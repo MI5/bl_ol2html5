@@ -14,8 +14,6 @@
 
 - (NSInteger)tag;
 
-- (IBAction)button2Clicked:(id)sender;
-
 
 extern NSTextView* globalAccessToTextView;
 

@@ -12,7 +12,6 @@
 
 @property (assign) IBOutlet NSWindow *window;
 
-- (IBAction)saveAction:(id)sender;
 - (IBAction)openFileClicked:(id)sender;
 
 @end

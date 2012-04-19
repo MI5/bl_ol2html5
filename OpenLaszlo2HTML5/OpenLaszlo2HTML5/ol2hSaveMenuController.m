@@ -12,7 +12,6 @@
 
 @implementation ol2hSaveMenuController
 @synthesize textViewText = _textViewText;
-@synthesize textfieldText = _textfieldText;
 
 - (IBAction)doSaveAs:(id)pId
 {	

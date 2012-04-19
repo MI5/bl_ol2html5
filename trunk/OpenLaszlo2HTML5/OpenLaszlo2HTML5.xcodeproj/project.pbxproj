@@ -1,0 +1,297 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		65C571311540A1620047963C /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 65C571301540A1620047963C /* Cocoa.framework */; };
+		65C5713B1540A1620047963C /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 65C571391540A1620047963C /* InfoPlist.strings */; };
+		65C5713D1540A1620047963C /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 65C5713C1540A1620047963C /* main.m */; };
+		65C571411540A1620047963C /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = 65C5713F1540A1620047963C /* Credits.rtf */; };
+		65C571441540A1620047963C /* ol2hAppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 65C571431540A1620047963C /* ol2hAppDelegate.m */; };
+		65C571471540A1620047963C /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 65C571451540A1620047963C /* MainMenu.xib */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		65C5712C1540A1620047963C /* OpenLaszlo2HTML5.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OpenLaszlo2HTML5.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		65C571301540A1620047963C /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
+		65C571331540A1620047963C /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+		65C571341540A1620047963C /* CoreData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreData.framework; path = System/Library/Frameworks/CoreData.framework; sourceTree = SDKROOT; };
+		65C571351540A1620047963C /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		65C571381540A1620047963C /* OpenLaszlo2HTML5-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "OpenLaszlo2HTML5-Info.plist"; sourceTree = "<group>"; };
+		65C5713A1540A1620047963C /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		65C5713C1540A1620047963C /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		65C5713E1540A1620047963C /* OpenLaszlo2HTML5-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "OpenLaszlo2HTML5-Prefix.pch"; sourceTree = "<group>"; };
+		65C571401540A1620047963C /* en */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; name = en; path = en.lproj/Credits.rtf; sourceTree = "<group>"; };
+		65C571421540A1620047963C /* ol2hAppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ol2hAppDelegate.h; sourceTree = "<group>"; };
+		65C571431540A1620047963C /* ol2hAppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ol2hAppDelegate.m; sourceTree = "<group>"; };
+		65C571461540A1620047963C /* en */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = en; path = en.lproj/MainMenu.xib; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		65C571291540A1620047963C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				65C571311540A1620047963C /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		65C571211540A1620047963C = {
+			isa = PBXGroup;
+			children = (
+				65C571361540A1620047963C /* OpenLaszlo2HTML5 */,
+				65C5712F1540A1620047963C /* Frameworks */,
+				65C5712D1540A1620047963C /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		65C5712D1540A1620047963C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				65C5712C1540A1620047963C /* OpenLaszlo2HTML5.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		65C5712F1540A1620047963C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				65C571301540A1620047963C /* Cocoa.framework */,
+				65C571321540A1620047963C /* Other Frameworks */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		65C571321540A1620047963C /* Other Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				65C571331540A1620047963C /* AppKit.framework */,
+				65C571341540A1620047963C /* CoreData.framework */,
+				65C571351540A1620047963C /* Foundation.framework */,
+			);
+			name = "Other Frameworks";
+			sourceTree = "<group>";
+		};
+		65C571361540A1620047963C /* OpenLaszlo2HTML5 */ = {
+			isa = PBXGroup;
+			children = (
+				65C571421540A1620047963C /* ol2hAppDelegate.h */,
+				65C571431540A1620047963C /* ol2hAppDelegate.m */,
+				65C571451540A1620047963C /* MainMenu.xib */,
+				65C571371540A1620047963C /* Supporting Files */,
+			);
+			path = OpenLaszlo2HTML5;
+			sourceTree = "<group>";
+		};
+		65C571371540A1620047963C /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				65C571381540A1620047963C /* OpenLaszlo2HTML5-Info.plist */,
+				65C571391540A1620047963C /* InfoPlist.strings */,
+				65C5713C1540A1620047963C /* main.m */,
+				65C5713E1540A1620047963C /* OpenLaszlo2HTML5-Prefix.pch */,
+				65C5713F1540A1620047963C /* Credits.rtf */,
+			);
+			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		65C5712B1540A1620047963C /* OpenLaszlo2HTML5 */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 65C5714A1540A1620047963C /* Build configuration list for PBXNativeTarget "OpenLaszlo2HTML5" */;
+			buildPhases = (
+				65C571281540A1620047963C /* Sources */,
+				65C571291540A1620047963C /* Frameworks */,
+				65C5712A1540A1620047963C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = OpenLaszlo2HTML5;
+			productName = OpenLaszlo2HTML5;
+			productReference = 65C5712C1540A1620047963C /* OpenLaszlo2HTML5.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		65C571231540A1620047963C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				CLASSPREFIX = ol2h;
+				LastUpgradeCheck = 0430;
+				ORGANIZATIONNAME = Buhl;
+			};
+			buildConfigurationList = 65C571261540A1620047963C /* Build configuration list for PBXProject "OpenLaszlo2HTML5" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 65C571211540A1620047963C;
+			productRefGroup = 65C5712D1540A1620047963C /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				65C5712B1540A1620047963C /* OpenLaszlo2HTML5 */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		65C5712A1540A1620047963C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				65C5713B1540A1620047963C /* InfoPlist.strings in Resources */,
+				65C571411540A1620047963C /* Credits.rtf in Resources */,
+				65C571471540A1620047963C /* MainMenu.xib in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		65C571281540A1620047963C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				65C5713D1540A1620047963C /* main.m in Sources */,
+				65C571441540A1620047963C /* ol2hAppDelegate.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		65C571391540A1620047963C /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				65C5713A1540A1620047963C /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		65C5713F1540A1620047963C /* Credits.rtf */ = {
+			isa = PBXVariantGroup;
+			children = (
+				65C571401540A1620047963C /* en */,
+			);
+			name = Credits.rtf;
+			sourceTree = "<group>";
+		};
+		65C571451540A1620047963C /* MainMenu.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				65C571461540A1620047963C /* en */,
+			);
+			name = MainMenu.xib;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		65C571481540A1620047963C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_VERSION = com.apple.compilers.llvm.clang.1_0;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.7;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		65C571491540A1620047963C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_VERSION = com.apple.compilers.llvm.clang.1_0;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.7;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		65C5714B1540A1620047963C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "OpenLaszlo2HTML5/OpenLaszlo2HTML5-Prefix.pch";
+				INFOPLIST_FILE = "OpenLaszlo2HTML5/OpenLaszlo2HTML5-Info.plist";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				WRAPPER_EXTENSION = app;
+			};
+			name = Debug;
+		};
+		65C5714C1540A1620047963C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "OpenLaszlo2HTML5/OpenLaszlo2HTML5-Prefix.pch";
+				INFOPLIST_FILE = "OpenLaszlo2HTML5/OpenLaszlo2HTML5-Info.plist";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				WRAPPER_EXTENSION = app;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		65C571261540A1620047963C /* Build configuration list for PBXProject "OpenLaszlo2HTML5" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				65C571481540A1620047963C /* Debug */,
+				65C571491540A1620047963C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		65C5714A1540A1620047963C /* Build configuration list for PBXNativeTarget "OpenLaszlo2HTML5" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				65C5714B1540A1620047963C /* Debug */,
+				65C5714C1540A1620047963C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 65C571231540A1620047963C /* Project object */;
+}

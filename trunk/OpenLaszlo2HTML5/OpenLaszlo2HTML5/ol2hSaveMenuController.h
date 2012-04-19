@@ -13,7 +13,6 @@
 - (IBAction)doOpen:(id)pId;
 
 @property (strong) IBOutlet NSTextView *textViewText;
-@property (strong) IBOutlet NSTextField *textfieldText;
 
 - (void)openDlgWithoutIB;
 @end

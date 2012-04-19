@@ -127,7 +127,10 @@ void OLLog(xmlParser *self, NSString* s,...)
 //1. Try: #define NSLog(...) OLLog(self,__VA_ARGS__)
 //2. Try: #define NSLog(x,...) OLLog(self,x)
 // Final Try:
-#define NSLog(...) OLLog(self,__VA_ARGS__)
+
+//////////////////////////////////////////////
+//#define NSLog(...) OLLog(self,__VA_ARGS__)//
+//////////////////////////////////////////////
 /********** Dirty Trick um NSLog umzuleiten *********/
 
 
@@ -183,7 +186,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 }
 
 
--(void) start
+-(NSArray*) start
 {
     // NSLog(@"GATTV: %@",[[globalAccessToTextView textStorage] string]);
     // NSLog(@"SharedSingleton: %@",[[sharedSingleton.textView textStorage] string]);
@@ -215,8 +218,11 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     // Do the parse
     [parser parse];
-
     // NSLog(@"items = %@", self.items);
+
+    // Zur Sicherheit mache ich von allem ne Copy, nicht, dass es beim Verlassen der Rekursion zerstört wird
+    NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.allJSGlobalVars copy], nil];
+    return r;
 }
 
 
@@ -597,9 +603,10 @@ didStartElement:(NSString *)elementName
 {
 
 
+
     self.verschachtelungstiefe++;
 
-    NSLog([NSString stringWithFormat:@"\nStarting Element: %@", elementName]);
+    NSLog([NSString stringWithFormat:@"Opening Element: %@", elementName]);
     NSLog([NSString stringWithFormat:@"with these attributes: %@\n", attributeDict]);
 
     // This is a string we will append to as the text arrives
@@ -615,6 +622,33 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"BDStext"] ||
         [elementName isEqualToString:@"rollUpDown"])
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+
+
+
+
+    if ([elementName isEqualToString:@"include"])
+    {
+        NSLog(@"Include Tag found!");
+        NSLog(@"Calling myself recursive");
+        if (![attributeDict valueForKey:@"href"])
+            NSLog(@"ERROR: No src given in include-tag");
+
+        NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
+        NSURL *pathToInclude = [NSURL URLWithString:[attributeDict valueForKey:@"href"] relativeToURL:path];
+
+        xmlParser *x = [[xmlParser alloc] initWith:pathToInclude];
+        NSArray* result = [x start];
+
+        [self.output appendString:[result objectAtIndex:0]];
+        [self.jsOutput appendString:[result objectAtIndex:1]];
+        [self.jQueryOutput appendString:[result objectAtIndex:2]];
+        [self.jsHeadOutput appendString:[result objectAtIndex:3]];
+        [self.jsHead2Output appendString:[result objectAtIndex:4]];
+        [self.allJSGlobalVars addEntriesFromDictionary:[result objectAtIndex:5]];
+
+
+        NSLog(@"Leaving recursion");
+    }
 
 
 
@@ -1165,6 +1199,12 @@ static inline BOOL isEmpty(id thing)
 
 - (void) parserDidEndDocument:(NSXMLParser *)parser
 {
+    // Move NSTextView to the end
+    NSRange range;
+    range = NSMakeRange ([[globalAccessToTextView string] length], 0);
+    [globalAccessToTextView scrollRangeToVisible: range];
+
+
     NSMutableString *pre = [[NSMutableString alloc] initWithString:@""];
 
     [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n<title>Canvastest</title>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n<script type=\"text/javascript\" src=\"jquery172.js\"></script>\n<style type='text/css'>body { text-align: center; }</style>\n\n<script type=\"text/javascript\">\n"];

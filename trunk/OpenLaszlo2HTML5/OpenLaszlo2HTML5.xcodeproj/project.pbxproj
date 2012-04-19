@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		65561AFC1540A74300733326 /* ausgabeText.m in Sources */ = {isa = PBXBuildFile; fileRef = 65561AFB1540A74300733326 /* ausgabeText.m */; };
+		65561AFF1540A75B00733326 /* globalVars.m in Sources */ = {isa = PBXBuildFile; fileRef = 65561AFE1540A75B00733326 /* globalVars.m */; };
+		65561B021540A87C00733326 /* ol2hSaveMenuController.m in Sources */ = {isa = PBXBuildFile; fileRef = 65561B011540A87C00733326 /* ol2hSaveMenuController.m */; };
+		65561B051540A8BF00733326 /* xmlParser.m in Sources */ = {isa = PBXBuildFile; fileRef = 65561B041540A8BF00733326 /* xmlParser.m */; };
 		65C571311540A1620047963C /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 65C571301540A1620047963C /* Cocoa.framework */; };
 		65C5713B1540A1620047963C /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 65C571391540A1620047963C /* InfoPlist.strings */; };
 		65C5713D1540A1620047963C /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 65C5713C1540A1620047963C /* main.m */; };
@@ -16,6 +20,14 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		65561AF91540A73000733326 /* ausgabeText.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ausgabeText.h; sourceTree = "<group>"; };
+		65561AFB1540A74300733326 /* ausgabeText.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ausgabeText.m; sourceTree = "<group>"; };
+		65561AFD1540A75300733326 /* globalVars.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = globalVars.h; sourceTree = "<group>"; };
+		65561AFE1540A75B00733326 /* globalVars.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = globalVars.m; sourceTree = "<group>"; };
+		65561B001540A87500733326 /* ol2hSaveMenuController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ol2hSaveMenuController.h; sourceTree = "<group>"; };
+		65561B011540A87C00733326 /* ol2hSaveMenuController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ol2hSaveMenuController.m; sourceTree = "<group>"; };
+		65561B031540A8B900733326 /* xmlParser.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = xmlParser.h; sourceTree = "<group>"; };
+		65561B041540A8BF00733326 /* xmlParser.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = xmlParser.m; sourceTree = "<group>"; };
 		65C5712C1540A1620047963C /* OpenLaszlo2HTML5.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OpenLaszlo2HTML5.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		65C571301540A1620047963C /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
 		65C571331540A1620047963C /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
@@ -82,8 +94,16 @@
 		65C571361540A1620047963C /* OpenLaszlo2HTML5 */ = {
 			isa = PBXGroup;
 			children = (
+				65561AF91540A73000733326 /* ausgabeText.h */,
+				65561AFB1540A74300733326 /* ausgabeText.m */,
+				65561AFD1540A75300733326 /* globalVars.h */,
+				65561AFE1540A75B00733326 /* globalVars.m */,
 				65C571421540A1620047963C /* ol2hAppDelegate.h */,
 				65C571431540A1620047963C /* ol2hAppDelegate.m */,
+				65561B001540A87500733326 /* ol2hSaveMenuController.h */,
+				65561B011540A87C00733326 /* ol2hSaveMenuController.m */,
+				65561B031540A8B900733326 /* xmlParser.h */,
+				65561B041540A8BF00733326 /* xmlParser.m */,
 				65C571451540A1620047963C /* MainMenu.xib */,
 				65C571371540A1620047963C /* Supporting Files */,
 			);
@@ -169,6 +189,10 @@
 			files = (
 				65C5713D1540A1620047963C /* main.m in Sources */,
 				65C571441540A1620047963C /* ol2hAppDelegate.m in Sources */,
+				65561AFC1540A74300733326 /* ausgabeText.m in Sources */,
+				65561AFF1540A75B00733326 /* globalVars.m in Sources */,
+				65561B021540A87C00733326 /* ol2hSaveMenuController.m in Sources */,
+				65561B051540A8BF00733326 /* xmlParser.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -290,6 +314,7 @@
 				65C5714C1540A1620047963C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

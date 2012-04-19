@@ -1,0 +1,7 @@
+//
+// Prefix header for all source files of the 'OpenLaszlo2HTML5' target in the 'OpenLaszlo2HTML5' project
+//
+
+#ifdef __OBJC__
+    #import <Cocoa/Cocoa.h>
+#endif

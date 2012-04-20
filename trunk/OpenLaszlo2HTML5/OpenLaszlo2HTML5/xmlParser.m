@@ -43,6 +43,7 @@
 @property (strong, nonatomic) NSMutableString *jQueryOutput;
 @property (strong, nonatomic) NSMutableString *jsHeadOutput;
 @property (strong, nonatomic) NSMutableString *jsHead2Output; // die mit resource gesammelten globalen vars
+@property (strong, nonatomic) NSMutableString *cssOutput; // CSS-Ausgaben, die gesammelt werden, derzeit @Font-Face
 
 @property (nonatomic) BOOL errorParsing;
 @property (nonatomic) NSInteger viewIdZaehler;
@@ -60,6 +61,9 @@
 
 @property (strong, nonatomic) NSString *last_resource_name_for_frametag;
 @property (strong, nonatomic) NSMutableArray *collectedFrameResources;
+
+// Für das Element RollUpDownContainer
+@property (strong, nonatomic) NSString *animDuration;
 
 // Damit ich auch intern auf die Inhalte der Variablen zugreifen kann
 @property (strong, nonatomic) NSMutableDictionary *allJSGlobalVars;
@@ -82,7 +86,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize enclosingElement = _enclosingElement, tempVerschachtelungstiefe = _tempVerschachtelungstiefe;
 
-@synthesize output = _output, jsOutput = _jsOutput, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output;
+@synthesize output = _output, jsOutput = _jsOutput, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output, cssOutput = _cssOutput;
 
 @synthesize errorParsing = _errorParsing, verschachtelungstiefe = _verschachtelungstiefe;
 
@@ -95,6 +99,8 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize firstElementOfSimpleLayout_x = _firstElementOfSimpleLayout_x, simplelayout_x_tiefe = _simplelayout_x_tiefe;
 
 @synthesize last_resource_name_for_frametag = _last_resource_name_for_frametag, collectedFrameResources = _collectedFrameResources;
+
+@synthesize animDuration = _animDuration;
 
 @synthesize allJSGlobalVars = _allJSGlobalVars;
 
@@ -162,6 +168,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.jQueryOutput = [[NSMutableString alloc] initWithString:@""];
         self.jsHeadOutput = [[NSMutableString alloc] initWithString:@""];
         self.jsHead2Output = [[NSMutableString alloc] initWithString:@""];
+        self.cssOutput = [[NSMutableString alloc] initWithString:@""];
 
         self.errorParsing = NO;
         self.verschachtelungstiefe = 0;
@@ -179,6 +186,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         self.last_resource_name_for_frametag = [[NSString alloc] initWithString:@""];
         self.collectedFrameResources = [[NSMutableArray alloc] init];
+
+        self.animDuration = @"slow";
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
     }
@@ -221,7 +230,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // NSLog(@"items = %@", self.items);
 
     // Zur Sicherheit mache ich von allem ne Copy, nicht, dass es beim Verlassen der Rekursion zerstört wird
-    NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.allJSGlobalVars copy], nil];
+    NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.allJSGlobalVars copy], nil];
     return r;
 }
 
@@ -235,7 +244,29 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 }
 
+- (NSMutableString*) addCSSAttributes:(NSDictionary*) attributeDict forceWidthAndHeight:(BOOL)b
+{
+    if (!b)
+        [self instableXML:@"ERROR: Don't call addCSSAttributes:forcingWidthAndHeight this way"];
 
+    NSMutableString *style = [[NSMutableString alloc] initWithString:@""];
+
+    style = [self addCSSAttributes:attributeDict];
+
+    // width erzwingen
+    if ([style rangeOfString:@"width:"].location == NSNotFound)
+    {
+        [style appendString:@"width:inherit"];
+    }
+
+    // height erzwingen
+    if ([style rangeOfString:@"height:"].location == NSNotFound)
+    {
+        [style appendString:@"height:inherit"];
+    }
+
+    return style;
+}
 
 - (NSMutableString*) addCSSAttributes:(NSDictionary*) attributeDict
 {
@@ -285,6 +316,25 @@ void OLLog(xmlParser *self, NSString* s,...)
         [style appendString:@";"];
     }
 
+    if ([attributeDict valueForKey:@"boxheight"])
+    {
+        NSLog(@"Setting the attribute 'boxheight' as CSS 'height'.");
+        [style appendString:@"height:"];
+        
+        if ([[attributeDict valueForKey:@"boxheight"] rangeOfString:@"${parent.height}"].location != NSNotFound)
+        {
+            [style appendString:@"inherit"];
+        }
+        else
+        {
+            [style appendString:[attributeDict valueForKey:@"boxheight"]];
+            if ([[attributeDict valueForKey:@"boxheight"] rangeOfString:@"%"].location == NSNotFound)
+                [style appendString:@"px"];
+        }
+
+        [style appendString:@";"];
+    }
+
     // speichern, falls width schon gesetz wurde für Attribut resource
     BOOL widthGesetzt = NO;
     if ([attributeDict valueForKey:@"width"])
@@ -305,6 +355,24 @@ void OLLog(xmlParser *self, NSString* s,...)
         [style appendString:@";"];
 
         widthGesetzt = YES;
+    }
+
+    if ([attributeDict valueForKey:@"controlwidth"])
+    {
+        NSLog(@"Setting the attribute 'controlwidth' as CSS 'width'.");
+        [style appendString:@"width:"];
+
+        if ([[attributeDict valueForKey:@"controlwidth"] rangeOfString:@"${parent.width}"].location != NSNotFound)
+        {
+            [style appendString:@"inherit"];
+        }
+        else
+        {
+            [style appendString:[attributeDict valueForKey:@"controlwidth"]];
+            if ([[attributeDict valueForKey:@"controlwidth"] rangeOfString:@"%"].location == NSNotFound)
+                [style appendString:@"px"];
+        }
+        [style appendString:@";"];
     }
 
     if ([attributeDict valueForKey:@"x"])
@@ -337,13 +405,11 @@ void OLLog(xmlParser *self, NSString* s,...)
         {
             //Möglichkeit 1: Resource wird direkt als String angegeben!
             s = [attributeDict valueForKey:@"resource"];
-
-
         }
         else
         {
             // Möglichkeit 2: Resource wurde vorher extern gesetzt
-            
+
             // Namen des Bildes aus eigener vorher angelegter Res-DB ermitteln
             if ([[self.allJSGlobalVars valueForKey:[attributeDict valueForKey:@"resource"]] isKindOfClass:[NSArray class]])
             {
@@ -458,14 +524,14 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.simplelayout_y_spacing removeLastObject];
         self.firstElementOfSimpleLayout_y = YES;
         self.simplelayout_y_tiefe--;
-        
+
         // Wenn wir ein tiefer verschachteltes simlelayout gerade verlassen, merken wir uns das
         // das heißt ein anderes simplelayout (y) ist noch aktiv
         if (self.simplelayout_y_tiefe > 0)
             wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y = YES;
     }
-    
-    
+
+
     // simplelayout verlassen, alsbald das letzte Geschwisterchen erreicht ist
     BOOL wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_X = NO;
     if (self.simplelayout_x-1 == self.verschachtelungstiefe)
@@ -501,10 +567,10 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jsOutput appendString:@"').previousElementSibling && document.getElementById('view"];
         [self.jsOutput appendString:id];
         [self.jsOutput appendString:@"').previousElementSibling.lastElementChild)\n"];
-        
+
         [self.jsOutput appendString:@"  document.getElementById('view"];
         [self.jsOutput appendString:id];
-        
+
         // parseInt removes the "px" at the end
         [self.jsOutput appendString:@"').style.top = (parseInt(document.getElementById('view"];
         [self.jsOutput appendString:id];
@@ -513,7 +579,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jsOutput appendString:@"').previousElementSibling.lastElementChild.style.height)+"];
         [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_y]];
         [self.jsOutput appendString:@") + \"px\";\n\n"];
-        
+
         wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y = NO;
     }
     else if (self.simplelayout_y == self.verschachtelungstiefe)  // > 0)
@@ -524,10 +590,10 @@ void OLLog(xmlParser *self, NSString* s,...)
             [self.jsOutput appendString:@"if (document.getElementById('view"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').previousElementSibling)\n"];
-            
+
             [self.jsOutput appendString:@"  document.getElementById('view"];
             [self.jsOutput appendString:id];
-            
+
             // parseInt removes the "px" at the end
             [self.jsOutput appendString:@"').style.top = (parseInt(document.getElementById('view"];
             [self.jsOutput appendString:id];
@@ -539,9 +605,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
         self.firstElementOfSimpleLayout_y = NO;
     }
-    
-    
-    
+
+
+
     // Simplelayout X
     if (wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_X)
     {
@@ -551,10 +617,10 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jsOutput appendString:@"').previousElementSibling && document.getElementById('view"];
         [self.jsOutput appendString:id];
         [self.jsOutput appendString:@"').previousElementSibling.lastElementChild)\n"];
-        
+
         [self.jsOutput appendString:@"  document.getElementById('view"];
         [self.jsOutput appendString:id];
-        
+
         // parseInt removes the "px" at the end
         [self.jsOutput appendString:@"').style.left = (parseInt(document.getElementById('view"];
         [self.jsOutput appendString:id];
@@ -574,10 +640,10 @@ void OLLog(xmlParser *self, NSString* s,...)
             [self.jsOutput appendString:@"if (document.getElementById('view"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').previousElementSibling)\n"];
-            
+
             [self.jsOutput appendString:@"  document.getElementById('view"];
             [self.jsOutput appendString:id];
-            
+
             // parseInt removes the "px" at the end
             [self.jsOutput appendString:@"').style.left = (parseInt(document.getElementById('view"];
             [self.jsOutput appendString:id];
@@ -591,7 +657,12 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 }
 
-
+// ToDo: Im Release kommt hier das "exit(0);" dann raus.
+- (void) instableXML:(NSString*)s
+{
+    NSLog(@"%@",s);
+    exit(0);
+}
 
 #pragma mark Delegate calls
 
@@ -601,6 +672,9 @@ didStartElement:(NSString *)elementName
   qualifiedName:(NSString *)qName
      attributes:(NSDictionary *)attributeDict
 {
+    // Zum internen testen, ob wir alle Elemente erfasst haben
+    BOOL element_bearbeitet = NO;
+
 
 
 
@@ -618,8 +692,11 @@ didStartElement:(NSString *)elementName
 
     if ([elementName isEqualToString:@"window"] ||
         [elementName isEqualToString:@"view"] ||
+        [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDStext"] ||
+        [elementName isEqualToString:@"BDScombobox"] ||
+        [elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"rollUpDown"])
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
@@ -628,10 +705,12 @@ didStartElement:(NSString *)elementName
 
     if ([elementName isEqualToString:@"include"])
     {
+        element_bearbeitet = YES;
+
         NSLog(@"Include Tag found!");
         NSLog(@"Calling myself recursive");
         if (![attributeDict valueForKey:@"href"])
-            NSLog(@"ERROR: No src given in include-tag");
+            [self instableXML:@"ERROR: No attribute 'src' given in include-tag"];
 
         NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
         NSURL *pathToInclude = [NSURL URLWithString:[attributeDict valueForKey:@"href"] relativeToURL:path];
@@ -644,7 +723,8 @@ didStartElement:(NSString *)elementName
         [self.jQueryOutput appendString:[result objectAtIndex:2]];
         [self.jsHeadOutput appendString:[result objectAtIndex:3]];
         [self.jsHead2Output appendString:[result objectAtIndex:4]];
-        [self.allJSGlobalVars addEntriesFromDictionary:[result objectAtIndex:5]];
+        [self.cssOutput appendString:[result objectAtIndex:5]];
+        [self.allJSGlobalVars addEntriesFromDictionary:[result objectAtIndex:6]];
 
 
         NSLog(@"Leaving recursion");
@@ -652,10 +732,41 @@ didStartElement:(NSString *)elementName
 
 
 
+    // font als CSS anlegen
+    if ([elementName isEqualToString:@"font"])
+    {
+        element_bearbeitet = YES;
+
+        if (![attributeDict valueForKey:@"name"])
+            [self instableXML:@"ERROR: No attribute 'name' given in font-tag"];
+        if (![attributeDict valueForKey:@"src"])
+            [self instableXML:@"ERROR: No attribute 'src' given in font-tag"];
+
+        NSString *name = [attributeDict valueForKey:@"name"];
+        NSString *src = [attributeDict valueForKey:@"src"];
+        NSString *weight;
+        if ([attributeDict valueForKey:@"style"])
+            weight = [attributeDict valueForKey:@"style"];
+        else
+            weight = @"normal";
+
+
+        [self.cssOutput appendString:@"@font-face {\n  font-family: "];
+        [self.cssOutput appendString:name];
+        [self.cssOutput appendString:@";\n  src: url('"];
+        [self.cssOutput appendString:src];
+        [self.cssOutput appendString:@"');\n"];
+        [self.cssOutput appendString:@"  font-style: normal;\n"];
+        [self.cssOutput appendString:@"  font-weight: "];
+        [self.cssOutput appendString:weight];
+        [self.cssOutput appendString:@";\n}\n\n"];
+    }
 
 
     if ([elementName isEqualToString:@"canvas"])
     {
+        element_bearbeitet = YES;
+
         [self check4Simplelayout];
 
 
@@ -668,11 +779,49 @@ didStartElement:(NSString *)elementName
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
         [self.output appendString:@"\">\n"];
+
+        // Wir deklarieren Angaben zur Schriftart und Schriftgröße lieber nochmal als CSS für das body-Element.
+        // Aber nur wenn fontart oder wenigstens fontsize auch angegeben wurde
+        if ([attributeDict valueForKey:@"fontsize"] || [attributeDict valueForKey:@"font"])
+        {
+            NSString *fontsize;
+            if ([attributeDict valueForKey:@"fontsize"])
+                fontsize = [attributeDict valueForKey:@"fontsize"];
+            else
+                fontsize = @"12";
+
+            NSString *font;
+            if ([attributeDict valueForKey:@"font"])
+                font = [attributeDict valueForKey:@"font"];
+            else
+                font = @"";
+
+            [self.cssOutput appendString:@"body\n{\n  text-align: center;\n  font-size: "];
+            [self.cssOutput appendString:fontsize];
+            [self.cssOutput appendString:@"px;\n"];
+            [self.cssOutput appendString:@"  font-family: "];
+            [self.cssOutput appendString:font];
+            [self.cssOutput appendString:@", Verdana, Helvetica, sans-serif, Arial;\n"];
+
+            // Auch noch die Hintergrundfarbe auf Body anwenden, falls vorhanden
+            if ([attributeDict valueForKey:@"bgcolor"])
+            {
+                [self.cssOutput appendString:@"  background-color: "];
+                [self.cssOutput appendString:[attributeDict valueForKey:@"bgcolor"]];
+                [self.cssOutput appendString:@";\n"];
+            }
+
+            [self.cssOutput appendString:@"}\n\n"];
+        }
     }
+
+
 
 
     if ([elementName isEqualToString:@"resource"])
     {
+        element_bearbeitet = YES;
+
          // Falls src angegeben ist, kann die var direkt gespeichert werden.
         if ([attributeDict valueForKey:@"src"])
         {
@@ -699,7 +848,9 @@ didStartElement:(NSString *)elementName
     // ToDo: -wir legen jedesmal ein neues Objekt an, das darf nur einmal geschehen
     if ([elementName isEqualToString:@"attribute"])
     {
-        // ToDo: Attrbute kann bis jetzt nur globale Variable handeln, die direkt in canvas liegen
+        element_bearbeitet = YES;
+
+        // ToDo: Attrbute kann bis jetzt nur globale Variable verarbeiten, die direkt in canvas liegen
         if ([attributeDict valueForKey:@"name"])
         {
             BOOL weNeedQuotes = YES;
@@ -728,12 +879,16 @@ didStartElement:(NSString *)elementName
 
     if ([elementName isEqualToString:@"frame"])
     {
+        element_bearbeitet = YES;
+
         // Erstmal alle frame-Einträge sammeln, weil wir nicht wissen wie viele noch kommen
         [self.collectedFrameResources addObject:[attributeDict valueForKey:@"src"]];
     }
 
     if ([elementName isEqualToString:@"window"])
     {
+        element_bearbeitet = YES;
+
         [self.output appendString:@"<div class=\"ol_standard_window\" style=\""];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
@@ -746,6 +901,8 @@ didStartElement:(NSString *)elementName
 
     if ([elementName isEqualToString:@"simplelayout"])
     {
+        element_bearbeitet = YES;
+
         // Simplelayout mit Achse Y berücksichtigen
         if ([[attributeDict valueForKey:@"axis"] hasSuffix:@"y"])
         {
@@ -846,7 +1003,15 @@ didStartElement:(NSString *)elementName
 
     if ([elementName isEqualToString:@"view"] || [elementName isEqualToString:@"basebutton"])
     {
+        element_bearbeitet = YES;
+
         [self check4Simplelayout];
+
+        if ([elementName isEqualToString:@"basebutton"])
+        {
+            [self.output appendString:@"<!-- Basebutton: -->\n"];
+            [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+        }
 
         [self.output appendString:@"<div"];
 
@@ -880,6 +1045,8 @@ didStartElement:(NSString *)elementName
     // ToDo: Eigentlich sollte das hier selbständig hinzugefügt werden und anhand der definierten Klasse erkannt werden
     if ([elementName isEqualToString:@"BDStext"])
     {
+        element_bearbeitet = YES;
+
         [self check4Simplelayout];
 
         [self.output appendString:@"<div"];
@@ -902,6 +1069,8 @@ didStartElement:(NSString *)elementName
     // ToDo: Eigentlich sollte das hier selbständig hinzugefügt werden und anhand der definierten Klasse erkannt werden
     if ([elementName isEqualToString:@"BDSedit"])
     {
+        element_bearbeitet = YES;
+
         [self check4Simplelayout];
 
         [self.output appendString:@"<input type=\"text\""];
@@ -919,14 +1088,98 @@ didStartElement:(NSString *)elementName
 
 
 
+    if ([elementName isEqualToString:@"BDScombobox"])
+    {
+        element_bearbeitet = YES;
+
+        [self check4Simplelayout];
+
+        if ([attributeDict valueForKey:@"title"])
+        {
+            if ([[attributeDict valueForKey:@"title"] hasPrefix:@"$"])
+            {
+                // To Con: regExp the JS from here: [attributeDict valueForKey:@"title"]
+                [self.output appendString:@"JAVASCRIPT"];
+            }
+            else
+            {
+                [self.output appendString:[attributeDict valueForKey:@"title"]];
+            }
+        }
+
+        [self.output appendString:@"<select class=\"combobox\" size=\"1\""];
+
+        [self addIdToElement];
+
+        [self.output appendString:@" style=\""];
+
+        // Im Prinzip nur wegen controlwidth
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+        [self.output appendString:@"\" >\n"];
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"<option>Heino</option>\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"<option>Michael Jackson</option>\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"<option>Tom Waits</option>\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"<option>Nina Hagen</option>\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"<option>Marianne Rosenberg</option>\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+        [self.output appendString:@"</select><br />\n"];
+    }
+
+
+
+
+
+    if ([elementName isEqualToString:@"rollUpDownContainer"])
+    {
+        element_bearbeitet = YES;
+
+        [self.output appendString:@"<!-- Container für RollUpDown: -->\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+
+
+        [self check4Simplelayout];
+
+        [self.output appendString:@"<div"];
+
+        [self addIdToElement];
+
+        // Im Prinzip nur wegen Boxheight müssen wir in addCSSAttributes rein
+        [self.output appendString:@" style=\""];
+        [self.output appendString:[self addCSSAttributes:attributeDict forceWidthAndHeight:YES]];
+        [self.output appendString:@"\">\n"];
+
+
+        // Setz die MiliSekunden für die Animationszeit, damit die 'rollUpDown'-Elemente darauf zugreifen können
+        if ([attributeDict valueForKey:@"animduration"])
+            self.animDuration = [attributeDict valueForKey:@"animduration"];
+        else
+            self.animDuration = @"slow";
+    }
+
+
+
+
 
     // Das äußere Div behält die selbst generierte ID, die beiden inneren DIVs erhalten die
     // in OpenLaszlo gesetzte Original-ID
     if ([elementName isEqualToString:@"rollUpDown"])
     {
+        element_bearbeitet = YES;
+
+        [self.output appendString:@"<!-- RollUpDown-Element: -->\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+
+
         [self check4Simplelayout];
 
-        [self.output appendString:@"<div "];
+        [self.output appendString:@"<div"];
 
         [self addIdToElement];
 
@@ -972,25 +1225,31 @@ didStartElement:(NSString *)elementName
         }
 
         int heightOfFlipBar = 30;
-        
+
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<!-- Die Flipleiste -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:[NSString stringWithFormat:@"<div style=\"position:absolute; top:0px; left:0px; width:inherit; height:%dpx; background-color:lightblue; line-height: %dpx; vertical-align:middle;\" id=\"",heightOfFlipBar]];
         [self.output appendString:id4flipleiste];
-        [self.output appendString:@"\"><span style=\"margin-left:8px;\">"];
+        [self.output appendString:@"\">\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+        [self.output appendString:@"<span style=\"margin-left:8px;\">"];
         [self.output appendString:title];
-        [self.output appendString:@"</span></div>\n"];
+        [self.output appendString:@"</span>\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"</div>\n"];
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<!-- Das aufklappende Menü -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:[NSString stringWithFormat:@"<div style=\"position:absolute; top:%dpx; left:0px; width:inherit; height:inherit; background-color:white;\" id=\"",heightOfFlipBar]];
+        [self.output appendString:[NSString stringWithFormat:@"<div style=\"position:absolute; top:%dpx; left:0px; width:inherit; height:200px; background-color:white;\" id=\"",heightOfFlipBar]];
         [self.output appendString:id4panel];
-        [self.output appendString:@"\"></div>\n"];
+        [self.output appendString:@"\">\n"];
 
         // Die jQuery-Ausgabe
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"$(\"#%@\").click(function(){$(\"#%@\").slideToggle(\"slow\");});\n",id4flipleiste,id4panel]];
+        [self.jQueryOutput appendString:[NSString stringWithFormat:@"$(\"#%@\").click(function(){$(\"#%@\").slideToggle(\"",id4flipleiste,id4panel]];
+        [self.jQueryOutput appendString:self.animDuration];
+        [self.jQueryOutput appendString:@"\");});\n"];
     }
 
 
@@ -1002,6 +1261,8 @@ didStartElement:(NSString *)elementName
 
     if ([elementName isEqualToString:@"text"])
     {
+        element_bearbeitet = YES;
+
         // Text mit foundCharacters sammeln und beim schließen anzeigen
     }
 
@@ -1010,6 +1271,10 @@ didStartElement:(NSString *)elementName
 
 
 
+
+
+    if (!element_bearbeitet)
+        [self instableXML:[NSString stringWithFormat:@"ERROR: Nicht erfasstes öffnendes Element: '%@'", elementName]];
 
 
 
@@ -1039,8 +1304,15 @@ static inline BOOL isEmpty(id thing)
    namespaceURI:(NSString *)namespaceURI
   qualifiedName:(NSString *)qName
 {
-    if ([elementName isEqualToString:@"window"] || [elementName isEqualToString:@"view"])
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+    // Zum internen testen, ob wir alle Elemente erfasst haben
+    BOOL element_geschlossen = NO;
+
+
+    if ([elementName isEqualToString:@"window"] ||
+        [elementName isEqualToString:@"view"] ||
+        [elementName isEqualToString:@"rollUpDownContainer"] ||
+        [elementName isEqualToString:@"basebutton"])
+            [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
     self.verschachtelungstiefe--;
 
@@ -1049,12 +1321,14 @@ static inline BOOL isEmpty(id thing)
     // Schließen von canvas oder windows
     if ([elementName isEqualToString:@"canvas"] || [elementName isEqualToString:@"window"])
     {
+        element_geschlossen = YES;
         [self.output appendString:@"</div>\n"];
     }
 
 
     if ([elementName isEqualToString:@"text"])
     {
+        element_geschlossen = YES;
         [self.output appendString:self.textInProgress];
         [self.output appendString:@"\n"];
     }
@@ -1064,13 +1338,16 @@ static inline BOOL isEmpty(id thing)
 
     if ([elementName isEqualToString:@"simplelayout"])
     {
-
+        element_geschlossen = YES;
     }
 
 
 
     if ([elementName isEqualToString:@"resource"])
     {
+        element_geschlossen = YES;
+
+
         // Dann gab es keine frame-tags
         if ([self.collectedFrameResources count] == 0)
             return;
@@ -1113,27 +1390,25 @@ static inline BOOL isEmpty(id thing)
     }
 
 
-
-    if ([elementName isEqualToString:@"frame"])
+    // Bei diesen Elementen muss beim schließen nichts unternommen werden, da sie kein schließendes Tag haben:
+    if ([elementName isEqualToString:@"BDSedit"] ||
+        [elementName isEqualToString:@"BDScombobox"] ||
+        [elementName isEqualToString:@"frame"] ||
+        [elementName isEqualToString:@"font"] ||
+        [elementName isEqualToString:@"attribute"])
     {
-
+        element_geschlossen = YES;
     }
 
 
 
-
-
-    if ([elementName isEqualToString:@"attribute"])
+    // Schließen des Div's
+    if ([elementName isEqualToString:@"view"] ||
+        [elementName isEqualToString:@"basebutton"] ||
+        [elementName isEqualToString:@"rollUpDownContainer"])
     {
+        element_geschlossen = YES;
 
-    }
-
-
-
-
-    // Schließen von view
-    if ([elementName isEqualToString:@"view"] || [elementName isEqualToString:@"basebutton"])
-    {
         [self.output appendString:@"</div>\n"];
     }
 
@@ -1141,23 +1416,24 @@ static inline BOOL isEmpty(id thing)
     // Schließen von BDStext
     if ([elementName isEqualToString:@"BDStext"])
     {
+        element_geschlossen = YES;
+
         // Hinzufügen von gesammelten Text, falls er zwischen den tags gesetzt wurde
         [self.output appendString:self.textInProgress];
 
         [self.output appendString:@"</div>\n"];
     }
 
-    // Schließen von BDSedit
-    if ([elementName isEqualToString:@"BDSedit"])
-    {
-        // Nichts, da kein schließendes Tag gesetzt werden muss
-    }
-
 
 
     if ([elementName isEqualToString:@"rollUpDown"])
     {
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+        element_geschlossen = YES;
+
+        // Wir schließen hier gleich 2 Elemente, da rollUpDown intern aus mehreren Elementen besteht
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+        [self.output appendString:@"</div>\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"</div>\n"];
     }
 
@@ -1175,9 +1451,14 @@ static inline BOOL isEmpty(id thing)
     }
      */
 
+
     // Clear the text and key
     self.textInProgress = nil;
     self.keyInProgress = nil;
+
+
+    if (!element_geschlossen)
+        [self instableXML:[NSString stringWithFormat:@"ERROR: Nicht erfasstes schließendes Element: '%@'", elementName]];
 }
 
 // This method can get called multiple times for the
@@ -1207,7 +1488,9 @@ static inline BOOL isEmpty(id thing)
 
     NSMutableString *pre = [[NSMutableString alloc] initWithString:@""];
 
-    [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n<title>Canvastest</title>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n<script type=\"text/javascript\" src=\"jquery172.js\"></script>\n<style type='text/css'>body { text-align: center; }</style>\n\n<script type=\"text/javascript\">\n"];
+    [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n<title>Canvastest</title>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n<script type=\"text/javascript\" src=\"jquery172.js\"></script>\n<script src=\"jsHelper.js\" type=\"text/javascript\"></script>\n\n<style type='text/css'>\n"];
+    [pre appendString:self.cssOutput];
+    [pre appendString:@"</style>\n\n<script type=\"text/javascript\">\n"];
 
     // [pre appendString:self.jsHeadOutput]; 
 
@@ -1227,7 +1510,7 @@ static inline BOOL isEmpty(id thing)
     [self.output appendString:self.jsOutput];
     [self.output appendString:@"\n\n$(function()\n{\n  "];
     [self.output appendString:self.jQueryOutput];
-    [self.output appendString:@"\n});\n</script>\n\n"];
+    [self.output appendString:@"});\n</script>\n\n"];
 
     // Und nur noch die schließenden Tags
     [self.output appendString:@"</body>\n</html>"];

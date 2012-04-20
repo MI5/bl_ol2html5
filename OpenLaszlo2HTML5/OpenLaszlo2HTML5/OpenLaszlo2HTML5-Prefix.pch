@@ -5,3 +5,7 @@
 #ifdef __OBJC__
     #import <Cocoa/Cocoa.h>
 #endif
+
+// Während der Entwicklung die Warnungen abschalten für NSLog
+// ToDo: Ausklammern im Falle von Release.
+#pragma GCC diagnostic ignored "-Wformat-security"

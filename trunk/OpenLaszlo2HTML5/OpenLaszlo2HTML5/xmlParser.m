@@ -936,7 +936,7 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"\">\n"];
 
-        /* *************CANVAS***************VERWORFEN*************
+        /* *************CANVAS***************VERWORFEN************* SPÄTER NUTZEN FÜR DIE RUNDEN ECKEN
         [self.output appendString:@"<canvas style=\"position:absolute; top:37px; left:81px;\" id=\"leiste\" width=\"500\" height=\"200\"></canvas>"];
 
         [self.output appendString:@"<canvas style=\"position:absolute; top:61px; left:81px;\" id=\"details\" width=\"500\" height=\"200\"></canvas>"];
@@ -978,9 +978,9 @@ didStartElement:(NSString *)elementName
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:[NSString stringWithFormat:@"<div style=\"position:absolute; top:0px; left:0px; width:inherit; height:%dpx; background-color:lightblue; line-height: %dpx; vertical-align:middle;\" id=\"",heightOfFlipBar]];
         [self.output appendString:id4flipleiste];
-        [self.output appendString:@"\">"];
+        [self.output appendString:@"\"><span style=\"margin-left:8px;\">"];
         [self.output appendString:title];
-        [self.output appendString:@"</div>\n"];
+        [self.output appendString:@"</span></div>\n"];
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<!-- Das aufklappende Menü -->\n"];

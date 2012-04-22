@@ -59,6 +59,9 @@
 @property (nonatomic) NSInteger firstElementOfSimpleLayout_x;
 @property (nonatomic) NSInteger simplelayout_x_tiefe;
 
+// Benötigt derzeit nur Simplelayout => So können wir die von OpenLaszlo gesetzten ids benutzen
+@property (strong, nonatomic) NSString* zuletztGesetzteID;
+
 @property (strong, nonatomic) NSString *last_resource_name_for_frametag;
 @property (strong, nonatomic) NSMutableArray *collectedFrameResources;
 
@@ -67,6 +70,9 @@
 
 // Damit ich auch intern auf die Inhalte der Variablen zugreifen kann
 @property (strong, nonatomic) NSMutableDictionary *allJSGlobalVars;
+
+// Zum internen testen, ob wir alle Attribute erfasst haben
+@property (nonatomic) int attributeCount;
 @end
 
 
@@ -98,11 +104,16 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize simplelayout_x = _simplelayout_x, simplelayout_x_spacing = _simplelayout_x_spacing;
 @synthesize firstElementOfSimpleLayout_x = _firstElementOfSimpleLayout_x, simplelayout_x_tiefe = _simplelayout_x_tiefe;
 
+@synthesize zuletztGesetzteID;
+
 @synthesize last_resource_name_for_frametag = _last_resource_name_for_frametag, collectedFrameResources = _collectedFrameResources;
 
 @synthesize animDuration = _animDuration;
 
 @synthesize allJSGlobalVars = _allJSGlobalVars;
+
+@synthesize attributeCount = _attributeCount;
+
 
 
 
@@ -135,7 +146,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // Final Try:
 
 //////////////////////////////////////////////
-//#define NSLog(...) OLLog(self,__VA_ARGS__)//
+#define NSLog(...) OLLog(self,__VA_ARGS__)
 //////////////////////////////////////////////
 /********** Dirty Trick um NSLog umzuleiten *********/
 
@@ -183,6 +194,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.simplelayout_x_spacing = [[NSMutableArray alloc] init];
         self.firstElementOfSimpleLayout_x = YES;
         self.simplelayout_x_tiefe = 0;
+
+        self.zuletztGesetzteID = @"";
 
         self.last_resource_name_for_frametag = [[NSString alloc] initWithString:@""];
         self.collectedFrameResources = [[NSMutableArray alloc] init];
@@ -247,7 +260,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 - (NSMutableString*) addCSSAttributes:(NSDictionary*) attributeDict forceWidthAndHeight:(BOOL)b
 {
     if (!b)
-        [self instableXML:@"ERROR: Don't call addCSSAttributes:forcingWidthAndHeight this way"];
+        [self instableXML:@"ERROR: Don't call addCSSAttributes:forcingWidthAndHeight with b = false"];
 
     NSMutableString *style = [[NSMutableString alloc] initWithString:@""];
 
@@ -275,6 +288,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([attributeDict valueForKey:@"bgcolor"])
     {
+        self.attributeCount++;
         NSLog(@"Setting the attribute 'bgcolor' as CSS 'background-color'.");
         [style appendString:@"background-color:"];
         [style appendString:[attributeDict valueForKey:@"bgcolor"]];
@@ -283,6 +297,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([attributeDict valueForKey:@"fgcolor"])
     {
+        self.attributeCount++;
         NSLog(@"Setting the attribute 'fgcolor' as CSS 'color'.");
         [style appendString:@"color:"];
         [style appendString:[attributeDict valueForKey:@"fgcolor"]];
@@ -291,6 +306,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([attributeDict valueForKey:@"valign"])
     {
+        self.attributeCount++;
         NSLog(@"Setting the attribute 'valign' as CSS 'vertical-align'.");
         [style appendString:@"vertical-align:"];
         [style appendString:[attributeDict valueForKey:@"valign"]];
@@ -299,6 +315,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([attributeDict valueForKey:@"height"])
     {
+        self.attributeCount++;
         NSLog(@"Setting the attribute 'height' as CSS 'height'.");
         [style appendString:@"height:"];
 
@@ -318,6 +335,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([attributeDict valueForKey:@"boxheight"])
     {
+        self.attributeCount++;
         NSLog(@"Setting the attribute 'boxheight' as CSS 'height'.");
         [style appendString:@"height:"];
         
@@ -339,6 +357,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     BOOL widthGesetzt = NO;
     if ([attributeDict valueForKey:@"width"])
     {
+        self.attributeCount++;
         NSLog(@"Setting the attribute 'width' as CSS 'width'.");
         [style appendString:@"width:"];
 
@@ -359,6 +378,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([attributeDict valueForKey:@"controlwidth"])
     {
+        self.attributeCount++;
         NSLog(@"Setting the attribute 'controlwidth' as CSS 'width'.");
         [style appendString:@"width:"];
 
@@ -377,6 +397,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([attributeDict valueForKey:@"x"])
     {
+        self.attributeCount++;
         NSLog(@"Setting the attribute 'x' as CSS 'left'.");
         [style appendString:@"left:"];
         [style appendString:[attributeDict valueForKey:@"x"]];
@@ -387,6 +408,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([attributeDict valueForKey:@"y"])
     {
+        self.attributeCount++;
         NSLog(@"Setting the attribute 'y' as CSS 'top'.");
         [style appendString:@"top:"];
         [style appendString:[attributeDict valueForKey:@"y"]];
@@ -395,8 +417,49 @@ void OLLog(xmlParser *self, NSString* s,...)
         [style appendString:@";"];
     }
 
+
+
+    if ([attributeDict valueForKey:@"fontsize"])
+    {
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'fontsize' as CSS 'font-size'.");
+
+        [style appendString:@"font-size:"];
+        [style appendString:[attributeDict valueForKey:@"fontsize"]];
+        [style appendString:@"px;"];
+    }
+
+
+
+    if ([attributeDict valueForKey:@"font"])
+    {
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'font' as CSS 'font-family'.");
+        
+        [style appendString:@"font-family:"];
+        [style appendString:[attributeDict valueForKey:@"font"]];
+        [style appendString:@";"];
+    }
+
+
+
+    // Skipping this attribute
+    if ([attributeDict valueForKey:@"scriptlimits"])
+    {
+        self.attributeCount++;
+        NSLog(@"Skipping the attribute 'scriptlimits'.");
+    }
+    if ([attributeDict valueForKey:@"stretches"])
+    {
+        // Wird automatisch con CSS bei Hintergrundbildern berücksichtigt
+        self.attributeCount++;
+        NSLog(@"Skipping the attribute 'stretches'.");
+    }
+
+
     if ([attributeDict valueForKey:@"resource"])
     {
+        self.attributeCount++;
         NSLog(@"Setting the attribute 'ressource' as CSS 'background-image:url()");
         NSString *s = @"";
 
@@ -423,7 +486,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-        NSLog(@"Untersuche das Bild auf Dateiebene");
+        NSLog(@"Checking the image directly on file-system:");
         // Dann erstmal width und height von dem Image auf Dateiebene ermitteln
         NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
 
@@ -435,8 +498,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSSize dimensions = [image size];
         NSInteger w = (int) dimensions.width;
         NSInteger h = (int) dimensions.height;
-        NSLog([NSString stringWithFormat:@"Resolving width of image from original file: %d",w]);
-        NSLog([NSString stringWithFormat:@"Resolving height of Image from original file: %d",h]);
+        NSLog([NSString stringWithFormat:@"Resolving width of image from original file: %d (setting as CSS-width)",w]);
+        NSLog([NSString stringWithFormat:@"Resolving height of Image from original file: %d (setting as CSS-height)",h]);
         if (!widthGesetzt)
             [style appendString:[NSString stringWithFormat:@"width:%dpx;",w]];
         // Height setzen wir erstmal immer, später ändern? (ToDo)
@@ -462,6 +525,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([attributeDict valueForKey:@"visible"])
     {
+        self.attributeCount++;
         NSLog(@"Setting the attribute 'visible' as JS.");
 
         // Remove all occurrences of $,{,}
@@ -477,6 +541,29 @@ void OLLog(xmlParser *self, NSString* s,...)
         [code appendString:idName];
         [code appendString:@"').style.visibility = 'hidden';"];
     }
+
+
+
+
+    if ([attributeDict valueForKey:@"onclick"])
+    {
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'onclick' as jQuery.");
+
+        // Remove all occurrences of $,{,}
+        NSString *s = [attributeDict valueForKey:@"onclick"];
+        s = [s stringByReplacingOccurrencesOfString:@"$" withString:@""];
+        s = [s stringByReplacingOccurrencesOfString:@"{" withString:@""];
+        s = [s stringByReplacingOccurrencesOfString:@"}" withString:@""];
+
+        // To Put in 's': [code appendString:s];
+        [code appendString:@"$('#"];
+        [code appendString:idName];
+        [code appendString:@"').click(function(){alert('ToDo: test');});"];
+    }
+
+
+
 
 
     NSMutableString *rueckgabe = [[NSMutableString alloc] initWithString:@""];
@@ -506,6 +593,10 @@ void OLLog(xmlParser *self, NSString* s,...)
     [self.output appendString:id];
     [self.output appendString:@"\""];
 
+
+    // Für Simplelayout speichern
+    self.zuletztGesetzteID = [NSString stringWithFormat:@"view%@",id];
+
     return id;
 }
 
@@ -525,8 +616,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.firstElementOfSimpleLayout_y = YES;
         self.simplelayout_y_tiefe--;
 
-        // Wenn wir ein tiefer verschachteltes simlelayout gerade verlassen, merken wir uns das
-        // das heißt ein anderes simplelayout (y) ist noch aktiv
+        // Wenn wir ein tiefer verschachteltes simlelayout gerade verlassen, merken wir uns das.
+        // Das heißt ein anderes simplelayout (y) ist noch aktiv
         if (self.simplelayout_y_tiefe > 0)
             wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y = YES;
     }
@@ -542,8 +633,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.simplelayout_x_tiefe--;
 
 
-        // Wenn wir ein tiefer verschachteltes simlelayout gerade verlassen, merken wir uns das
-        // das heißt ein anderes simplelayout (x) ist noch aktiv
+        // Wenn wir ein tiefer verschachteltes simlelayout gerade verlassen, merken wir uns das.
+        // Das heißt ein anderes simplelayout (x) ist noch aktiv
         if (self.simplelayout_x_tiefe > 0)
             wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_X = YES;
     }
@@ -660,8 +751,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 // ToDo: Im Release kommt hier das "exit(0);" dann raus.
 - (void) instableXML:(NSString*)s
 {
-    NSLog(@"%@",s);
-    exit(0);
+    NSLog([NSString stringWithFormat:@"%@",s]);
+    @throw [NSException exceptionWithName:NSInternalInconsistencyException reason:@"Exception geworfen" userInfo:nil];
+    // exit(0);
 }
 
 #pragma mark Delegate calls
@@ -675,12 +767,14 @@ didStartElement:(NSString *)elementName
     // Zum internen testen, ob wir alle Elemente erfasst haben
     BOOL element_bearbeitet = NO;
 
+    // Zum internen testen, ob wir alle Attribute erfasst haben
+    self.attributeCount = 0;
 
 
 
     self.verschachtelungstiefe++;
 
-    NSLog([NSString stringWithFormat:@"Opening Element: %@", elementName]);
+    NSLog([NSString stringWithFormat:@"\nOpening Element: %@", elementName]);
     NSLog([NSString stringWithFormat:@"with these attributes: %@\n", attributeDict]);
 
     // This is a string we will append to as the text arrives
@@ -707,8 +801,8 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
-        NSLog(@"Include Tag found!");
-        NSLog(@"Calling myself recursive");
+        NSLog(@"Include Tag found! So I am calling myself recursive");
+
         if (![attributeDict valueForKey:@"href"])
             [self instableXML:@"ERROR: No attribute 'src' given in include-tag"];
 
@@ -739,8 +833,22 @@ didStartElement:(NSString *)elementName
 
         if (![attributeDict valueForKey:@"name"])
             [self instableXML:@"ERROR: No attribute 'name' given in font-tag"];
+        else
+            self.attributeCount++;
         if (![attributeDict valueForKey:@"src"])
             [self instableXML:@"ERROR: No attribute 'src' given in font-tag"];
+        else
+            self.attributeCount++;
+
+        if ([attributeDict valueForKey:@"style"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the element 'font' as CSS '@font-face' (with 'name' and 'src' and 'style').");
+        }
+        else
+        {
+            NSLog(@"Setting the element 'font' as CSS '@font-face' (with 'name' and 'src').");
+        }
 
         NSString *name = [attributeDict valueForKey:@"name"];
         NSString *src = [attributeDict valueForKey:@"src"];
@@ -825,6 +933,14 @@ didStartElement:(NSString *)elementName
          // Falls src angegeben ist, kann die var direkt gespeichert werden.
         if ([attributeDict valueForKey:@"src"])
         {
+            self.attributeCount++;
+
+
+            if (![attributeDict valueForKey:@"name"])
+                [self instableXML:@"ERROR: No attribute 'name' given in resource-tag"];
+            else
+                self.attributeCount++;
+
             [self.jsHeadOutput appendString:@"var "];
             [self.jsHeadOutput appendString:[attributeDict valueForKey:@"name"]];
             [self.jsHeadOutput appendString:@" = \""];
@@ -836,6 +952,8 @@ didStartElement:(NSString *)elementName
         }
         else if ([attributeDict valueForKey:@"name"])
         {
+            self.attributeCount++;
+
             // Ansonsten machen wir im tag 'frame' weiter
             self.last_resource_name_for_frametag = [attributeDict valueForKey:@"name"];
         }
@@ -850,9 +968,28 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
+
+        if (![attributeDict valueForKey:@"name"])
+            [self instableXML:@"ERROR: No attribute 'name' given in attribute-tag"];
+        else
+            self.attributeCount++;
+        
+        if (![attributeDict valueForKey:@"type"])
+            [self instableXML:@"ERROR: No attribute 'type' given in attribute-tag"];
+        else
+            self.attributeCount++;
+        
+        if (![attributeDict valueForKey:@"value"])
+            [self instableXML:@"ERROR: No attribute 'value' given in attribute-tag"];
+        else
+            self.attributeCount++;
+
+
         // ToDo: Attrbute kann bis jetzt nur globale Variable verarbeiten, die direkt in canvas liegen
         if ([attributeDict valueForKey:@"name"])
         {
+            NSLog([NSString stringWithFormat:@"Setting '%@' as class-member in JavaScript-class 'canvas'.",[attributeDict valueForKey:@"name"]]);
+
             BOOL weNeedQuotes = YES;
             if ([[attributeDict valueForKey:@"type"] isEqualTo:@"boolean"])
                 weNeedQuotes = NO;
@@ -881,6 +1018,11 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
+        if (![attributeDict valueForKey:@"src"])
+            [self instableXML:@"ERROR: No attribute 'src' given in frame-tag"];
+        else
+            self.attributeCount++;
+
         // Erstmal alle frame-Einträge sammeln, weil wir nicht wissen wie viele noch kommen
         [self.collectedFrameResources addObject:[attributeDict valueForKey:@"src"]];
     }
@@ -903,9 +1045,17 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
+        if ([attributeDict valueForKey:@"spacing"])
+            self.attributeCount++;
+
+
+
         // Simplelayout mit Achse Y berücksichtigen
         if ([[attributeDict valueForKey:@"axis"] hasSuffix:@"y"])
         {
+            self.attributeCount++;
+
+
             // Anstatt nur TRUE gleichzeitig darin die Verschachtelungstiefe speichern
             // somit wird simplelayout nur in der richtigen Element-Ebene angewandt
             self.simplelayout_y = self.verschachtelungstiefe;
@@ -920,10 +1070,11 @@ didStartElement:(NSString *)elementName
                 [self.simplelayout_y_spacing addObject:@"0"];
             }
 
+            // SimpleLayout-Tiefenzähler (y) um 1 erhöhen
             self.simplelayout_y_tiefe++;
 
             /*******************/
-            // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe an der beinhaltenden Elemente
+            // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe der beinhaltenden Elemente an
             // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
             // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
             [self.jsOutput appendString:@"// Alle nachfolgenden Simplelayouts sollen entsprechend der Breite des vorherigen Divs aufrücken\n"];
@@ -949,6 +1100,9 @@ didStartElement:(NSString *)elementName
         // Simplelayout mit Achse X berücksichtigen
         if ([[attributeDict valueForKey:@"axis"] hasSuffix:@"x"])
         {
+            self.attributeCount++;
+
+
             // Anstatt nur TRUE gleichzeitig darin die Verschachtelungstiefe speichern
             // somit wird simplelayout nur in der richtigen Element-Ebene angewandt
             self.simplelayout_x = self.verschachtelungstiefe;
@@ -963,11 +1117,12 @@ didStartElement:(NSString *)elementName
                 [self.simplelayout_x_spacing addObject:@"0"];
             }
 
+            // SimpleLayout-Tiefenzähler (x) um 1 erhöhen
             self.simplelayout_x_tiefe++;
 
 
             /*******************/
-            // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe an der beinhaltenden Elemente
+            // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe der beinhaltenden Elemente an
             // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
             // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
             [self.jsOutput appendString:@"// Alle nachfolgenden Simplelayouts sollen entsprechend der Höhe des vorherigen Divs aufrücken\n"];
@@ -1269,12 +1424,15 @@ didStartElement:(NSString *)elementName
 
 
 
-
-
+    NSLog([NSString stringWithFormat:@"Es wurden %d von %d Attributen berücksichtigt.",self.attributeCount,[attributeDict count]]);
+    if (self.attributeCount != [attributeDict count])
+    {
+        // [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht alle Attribute verwertet."]];
+    }
 
 
     if (!element_bearbeitet)
-        [self instableXML:[NSString stringWithFormat:@"ERROR: Nicht erfasstes öffnendes Element: '%@'", elementName]];
+        [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht erfasstes öffnendes Element: '%@'", elementName]];
 
 
 
@@ -1480,12 +1638,6 @@ static inline BOOL isEmpty(id thing)
 
 - (void) parserDidEndDocument:(NSXMLParser *)parser
 {
-    // Move NSTextView to the end
-    NSRange range;
-    range = NSMakeRange ([[globalAccessToTextView string] length], 0);
-    [globalAccessToTextView scrollRangeToVisible: range];
-
-
     NSMutableString *pre = [[NSMutableString alloc] initWithString:@""];
 
     [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n<title>Canvastest</title>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n<script type=\"text/javascript\" src=\"jquery172.js\"></script>\n<script src=\"jsHelper.js\" type=\"text/javascript\"></script>\n\n<style type='text/css'>\n"];
@@ -1536,17 +1688,29 @@ static inline BOOL isEmpty(id thing)
         bool success = [self.output writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
 
         if (success)
-            NSLog(@"...done.");
+            NSLog(@"...succeed.");
         else
             NSLog(@"...failed.");
+        NSLog(@"Job done.");
     }
     else
     {
         NSLog(@"Error occurred during XML processing");
     }
+
+
+
+    [self jumpToEndOfTextView];
 }
 
 
+- (void) jumpToEndOfTextView
+{
+    // Move NSTextView to the end
+    NSRange range;
+    range = NSMakeRange ([[globalAccessToTextView string] length], 0);
+    [globalAccessToTextView scrollRangeToVisible: range];    
+}
 
 
 - (void) parser:(NSXMLParser *)parser parseErrorOccurred:(NSError *)parseError
@@ -1558,8 +1722,14 @@ static inline BOOL isEmpty(id thing)
     {
         NSLog(@"XML-Dokument unvollständig geladen bzw Datei nicht vorhanden bzw kein vollständiges XML-Tag enthalten.");
     }
-    
+
+    if ([errorString hasSuffix:@"76"])
+    {
+        NSLog(@"z. B. schließendes Tag gefunden ohne korrespondierendes öffnendes Tag.");
+    }
+
     self.errorParsing=YES;
+    [self jumpToEndOfTextView];
 }
 
 

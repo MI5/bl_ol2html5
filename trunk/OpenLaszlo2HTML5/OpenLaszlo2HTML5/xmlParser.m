@@ -46,7 +46,7 @@
 @property (strong, nonatomic) NSMutableString *cssOutput; // CSS-Ausgaben, die gesammelt werden, derzeit @Font-Face
 
 @property (nonatomic) BOOL errorParsing;
-@property (nonatomic) NSInteger viewIdZaehler;
+@property (nonatomic) NSInteger idZaehler;
 @property (nonatomic) NSInteger verschachtelungstiefe;
 
 @property (nonatomic) NSInteger simplelayout_y;
@@ -96,7 +96,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize errorParsing = _errorParsing, verschachtelungstiefe = _verschachtelungstiefe;
 
-@synthesize viewIdZaehler = _viewIdZaehler;
+@synthesize idZaehler = _idZaehler;
 
 @synthesize simplelayout_y = _simplelayout_y, simplelayout_y_spacing = _simplelayout_y_spacing;
 @synthesize firstElementOfSimpleLayout_y = _firstElementOfSimpleLayout_y, simplelayout_y_tiefe = _simplelayout_y_tiefe;
@@ -183,7 +183,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         self.errorParsing = NO;
         self.verschachtelungstiefe = 0;
-        self.viewIdZaehler = 0;
+        self.idZaehler = 0;
 
         self.simplelayout_y = 0;
         self.simplelayout_y_spacing = [[NSMutableArray alloc] init];
@@ -443,7 +443,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    // Skipping this attribute
+
+
+    // Skipping this attributes
     if ([attributeDict valueForKey:@"scriptlimits"])
     {
         self.attributeCount++;
@@ -455,6 +457,15 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.attributeCount++;
         NSLog(@"Skipping the attribute 'stretches'.");
     }
+    if ([attributeDict valueForKey:@"initstage"])
+    {
+        // Dieses Attribut spielt hoffentlich keine Rolle
+        self.attributeCount++;
+        NSLog(@"Skipping the attribute 'initstage'.");
+    }
+
+
+
 
 
     if ([attributeDict valueForKey:@"resource"])
@@ -556,10 +567,34 @@ void OLLog(xmlParser *self, NSString* s,...)
         s = [s stringByReplacingOccurrencesOfString:@"{" withString:@""];
         s = [s stringByReplacingOccurrencesOfString:@"}" withString:@""];
 
-        // To Put in 's': [code appendString:s];
-        [code appendString:@"$('#"];
-        [code appendString:idName];
-        [code appendString:@"').click(function(){alert('ToDo: test');});"];
+        // Wir löschen erstmal "canvas.", weil wir direk die Funktin in JS deklarieren
+        // Als Klassenmethode macht (noch) keinen Sinnm dann müssten wir ja erstmal mit new() ein objekt anlegen
+        // Außerdem wäre canvas ja der Klassenname und nicht der Objektname. Objekt bringt uns also hier nicht weiter
+        s = [s stringByReplacingOccurrencesOfString:@"canvas." withString:@""];
+
+
+        NSMutableString *gesammelterCode = [[NSMutableString alloc] initWithString:@""];
+        [gesammelterCode appendString:@"$('#"];
+        [gesammelterCode appendString:idName];
+        [gesammelterCode appendString:@"').click(function(){"];
+        [gesammelterCode appendString:s];
+        [gesammelterCode appendString:@"});"];
+
+
+        // Hiermit kann ich es jederzeit auch direkt im Div anzeigen, damit ich es schneller finde bei Debug-Suche
+        BOOL jQueryAusgabe = TRUE;
+
+
+        if (jQueryAusgabe)
+        {
+            [self.jQueryOutput appendString:@"  "];
+            [self.jQueryOutput appendString:gesammelterCode];
+            [self.jQueryOutput appendString:@"\n"];
+        }
+        else
+        {
+            [code appendString:gesammelterCode];
+        }
     }
 
 
@@ -581,31 +616,42 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-// Die ID ermitteln (für simplelayout) - auch canvas muss als view mitgezählt werden
-- (NSString*) addIdToElement
+// Die ID ermitteln
+// self.zuletztGesetzteID wird hier gesetzt, wird vom Simplelayout gebraucht
+- (NSString*) addIdToElement:(NSDictionary*) attributeDict
 {
+    // Erstmal auch dann setzen, wenn wir eine gegebene ID von OpenLaszlo haben, evtl. zu ändern
+    self.idZaehler++;
+
+    if ([attributeDict valueForKey:@"id"])
+    {
+        self.attributeCount++;
+        self.zuletztGesetzteID = [attributeDict valueForKey:@"id"];
+    }
+    else
+    {
+        self.zuletztGesetzteID = [NSString stringWithFormat:@"element%d",self.idZaehler];
+    }
 
 
-    NSString *id = [[NSString alloc] initWithFormat:@"%d", self.viewIdZaehler];
 
-    // alle views kriegen eine id verpasst (u. a. wegen Simplelayout)
-    [self.output appendString:@" id=\"view"];
-    [self.output appendString:id];
+    [self.output appendString:@" id=\""];
+    [self.output appendString:self.zuletztGesetzteID];
     [self.output appendString:@"\""];
 
 
-    // Für Simplelayout speichern
-    self.zuletztGesetzteID = [NSString stringWithFormat:@"view%@",id];
 
-    return id;
+
+    // Und Simplelayout-Check von hier aus aufrufen, da alle Elemente mit gesetzter ID überprüft werden sollen
+    [self check4Simplelayout];
+
+    return self.zuletztGesetzteID;
 }
 
 
-
+// Muss immer nach addIDToElement aufgerufen werden, da wir auf die zuletzt gesetzten id zurückgreifen
 - (void) check4Simplelayout
 {
-    // ToDo: Umbennen: Ist kein viewIdZaehler mehr, sondern eine IdZaehler
-    self.viewIdZaehler++;
 
     // simplelayout verlassen, alsbald das letzte Geschwisterchen erreicht ist
     BOOL wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y = NO;
@@ -644,28 +690,30 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    NSString *id = [[NSString alloc] initWithFormat:@"%d", self.viewIdZaehler];
+    NSString *id = self.zuletztGesetzteID;
     // Hol die aktuell geltende SpacingHöhe (für Simplelayout Y + x)
     NSInteger spacing_y = [[self.simplelayout_y_spacing lastObject] integerValue];
     NSInteger spacing_x = [[self.simplelayout_x_spacing lastObject] integerValue];
+
+
 
     // Simplelayout Y
     if (wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y)
     {
         // If-Abfrage bauen
-        [self.jsOutput appendString:@"if (document.getElementById('view"];
+        [self.jsOutput appendString:@"if (document.getElementById('"];
         [self.jsOutput appendString:id];
-        [self.jsOutput appendString:@"').previousElementSibling && document.getElementById('view"];
+        [self.jsOutput appendString:@"').previousElementSibling && document.getElementById('"];
         [self.jsOutput appendString:id];
         [self.jsOutput appendString:@"').previousElementSibling.lastElementChild)\n"];
 
-        [self.jsOutput appendString:@"  document.getElementById('view"];
+        [self.jsOutput appendString:@"  document.getElementById('"];
         [self.jsOutput appendString:id];
 
         // parseInt removes the "px" at the end
-        [self.jsOutput appendString:@"').style.top = (parseInt(document.getElementById('view"];
+        [self.jsOutput appendString:@"').style.top = (parseInt(document.getElementById('"];
         [self.jsOutput appendString:id];
-        [self.jsOutput appendString:@"').previousElementSibling.lastElementChild.offsetTop)+parseInt(document.getElementById('view"];
+        [self.jsOutput appendString:@"').previousElementSibling.lastElementChild.offsetTop)+parseInt(document.getElementById('"];
         [self.jsOutput appendString:id];
         [self.jsOutput appendString:@"').previousElementSibling.lastElementChild.style.height)+"];
         [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_y]];
@@ -678,17 +726,17 @@ void OLLog(xmlParser *self, NSString* s,...)
         if (!self.firstElementOfSimpleLayout_y)
         {
             // Den allerersten sippling auslassen
-            [self.jsOutput appendString:@"if (document.getElementById('view"];
+            [self.jsOutput appendString:@"if (document.getElementById('"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').previousElementSibling)\n"];
 
-            [self.jsOutput appendString:@"  document.getElementById('view"];
+            [self.jsOutput appendString:@"  document.getElementById('"];
             [self.jsOutput appendString:id];
 
             // parseInt removes the "px" at the end
-            [self.jsOutput appendString:@"').style.top = (parseInt(document.getElementById('view"];
+            [self.jsOutput appendString:@"').style.top = (parseInt(document.getElementById('"];
             [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').previousElementSibling.offsetTop)+parseInt(document.getElementById('view"];
+            [self.jsOutput appendString:@"').previousElementSibling.offsetTop)+parseInt(document.getElementById('"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').previousElementSibling.style.height)+"];
             [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_y]];
@@ -703,19 +751,19 @@ void OLLog(xmlParser *self, NSString* s,...)
     if (wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_X)
     {
         // If-Abfrage bauen
-        [self.jsOutput appendString:@"if (document.getElementById('view"];
+        [self.jsOutput appendString:@"if (document.getElementById('"];
         [self.jsOutput appendString:id];
-        [self.jsOutput appendString:@"').previousElementSibling && document.getElementById('view"];
+        [self.jsOutput appendString:@"').previousElementSibling && document.getElementById('"];
         [self.jsOutput appendString:id];
         [self.jsOutput appendString:@"').previousElementSibling.lastElementChild)\n"];
 
-        [self.jsOutput appendString:@"  document.getElementById('view"];
+        [self.jsOutput appendString:@"  document.getElementById('"];
         [self.jsOutput appendString:id];
 
         // parseInt removes the "px" at the end
-        [self.jsOutput appendString:@"').style.left = (parseInt(document.getElementById('view"];
+        [self.jsOutput appendString:@"').style.left = (parseInt(document.getElementById('"];
         [self.jsOutput appendString:id];
-        [self.jsOutput appendString:@"').previousElementSibling.lastElementChild.offsetLeft)+parseInt(document.getElementById('view"];
+        [self.jsOutput appendString:@"').previousElementSibling.lastElementChild.offsetLeft)+parseInt(document.getElementById('"];
         [self.jsOutput appendString:id];
         [self.jsOutput appendString:@"').previousElementSibling.lastElementChild.offsetWidth)+"];
         [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
@@ -728,17 +776,17 @@ void OLLog(xmlParser *self, NSString* s,...)
         if (!self.firstElementOfSimpleLayout_x)
         {
             // Den allerersten sippling auslassen
-            [self.jsOutput appendString:@"if (document.getElementById('view"];
+            [self.jsOutput appendString:@"if (document.getElementById('"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').previousElementSibling)\n"];
 
-            [self.jsOutput appendString:@"  document.getElementById('view"];
+            [self.jsOutput appendString:@"  document.getElementById('"];
             [self.jsOutput appendString:id];
 
             // parseInt removes the "px" at the end
-            [self.jsOutput appendString:@"').style.left = (parseInt(document.getElementById('view"];
+            [self.jsOutput appendString:@"').style.left = (parseInt(document.getElementById('"];
             [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').previousElementSibling.offsetLeft)+parseInt(document.getElementById('view"];
+            [self.jsOutput appendString:@"').previousElementSibling.offsetLeft)+parseInt(document.getElementById('"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').previousElementSibling.offsetWidth)+"];
             [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
@@ -793,6 +841,115 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"rollUpDown"])
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+
+
+
+
+    // Sollte als erstes stehen, damit der zuletzt gesetzte Zähler, auf den hier zurückgegriffen wird, noch stimmt.
+    if ([elementName isEqualToString:@"simplelayout"])
+    {
+        element_bearbeitet = YES;
+
+        if ([attributeDict valueForKey:@"spacing"])
+            self.attributeCount++;
+
+
+
+        // Simplelayout mit Achse Y berücksichtigen
+        if ([[attributeDict valueForKey:@"axis"] hasSuffix:@"y"])
+        {
+            self.attributeCount++;
+
+
+            // Anstatt nur TRUE gleichzeitig darin die Verschachtelungstiefe speichern
+            // somit wird simplelayout nur in der richtigen Element-Ebene angewandt
+            self.simplelayout_y = self.verschachtelungstiefe;
+
+            // spacing müssen wir auch sichern und später berücksichtigen
+            if ([attributeDict valueForKey:@"spacing"])
+            {
+                [self.simplelayout_y_spacing addObject:[attributeDict valueForKey:@"spacing"]];
+            }
+            else
+            {
+                [self.simplelayout_y_spacing addObject:@"0"];
+            }
+
+            // SimpleLayout-Tiefenzähler (y) um 1 erhöhen
+            self.simplelayout_y_tiefe++;
+
+            /*******************/
+            // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe der beinhaltenden Elemente an
+            // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
+            // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
+            [self.jsOutput appendString:@"// Eventuell nachfolgenden Simplelayouts müssen entsprechend der Breite des vorherigen umgebenden Divs aufrücken\n"];
+
+            // If-Abfrage drum herum als Schutz gegen unbekannte Elemente oder wenn simplelayout das letzte Element
+            // mehrerer Geschwister ist, was nicht unterstützt wird
+            [self.jsOutput appendString:@"if (document.getElementById('"];
+            [self.jsOutput appendString:self.zuletztGesetzteID];
+            [self.jsOutput appendString:@"').lastElementChild)\n"];
+
+            [self.jsOutput appendString:@"  document.getElementById('"];
+            [self.jsOutput appendString:self.zuletztGesetzteID];
+            [self.jsOutput appendString:@"').style.width = document.getElementById('"];
+            [self.jsOutput appendString:self.zuletztGesetzteID];
+            // ToDo: Hier muss ich eigentlich dasjenige Kind suchen, welches die größte Breite hat
+            [self.jsOutput appendString:@"').lastElementChild.style.width"];
+            [self.jsOutput appendString:@";\n\n"];
+            /*******************/
+        }
+
+
+
+        // Simplelayout mit Achse X berücksichtigen
+        if ([[attributeDict valueForKey:@"axis"] hasSuffix:@"x"])
+        {
+            self.attributeCount++;
+
+
+            // Anstatt nur TRUE gleichzeitig darin die Verschachtelungstiefe speichern
+            // somit wird simplelayout nur in der richtigen Element-Ebene angewandt
+            self.simplelayout_x = self.verschachtelungstiefe;
+
+            // spacing müssen wir auch sichern und später berücksichtigen
+            if ([attributeDict valueForKey:@"spacing"])
+            {
+                [self.simplelayout_x_spacing addObject:[attributeDict valueForKey:@"spacing"]];
+            }
+            else
+            {
+                [self.simplelayout_x_spacing addObject:@"0"];
+            }
+
+            // SimpleLayout-Tiefenzähler (x) um 1 erhöhen
+            self.simplelayout_x_tiefe++;
+
+
+            /*******************/
+            // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe der beinhaltenden Elemente an
+            // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
+            // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
+            [self.jsOutput appendString:@"// Eventuell nachfolgenden Simplelayouts müssen entsprechend der Höhe des vorherigen umgebenden Divs aufrücken\n"];
+
+            // If-Abfrage drum herum als Schutz gegen unbekannte Elemente oder wenn simplelayout das letzte Element
+            // mehrerer Geschwister ist, was nicht unterstützt wird
+            [self.jsOutput appendString:@"if (document.getElementById('"];
+            [self.jsOutput appendString:self.zuletztGesetzteID];
+            [self.jsOutput appendString:@"').lastElementChild)\n"];
+
+            [self.jsOutput appendString:@"  document.getElementById('"];
+            [self.jsOutput appendString:self.zuletztGesetzteID];
+            [self.jsOutput appendString:@"').style.height = document.getElementById('"];
+            [self.jsOutput appendString:self.zuletztGesetzteID];
+            // ToDo: Hier muss ich eigentlich dasjenige Kind suchen, welches die größte height hat
+            [self.jsOutput appendString:@"').lastElementChild.style.height"];
+            [self.jsOutput appendString:@";\n\n"];
+            /*******************/
+        }
+    }
+
+
 
 
 
@@ -875,12 +1032,12 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
-        [self check4Simplelayout];
+
 
 
         [self.output appendString:@"<div"];
 
-        [self addIdToElement];
+        [self addIdToElement:attributeDict];
 
         [self.output appendString:@" class=\"ol_standard_canvas\" style=\""];
 
@@ -1041,138 +1198,50 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"simplelayout"])
+
+
+
+
+
+
+
+
+    if ([elementName isEqualToString:@"view"])
     {
         element_bearbeitet = YES;
 
-        if ([attributeDict valueForKey:@"spacing"])
-            self.attributeCount++;
-
-
-
-        // Simplelayout mit Achse Y berücksichtigen
-        if ([[attributeDict valueForKey:@"axis"] hasSuffix:@"y"])
-        {
-            self.attributeCount++;
-
-
-            // Anstatt nur TRUE gleichzeitig darin die Verschachtelungstiefe speichern
-            // somit wird simplelayout nur in der richtigen Element-Ebene angewandt
-            self.simplelayout_y = self.verschachtelungstiefe;
-
-            // spacing müssen wir auch sichern und später berücksichtigen
-            if ([attributeDict valueForKey:@"spacing"])
-            {
-                [self.simplelayout_y_spacing addObject:[attributeDict valueForKey:@"spacing"]];
-            }
-            else
-            {
-                [self.simplelayout_y_spacing addObject:@"0"];
-            }
-
-            // SimpleLayout-Tiefenzähler (y) um 1 erhöhen
-            self.simplelayout_y_tiefe++;
-
-            /*******************/
-            // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe der beinhaltenden Elemente an
-            // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
-            // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
-            [self.jsOutput appendString:@"// Alle nachfolgenden Simplelayouts sollen entsprechend der Breite des vorherigen Divs aufrücken\n"];
-
-            // If-Abfrage drum herum als Schutz gegen unbekannte Elemente oder wenn simplelayout das letzte Element
-            // mehrerer Geschwister ist, was nicht unterstützt wird
-            [self.jsOutput appendString:@"if (document.getElementById('view"];
-            [self.jsOutput appendString:[[NSString alloc] initWithFormat:@"%d", self.viewIdZaehler]];
-            [self.jsOutput appendString:@"').lastElementChild)\n"];
-
-            [self.jsOutput appendString:@"  document.getElementById('view"];
-            [self.jsOutput appendString:[[NSString alloc] initWithFormat:@"%d", self.viewIdZaehler]];
-            [self.jsOutput appendString:@"').style.width = document.getElementById('view"];
-            [self.jsOutput appendString:[[NSString alloc] initWithFormat:@"%d", self.viewIdZaehler]];
-            // ToDo: Hier muss ich eigentlich dasjenige Kind suchen, welches die größte Breite hat
-            [self.jsOutput appendString:@"').lastElementChild.style.width"];
-            [self.jsOutput appendString:@";\n\n"];
-            /*******************/
-        }
-
-
-
-        // Simplelayout mit Achse X berücksichtigen
-        if ([[attributeDict valueForKey:@"axis"] hasSuffix:@"x"])
-        {
-            self.attributeCount++;
-
-
-            // Anstatt nur TRUE gleichzeitig darin die Verschachtelungstiefe speichern
-            // somit wird simplelayout nur in der richtigen Element-Ebene angewandt
-            self.simplelayout_x = self.verschachtelungstiefe;
-
-            // spacing müssen wir auch sichern und später berücksichtigen
-            if ([attributeDict valueForKey:@"spacing"])
-            {
-                [self.simplelayout_x_spacing addObject:[attributeDict valueForKey:@"spacing"]];
-            }
-            else
-            {
-                [self.simplelayout_x_spacing addObject:@"0"];
-            }
-
-            // SimpleLayout-Tiefenzähler (x) um 1 erhöhen
-            self.simplelayout_x_tiefe++;
-
-
-            /*******************/
-            // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe der beinhaltenden Elemente an
-            // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
-            // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
-            [self.jsOutput appendString:@"// Alle nachfolgenden Simplelayouts sollen entsprechend der Höhe des vorherigen Divs aufrücken\n"];
-
-            // If-Abfrage drum herum als Schutz gegen unbekannte Elemente oder wenn simplelayout das letzte Element
-            // mehrerer Geschwister ist, was nicht unterstützt wird
-            [self.jsOutput appendString:@"if (document.getElementById('view"];
-            [self.jsOutput appendString:[[NSString alloc] initWithFormat:@"%d", self.viewIdZaehler]];
-            [self.jsOutput appendString:@"').lastElementChild)\n"];
-
-            [self.jsOutput appendString:@"  document.getElementById('view"];
-            [self.jsOutput appendString:[[NSString alloc] initWithFormat:@"%d", self.viewIdZaehler]];
-            [self.jsOutput appendString:@"').style.height = document.getElementById('view"];
-            [self.jsOutput appendString:[[NSString alloc] initWithFormat:@"%d", self.viewIdZaehler]];
-            // ToDo: Hier muss ich eigentlich dasjenige Kind suchen, welches die größte height hat
-            [self.jsOutput appendString:@"').lastElementChild.style.height"];
-            [self.jsOutput appendString:@";\n\n"];
-            /*******************/
-        }
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-    if ([elementName isEqualToString:@"view"] || [elementName isEqualToString:@"basebutton"])
-    {
-        element_bearbeitet = YES;
-
-        [self check4Simplelayout];
-
-        if ([elementName isEqualToString:@"basebutton"])
-        {
-            [self.output appendString:@"<!-- Basebutton: -->\n"];
-            [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
-        }
 
         [self.output appendString:@"<div"];
 
 
         // id hinzufügen und gleichzeitg speichern
-        NSString *id = [self addIdToElement];
+        NSString *id = [self addIdToElement:attributeDict];
+
+
+
+        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in view wegen 'cobrand-view',
+        // hätte sonst eventuell zu viele Seiteneffekte.
+        // Außerdem ist name nicht erlaubt gemäß HTML-Validator als Attribut bei DIVs
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the view's attribute 'name' as CSS 'name'.");
+            [self.output appendString:@" name=\""];
+            [self.output appendString:[attributeDict valueForKey:@"name"]];
+            [self.output appendString:@"\""];
+        }
+
+
+
+
+        // Wird derzeit noch übersprungen (ToDo)
+        if ([attributeDict valueForKey:@"layout"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping layout-Attribute on view (ToDo).");
+        }
+
+
 
 
         [self.output appendString:@" class=\"ol_standard_view\" style=\""];
@@ -1181,18 +1250,41 @@ didStartElement:(NSString *)elementName
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
 
+        [self.output appendString:@"\">\n"];
+
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
+    }
 
 
 
 
+
+    if ([elementName isEqualToString:@"basebutton"])
+    {
+        element_bearbeitet = YES;
+        
+        
+
+        [self.output appendString:@"<!-- Basebutton: -->\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+
+
+        [self.output appendString:@"<div"];
+
+        // id hinzufügen und gleichzeitg speichern
+        NSString *id = [self addIdToElement:attributeDict];
+
+
+        [self.output appendString:@" class=\"ol_standard_view\" style=\""];
+
+
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
 
 
         [self.output appendString:@"\">\n"];
 
-        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"view%@",id]]];
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
     }
-
-
 
 
 
@@ -1202,11 +1294,10 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
-        [self check4Simplelayout];
 
         [self.output appendString:@"<div"];
 
-        [self addIdToElement];
+        [self addIdToElement:attributeDict];
 
         [self.output appendString:@" style=\""];
 
@@ -1216,6 +1307,8 @@ didStartElement:(NSString *)elementName
 
         if ([attributeDict valueForKey:@"text"])
         {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'text' as text between opening and closing tag.");
             [self.output appendString:[attributeDict valueForKey:@"text"]];
         }
     }
@@ -1226,11 +1319,24 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
-        [self check4Simplelayout];
 
-        [self.output appendString:@"<input type=\"text\""];
+        if ([attributeDict valueForKey:@"password"])
+        {
+            self.attributeCount++;
+            NSLog(@"Using the attribute 'password' for HTML '<input type=\"password\">'.");
 
-        [self addIdToElement];
+            if ([[attributeDict valueForKey:@"password"] isEqual:@"true"])
+                [self.output appendString:@"<input type=\"password\""];
+            else
+                [self.output appendString:@"<input type=\"text\""];
+        }
+        else
+        {
+            [self.output appendString:@"<input type=\"text\""];
+        }
+
+
+        [self addIdToElement:attributeDict];
 
         [self.output appendString:@" style=\""];
 
@@ -1247,7 +1353,6 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
-        [self check4Simplelayout];
 
         if ([attributeDict valueForKey:@"title"])
         {
@@ -1264,7 +1369,7 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"<select class=\"combobox\" size=\"1\""];
 
-        [self addIdToElement];
+        [self addIdToElement:attributeDict];
 
         [self.output appendString:@" style=\""];
 
@@ -1299,11 +1404,11 @@ didStartElement:(NSString *)elementName
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
-        [self check4Simplelayout];
 
         [self.output appendString:@"<div"];
 
-        [self addIdToElement];
+        [self addIdToElement:attributeDict];
+
 
         // Im Prinzip nur wegen Boxheight müssen wir in addCSSAttributes rein
         [self.output appendString:@" style=\""];
@@ -1313,17 +1418,21 @@ didStartElement:(NSString *)elementName
 
         // Setz die MiliSekunden für die Animationszeit, damit die 'rollUpDown'-Elemente darauf zugreifen können
         if ([attributeDict valueForKey:@"animduration"])
+        {
+            self.attributeCount++;
             self.animDuration = [attributeDict valueForKey:@"animduration"];
+        }
         else
+        {
             self.animDuration = @"slow";
+        }
     }
 
 
 
 
 
-    // Das äußere Div behält die selbst generierte ID, die beiden inneren DIVs erhalten die
-    // in OpenLaszlo gesetzte Original-ID
+
     if ([elementName isEqualToString:@"rollUpDown"])
     {
         element_bearbeitet = YES;
@@ -1332,11 +1441,13 @@ didStartElement:(NSString *)elementName
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
-        [self check4Simplelayout];
-
         [self.output appendString:@"<div"];
 
-        [self addIdToElement];
+        // Das äußere Div erhält eine selbst generierte ID, die beiden inneren DIVs erhalten die
+        // in OpenLaszlo gesetzten Original-IDs, dazu müssen wir hier aber nil als attributeDict
+        // angeben, um vorzutäuschen es gäbe keine ID.
+        [self addIdToElement:nil];
+
 
         [self.output appendString:@" style=\"width:inherit;height:inherit;"];
 
@@ -1362,6 +1473,7 @@ didStartElement:(NSString *)elementName
         NSString *id4panel;
         if ([attributeDict valueForKey:@"id"])
         {
+            self.attributeCount++;
             id4flipleiste = [attributeDict valueForKey:@"id"];
             id4panel = [NSString stringWithFormat:@"%@_panel",[attributeDict valueForKey:@"id"]];
         }
@@ -1376,10 +1488,20 @@ didStartElement:(NSString *)elementName
         NSString *title = @"";
         if ([attributeDict valueForKey:@"header"])
         {
+            self.attributeCount++;
             title = [attributeDict valueForKey:@"header"];
         }
 
         int heightOfFlipBar = 30;
+        if ([attributeDict valueForKey:@"hmargin"])
+        {
+            self.attributeCount++;
+            heightOfFlipBar = [[attributeDict valueForKey:@"hmargin"] intValue];
+            heightOfFlipBar +=3; // Abstand nach oben
+            heightOfFlipBar +=3; // Abstand nach unten
+        }
+
+
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<!-- Die Flipleiste -->\n"];
@@ -1401,10 +1523,24 @@ didStartElement:(NSString *)elementName
         [self.output appendString:id4panel];
         [self.output appendString:@"\">\n"];
 
+
         // Die jQuery-Ausgabe
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"$(\"#%@\").click(function(){$(\"#%@\").slideToggle(\"",id4flipleiste,id4panel]];
+        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").click(function(){$(\"#%@\").slideToggle(",id4flipleiste,id4panel]];
         [self.jQueryOutput appendString:self.animDuration];
-        [self.jQueryOutput appendString:@"\");});\n"];
+        [self.jQueryOutput appendString:@");});\n"];
+
+        if ([attributeDict valueForKey:@"down"])
+        {
+            self.attributeCount++;
+
+            // Falls down = false Menü einmal zuschieben.
+            if ([[attributeDict valueForKey:@"down"] isEqual:@"false"])
+            {
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").slideToggle(",id4panel]];
+                // [self.jQueryOutput appendString:self.animDuration];
+                [self.jQueryOutput appendString:@"0); // Einmal zuschieben das Menü\n"];
+            }
+        }
     }
 
 
@@ -1427,7 +1563,7 @@ didStartElement:(NSString *)elementName
     NSLog([NSString stringWithFormat:@"Es wurden %d von %d Attributen berücksichtigt.",self.attributeCount,[attributeDict count]]);
     if (self.attributeCount != [attributeDict count])
     {
-        // [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht alle Attribute verwertet."]];
+       [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht alle Attribute verwertet."]];
     }
 
 
@@ -1660,7 +1796,7 @@ static inline BOOL isEmpty(id thing)
     // Füge noch die nötigen JS ein:
     [self.output appendString:@"\n<script type=\"text/javascript\">\n"];
     [self.output appendString:self.jsOutput];
-    [self.output appendString:@"\n\n$(function()\n{\n  "];
+    [self.output appendString:@"\n\n$(function()\n{\n"];
     [self.output appendString:self.jQueryOutput];
     [self.output appendString:@"});\n</script>\n\n"];
 

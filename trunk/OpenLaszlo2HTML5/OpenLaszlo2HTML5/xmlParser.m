@@ -1897,7 +1897,10 @@ static inline BOOL isEmpty(id thing)
 {
     NSMutableString *pre = [[NSMutableString alloc] initWithString:@""];
 
-    [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n<title>Canvastest</title>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n<script type=\"text/javascript\" src=\"jquery172.js\"></script>\n<script src=\"jsHelper.js\" type=\"text/javascript\"></script>\n\n<style type='text/css'>\n"];
+    [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n<title>Canvastest</title>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n<script type=\"text/javascript\" src=\"http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js\"></script>\n<script src=\"jsHelper.js\" type=\"text/javascript\"></script>\n\n<style type='text/css'>\n"];
+    // Falls latest jQuery-Version gewünscht:
+    // '<script type="text/javascript" src="http://code.jquery.com/jquery-latest.min.js"></script>' einbauen
+    // aber dann kein Caching.
     [pre appendString:self.cssOutput];
     [pre appendString:@"</style>\n\n<script type=\"text/javascript\">\n"];
 
@@ -1932,13 +1935,17 @@ static inline BOOL isEmpty(id thing)
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDownloadsDirectory, NSUserDomainMask, YES);
     NSString *dlDirectory = [paths objectAtIndex:0];
     NSString * path = [[NSString alloc] initWithString:dlDirectory];
+
+    [self createCSSFile:[NSString stringWithFormat:@"%@/formate2.css",path]];
+    [self createJSFile:[NSString stringWithFormat:@"%@/jsHelper2.css",path]];
+
     path = [path stringByAppendingString: @"/output_ol2x.html"];
 
     // NSLog(@"%@",path);
 
     if (self.errorParsing == NO)
     {
-        NSLog(@"XML processing done! Writing file...");
+        NSLog(@"XML processing done!");
 
         // Schreiben einer Datei per NSData:
         // NSData* data = [self.output dataUsingEncoding:NSUTF8StringEncoding];
@@ -1949,9 +1956,9 @@ static inline BOOL isEmpty(id thing)
         bool success = [self.output writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
 
         if (success)
-            NSLog(@"...succeed.");
+            NSLog(@"Writing file... succeeded.");
         else
-            NSLog(@"...failed.");
+            NSLog(@"Writing file...failed.");
         NSLog(@"Job done.");
     }
     else
@@ -1963,6 +1970,136 @@ static inline BOOL isEmpty(id thing)
 
     [self jumpToEndOfTextView];
 }
+
+
+
+
+- (void) createCSSFile:(NSString*)path
+{
+    NSString *css = @"/* DATEI: formate.css */ "
+    "/* Enthaelt standard-Definitionen von OpenLaszlo, falls diese nicht ueberschrieben werden */ "
+    "/* "
+    "Known issues: "
+    "inherit => Not supported by IE6 & IE 7; hilft ersetzen durch auto? "
+    "previousElementSibling => not supported by IE < 9 "
+    " "
+    " - simplelayout muss das erste element sein bei schwester-elementen "
+    " - keine Unterstützung für Sound-Resourcen "
+    " - Kommentare gehen verloren "
+    " - offsetWIdth vs clientWIdth nochmal testen, aber macht wohl keinen Unterschied: "
+    " (http://www.quirksmode.org/dom/w3c_cssom.html) "
+    " "
+    "ToDo "
+    " - Bei views das Layout-Attribut berücksichtigen: Dazu wohl Simplelayout-Anfangs-Test als eigene Methode; "
+    " - Bei Links muss sich der Mauszeiger verändern "
+    " - BDStext darf derzeit keine HTML-Tags enthalten, das ist blöd "
+    " - BaseButton ist noch in view integriert. Passt das so? "
+    " - Warum bricht er e-Mail beim Bindestrich um? "
+    " - BLABLAparent.width (mit Blabla mit was ersetzt) macht er zu breit, wenn ich es nur mit einem width ersetze "
+    " - style.height in check4somplelayout kann/muss ich wohl ersetzen mit offsetHeight "
+    " - Files importieren und so damit rekursiv arbeiten "
+    " - 1000px großes bild soll nur bis zum Bildschirmrand gehen "
+    " - und zusätzlich sich selbst aktualisieren, wenn bildschirmhöhe verändert wird "
+    " - PS: CSS einteilen in Form, Farbe, Schrift "
+    " */ "
+    " "
+    "body, html "
+    "{ "
+    "    /* http://www.quirksmode.org/css/100percheight.html */ "
+    " height: 100%; "
+    "    /* prevent browser decorations */ "
+    " margin: 0; "
+    "    /* padding: 0; Nicht notwendig: http://www.thestyleworks.de/basics/inheritance.shtml*/ "
+    " border: 0 none; "
+    " "
+    "    /* Prevents scrolling */ "
+    "overflow: hidden; "
+    " "
+    "    text-align: center; "
+    "} "
+    "img { border: 0 none; } "
+    " "
+    "/* Alle Divs und inputs müssen position:absolute sein, damit die Poitionsangaben stimmen */ "
+    "div, input "
+    "{ "
+	"position:absolute; "
+    " "
+    "    /* Damit auf jedenfall ein Startwert gesetzt ist, sonst gibt es massive Probs beim auslesen der Variable */ "
+	"height:auto; "
+	"width:auto; "
+    "} "
+    " "
+    "/* Das Standard-Canvas, dass den Rahmen darstellt */ "
+    "div.ol_standard_canvas "
+    "{ "
+    "    background-color:white; "
+	"height:100%; "
+	"width:100%; "
+	"position:absolute; "
+	"top:0px; "
+	"left:0px; "
+    "    text-align:left; "
+	"padding:0px; "
+    "} "
+    " "
+    "select "
+    "{ "
+    "    margin-left:5px; "
+    "} "
+    " "
+    "/* Das Standard-Window, wie es ungefaehr in OpenLaszlo aussieht */ "
+    "div.ol_standard_window "
+    "{ "
+    "    background-color:lightgrey; "
+	"height:40px; "
+	"width:50px; "
+	"position:relative; /* ToDo: Ist hier dann nicht auch absolute? */ "
+	"top:20px; "
+	"left:20px; "
+    "text-align:left; "
+	"padding:4px; "
+    "} "
+    " "
+    "/* Das Standard-View, wie es ungefaehr in OpenLaszlo aussieht */ "
+    "div.ol_standard_view "
+    "{ "
+    "    /* background-color:blue; /* Standard ist hier keine, also transparent, aber zum testen auf blau setzen */ "
+    " "
+	"height:auto; "
+	"width:auto; "
+	"position:absolute; "
+	"top:0px; "
+	"left:0px; "
+    "/* "
+    "text-align:left; "
+    "padding:4px; "
+    "*/ "
+    "} ";
+
+
+
+    bool success = [css writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
+
+    if (success)
+        NSLog(@"Writing CSS-File... succeeded.");
+    else
+        NSLog(@"Writing file... failed.");   
+}
+
+
+
+- (void) createJSFile:(NSString*)path
+{
+    NSString *js = @"/* DATEI: jsHelper.js */ ";
+
+    bool success = [js writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
+
+    if (success)
+        NSLog(@"Writing JS-File... succeeded.");
+    else
+        NSLog(@"Writing file... failed.");  
+}
+
 
 
 - (void) jumpToEndOfTextView

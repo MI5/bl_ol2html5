@@ -178,7 +178,10 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.jsOutput = [[NSMutableString alloc] initWithString:@""];
         self.jQueryOutput = [[NSMutableString alloc] initWithString:@""];
         self.jsHeadOutput = [[NSMutableString alloc] initWithString:@""];
-        self.jsHead2Output = [[NSMutableString alloc] initWithString:@""];
+        // Wir sammeln hierdrin die global gesetzten Konstanten/Variablen, auf die vom Open-
+        // Laszlo-Skript per canvas.* zugegriffen wird. Dazu legen wir einfach ein
+        // canvas-JS-Objekt an! Aber natürlich nur einmal, nicht bei rekursiven Aufrufen. (ToDo)
+        self.jsHead2Output = [[NSMutableString alloc] initWithString:@"canvas=new Object();\n"];
         self.cssOutput = [[NSMutableString alloc] initWithString:@""];
 
         self.errorParsing = NO;
@@ -453,7 +456,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
     if ([attributeDict valueForKey:@"stretches"])
     {
-        // Wird automatisch con CSS bei Hintergrundbildern berücksichtigt
+        // Wird automatisch von CSS bei Hintergrundbildern berücksichtigt
         self.attributeCount++;
         NSLog(@"Skipping the attribute 'stretches'.");
     }
@@ -463,6 +466,14 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.attributeCount++;
         NSLog(@"Skipping the attribute 'initstage'.");
     }
+    if ([attributeDict valueForKey:@"listwidth"])
+    {
+        // Kann mit diesem Attribut derzeit nichts anfangen
+        self.attributeCount++;
+        NSLog(@"Skipping the attribute 'listwidth'.");
+    }
+
+
 
 
 
@@ -567,8 +578,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         s = [s stringByReplacingOccurrencesOfString:@"{" withString:@""];
         s = [s stringByReplacingOccurrencesOfString:@"}" withString:@""];
 
-        // Wir löschen erstmal "canvas.", weil wir direk die Funktin in JS deklarieren
-        // Als Klassenmethode macht (noch) keinen Sinnm dann müssten wir ja erstmal mit new() ein objekt anlegen
+        // Wir löschen erstmal 'canvas.', weil wir direkt die Funktin in JS deklarieren
+        // Als Klassenmethode macht (noch) keinen Sinn, dann müssten wir ja erstmal mit new() ein objekt anlegen
         // Außerdem wäre canvas ja der Klassenname und nicht der Objektname. Objekt bringt uns also hier nicht weiter
         s = [s stringByReplacingOccurrencesOfString:@"canvas." withString:@""];
 
@@ -601,6 +612,29 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+
+
+
+    // Skipping this attributes
+    if ([attributeDict valueForKey:@"dataset"])
+    {
+        self.attributeCount++;
+        NSLog(@"ToDo: Implement later the attribute 'dataset'.");
+    }
+    if ([attributeDict valueForKey:@"datapath"])
+    {
+        self.attributeCount++;
+        NSLog(@"ToDo: Implement later the attribute 'datapath'.");
+    }
+
+
+
+
+
+
+
+
+
     NSMutableString *rueckgabe = [[NSMutableString alloc] initWithString:@""];
     if ([code length] > 0)
     {
@@ -622,6 +656,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 {
     // Erstmal auch dann setzen, wenn wir eine gegebene ID von OpenLaszlo haben, evtl. zu ändern
     self.idZaehler++;
+    NSLog(@"Setting the attribute 'id' as HTML-attribute 'id'.");
 
     if ([attributeDict valueForKey:@"id"])
     {
@@ -1119,8 +1154,6 @@ didStartElement:(NSString *)elementName
 
 
 
-    // ToDo: -Hier ist noch viel zu tun: Nur bei boolean bisher die Quotes entfernt
-    // ToDo: -wir legen jedesmal ein neues Objekt an, das darf nur einmal geschehen
     if ([elementName isEqualToString:@"attribute"])
     {
         element_bearbeitet = YES;
@@ -1130,28 +1163,30 @@ didStartElement:(NSString *)elementName
             [self instableXML:@"ERROR: No attribute 'name' given in attribute-tag"];
         else
             self.attributeCount++;
-        
+
         if (![attributeDict valueForKey:@"type"])
             [self instableXML:@"ERROR: No attribute 'type' given in attribute-tag"];
         else
             self.attributeCount++;
-        
+
         if (![attributeDict valueForKey:@"value"])
             [self instableXML:@"ERROR: No attribute 'value' given in attribute-tag"];
         else
             self.attributeCount++;
 
 
-        // ToDo: Attrbute kann bis jetzt nur globale Variable verarbeiten, die direkt in canvas liegen
+        // ToDo: 'attrbute' kann bis jetzt nur globale Variable verarbeiten, die direkt in canvas liegen
         if ([attributeDict valueForKey:@"name"])
         {
             NSLog([NSString stringWithFormat:@"Setting '%@' as class-member in JavaScript-class 'canvas'.",[attributeDict valueForKey:@"name"]]);
 
             BOOL weNeedQuotes = YES;
-            if ([[attributeDict valueForKey:@"type"] isEqualTo:@"boolean"])
+            if ([[attributeDict valueForKey:@"type"] isEqualTo:@"boolean"] ||
+                [[attributeDict valueForKey:@"type"] isEqualTo:@"number"])
                 weNeedQuotes = NO;
-            // [self.jsHead2Output appendString:@"var "]; -> Wir lösen es mal als Objekt und schauen mal: ToCheck
-            [self.jsHead2Output appendString:@"canvas=new Object();\ncanvas."]; // ToDo, ToDo, ToDo: Hard coded Trick
+
+
+            [self.jsHead2Output appendString:@"canvas."];
             [self.jsHead2Output appendString:[attributeDict valueForKey:@"name"]];
             [self.jsHead2Output appendString:@" = "];
             if (weNeedQuotes)
@@ -1161,7 +1196,8 @@ didStartElement:(NSString *)elementName
                 [self.jsHead2Output appendString:@"\""];
             [self.jsHead2Output appendString:@";\n"];
 
-            // Auch intern die Var speichern? Erstmal nein
+            // Auch intern die Var speichern? Erstmal nein. Wir wollen bewusst per JS/jQuery immer
+            // drauf zugreifen! Weil die Variablen nach dem Export noch benutzbar sein sollen.
             // [self.allJSGlobalVars setObject:[attributeDict valueForKey:@"src"] forKey:[attributeDict valueForKey:@"name"]];
         }
     }
@@ -1335,6 +1371,14 @@ didStartElement:(NSString *)elementName
             [self.output appendString:@"<input type=\"text\""];
         }
 
+        if ([attributeDict valueForKey:@"pattern"])
+        {
+            self.attributeCount++;
+
+            // if ([[attributeDict valueForKey:@"pattern"] isEqual:@"[0-9a-z@_.\\-]*"])
+            //    ; // ToDo: Hier wohl <input type="email"... (neu eingeführt in HTML5)
+            
+        }
 
         [self addIdToElement:attributeDict];
 
@@ -1354,29 +1398,63 @@ didStartElement:(NSString *)elementName
         element_bearbeitet = YES;
 
 
+        // Wenn im Attribut title Code auftaucht, dann müssen wir es dynamisch setzen
+        // müssen aber erst abwarten bis wir die ID haben, weil wir die für den Zugriff brauchen.
+        // <span> drum herum, damit ich per jQuery darauf zugreifen kann
+        BOOL titelDynamischSetzen = NO;
         if ([attributeDict valueForKey:@"title"])
         {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'title' in <span>-tags as text in front of combobox.");
             if ([[attributeDict valueForKey:@"title"] hasPrefix:@"$"])
             {
-                // To Con: regExp the JS from here: [attributeDict valueForKey:@"title"]
-                [self.output appendString:@"JAVASCRIPT"];
+                titelDynamischSetzen = YES;
+                [self.output appendString:@"<span>CODE! - Wird dynamisch mit jQuery ersetzt.</span>\n"];
             }
             else
             {
+                [self.output appendString:@"<span>"];
                 [self.output appendString:[attributeDict valueForKey:@"title"]];
+                [self.output appendString:@"</span>\n"];
             }
         }
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
         [self.output appendString:@"<select class=\"combobox\" size=\"1\""];
 
-        [self addIdToElement:attributeDict];
+        NSString *id =[self addIdToElement:attributeDict];
+
+        // Jetzt erst haben wir die ID und können diese nutzen für den jQuery-Code
+        if (titelDynamischSetzen)
+        {
+            NSString *code = [attributeDict valueForKey:@"title"];
+            // Remove all occurrences of $,{,}
+            code = [code stringByReplacingOccurrencesOfString:@"$" withString:@""];
+            code = [code stringByReplacingOccurrencesOfString:@"{" withString:@""];
+            code = [code stringByReplacingOccurrencesOfString:@"}" withString:@""];
+
+            [self.jQueryOutput appendString:@"  // combobox-Text wird hier dynamisch gesetzt\n"];
+            // [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').before(%@);",id,code]];
+            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').prev().text(%@);",id,code]];
+        }
+
+
+        if ([attributeDict valueForKey:@"initvalue"])
+        {
+            self.attributeCount++;
+            // Die Bedeutung dieses Elements ist mir noch nicht ganz klar
+            
+        }
+
+
 
         [self.output appendString:@" style=\""];
+
 
         // Im Prinzip nur wegen controlwidth
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
-        [self.output appendString:@"\" >\n"];
+        [self.output appendString:@"\">\n"];
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<option>Heino</option>\n"];
@@ -1390,6 +1468,9 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"<option>Marianne Rosenberg</option>\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
         [self.output appendString:@"</select><br />\n"];
+
+
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
     }
 
 
@@ -1502,6 +1583,33 @@ didStartElement:(NSString *)elementName
         }
 
 
+        // Als callback mit einfügen dann, falls 'onrolleddown' gesetzt wurde.
+        NSString *callback = nil;
+        if ([attributeDict valueForKey:@"onrolleddown"])
+        {
+            self.attributeCount++;
+
+            NSString *s = [attributeDict valueForKey:@"onrolleddown"];
+
+            // Hier wird oft setglobalhelp aufgerufen. Derzeit einfach als eigene Funktion
+            // definiert.
+            // Ich ersetze erstmal alles genau bis zum und inklusive dem Punkt.
+            // Später hier mit NSRegularExpression arbeiten (ToDo)
+            if ([s rangeOfString:@"."].location == NSNotFound)
+            {
+                // Ist natürlich gar nicht instable XML hier, aber ich will abbrechen, falls es
+                // ein entsprechendes 'onrolleddown' gibt, welches ohne '.' aufgebaut ist.
+                [self instableXML:(@"string does not contain '.' ('onrolleddown'-Attribute in element 'rollupdown')")];
+            } else
+            {
+                s = [s substringFromIndex:[s rangeOfString:@"."].location+1];
+                // NSLog(s);
+            }
+
+            callback = s;
+        }
+
+
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<!-- Die Flipleiste -->\n"];
@@ -1525,8 +1633,21 @@ didStartElement:(NSString *)elementName
 
 
         // Die jQuery-Ausgabe
+        if (callback)
+            [self.jQueryOutput appendString:@"  // Animation bei Klick auf die Leiste (mit callback)\n"];
+        else
+            [self.jQueryOutput appendString:@"  // Animation bei Klick auf die Leiste (ohne callback)\n"];
+
         [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").click(function(){$(\"#%@\").slideToggle(",id4flipleiste,id4panel]];
         [self.jQueryOutput appendString:self.animDuration];
+        if (callback)
+        {
+            [self.jQueryOutput appendString:@","];
+            [self.jQueryOutput appendString:@"function() {"];
+            [self.jQueryOutput appendString:callback];
+            [self.jQueryOutput appendString:@"}"];
+            // [self.jQueryOutput appendString:callback];
+        }
         [self.jQueryOutput appendString:@");});\n"];
 
         if ([attributeDict valueForKey:@"down"])
@@ -1563,7 +1684,7 @@ didStartElement:(NSString *)elementName
     NSLog([NSString stringWithFormat:@"Es wurden %d von %d Attributen berücksichtigt.",self.attributeCount,[attributeDict count]]);
     if (self.attributeCount != [attributeDict count])
     {
-       [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht alle Attribute verwertet."]];
+        [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht alle Attribute verwertet."]];
     }
 
 
@@ -1797,6 +1918,10 @@ static inline BOOL isEmpty(id thing)
     [self.output appendString:@"\n<script type=\"text/javascript\">\n"];
     [self.output appendString:self.jsOutput];
     [self.output appendString:@"\n\n$(function()\n{\n"];
+
+    [self.output appendString:@"  // globalhelp heimlich als Div einführen\n"];
+    [self.output appendString:@"  $('div:first').prepend('<div id=\"___globalhelp\" style=\"position:absolute;left:800px;top:150px;width:190px;height:300px;z-index:1000;background-color:white;\"></div>');\n\n"];
+
     [self.output appendString:self.jQueryOutput];
     [self.output appendString:@"});\n</script>\n\n"];
 

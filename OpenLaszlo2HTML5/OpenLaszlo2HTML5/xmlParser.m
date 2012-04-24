@@ -68,6 +68,9 @@
 // Für das Element RollUpDownContainer
 @property (strong, nonatomic) NSString *animDuration;
 
+// Für das Element item innerhalb von dataset
+@property (strong, nonatomic) NSString *lastUsedDataset;
+
 // Damit ich auch intern auf die Inhalte der Variablen zugreifen kann
 @property (strong, nonatomic) NSMutableDictionary *allJSGlobalVars;
 
@@ -109,6 +112,8 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize last_resource_name_for_frametag = _last_resource_name_for_frametag, collectedFrameResources = _collectedFrameResources;
 
 @synthesize animDuration = _animDuration;
+
+@synthesize lastUsedDataset = _lastUsedDataset;
 
 @synthesize allJSGlobalVars = _allJSGlobalVars;
 
@@ -181,7 +186,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         // Wir sammeln hierdrin die global gesetzten Konstanten/Variablen, auf die vom Open-
         // Laszlo-Skript per canvas.* zugegriffen wird. Dazu legen wir einfach ein
         // canvas-JS-Objekt an! Aber natürlich nur einmal, nicht bei rekursiven Aufrufen. (ToDo)
-        self.jsHead2Output = [[NSMutableString alloc] initWithString:@"canvas=new Object();\n"];
+        self.jsHead2Output = [[NSMutableString alloc] initWithString:@"// globales Objekt für direkt in canvas global deklarierte Konstanten und Variablen\nvar canvas=new Object();\n\n"];
         self.cssOutput = [[NSMutableString alloc] initWithString:@""];
 
         self.errorParsing = NO;
@@ -204,6 +209,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.collectedFrameResources = [[NSMutableArray alloc] init];
 
         self.animDuration = @"slow";
+        self.lastUsedDataset = @"";
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
     }
@@ -839,6 +845,31 @@ void OLLog(xmlParser *self, NSString* s,...)
     // exit(0);
 }
 
+
+
+
+-(void) callMyselfRecursive:(NSString*)relativePath
+{
+    NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
+    NSURL *pathToFile = [NSURL URLWithString:relativePath relativeToURL:path];
+
+    xmlParser *x = [[xmlParser alloc] initWith:pathToFile];
+    NSArray* result = [x start];
+
+    [self.output appendString:[result objectAtIndex:0]];
+    [self.jsOutput appendString:[result objectAtIndex:1]];
+    [self.jQueryOutput appendString:[result objectAtIndex:2]];
+    [self.jsHeadOutput appendString:[result objectAtIndex:3]];
+    [self.jsHead2Output appendString:[result objectAtIndex:4]];
+    [self.cssOutput appendString:[result objectAtIndex:5]];
+    [self.allJSGlobalVars addEntriesFromDictionary:[result objectAtIndex:6]];
+
+    NSLog(@"Leaving recursion");
+}
+
+
+
+
 #pragma mark Delegate calls
 
 - (void) parser:(NSXMLParser *)parser
@@ -998,22 +1029,7 @@ didStartElement:(NSString *)elementName
         if (![attributeDict valueForKey:@"href"])
             [self instableXML:@"ERROR: No attribute 'src' given in include-tag"];
 
-        NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
-        NSURL *pathToInclude = [NSURL URLWithString:[attributeDict valueForKey:@"href"] relativeToURL:path];
-
-        xmlParser *x = [[xmlParser alloc] initWith:pathToInclude];
-        NSArray* result = [x start];
-
-        [self.output appendString:[result objectAtIndex:0]];
-        [self.jsOutput appendString:[result objectAtIndex:1]];
-        [self.jQueryOutput appendString:[result objectAtIndex:2]];
-        [self.jsHeadOutput appendString:[result objectAtIndex:3]];
-        [self.jsHead2Output appendString:[result objectAtIndex:4]];
-        [self.cssOutput appendString:[result objectAtIndex:5]];
-        [self.allJSGlobalVars addEntriesFromDictionary:[result objectAtIndex:6]];
-
-
-        NSLog(@"Leaving recursion");
+        [self callMyselfRecursive:[attributeDict valueForKey:@"href"]];
     }
 
 
@@ -1069,7 +1085,6 @@ didStartElement:(NSString *)elementName
 
 
 
-
         [self.output appendString:@"<div"];
 
         [self addIdToElement:attributeDict];
@@ -1113,6 +1128,95 @@ didStartElement:(NSString *)elementName
 
             [self.cssOutput appendString:@"}\n\n"];
         }
+    }
+
+
+
+
+
+
+    if ([elementName isEqualToString:@"dataset"])
+    {
+        element_bearbeitet = YES;
+
+
+
+        if (![attributeDict valueForKey:@"name"])
+            [self instableXML:@"ERROR: No attribute 'name' given in dataset-tag"];
+        else
+            self.attributeCount++;
+
+        NSString *name = [attributeDict valueForKey:@"name"];
+        self.lastUsedDataset = name; // item braucht es später
+        NSLog(@"Using the attribute 'name' as JS-name for a new Array().");
+
+        // Ein Array mit dem Namen des gefundenen datasets und den dataset-items als Elementen
+        [self.jsHead2Output appendString:@"// Ein Array mit dem Namen des gefundenen datasets und den dataset-items als Elementen\n"];
+
+        [self.jsHead2Output appendString:@"var "];
+        [self.jsHead2Output appendString:name];
+        [self.jsHead2Output appendString:@" = new Array();\n"];
+
+
+        // Fals es per src in eigener externer Datei angegeben ist, müssen wir diese auslesen
+        if ([attributeDict valueForKey:@"src"])
+        {
+            self.attributeCount++;
+
+            // type ignorieren wir, ist wohl immer auf 'http'
+            if ([attributeDict valueForKey:@"type"])
+            {
+                self.attributeCount++;
+                NSLog(@"Skipping the attribute 'type'.");
+            }
+            // request ignorieren wir, ist wohl immer auf 'true' bzw. spielt für JS keine Rolle
+            if ([attributeDict valueForKey:@"request"])
+            {
+                self.attributeCount++;
+                NSLog(@"Skipping the attribute 'request'.");
+            }
+
+
+            NSLog(@"'src'-Attribute in dataset found! So I am calling myself recursive with given path");
+            [self callMyselfRecursive:[attributeDict valueForKey:@"src"]];
+        }
+    }
+
+    if ([elementName isEqualToString:@"items"])
+    {
+        // Dieses Element wird derzeit nicht benutzt, im moment brauchen wir keine Markierung für
+        // den Beginn einer item-Liste
+        element_bearbeitet = YES;
+    }
+
+    if ([elementName isEqualToString:@"item"])
+    {
+        element_bearbeitet = YES;
+
+        if (![attributeDict valueForKey:@"value"])
+            [self instableXML:@"ERROR: No attribute 'value' given in item-tag"];
+        else
+            self.attributeCount++;
+
+        // Könnten wir nochmal brauchen, kann hier aber auch deaktiviert werden (Schalter)
+        BOOL useAssociativeJSArray = NO;
+
+        [self.jsHead2Output appendString:self.lastUsedDataset];
+        [self.jsHead2Output appendString:@"["];
+        if (useAssociativeJSArray)
+        {
+            [self.jsHead2Output appendString:@"'"];
+            [self.jsHead2Output appendString:[attributeDict valueForKey:@"value"]];
+            [self.jsHead2Output appendString:@"'"];
+        }
+        else
+        {
+            [self.jsHead2Output appendString:self.lastUsedDataset];
+            [self.jsHead2Output appendString:@".length"];
+        }
+        [self.jsHead2Output appendString:@"] = new datasetItem("];
+        [self.jsHead2Output appendString:[attributeDict valueForKey:@"value"]];
+        [self.jsHead2Output appendString:@",'"];
     }
 
 
@@ -1681,15 +1785,22 @@ didStartElement:(NSString *)elementName
 
 
 
+    /////////////////////////////////////////////////
+    // Abfragen ob wir alles erfasst haben (Debug) //
+    /////////////////////////////////////////////////
+    if (!element_bearbeitet)
+        [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht erfasstes öffnendes Element: '%@'", elementName]];
+
     NSLog([NSString stringWithFormat:@"Es wurden %d von %d Attributen berücksichtigt.",self.attributeCount,[attributeDict count]]);
     if (self.attributeCount != [attributeDict count])
     {
         [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht alle Attribute verwertet."]];
     }
+    /////////////////////////////////////////////////
+    // Abfragen ob wir alles erfasst haben (Debug) //
+    /////////////////////////////////////////////////
 
 
-    if (!element_bearbeitet)
-        [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht erfasstes öffnendes Element: '%@'", elementName]];
 
 
 
@@ -1805,11 +1916,12 @@ static inline BOOL isEmpty(id thing)
     }
 
 
-    // Bei diesen Elementen muss beim schließen nichts unternommen werden, da sie kein schließendes Tag haben:
+    // Bei diesen Elementen muss beim schließen nichts unternommen werden
     if ([elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDScombobox"] ||
         [elementName isEqualToString:@"frame"] ||
         [elementName isEqualToString:@"font"] ||
+        [elementName isEqualToString:@"items"] ||
         [elementName isEqualToString:@"attribute"])
     {
         element_geschlossen = YES;
@@ -1839,6 +1951,25 @@ static inline BOOL isEmpty(id thing)
         [self.output appendString:@"</div>\n"];
     }
 
+
+
+    // Schließen von item
+    if ([elementName isEqualToString:@"item"])
+    {
+        element_geschlossen = YES;
+
+        // Hinzufügen von gesammelten Text
+        [self.jsHead2Output appendString:self.textInProgress];
+        [self.jsHead2Output appendString:@"');\n"];
+    }
+
+    // Schließen von dataset
+    if ([elementName isEqualToString:@"dataset"])
+    {
+        element_geschlossen = YES;
+
+        [self.jsHead2Output appendString:@"\n"];
+    }
 
 
     if ([elementName isEqualToString:@"rollUpDown"])
@@ -1936,8 +2067,8 @@ static inline BOOL isEmpty(id thing)
     NSString *dlDirectory = [paths objectAtIndex:0];
     NSString * path = [[NSString alloc] initWithString:dlDirectory];
 
-    [self createCSSFile:[NSString stringWithFormat:@"%@/formate2.css",path]];
-    [self createJSFile:[NSString stringWithFormat:@"%@/jsHelper2.css",path]];
+    NSString *pathToCSSFile = [NSString stringWithFormat:@"%@/formate.css",path];
+    NSString *pathToJSFile = [NSString stringWithFormat:@"%@/jsHelper.js",path];
 
     path = [path stringByAppendingString: @"/output_ol2x.html"];
 
@@ -1945,20 +2076,27 @@ static inline BOOL isEmpty(id thing)
 
     if (self.errorParsing == NO)
     {
-        NSLog(@"XML processing done!");
+        NSLog(@"XML processing done!\n");
 
         // Schreiben einer Datei per NSData:
         // NSData* data = [self.output dataUsingEncoding:NSUTF8StringEncoding];
         // [data writeToFile:@"output_ol2x.html" atomically:NO];
-        
+
 
         // Aber wir machen es direkt über den String:
         bool success = [self.output writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
 
         if (success)
-            NSLog(@"Writing file... succeeded.");
+            NSLog(@"Writing HTML-file... succeeded.");
         else
-            NSLog(@"Writing file...failed.");
+            NSLog(@"Writing HTML-file...failed.");
+
+        // Unterstützende CSS-Datei schreiben
+        [self createCSSFile:pathToCSSFile];
+
+        // Unterstützende JS-Datei schreiben
+        [self createJSFile:pathToJSFile];
+
         NSLog(@"Job done.");
     }
     else
@@ -1976,128 +2114,208 @@ static inline BOOL isEmpty(id thing)
 
 - (void) createCSSFile:(NSString*)path
 {
-    NSString *css = @"/* DATEI: formate.css */ "
-    "/* Enthaelt standard-Definitionen von OpenLaszlo, falls diese nicht ueberschrieben werden */ "
-    "/* "
-    "Known issues: "
-    "inherit => Not supported by IE6 & IE 7; hilft ersetzen durch auto? "
-    "previousElementSibling => not supported by IE < 9 "
-    " "
-    " - simplelayout muss das erste element sein bei schwester-elementen "
-    " - keine Unterstützung für Sound-Resourcen "
-    " - Kommentare gehen verloren "
-    " - offsetWIdth vs clientWIdth nochmal testen, aber macht wohl keinen Unterschied: "
-    " (http://www.quirksmode.org/dom/w3c_cssom.html) "
-    " "
-    "ToDo "
-    " - Bei views das Layout-Attribut berücksichtigen: Dazu wohl Simplelayout-Anfangs-Test als eigene Methode; "
-    " - Bei Links muss sich der Mauszeiger verändern "
-    " - BDStext darf derzeit keine HTML-Tags enthalten, das ist blöd "
-    " - BaseButton ist noch in view integriert. Passt das so? "
-    " - Warum bricht er e-Mail beim Bindestrich um? "
-    " - BLABLAparent.width (mit Blabla mit was ersetzt) macht er zu breit, wenn ich es nur mit einem width ersetze "
-    " - style.height in check4somplelayout kann/muss ich wohl ersetzen mit offsetHeight "
-    " - Files importieren und so damit rekursiv arbeiten "
-    " - 1000px großes bild soll nur bis zum Bildschirmrand gehen "
-    " - und zusätzlich sich selbst aktualisieren, wenn bildschirmhöhe verändert wird "
-    " - PS: CSS einteilen in Form, Farbe, Schrift "
-    " */ "
-    " "
-    "body, html "
-    "{ "
-    "    /* http://www.quirksmode.org/css/100percheight.html */ "
-    " height: 100%; "
-    "    /* prevent browser decorations */ "
-    " margin: 0; "
-    "    /* padding: 0; Nicht notwendig: http://www.thestyleworks.de/basics/inheritance.shtml*/ "
-    " border: 0 none; "
-    " "
-    "    /* Prevents scrolling */ "
-    "overflow: hidden; "
-    " "
-    "    text-align: center; "
-    "} "
-    "img { border: 0 none; } "
-    " "
-    "/* Alle Divs und inputs müssen position:absolute sein, damit die Poitionsangaben stimmen */ "
-    "div, input "
-    "{ "
-	"position:absolute; "
-    " "
-    "    /* Damit auf jedenfall ein Startwert gesetzt ist, sonst gibt es massive Probs beim auslesen der Variable */ "
-	"height:auto; "
-	"width:auto; "
-    "} "
-    " "
-    "/* Das Standard-Canvas, dass den Rahmen darstellt */ "
-    "div.ol_standard_canvas "
-    "{ "
-    "    background-color:white; "
-	"height:100%; "
-	"width:100%; "
-	"position:absolute; "
-	"top:0px; "
-	"left:0px; "
-    "    text-align:left; "
-	"padding:0px; "
-    "} "
-    " "
-    "select "
-    "{ "
-    "    margin-left:5px; "
-    "} "
-    " "
-    "/* Das Standard-Window, wie es ungefaehr in OpenLaszlo aussieht */ "
-    "div.ol_standard_window "
-    "{ "
-    "    background-color:lightgrey; "
-	"height:40px; "
-	"width:50px; "
-	"position:relative; /* ToDo: Ist hier dann nicht auch absolute? */ "
-	"top:20px; "
-	"left:20px; "
-    "text-align:left; "
-	"padding:4px; "
-    "} "
-    " "
-    "/* Das Standard-View, wie es ungefaehr in OpenLaszlo aussieht */ "
-    "div.ol_standard_view "
-    "{ "
-    "    /* background-color:blue; /* Standard ist hier keine, also transparent, aber zum testen auf blau setzen */ "
-    " "
-	"height:auto; "
-	"width:auto; "
-	"position:absolute; "
-	"top:0px; "
-	"left:0px; "
-    "/* "
-    "text-align:left; "
-    "padding:4px; "
-    "*/ "
-    "} ";
+    NSString *css = @"/* DATEI: formate.css */\n"
+    "\n"
+    "/* Enthaelt standard-Definitionen, die das Aussehen von OpenLaszlo simulieren */\n"
+    "/*\n"
+    "Known issues:\n"
+    "inherit => Not supported by IE6 & IE 7; hilft ersetzen durch auto?\n"
+    "previousElementSibling => not supported by IE < 9\n"
+    "\n"
+    "- simplelayout muss das erste element sein bei aufeinanderfolgenden Schwester-Elementen\n"
+    "- keine Unterstützung für Sound-Resourcen\n"
+    "- Kommentare gehen verloren\n"
+    "- offsetWIdth vs clientWIdth nochmal testen, aber macht wohl keinen Unterschied:\n"
+    "(http://www.quirksmode.org/dom/w3c_cssom.html)\n"
+    "\n"
+    "\n"
+    "ToDo\n"
+    "- Bei views Layout-Attribut beachten: Dazu wohl Simplelayout-Test als eigene Methode;\n"
+    "- Bei Links muss sich der Mauszeiger verändern\n"
+    "- BDStext darf derzeit keine HTML-Tags enthalten, das ist blöd\n"
+    "- BaseButton ist noch in view integriert. Passt das so?\n"
+    "- Warum bricht er e-Mail beim Bindestrich um?\n"
+    "- BLABLAparent.width macht er zu breit, wenn ich es nur mit einem width ersetze\n"
+    "- style.height in check4somplelayout kann/muss ich wohl ersetzen mit offsetHeight\n"
+    "- Files importieren und so damit rekursiv arbeiten\n"
+    "- 1000px großes bild soll nur bis zum Bildschirmrand gehen\n"
+    "- und zusätzlich sich selbst aktualisieren, wenn bildschirmhöhe verändert wird\n"
+    "- PS: CSS einteilen in Form, Farbe, Schrift\n"
+    " */\n"
+    "\n"
+    "body, html\n"
+    "{\n"
+    "    /* http://www.quirksmode.org/css/100percheight.html */\n"
+    "    height: 100%;\n"
+    "    /* prevent browser decorations */\n"
+    "    margin: 0;\n"
+    "    /* padding: 0; Nicht notwendig: http://www.thestyleworks.de/basics/inheritance.shtml*/\n"
+    "    border: 0 none;\n"
+    "\n"
+    "    /* Prevents scrolling */\n"
+    "    overflow: hidden;\n"
+    "\n"
+    "    text-align: center;\n"
+    "}\n"
+    "\n"
+    "img { border: 0 none; }\n"
+    "\n"
+    "/* Alle Divs/inputs müssen position:absolute sein, damit die Positionierung stimmt */\n"
+    "div, input\n"
+    "{\n"
+	"    position:absolute;\n"
+    "\n"
+    "    /* Damit auf jedenfall ein Startwert gesetzt ist,\n"
+    "    sonst gibt es massive Probs beim auslesen der Variable von JS */\n"
+	"    height:auto;\n"
+	"    width:auto;\n"
+    "}\n"
+    "\n"
+    "/* Das Standard-Canvas, dass den Rahmen darstellt */\n"
+    "div.ol_standard_canvas\n"
+    "{\n"
+    "    background-color:white;\n"
+	"    height:100%;\n"
+	"    width:100%;\n"
+	"    position:absolute;\n"
+	"    top:0px;\n"
+	"    left:0px;\n"
+    "    text-align:left;\n"
+	"    padding:0px;\n"
+    "}\n"
+    "\n"
+    "select\n"
+    "{\n"
+    "    margin-left:5px;\n"
+    "}\n"
+    "\n"
+    "/* Das Standard-Window, wie es ungefaehr in OpenLaszlo aussieht */\n"
+    "div.ol_standard_window\n"
+    "{\n"
+    "    background-color:lightgrey;\n"
+	"    height:40px;\n"
+	"    width:50px;\n"
+	"    position:relative; /* ToDo: Ist hier dann nicht auch absolute? */\n"
+	"    top:20px;\n"
+	"    left:20px;\n"
+    "    text-align:left;\n"
+	"    padding:4px;\n"
+    "}\n"
+    "\n"
+    "/* Das Standard-View, wie es ungefaehr in OpenLaszlo aussieht */\n"
+    "div.ol_standard_view\n"
+    "{\n"
+    "    /* background-color:red; /* Standard ist hier keine (=transparent), zum testen red */\n"
+    "\n"
+	"    height:auto;\n"
+	"    width:auto;\n"
+	"    position:absolute;\n"
+	"    top:0px;\n"
+	"    left:0px;\n"
+    "    /*\n"
+    "    text-align:left;\n"
+    "    padding:4px;\n"
+    "    */\n"
+    "}";
 
 
 
     bool success = [css writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
 
     if (success)
-        NSLog(@"Writing CSS-File... succeeded.");
+        NSLog(@"Writing CSS-file... succeeded.");
     else
-        NSLog(@"Writing file... failed.");   
+        NSLog(@"Writing CSS-file... failed.");   
 }
 
 
 
 - (void) createJSFile:(NSString*)path
 {
-    NSString *js = @"/* DATEI: jsHelper.js */ ";
+    NSString *js = @"/* DATEI: jsHelper.js */\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hindere IE 9 am seitlichen scrollen mit dem Scrollrad!\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function wheel(event)\n"
+    "{\n"
+    "    if (!event)\n"
+    "        event = window.event;\n"
+    "\n"
+    "    if (event.preventDefault)\n"
+    "    {\n"
+    "        event.preventDefault();\n"
+    "        event.returnValue = false;\n"
+    "    }\n"
+    "}\n"
+    "if (window.addEventListener)\n"
+    "    window.addEventListener('DOMMouseScroll', wheel, false);\n"
+    "window.onmousewheel = document.onmousewheel = wheel;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// datasetItem-Klasse für in OL deklarierte datasets (bzw. ein Objekt-Konstruktor dafür)\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function datasetItem(value, content)\n"
+    "{\n"
+    "    // Die Propertys des Objekts\n"
+    "    this.value = value;\n"
+    "    this.content = content;\n"
+    "}\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// globale canvas-Methoden\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function loadurlchecksave(url)\n"
+    "{\n"
+    "    window.location.href = url;\n"
+    "}\n"
+    "\n"
+    "function setglobalhelp(s)\n"
+    "{\n"
+    "    $('#___globalhelp').text(s);\n"
+    "}\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// jQuery\n"
+    "/////////////////////////////////////////////////////////\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Zentriere Anzeige beim öffnen der Seite\n"
+    "/////////////////////////////////////////////////////////\n"
+    "$(function()\n"
+    "{\n"
+    "    adjustOffsetOnBrowserResize();\n"
+    "});\n"
+    "\n"
+    "function adjustOffsetOnBrowserResize()\n"
+    "{\n"
+    "    // var widthDesErstenKindes = parseInt($('div:first').children(':first').css('width'));\n"
+    "    var unsereWidth = parseInt($('div:first').css('width'));\n"
+    "    var left\n"
+    "    if ((($(window).width())-unsereWidth)/2 > 0)\n"
+    "        left = (($(window).width())-unsereWidth)/2;\n"
+    "    else\n"
+    "        left = 0\n"
+    "    $('div:first').css('left', left +'px');\n"
+    "}\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Zentriere Anzeige beim resizen der Seite\n"
+    "/////////////////////////////////////////////////////////\n"
+    "$(window).resize(function()\n"
+    "{\n"
+    "    adjustOffsetOnBrowserResize();\n"
+    "});";
+
+
 
     bool success = [js writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
 
     if (success)
-        NSLog(@"Writing JS-File... succeeded.");
+        NSLog(@"Writing JS-file... succeeded.");
     else
-        NSLog(@"Writing file... failed.");  
+        NSLog(@"Writing JS-file... failed.");  
 }
 
 

@@ -48,7 +48,9 @@
 @property (strong, nonatomic) NSMutableString *jsOutput;
 @property (strong, nonatomic) NSMutableString *jQueryOutput;
 @property (strong, nonatomic) NSMutableString *jsHeadOutput;
-@property (strong, nonatomic) NSMutableString *jsHead2Output; // die mit resource gesammelten globalen vars
+@property (strong, nonatomic) NSMutableString *jsHead2Output;   // die mit resource gesammelten globalen vars
+                                                                // (+ globale Funktionen + globales gefundenes JS)
+
 @property (strong, nonatomic) NSMutableString *cssOutput; // CSS-Ausgaben, die gesammelt werden, derzeit @Font-Face
 
 @property (nonatomic) BOOL errorParsing;
@@ -83,6 +85,12 @@
 
 // Zum internen testen, ob wir alle Attribute erfasst haben
 @property (nonatomic) int attributeCount;
+
+// Weil der Aufruf von [parser abortParsing] rekurisv nicht klappt, muss ich es mir so merken
+@property (strong, nonatomic) NSString* issueWithRecursiveFileNotFound;
+
+// Derzeit überspringen wir alles im Element class, später ToDo
+@property (nonatomic) BOOL weAreInTheTagClass;
 @end
 
 
@@ -130,6 +138,9 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize allJSGlobalVars = _allJSGlobalVars;
 
 @synthesize attributeCount = _attributeCount;
+
+@synthesize issueWithRecursiveFileNotFound = _issueWithRecursiveFileNotFound;
+@synthesize weAreInTheTagClass = _weAreInTheTagClass;
 
 
 
@@ -238,6 +249,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.animDuration = @"slow";
         self.lastUsedDataset = @"";
         self.datasetItemsCounter = 0;
+
+        self.issueWithRecursiveFileNotFound = @"";
+        self.weAreInTheTagClass = NO;
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
     }
@@ -890,11 +904,12 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([[result objectAtIndex:0] isEqual:@"XML-File not found"])
     {
-        NSLog(@"Recursive given file wasn't found. Parsing aborted.");
+        NSLog(@"Recursive given file wasn't found. Parsing of this file aborted.");
         NSLog([NSString stringWithFormat:@"Filename is: \"%@\"",[pathToFile absoluteString]]);
         NSLog(@"I can't help it. This file doesn't exist.");
         // 5 Stunden Zeit verloren wegen diesem Aufruf... Man kann nicht rekursiv abbrechen.
         // [self.parser abortParsing];
+        self.issueWithRecursiveFileNotFound = [pathToFile absoluteString];
     }
     else
     {
@@ -926,6 +941,14 @@ didStartElement:(NSString *)elementName
 
     // Zum internen testen, ob wir alle Attribute erfasst haben
     self.attributeCount = 0;
+
+    // skipping All Elements in Class-elements
+    if (self.weAreInTheTagClass)
+        return;
+
+
+
+
 
 
 
@@ -1069,10 +1092,18 @@ didStartElement:(NSString *)elementName
         NSLog(@"Include Tag found! So I am calling myself recursive");
 
         if (![attributeDict valueForKey:@"href"])
+        {
             [self instableXML:@"ERROR: No attribute 'src' given in include-tag"];
+        }
+        else
+        {
+            self.attributeCount++;
+            NSLog(@"Using the element 'href' as path to the recursive called file.");
+        }
 
         [self callMyselfRecursive:[attributeDict valueForKey:@"href"]];
     }
+
 
 
 
@@ -1855,6 +1886,87 @@ didStartElement:(NSString *)elementName
     }
 
 
+    // Nichts zu tun
+    if ([elementName isEqualToString:@"library"])
+    {
+        element_bearbeitet = YES;
+    }
+
+
+    // ToDo Audio (ist wohl sehr ähnlich aufgebaut wie ressource. Trotzdem erstmal checken
+    if ([elementName isEqualToString:@"audio"])
+    {
+        element_bearbeitet = YES;
+        if ([attributeDict valueForKey:@"src"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+    }
+
+    // MEGA MEGA ToDo ToDo ToDo class
+    if ([elementName isEqualToString:@"class"])
+    {
+        element_bearbeitet = YES;
+
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"clickable"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"extends"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"onclick"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"oninit"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"resource"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"x"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"y"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"fontsize"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"pixellock"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"styleable"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"height"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"width"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"clip"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"fontstyle"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"bgcolor0"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"bgcolor1"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"showhlines"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"showvlines"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"style"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"layout"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"initstage"])
+            self.attributeCount++;
+
+
+        // Alles was in class definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten
+        self.weAreInTheTagClass = YES;
+    }
+
+
+
+    if ([elementName isEqualToString:@"script"])
+    {
+        element_bearbeitet = YES;
+
+        // JS-Code mit foundCharacters sammeln und beim schließen übernehmen
+    }
+
 
 
 
@@ -1919,6 +2031,27 @@ static inline BOOL isEmpty(id thing)
 {
     // Zum internen testen, ob wir alle Elemente erfasst haben
     BOOL element_geschlossen = NO;
+
+
+
+
+
+
+    if ([elementName isEqualToString:@"class"])
+    {
+        element_geschlossen = YES;
+
+        self.weAreInTheTagClass = NO;
+    }
+    // skipping All Elements in Class-elements
+    if (self.weAreInTheTagClass)
+        return;
+
+
+
+
+
+
 
 
     if ([elementName isEqualToString:@"window"] ||
@@ -2009,6 +2142,9 @@ static inline BOOL isEmpty(id thing)
         [elementName isEqualToString:@"frame"] ||
         [elementName isEqualToString:@"font"] ||
         [elementName isEqualToString:@"items"] ||
+        [elementName isEqualToString:@"library"] ||
+        [elementName isEqualToString:@"audio"] ||
+        [elementName isEqualToString:@"include"] ||
         [elementName isEqualToString:@"attribute"])
     {
         element_geschlossen = YES;
@@ -2072,6 +2208,16 @@ static inline BOOL isEmpty(id thing)
 
 
 
+    if ([elementName isEqualToString:@"script"])
+    {
+        element_geschlossen = YES;
+        [self.jsHead2Output appendString:self.textInProgress];
+    }
+
+
+
+
+
 
     /*
     if ([elementName isEqual:@"Item"])
@@ -2128,9 +2274,10 @@ static inline BOOL isEmpty(id thing)
     [pre appendString:self.cssOutput];
     [pre appendString:@"</style>\n\n<script type=\"text/javascript\">\n"];
 
+    // Wird derzeit nicht ins JS ausgegeben, da die Bilder usw. direkt im Code stehen. (Solle das so bleiben?)
     // [pre appendString:self.jsHeadOutput]; 
 
-    // erstmal nur die mit resource gesammelten globalen vars ausgeben
+    // erstmal nur die mit resource gesammelten globalen vars ausgeben (+ globale Funktionen + globales JS)
     [pre appendString:self.jsHead2Output];
     [pre appendString:@"</script>\n\n</head>\n\n<body style=\"margin:0px;\">\n"];
 
@@ -2156,9 +2303,15 @@ static inline BOOL isEmpty(id thing)
     [self.output appendString:@"</body>\n</html>"];
 
     // Path zum speichern ermitteln
-    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDownloadsDirectory, NSUserDomainMask, YES);
-    NSString *dlDirectory = [paths objectAtIndex:0];
-    NSString * path = [[NSString alloc] initWithString:dlDirectory];
+    // Download-Verzeichnis war es mal, aber Problem ist, dass dann die Ressourcen fehlen...
+    // NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDownloadsDirectory, NSUserDomainMask, YES);
+    // NSString *dlDirectory = [paths objectAtIndex:0];
+    // NSString * path = [[NSString alloc] initWithString:dlDirectory];
+    //... deswegen ab jetzt immer im gleichen Verzeichnis wie das OpenLaszlo-input-File
+    // Die Dateien dürfen dann nur nicht zufälligerweise genau so heißen wie welche im Verzeischnis
+    // (ToDo bei Public Release)
+    NSString *path = [[self.pathToFile URLByDeletingLastPathComponent] relativePath];
+
 
     NSString *pathToCSSFile = [NSString stringWithFormat:@"%@/formate.css",path];
     NSString *pathToJSFile = [NSString stringWithFormat:@"%@/jsHelper.js",path];
@@ -2195,6 +2348,16 @@ static inline BOOL isEmpty(id thing)
     else
     {
         NSLog(@"Error occurred during XML processing");
+    }
+
+
+
+    if (![self.issueWithRecursiveFileNotFound isEqual:@""])
+    {
+        NSLog(@"\nATTENTION:\nThere was an issue with an recursive file that I couldn't found:");
+        NSLog([NSString stringWithFormat:@"'%@'",self.issueWithRecursiveFileNotFound]);
+        NSLog(@"I'm sorry I coudn't fix this problem. Your OpenLaszlo-file may be malformed.\n");
+        NSLog(@"I continued the parsing anyway, but there probably will be problems with the Output-File.");
     }
 
 

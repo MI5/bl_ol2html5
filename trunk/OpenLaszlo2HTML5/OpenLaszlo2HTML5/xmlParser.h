@@ -10,6 +10,10 @@
 
 @interface xmlParser : NSObject <NSXMLParserDelegate>
 
+// Für das Element item innerhalb von dataset
+// Ich muss es bei rekursiven Aufrufen von außen setzen können, deswegen public
+@property (strong, nonatomic) NSString *lastUsedDataset;
+
 -(id)initWith:(NSURL*) pathToFile;
 
 // Weil wir uns auch rekursiv aufrufen, muss ich zwischendruch ein Array mit den Zwischenergebnissen zurückgeben

@@ -25,6 +25,12 @@
 // Private Variablen
 @interface xmlParser()
 
+// Als Property eingeführt, damit ich zwischendurch auch Zugriff
+// auf den Parser habe und diesen abbrechen kann.
+@property (strong, nonatomic) NSXMLParser *parser;
+
+@property (nonatomic) BOOL isRecursiveCall;
+
 @property (strong, nonatomic) NSMutableString *log;
 
 @property (strong, nonatomic) NSURL * pathToFile;
@@ -59,17 +65,18 @@
 @property (nonatomic) NSInteger firstElementOfSimpleLayout_x;
 @property (nonatomic) NSInteger simplelayout_x_tiefe;
 
-// Benötigt derzeit nur Simplelayout => So können wir die von OpenLaszlo gesetzten ids benutzen
+// Benutzt derzeit nur Simplelayout=> So können wir stets die von OpenLaszlo gesetzten ids benutzen
 @property (strong, nonatomic) NSString* zuletztGesetzteID;
 
 @property (strong, nonatomic) NSString *last_resource_name_for_frametag;
 @property (strong, nonatomic) NSMutableArray *collectedFrameResources;
 
+// Für das Element dataset, um die Variablen für das JS-Array durchzählen zu können
+@property (nonatomic) int datasetItemsCounter;
+
 // Für das Element RollUpDownContainer
 @property (strong, nonatomic) NSString *animDuration;
 
-// Für das Element item innerhalb von dataset
-@property (strong, nonatomic) NSString *lastUsedDataset;
 
 // Damit ich auch intern auf die Inhalte der Variablen zugreifen kann
 @property (strong, nonatomic) NSMutableDictionary *allJSGlobalVars;
@@ -83,9 +90,14 @@
 
 @implementation xmlParser
 // public
+@synthesize lastUsedDataset = _lastUsedDataset;
 
 
 // private
+@synthesize parser = _parser;
+
+@synthesize isRecursiveCall = _isRecursiveCall;
+
 @synthesize log = _log;
 
 @synthesize pathToFile = _pathToFile;
@@ -111,9 +123,9 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize last_resource_name_for_frametag = _last_resource_name_for_frametag, collectedFrameResources = _collectedFrameResources;
 
-@synthesize animDuration = _animDuration;
+@synthesize datasetItemsCounter = _datasetItemsCounter;
 
-@synthesize lastUsedDataset = _lastUsedDataset;
+@synthesize animDuration = _animDuration;
 
 @synthesize allJSGlobalVars = _allJSGlobalVars;
 
@@ -141,8 +153,11 @@ void OLLog(xmlParser *self, NSString* s,...)
     va_end(arguments);
      */
 
-    [[self log] appendString:s];
-    [[self log] appendString:@"\n"];
+    if ([self log])
+    {
+        [[self log] appendString:s];
+        [[self log] appendString:@"\n"];
+    }
 }
 
 
@@ -166,10 +181,18 @@ void OLLog(xmlParser *self, NSString* s,...)
 }
 
 // Eigener Konstruktor:
--(id)initWith:(NSURL*) pathToFile;
+-(id)initWith:(NSURL*) pathToFile
+{
+    return [self initWith:pathToFile recursiveCall:NO];
+}
+
+// Eigener Konstruktor, den rekursive Instanzen aufrufen:
+-(id)initWith:(NSURL*) pathToFile recursiveCall:(BOOL)isRecursive
 {
     if (self = [super init])
     {
+        self.isRecursiveCall = isRecursive;
+
         self.log = [[globalAccessToTextView textStorage] mutableString];
 
         self.pathToFile = pathToFile;
@@ -185,8 +208,12 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.jsHeadOutput = [[NSMutableString alloc] initWithString:@""];
         // Wir sammeln hierdrin die global gesetzten Konstanten/Variablen, auf die vom Open-
         // Laszlo-Skript per canvas.* zugegriffen wird. Dazu legen wir einfach ein
-        // canvas-JS-Objekt an! Aber natürlich nur einmal, nicht bei rekursiven Aufrufen. (ToDo)
-        self.jsHead2Output = [[NSMutableString alloc] initWithString:@"// globales Objekt für direkt in canvas global deklarierte Konstanten und Variablen\nvar canvas=new Object();\n\n"];
+        // canvas-JS-Objekt an! Aber natürlich nur einmal, nicht bei rekursiven Aufrufen.
+        // ToDo: Sowohl das new Object als auch die gesammelten globalen Vars in jsHelper packen?
+        if (self.isRecursiveCall)
+            self.jsHead2Output = [[NSMutableString alloc] initWithString:@""];
+        else
+            self.jsHead2Output = [[NSMutableString alloc] initWithString:@"// Globales Objekt für direkt in canvas global deklarierte Konstanten und Variablen\nvar canvas = new Object();\n\n"];
         self.cssOutput = [[NSMutableString alloc] initWithString:@""];
 
         self.errorParsing = NO;
@@ -210,6 +237,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         self.animDuration = @"slow";
         self.lastUsedDataset = @"";
+        self.datasetItemsCounter = 0;
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
     }
@@ -230,30 +258,37 @@ void OLLog(xmlParser *self, NSString* s,...)
     BOOL fileExists = [[NSFileManager defaultManager] fileExistsAtPath:[self.pathToFile path]];
     if (!fileExists)
     {
-        NSLog(@"XML-File not found. Did you initialise with initWith: pathTofile?");
-        exit(0); // Dann aussteigen
+        // NSLog(@"XML-File not found. Did you initialise with initWith: pathTofile?");
+
+        // Ich frage den String in diesem Array beim verlassen der Rekursion ab,
+        // falls er zwischendurch mal eine Datei nicht findet.
+        NSArray *r = [NSArray arrayWithObjects:@"XML-File not found", nil];
+        return r;
     }
+    else
+    {
+        // Create a parser
+        // NSXMLParser *parser = [[NSXMLParser alloc] initWithData:xml];
+        // Die alte Lösung mit Data war nicht perfekt. Per URL ist besser:
+        self.parser = [[NSXMLParser alloc] initWithContentsOfURL:self.pathToFile];
+        [self.parser setDelegate:self];
 
-    // Create a parser
-    // NSXMLParser *parser = [[NSXMLParser alloc] initWithData:xml];
-    // Die alte Lösung mit Data war nicht perfekt. Per URL ist besser:
-    NSXMLParser *parser = [[NSXMLParser alloc] initWithContentsOfURL:self.pathToFile];
-    [parser setDelegate:self];
+        // You may need to turn some of these on depending on the type of XML file you are parsing
+        /*
+         [parser setShouldProcessNamespaces:NO];
+         [parser setShouldReportNamespacePrefixes:NO];
+         [parser setShouldResolveExternalEntities:NO];
+         */
 
-    // You may need to turn some of these on depending on the type of XML file you are parsing
-    /*
-    [parser setShouldProcessNamespaces:NO];
-    [parser setShouldReportNamespacePrefixes:NO];
-    [parser setShouldResolveExternalEntities:NO];
-     */
+        // NSLog([NSString stringWithFormat:@"Passing so much times here, but are we recursive? => %d",self.isRecursiveCall]);
+        // Do the parse
+        [self.parser parse];
 
-    // Do the parse
-    [parser parse];
-    // NSLog(@"items = %@", self.items);
-
-    // Zur Sicherheit mache ich von allem ne Copy, nicht, dass es beim Verlassen der Rekursion zerstört wird
-    NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.allJSGlobalVars copy], nil];
-    return r;
+        // Zur Sicherheit mache ich von allem ne Copy.
+        // Nicht, dass es beim Verlassen der Rekursion zerstört wird
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.allJSGlobalVars copy], nil];
+        return r;
+    }
 }
 
 
@@ -271,9 +306,8 @@ void OLLog(xmlParser *self, NSString* s,...)
     if (!b)
         [self instableXML:@"ERROR: Don't call addCSSAttributes:forcingWidthAndHeight with b = false"];
 
-    NSMutableString *style = [[NSMutableString alloc] initWithString:@""];
+    NSMutableString *style = [self addCSSAttributes:attributeDict];
 
-    style = [self addCSSAttributes:attributeDict];
 
     // width erzwingen
     if ([style rangeOfString:@"width:"].location == NSNotFound)
@@ -622,11 +656,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
     // Skipping this attributes
-    if ([attributeDict valueForKey:@"dataset"])
-    {
-        self.attributeCount++;
-        NSLog(@"ToDo: Implement later the attribute 'dataset'.");
-    }
     if ([attributeDict valueForKey:@"datapath"])
     {
         self.attributeCount++;
@@ -853,16 +882,30 @@ void OLLog(xmlParser *self, NSString* s,...)
     NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
     NSURL *pathToFile = [NSURL URLWithString:relativePath relativeToURL:path];
 
-    xmlParser *x = [[xmlParser alloc] initWith:pathToFile];
+    xmlParser *x = [[xmlParser alloc] initWith:pathToFile recursiveCall:YES];
+    // Wenn es eine Datei ist, die Items für ein Dataset enthält, dann muss das rekursiv
+    // auferufene Objekt das letzte DataSet wissen, damit es die Items richtig zuordnen kann
+    x.lastUsedDataset = self.lastUsedDataset;
     NSArray* result = [x start];
 
-    [self.output appendString:[result objectAtIndex:0]];
-    [self.jsOutput appendString:[result objectAtIndex:1]];
-    [self.jQueryOutput appendString:[result objectAtIndex:2]];
-    [self.jsHeadOutput appendString:[result objectAtIndex:3]];
-    [self.jsHead2Output appendString:[result objectAtIndex:4]];
-    [self.cssOutput appendString:[result objectAtIndex:5]];
-    [self.allJSGlobalVars addEntriesFromDictionary:[result objectAtIndex:6]];
+    if ([[result objectAtIndex:0] isEqual:@"XML-File not found"])
+    {
+        NSLog(@"Recursive given file wasn't found. Parsing aborted.");
+        NSLog([NSString stringWithFormat:@"Filename is: \"%@\"",[pathToFile absoluteString]]);
+        NSLog(@"I can't help it. This file doesn't exist.");
+        // 5 Stunden Zeit verloren wegen diesem Aufruf... Man kann nicht rekursiv abbrechen.
+        // [self.parser abortParsing];
+    }
+    else
+    {
+        [self.output appendString:[result objectAtIndex:0]];
+        [self.jsOutput appendString:[result objectAtIndex:1]];
+        [self.jQueryOutput appendString:[result objectAtIndex:2]];
+        [self.jsHeadOutput appendString:[result objectAtIndex:3]];
+        [self.jsHead2Output appendString:[result objectAtIndex:4]];
+        [self.cssOutput appendString:[result objectAtIndex:5]];
+        [self.allJSGlobalVars addEntriesFromDictionary:[result objectAtIndex:6]];
+    }
 
     NSLog(@"Leaving recursion");
 }
@@ -903,7 +946,6 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDStext"] ||
-        [elementName isEqualToString:@"BDScombobox"] ||
         [elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"rollUpDown"])
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
@@ -1148,7 +1190,7 @@ didStartElement:(NSString *)elementName
 
         NSString *name = [attributeDict valueForKey:@"name"];
         self.lastUsedDataset = name; // item braucht es später
-        NSLog(@"Using the attribute 'name' as JS-name for a new Array().");
+        NSLog(@"Using the attribute 'name' as name for a new JS-Array().");
 
         // Ein Array mit dem Namen des gefundenen datasets und den dataset-items als Elementen
         [self.jsHead2Output appendString:@"// Ein Array mit dem Namen des gefundenen datasets und den dataset-items als Elementen\n"];
@@ -1177,16 +1219,18 @@ didStartElement:(NSString *)elementName
             }
 
 
-            NSLog(@"'src'-Attribute in dataset found! So I am calling myself recursive with given path");
+            NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! So I am calling myself recursive with the file %@",[attributeDict valueForKey:@"src"]]);
             [self callMyselfRecursive:[attributeDict valueForKey:@"src"]];
         }
     }
 
     if ([elementName isEqualToString:@"items"])
     {
-        // Dieses Element wird derzeit nicht benutzt, im moment brauchen wir keine Markierung für
-        // den Beginn einer item-Liste
         element_bearbeitet = YES;
+
+
+        // markierung für den Beginn der item-Liste
+        self.datasetItemsCounter = 0;
     }
 
     if ([elementName isEqualToString:@"item"])
@@ -1194,9 +1238,14 @@ didStartElement:(NSString *)elementName
         element_bearbeitet = YES;
 
         if (![attributeDict valueForKey:@"value"])
+        {
             [self instableXML:@"ERROR: No attribute 'value' given in item-tag"];
+        }
         else
+        {
             self.attributeCount++;
+            NSLog(@"Using the attribute 'value' as index for JS-Array.");
+        }
 
         // Könnten wir nochmal brauchen, kann hier aber auch deaktiviert werden (Schalter)
         BOOL useAssociativeJSArray = NO;
@@ -1211,8 +1260,18 @@ didStartElement:(NSString *)elementName
         }
         else
         {
-            [self.jsHead2Output appendString:self.lastUsedDataset];
-            [self.jsHead2Output appendString:@".length"];
+            // Könnten wir nochmal brauchen, kann hier aber auch deaktiviert werden (Schalter)
+            BOOL arrayLengthToInsertNewArrayElements = NO;
+            if (arrayLengthToInsertNewArrayElements)
+            {
+                [self.jsHead2Output appendString:self.lastUsedDataset];
+                [self.jsHead2Output appendString:@".length"];
+            }
+            else
+            {
+                [self.jsHead2Output appendString:[NSString stringWithFormat:@"%d",self.datasetItemsCounter]];
+                self.datasetItemsCounter++;
+            }
         }
         [self.jsHead2Output appendString:@"] = new datasetItem("];
         [self.jsHead2Output appendString:[attributeDict valueForKey:@"value"]];
@@ -1502,6 +1561,9 @@ didStartElement:(NSString *)elementName
         element_bearbeitet = YES;
 
 
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+
+
         // Wenn im Attribut title Code auftaucht, dann müssen wir es dynamisch setzen
         // müssen aber erst abwarten bis wir die ID haben, weil wir die für den Zugriff brauchen.
         // <span> drum herum, damit ich per jQuery darauf zugreifen kann
@@ -1522,11 +1584,12 @@ didStartElement:(NSString *)elementName
                 [self.output appendString:@"</span>\n"];
             }
         }
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
         [self.output appendString:@"<select class=\"combobox\" size=\"1\""];
 
         NSString *id =[self addIdToElement:attributeDict];
+
 
         // Jetzt erst haben wir die ID und können diese nutzen für den jQuery-Code
         if (titelDynamischSetzen)
@@ -1539,7 +1602,7 @@ didStartElement:(NSString *)elementName
 
             [self.jQueryOutput appendString:@"  // combobox-Text wird hier dynamisch gesetzt\n"];
             // [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').before(%@);",id,code]];
-            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').prev().text(%@);",id,code]];
+            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').prev().text(%@);\n",id,code]];
         }
 
 
@@ -1560,21 +1623,44 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"\">\n"];
 
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"<option>Heino</option>\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"<option>Michael Jackson</option>\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"<option>Tom Waits</option>\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"<option>Nina Hagen</option>\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"<option>Marianne Rosenberg</option>\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
-        [self.output appendString:@"</select><br />\n"];
+
+        if (![attributeDict valueForKey:@"dataset"])
+        {
+            [self instableXML:@"ERROR: No attribute 'dataset' given in BDScombobox-tag"];
+        }
+        else
+        {
+            self.attributeCount++;
+            NSLog(@"Using the attribute 'dataset' as arrayname for jQuery, to access the corresponding array, which contains all Entrys (previously set by <dataset>.");
+        }
 
 
+
+        [self.jQueryOutput appendString:@"\n  // Dynamisch gesetzter Inhalt bezüglich combobox "];
+        [self.jQueryOutput appendString:id];
+        [self.jQueryOutput appendString:@"__CodeMarker\n"];
+        [self.jQueryOutput appendString:@"  $.each("];
+        [self.jQueryOutput appendString:[attributeDict valueForKey:@"dataset"]];
+        [self.jQueryOutput appendString:@", function(index, option)\n  {\n    $('#"];
+        [self.jQueryOutput appendString:id];
+        [self.jQueryOutput appendString:@"').append( new Option(option.content, option.value) );\n  });\n"];
+
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+        [self.output appendString:@"<!-- Inhalt wird per jQuery von folgender Anweisung gesetzt "];
+        [self.output appendString:id];
+        [self.output appendString:@"__CodeMarker -->\n"];
+
+        // Select auch wieder schließen
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"</select>\n"];
+
+        // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw.
         [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
+
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"<br />\n\n"];
     }
 
 
@@ -1792,6 +1878,7 @@ didStartElement:(NSString *)elementName
         [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht erfasstes öffnendes Element: '%@'", elementName]];
 
     NSLog([NSString stringWithFormat:@"Es wurden %d von %d Attributen berücksichtigt.",self.attributeCount,[attributeDict count]]);
+
     if (self.attributeCount != [attributeDict count])
     {
         [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht alle Attribute verwertet."]];
@@ -2026,12 +2113,18 @@ static inline BOOL isEmpty(id thing)
 
 - (void) parserDidEndDocument:(NSXMLParser *)parser
 {
+    // Alles das was wir in dieser Methode machen, machen wir nur einmal,
+    // deswegen nicht bei rekursiven Aufrufen!
+    if (self.isRecursiveCall)
+        return;
+
+
     NSMutableString *pre = [[NSMutableString alloc] initWithString:@""];
 
     [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n<title>Canvastest</title>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n<script type=\"text/javascript\" src=\"http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js\"></script>\n<script src=\"jsHelper.js\" type=\"text/javascript\"></script>\n\n<style type='text/css'>\n"];
     // Falls latest jQuery-Version gewünscht:
-    // '<script type="text/javascript" src="http://code.jquery.com/jquery-latest.min.js"></script>' einbauen
-    // aber dann kein Caching.
+    // '<script type="text/javascript" src="http://code.jquery.com/jquery-latest.min.js"></script>'
+    // einbauen, aber dann kein Caching.
     [pre appendString:self.cssOutput];
     [pre appendString:@"</style>\n\n<script type=\"text/javascript\">\n"];
 
@@ -2139,7 +2232,8 @@ static inline BOOL isEmpty(id thing)
     "- style.height in check4somplelayout kann/muss ich wohl ersetzen mit offsetHeight\n"
     "- Files importieren und so damit rekursiv arbeiten\n"
     "- 1000px großes bild soll nur bis zum Bildschirmrand gehen\n"
-    "- und zusätzlich sich selbst aktualisieren, wenn bildschirmhöhe verändert wird\n"
+    "- und zusätzlich sich selbst aktualisieren, wenn Bildschirmhöhe verändert wird\n"
+    "- abort Parsing bei rekursiven Aufrufen klappt nicht\n"
     "- PS: CSS einteilen in Form, Farbe, Schrift\n"
     " */\n"
     "\n"
@@ -2334,15 +2428,26 @@ static inline BOOL isEmpty(id thing)
     NSString *errorString = [NSString stringWithFormat:@"Error code %i", [parseError code]];
     NSLog([NSString stringWithFormat:@"Error parsing XML: %@", errorString]);
 
-    if ([errorString hasSuffix:@"5"])
+
+    
+    if ([errorString hasSuffix:@"512"])
     {
-        NSLog(@"XML-Dokument unvollständig geladen bzw Datei nicht vorhanden bzw kein vollständiges XML-Tag enthalten.");
+        NSLog(@"Parsing aborted programmatically.");
     }
+
 
     if ([errorString hasSuffix:@"76"])
     {
         NSLog(@"z. B. schließendes Tag gefunden ohne korrespondierendes öffnendes Tag.");
     }
+
+
+    if ([errorString hasSuffix:@"5"])
+    {
+        NSLog(@"XML-Dokument unvollständig geladen bzw Datei nicht vorhanden bzw kein vollständiges XML-Tag enthalten.");
+    }
+
+    NSLog(@"\nI had no success parsing the document. I'm sorry.");
 
     self.errorParsing=YES;
     [self jumpToEndOfTextView];

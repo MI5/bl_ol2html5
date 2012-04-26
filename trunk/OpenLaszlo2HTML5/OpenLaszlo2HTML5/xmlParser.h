@@ -20,4 +20,8 @@
 // Array enthält derzeit 6 Objekte (5 Strings und unsere intern gesammelten JS-Variablen
 -(NSArray*) start;
 
+
+// Damit die C-Funktion die NSLog() umleitet, darauf zugreifen kann
+- (void) jumpToEndOfTextView;
+
 @end

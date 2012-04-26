@@ -177,7 +177,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // Final Try:
 
 //////////////////////////////////////////////
-#define NSLog(...) OLLog(self,__VA_ARGS__)
+// #define NSLog(...) OLLog(self,__VA_ARGS__)
 //////////////////////////////////////////////
 /********** Dirty Trick um NSLog umzuleiten *********/
 
@@ -222,9 +222,17 @@ void OLLog(xmlParser *self, NSString* s,...)
         // canvas-JS-Objekt an! Aber natürlich nur einmal, nicht bei rekursiven Aufrufen.
         // ToDo: Sowohl das new Object als auch die gesammelten globalen Vars in jsHelper packen?
         if (self.isRecursiveCall)
+        {
             self.jsHead2Output = [[NSMutableString alloc] initWithString:@""];
+        }
         else
-            self.jsHead2Output = [[NSMutableString alloc] initWithString:@"// Globales Objekt für direkt in canvas global deklarierte Konstanten und Variablen\nvar canvas = new Object();\n\n"];
+        {
+            self.jsHead2Output = [[NSMutableString alloc] initWithString:@"// Globales Objekt für direkt in canvas global deklarierte Konstanten und Variablen\n"
+                "var canvas = new Object();\n\n"
+                "// Globale Klasse für in verschiedenen Methoden (lokal?) deklarierte Methoden\n"
+                "function parentKlasse() {\n}\n"
+                "var parent = new parentKlasse(); // <-- Unbedingt nötg, damit es auch ein Objekt gibt\n\n"];
+        }
         self.cssOutput = [[NSMutableString alloc] initWithString:@""];
 
         self.errorParsing = NO;
@@ -610,12 +618,68 @@ void OLLog(xmlParser *self, NSString* s,...)
         s = [s stringByReplacingOccurrencesOfString:@"{" withString:@""];
         s = [s stringByReplacingOccurrencesOfString:@"}" withString:@""];
 
-        [code appendString:s];
-        [code appendString:@" ? document.getElementById('"];
-        [code appendString:idName];
-        [code appendString:@"').style.visibility = 'visible' : document.getElementById('"];
-        [code appendString:idName];
-        [code appendString:@"').style.visibility = 'hidden';"];
+        // Ich brauche den String bis zum Punkt, denn das ist unsere Variable für die ein
+        // onChange-Event eingerichtet werden muss.
+        // Die Position des Punktes:
+        NSRange positionDesPunktes = [s rangeOfString:@"."];
+        NSString *idVonDerEsAbhaengigIst = [s substringToIndex:positionDesPunktes.location];
+        NSString *bedingung = [s substringFromIndex:positionDesPunktes.location+1];
+        // NSLog([NSString stringWithFormat:@"Heimlicher Test: %@",bedingung]);
+
+
+        if ([idVonDerEsAbhaengigIst isEqualToString:@"canvas"])
+        {
+            NSLog(@"ToDo: Sonderbehandlung");
+            [code appendString:s];
+            [code appendString:@" ? document.getElementById('"];
+            [code appendString:idName];
+            [code appendString:@"').style.visibility = 'visible' : document.getElementById('"];
+            [code appendString:idName];
+            [code appendString:@"').style.visibility = 'hidden';"];
+        }
+        else
+        {
+            [self.jQueryOutput appendString:@"\n  // Die Visibility ändert sich abhängig von dem Wert einer woanders gesetzten Variable (bei jeder Änderung)\n"];
+            [self.jQueryOutput appendString:@"  $('#"];
+            [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
+            [self.jQueryOutput appendString:@"').change(function()\n  {\n"];
+            [self.jQueryOutput appendString:@"    toggleVisibility('#"];
+            [self.jQueryOutput appendString:idName];
+            [self.jQueryOutput appendString:@"', '#"];
+            [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
+            [self.jQueryOutput appendString:@"', '"];
+            [self.jQueryOutput appendString:bedingung];
+            [self.jQueryOutput appendString:@"');\n"];
+
+            /* Alte Lösung ohne externe Funktion (Nachteil war, dass ich die initiale
+            // Visibility nicht setzen konnte):
+            [self.jQueryOutput appendString:@"    var value = $(this).val();\n"];
+            [self.jQueryOutput appendString:@"    $('#"];
+            [self.jQueryOutput appendString:idName];
+            [self.jQueryOutput appendString:@"').toggle("];
+            [self.jQueryOutput appendString:bedingung];
+            [self.jQueryOutput appendString:@");\n"];
+            [self.jQueryOutput appendString:@"    // Dazu gehörigen Text auch mit entfernen\n"];
+            [self.jQueryOutput appendString:@"    if ($('#"];
+            [self.jQueryOutput appendString:idName];
+            [self.jQueryOutput appendString:@"').prev().is('span'))\n"];
+            [self.jQueryOutput appendString:@"      $('#"];
+            [self.jQueryOutput appendString:idName];
+            [self.jQueryOutput appendString:@"').prev().toggle("];
+            [self.jQueryOutput appendString:bedingung];
+            [self.jQueryOutput appendString:@");\n"];
+             */
+            [self.jQueryOutput appendString:@"  });\n"];
+
+            [self.jQueryOutput appendString:@"  // Und einmal sofort die Visibility anpassen\n"];
+            [self.jQueryOutput appendString:@"  toggleVisibility('#"];
+            [self.jQueryOutput appendString:idName];
+            [self.jQueryOutput appendString:@"', '#"];
+            [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
+            [self.jQueryOutput appendString:@"', '"];
+            [self.jQueryOutput appendString:bedingung];
+            [self.jQueryOutput appendString:@"');\n"];
+        }
     }
 
 
@@ -969,6 +1033,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDStext"] ||
+        [elementName isEqualToString:@"button"] ||
         [elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"rollUpDown"])
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
@@ -1305,7 +1370,11 @@ didStartElement:(NSString *)elementName
             }
         }
         [self.jsHead2Output appendString:@"] = new datasetItem("];
+        if (!isNumeric([attributeDict valueForKey:@"value"]))
+            [self.jsHead2Output appendString:@"'"];
         [self.jsHead2Output appendString:[attributeDict valueForKey:@"value"]];
+        if (!isNumeric([attributeDict valueForKey:@"value"]))
+            [self.jsHead2Output appendString:@"'"];
         [self.jsHead2Output appendString:@",'"];
     }
 
@@ -1489,6 +1558,41 @@ didStartElement:(NSString *)elementName
 
 
 
+    // Wohl nicht von Taxango benutzt, der Standard-Button
+    if ([elementName isEqualToString:@"button"])
+    {
+        element_bearbeitet = YES;
+
+        [self.output appendString:@"<!-- Normaler button: -->\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+
+        [self.output appendString:@"<input type=\"button\""];
+
+        // id hinzufügen und gleichzeitg speichern
+        NSString *id = [self addIdToElement:attributeDict];
+
+        [self.output appendString:@" class=\"ol_standard_view\" style=\""];
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+        [self.output appendString:@"\" "];
+
+        // Den Text als Beschriftung für den Button setzen
+        if ([attributeDict valueForKey:@"text"])
+        {
+            self.attributeCount++;
+            [self.output appendString:@"value=\""];
+            [self.output appendString:[attributeDict valueForKey:@"text"]];
+            [self.output appendString:@"\""];
+        }
+
+        [self.output appendString:@" />\n"];
+
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
+    }
+
+
+
+
+
     if ([elementName isEqualToString:@"basebutton"])
     {
         element_bearbeitet = YES;
@@ -1637,13 +1741,6 @@ didStartElement:(NSString *)elementName
         }
 
 
-        if ([attributeDict valueForKey:@"initvalue"])
-        {
-            self.attributeCount++;
-            // Die Bedeutung dieses Elements ist mir noch nicht ganz klar
-            
-        }
-
 
 
         [self.output appendString:@" style=\""];
@@ -1674,7 +1771,30 @@ didStartElement:(NSString *)elementName
         [self.jQueryOutput appendString:[attributeDict valueForKey:@"dataset"]];
         [self.jQueryOutput appendString:@", function(index, option)\n  {\n    $('#"];
         [self.jQueryOutput appendString:id];
-        [self.jQueryOutput appendString:@"').append( new Option(option.content, option.value) );\n  });\n"];
+        [self.jQueryOutput appendString:@"').append( new Option(option.content, option.value"];
+        // [self.jQueryOutput appendString:@" , false, "]; // <- defaultSelected
+        // [self.jQueryOutput appendString:@"false"]; // <- nowSelected
+        [self.jQueryOutput appendString:@") );\n  });\n"];
+
+
+        // Vorauswahl setzen, falls eine gegeben ist
+        if ([attributeDict valueForKey:@"initvalue"])
+        {
+            self.attributeCount++;
+            
+            if ([[attributeDict valueForKey:@"initvalue"] isEqual:@"false"])
+            {
+                // 'false' heißt wohl es gibt keinen Init-Wert
+            }
+            else
+            {
+                [self.jQueryOutput appendString:@"  // Vorauswahl für diese Combobox setzen\n"];
+                [self.jQueryOutput appendString:@"  $(\"#cbBundesland option[value="];
+                [self.jQueryOutput appendString:[attributeDict valueForKey:@"initvalue"]];
+                [self.jQueryOutput appendString:@"]\").attr('selected',true);\n"];
+            }
+        }
+
 
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
@@ -1855,9 +1975,9 @@ didStartElement:(NSString *)elementName
 
         // Die jQuery-Ausgabe
         if (callback)
-            [self.jQueryOutput appendString:@"  // Animation bei Klick auf die Leiste (mit callback)\n"];
+            [self.jQueryOutput appendString:@"\n  // Animation bei Klick auf die Leiste (mit callback)\n"];
         else
-            [self.jQueryOutput appendString:@"  // Animation bei Klick auf die Leiste (ohne callback)\n"];
+            [self.jQueryOutput appendString:@"\n  // Animation bei Klick auf die Leiste (ohne callback)\n"];
 
         [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").click(function(){$(\"#%@\").slideToggle(",id4flipleiste,id4panel]];
         [self.jQueryOutput appendString:self.animDuration];
@@ -1982,6 +2102,81 @@ didStartElement:(NSString *)elementName
 
 
 
+    // Ich füge erstmal alle Methoden in ein Objekt ein, dass ich 'parent' nenne, da OpenLaszlo
+    // oft mit 'parent.*' arbeitet. Evtl. ist dieser Trick etwas zu dirty und muss überdacht werden
+    // Die Klasse 'parent' habe ich vorher angelegt.
+    if ([elementName isEqualToString:@"method"])
+    {
+        element_bearbeitet = YES;
+
+        if (![attributeDict valueForKey:@"name"])
+        {
+            [self instableXML:@"ERROR: No attribute 'name' given in method-tag"];
+        }
+        else
+        {
+            self.attributeCount++;
+            NSLog(@"Using the attribute 'name' as method-name for a JS-Function, that is prototyped to the class 'parent'");
+        }
+
+        [self.jsHead2Output appendString:@"\nparentKlasse.prototype."];
+        [self.jsHead2Output appendString:[attributeDict valueForKey:@"name"]];
+        [self.jsHead2Output appendString:@" = function()\n{\n  "];
+
+        // Okay, jetzt Text der Methode sammeln und beim schließen einfügen
+    }
+
+
+    // Handler wird immer in anderen Tags aufgerufen, wir nehmen von diesem umgebenden Tag
+    // einfach die ID um den Handler zurodnen zu können
+    if ([elementName isEqualToString:@"handler"])
+    {
+        element_bearbeitet = YES;
+
+        if ([attributeDict valueForKey:@"name"])
+        {
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onclick"])
+            {
+                self.attributeCount++;
+
+                [self.jQueryOutput appendString:@"\n  // onclick-Handler für "];
+                [self.jQueryOutput appendString:self.zuletztGesetzteID];
+                [self.jQueryOutput appendString:@"\n"];
+
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").click(function()\n  {\n    ",self.zuletztGesetzteID]];
+
+                // Okay, jetzt Text sammeln und beim schließen einfügen
+            }
+
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onvalue"])
+            {
+                self.attributeCount++;
+                
+                [self.jQueryOutput appendString:@"\n  // change-Handler für "];
+                [self.jQueryOutput appendString:self.zuletztGesetzteID];
+                [self.jQueryOutput appendString:@"\n"];
+                
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").change(function()\n  {\n    ",self.zuletztGesetzteID]];
+                
+                // Okay, jetzt Text sammeln und beim schließen einfügen
+            }
+        }
+
+
+
+
+        if ([attributeDict valueForKey:@"args"])
+        {
+            // Erstmal ignorieren, bis ich es brauche
+            self.attributeCount++;
+        }
+    }
+
+
+
+
+
+
 
     /////////////////////////////////////////////////
     // Abfragen ob wir alles erfasst haben (Debug) //
@@ -2021,6 +2216,17 @@ static inline BOOL isEmpty(id thing)
         && [(NSData *)thing length] == 0)
     || ([thing respondsToSelector:@selector(count)]
         && [(NSArray *)thing count] == 0);
+}
+
+// ToDo: Später in MyToolBox packen
+BOOL isNumeric(NSString *s)
+{
+    NSScanner *sc = [NSScanner scannerWithString: s];
+    if ( [sc scanFloat:NULL] )
+    {
+        return [sc isAtEnd];
+    }
+    return NO;
 }
 
 
@@ -2139,6 +2345,7 @@ static inline BOOL isEmpty(id thing)
     // Bei diesen Elementen muss beim schließen nichts unternommen werden
     if ([elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDScombobox"] ||
+        [elementName isEqualToString:@"button"] ||
         [elementName isEqualToString:@"frame"] ||
         [elementName isEqualToString:@"font"] ||
         [elementName isEqualToString:@"items"] ||
@@ -2214,6 +2421,53 @@ static inline BOOL isEmpty(id thing)
         [self.jsHead2Output appendString:self.textInProgress];
     }
 
+
+
+    if ([elementName isEqualToString:@"handler"])
+    {
+        element_geschlossen = YES;
+
+        NSString *s = self.textInProgress;
+        // Remove leading and ending Whitespaces and NewlineCharacters
+        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+        // This ersetzen
+        s = [s stringByReplacingOccurrencesOfString:@"this" withString:@"$(this)"];
+
+        // setAttribute ersetzen
+        s = [s stringByReplacingOccurrencesOfString:@"setAttribute" withString:@"attr"];
+
+        // ich muss zumindestens für Buttons das Attribut 'text' von OpenLaszlo durch das
+        // HTML-Attribut 'value' ersetzen (kann ich eventuell removen, falls es Sideeffects gibt
+        // weil taxango button wohl nicht benutzt)
+        // Habe es länger gemacht, um nicht z. B. die Phrase 'text' in einem String zu ersetzen
+        s = [s stringByReplacingOccurrencesOfString:@".attr('text'" withString:@".attr('value'"];
+
+
+        [self.jQueryOutput appendString:s];
+        [self.jQueryOutput appendString:@"\n  });\n"];
+    }
+
+
+
+
+
+    if ([elementName isEqualToString:@"method"])
+    {
+        element_geschlossen = YES;
+
+        NSString *s = self.textInProgress;
+        // Remove leading and ending Whitespaces and NewlineCharacters
+        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+        // This ersetzen
+        // s = [s stringByReplacingOccurrencesOfString:@"this" withString:@"$(this)"];
+
+
+        //s = @"alert('test')";
+        [self.jsHead2Output appendString:s];
+        [self.jsHead2Output appendString:@";\n}\n"];
+    }
 
 
 
@@ -2356,8 +2610,8 @@ static inline BOOL isEmpty(id thing)
     {
         NSLog(@"\nATTENTION:\nThere was an issue with an recursive file that I couldn't found:");
         NSLog([NSString stringWithFormat:@"'%@'",self.issueWithRecursiveFileNotFound]);
-        NSLog(@"I'm sorry I coudn't fix this problem. Your OpenLaszlo-file may be malformed.\n");
-        NSLog(@"I continued the parsing anyway, but there probably will be problems with the Output-File.");
+        NSLog(@"I'm sorry I coudn't fix this problem. Your OpenLaszlo-code may be malformed.\n");
+        NSLog(@"I continued the parsing anyway, but there may be problems with the Output.");
     }
 
 
@@ -2519,6 +2773,25 @@ static inline BOOL isEmpty(id thing)
     "    this.value = value;\n"
     "    this.content = content;\n"
     "}\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// toggleVisibility (wird benötigt um Visibility sowohl jetzt, als auch später,\n"
+    "// abhängig von einer Bedingung zu setzen)\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function toggleVisibility(id, idAbhaengig, bedingungAlsString)\n"
+    "{\n"
+    "  var value = $(idAbhaengig).val();\n"
+    "  // 'value' wird intern von OpenLaszlo benutzt! Indem ich auch in JS 'value' in der Zeile\n"
+    "  // vorher setze und danach den string auswerte, der 'value' in der Bedingung enthält,\n"
+    "  // muss ich das von OpenLaszlo benutzte 'value' nicht intern parsen (nice Trick, I Think)\n"
+    "  var bedingung = eval(bedingungAlsString);\n"
+    "\n"
+    "  $(id).toggle(bedingung);\n"
+    "  // Dazu gehörigen Text auch mit entfernen\n"
+    "  if ($(id).prev().is('span'))\n"
+    "    $(id).prev().toggle(bedingung);\n"
+    "}"
+    "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// globale canvas-Methoden\n"

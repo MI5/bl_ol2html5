@@ -89,6 +89,15 @@
 // Weil der Aufruf von [parser abortParsing] rekurisv nicht klappt, muss ich es mir so merken
 @property (strong, nonatomic) NSString* issueWithRecursiveFileNotFound;
 
+// Bei Switch/When lese ich nur einen Zweig (den ersten) aus, um Dopplungen zu vermeiden
+@property (nonatomic) BOOL weAreInTheTagSwitchAndNotInTheFirstWhen;
+
+// Wenn wir in BDSText sind, dann dürfen auf den Text bezogene HTML-Tags nicht ausgewertet werden
+@property (nonatomic) BOOL weAreInBDStextAndThereMayBeHTMLTags;
+
+// Für dataset ohne Attribut 'src' muss ich die nachfolgenden tags einzeln aufsammeln
+@property (nonatomic) BOOL weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags;
+
 // Derzeit überspringen wir alles im Element class, später ToDo
 @property (nonatomic) BOOL weAreInTheTagClass;
 @end
@@ -140,8 +149,11 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize attributeCount = _attributeCount;
 
 @synthesize issueWithRecursiveFileNotFound = _issueWithRecursiveFileNotFound;
-@synthesize weAreInTheTagClass = _weAreInTheTagClass;
 
+@synthesize weAreInTheTagSwitchAndNotInTheFirstWhen = _weAreInTheTagSwitchAndNotInTheFirstWhen;
+@synthesize weAreInBDStextAndThereMayBeHTMLTags = _weAreInBDStextAndThereMayBeHTMLTags;
+@synthesize weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags = _weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags;
+@synthesize weAreInTheTagClass = _weAreInTheTagClass;
 
 
 
@@ -168,6 +180,9 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         [[self log] appendString:s];
         [[self log] appendString:@"\n"];
+
+        // ToDo: Diese Zeile nur beim debuggen drin, damit ich nicht scrollen muss (tut extrem verlangsamen sonst)
+        [self jumpToEndOfTextView];
     }
 }
 
@@ -259,6 +274,10 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.datasetItemsCounter = 0;
 
         self.issueWithRecursiveFileNotFound = @"";
+
+        self.weAreInTheTagSwitchAndNotInTheFirstWhen = NO;
+        self.weAreInBDStextAndThereMayBeHTMLTags = NO;
+        self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags = NO;
         self.weAreInTheTagClass = NO;
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
@@ -505,6 +524,19 @@ void OLLog(xmlParser *self, NSString* s,...)
         [style appendString:[attributeDict valueForKey:@"font"]];
         [style appendString:@";"];
     }
+
+
+    if ([attributeDict valueForKey:@"align"])
+    {
+        if ([[attributeDict valueForKey:@"align"] isEqual:@"center"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'align=center' as CSS 'margin:auto;'.");
+
+            [style appendString:@"margin:auto;"];
+        }
+    }
+
 
 
 
@@ -769,7 +801,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 {
     // Erstmal auch dann setzen, wenn wir eine gegebene ID von OpenLaszlo haben, evtl. zu ändern
     self.idZaehler++;
-    NSLog(@"Setting the attribute 'id' as HTML-attribute 'id'.");
+    NSLog(@"Setting the (attribute 'id' as) HTML-attribute 'id'.");
 
     if ([attributeDict valueForKey:@"id"])
     {
@@ -1006,17 +1038,49 @@ didStartElement:(NSString *)elementName
     // Zum internen testen, ob wir alle Attribute erfasst haben
     self.attributeCount = 0;
 
+
+
+    // skipping All Elements in dataset without attribut 'src'
+    // Muss ich dringend tun und wenn ich hier drin bin alle Tags einsammeln (ToDo)
+    if (self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags)
+    {
+        NSLog([NSString stringWithFormat:@"\nSkipping the Element %@ for now.", elementName]);
+        return;
+    }
+
     // skipping All Elements in Class-elements
     if (self.weAreInTheTagClass)
+    {
+        NSLog([NSString stringWithFormat:@"\nSkipping the Element %@", elementName]);
         return;
+    }
 
+    // Skipping the elements in all when-truncs, except the first one
+    if (self.weAreInTheTagSwitchAndNotInTheFirstWhen)
+    {
+        NSLog([NSString stringWithFormat:@"\nSkipping the Element %@", elementName]);
+        return;
+    }
 
+    // Alle einzeln durchgehen, damit wir besser fehlende überprüfen können, deswegen ist dies kein redundanter Code
+    if (self.weAreInBDStextAndThereMayBeHTMLTags)
+    {
+        if ([elementName isEqualToString:@"br"])
+        {
+            NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
+            [self.textInProgress appendString:@"<br />"];
+            return;
+        }
+    }
 
 
 
 
 
     self.verschachtelungstiefe++;
+
+
+
 
     NSLog([NSString stringWithFormat:@"\nOpening Element: %@", elementName]);
     NSLog([NSString stringWithFormat:@"with these attributes: %@\n", attributeDict]);
@@ -1276,6 +1340,19 @@ didStartElement:(NSString *)elementName
     if ([elementName isEqualToString:@"dataset"])
     {
         element_bearbeitet = YES;
+
+
+
+        if (![attributeDict valueForKey:@"src"])
+        {
+            // Dringend ToDo -> ungefähre Anleitung: Alle nachfolgenden Tags in eine eigene Data-Struktur überführen
+            // Und diese Tags nicht auswerten lassen vom XML-Parser
+
+            // [self instableXML:@"ERROR: No attribute 'src' given in dataset-tag"];
+            self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags = YES;
+            return;
+        }
+
 
 
 
@@ -1558,7 +1635,6 @@ didStartElement:(NSString *)elementName
 
 
 
-    // Wohl nicht von Taxango benutzt, der Standard-Button
     if ([elementName isEqualToString:@"button"])
     {
         element_bearbeitet = YES;
@@ -1583,6 +1659,17 @@ didStartElement:(NSString *)elementName
             [self.output appendString:[attributeDict valueForKey:@"text"]];
             [self.output appendString:@"\""];
         }
+
+
+
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"isdefault"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'isdefault' for now.");
+        }
+
+
 
         [self.output appendString:@" />\n"];
 
@@ -1639,12 +1726,23 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"\">"];
 
+
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"multiline"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'multiline' for now.");
+        }
+
         if ([attributeDict valueForKey:@"text"])
         {
             self.attributeCount++;
             NSLog(@"Setting the attribute 'text' as text between opening and closing tag.");
             [self.output appendString:[attributeDict valueForKey:@"text"]];
         }
+
+        self.weAreInBDStextAndThereMayBeHTMLTags = YES;
+        NSLog(@"We won't include possible following HTML-Tags, because it is content of the text.");
     }
 
 
@@ -2058,6 +2156,8 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
         if ([attributeDict valueForKey:@"fontstyle"])
             self.attributeCount++;
+        if ([attributeDict valueForKey:@"bgcolor"])
+            self.attributeCount++;
         if ([attributeDict valueForKey:@"bgcolor0"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"bgcolor1"])
@@ -2072,10 +2172,118 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
         if ([attributeDict valueForKey:@"initstage"])
             self.attributeCount++;
+        if ([attributeDict valueForKey:@"antiAliasType"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"gridFit"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"sharpness"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"thickness"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"focusable"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"text_x"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"stateres"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"onmouseout"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"onmouseover"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"visible"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"focustrap"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"closeable"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"resourcepic"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"animduration"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"doesenter"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"align"])
+            self.attributeCount++;
+
 
 
         // Alles was in class definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten
         self.weAreInTheTagClass = YES;
+    }
+    // ToDo
+    if ([elementName isEqualToString:@"nicemodaldialog"])
+    {
+        element_bearbeitet = YES;
+
+        if ([attributeDict valueForKey:@"height"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"id"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"width"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"initstage"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"setfocus"])
+            self.attributeCount++;
+
+        // Alles was in nicemodaldialog definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
+        // Wir benutzen die Variable hier mit, da sie den gleichen Zweck erfüllt.
+        self.weAreInTheTagClass = YES;
+    }
+    // ToDo
+    if ([elementName isEqualToString:@"dlginfo"] || [elementName isEqualToString:@"dlgwarning"] || [elementName isEqualToString:@"dlgyesno"] || [elementName isEqualToString:@"nicepopup"] || [elementName isEqualToString:@"nicedialog"])
+    {
+        element_bearbeitet = YES;
+        
+        if ([attributeDict valueForKey:@"height"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"id"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"info"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"initstage"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"width"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"visible"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"question"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"x"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"y"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"modal"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"showhandcursor"])
+            self.attributeCount++;
+
+
+        // Alles was in nicemodaldialog definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
+        // Wir benutzen die Variable hier mit, da sie den gleichen Zweck erfüllt.
+        self.weAreInTheTagClass = YES;
+    }
+
+
+    // Das ist nur ein Schalter. Erst im Nachfolgenden schließenden Element 'when' müssen wir aktiv werden.
+    // Jedoch im schließenden 'switch' schalten wir wieder zurück.
+    if ([elementName isEqualToString:@"switch"])
+    {
+        element_bearbeitet = YES;
+    }
+    if ([elementName isEqualToString:@"when"])
+    {
+        element_bearbeitet = YES;
+
+        if (![attributeDict valueForKey:@"runtime"])
+        {
+            [self instableXML:@"ERROR: No attribute 'runtime' given in when-tag. Okay, not a real error, because we don't care about this attribute."];
+        }
+        else
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'runtime'.");
+        }
     }
 
 
@@ -2083,6 +2291,17 @@ didStartElement:(NSString *)elementName
     if ([elementName isEqualToString:@"script"])
     {
         element_bearbeitet = YES;
+
+        if ([attributeDict valueForKey:@"when"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'when'.");
+        }
+        if ([attributeDict valueForKey:@"src"])
+        {
+            // self.attributeCount++;
+            // ToDo
+        }
 
         // JS-Code mit foundCharacters sammeln und beim schließen übernehmen
     }
@@ -2241,8 +2460,25 @@ BOOL isNumeric(NSString *s)
 
 
 
+    // skipping All Elements in dataset without attribut 'src'
+    if (self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags)
+    {
+        NSLog([NSString stringWithFormat:@"\nSkipping the closing Element %@ for now.", elementName]);
+        return;
+    }
 
+    if ([elementName isEqualToString:@"dlginfo"] || [elementName isEqualToString:@"dlgwarning"] || [elementName isEqualToString:@"dlgyesno"] || [elementName isEqualToString:@"nicepopup"] || [elementName isEqualToString:@"nicedialog"])
+    {
+        element_geschlossen = YES;
+        
+        self.weAreInTheTagClass = NO;
+    }
+    if ([elementName isEqualToString:@"nicemodaldialog"])
+    {
+        element_geschlossen = YES;
 
+        self.weAreInTheTagClass = NO;
+    }
     if ([elementName isEqualToString:@"class"])
     {
         element_geschlossen = YES;
@@ -2253,6 +2489,15 @@ BOOL isNumeric(NSString *s)
     if (self.weAreInTheTagClass)
         return;
 
+    // Alle einzeln durchgehen, damit wir besser fehlende überprüfen können, deswegen ist dies kein redundanter Code
+    if (self.weAreInBDStextAndThereMayBeHTMLTags)
+    {
+        if ([elementName isEqualToString:@"br"])
+        {
+            element_geschlossen = YES;
+        }
+
+    }
 
 
 
@@ -2378,6 +2623,10 @@ BOOL isNumeric(NSString *s)
         // Hinzufügen von gesammelten Text, falls er zwischen den tags gesetzt wurde
         [self.output appendString:self.textInProgress];
 
+        // Ab jetzt dürfen wieder Tags gesetzt werden.
+        self.weAreInBDStextAndThereMayBeHTMLTags = NO;
+        NSLog(@"BDStext was closed. I will not any longer skip tags.");
+
         [self.output appendString:@"</div>\n"];
     }
 
@@ -2398,7 +2647,10 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-        [self.jsHead2Output appendString:@"\n"];
+        if (self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags)
+            self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags = NO;
+        else
+            [self.jsHead2Output appendString:@"\n"];
     }
 
 
@@ -2415,10 +2667,25 @@ BOOL isNumeric(NSString *s)
 
 
 
+
+
     if ([elementName isEqualToString:@"script"])
     {
         element_geschlossen = YES;
         [self.jsHead2Output appendString:self.textInProgress];
+    }
+
+
+    // Damit wir nur einen when-Zweig berücksichtigen, überspringen wir ab jetzt alle weiteren Elemente
+    if ([elementName isEqualToString:@"when"])
+    {
+        element_geschlossen = YES;
+        self.weAreInTheTagSwitchAndNotInTheFirstWhen = YES;
+    }
+    if ([elementName isEqualToString:@"switch"])
+    {
+        element_geschlossen = YES;
+        self.weAreInTheTagSwitchAndNotInTheFirstWhen = NO;
     }
 
 
@@ -2438,8 +2705,7 @@ BOOL isNumeric(NSString *s)
         s = [s stringByReplacingOccurrencesOfString:@"setAttribute" withString:@"attr"];
 
         // ich muss zumindestens für Buttons das Attribut 'text' von OpenLaszlo durch das
-        // HTML-Attribut 'value' ersetzen (kann ich eventuell removen, falls es Sideeffects gibt
-        // weil taxango button wohl nicht benutzt)
+        // HTML-Attribut 'value' ersetzen (muss ich eventuell ändern, falls es Sideeffects gibt)
         // Habe es länger gemacht, um nicht z. B. die Phrase 'text' in einem String zu ersetzen
         s = [s stringByReplacingOccurrencesOfString:@".attr('text'" withString:@".attr('value'"];
 
@@ -2485,9 +2751,14 @@ BOOL isNumeric(NSString *s)
      */
 
 
-    // Clear the text and key
-    self.textInProgress = nil;
-    self.keyInProgress = nil;
+    // bei den HTML-Tags innerhalb von BDStext darf ich self.textInProgress nicht auf nil setzen,
+    // da ich den Text ja weiter ergänze.
+    if (!self.weAreInBDStextAndThereMayBeHTMLTags)
+    {
+        // Clear the text and key
+        self.textInProgress = nil;
+        self.keyInProgress = nil;
+    }
 
 
     if (!element_geschlossen)
@@ -2642,7 +2913,6 @@ BOOL isNumeric(NSString *s)
     "ToDo\n"
     "- Bei views Layout-Attribut beachten: Dazu wohl Simplelayout-Test als eigene Methode;\n"
     "- Bei Links muss sich der Mauszeiger verändern\n"
-    "- BDStext darf derzeit keine HTML-Tags enthalten, das ist blöd\n"
     "- BaseButton ist noch in view integriert. Passt das so?\n"
     "- Warum bricht er e-Mail beim Bindestrich um?\n"
     "- BLABLAparent.width macht er zu breit, wenn ich es nur mit einem width ersetze\n"
@@ -2855,7 +3125,7 @@ BOOL isNumeric(NSString *s)
     // Move NSTextView to the end
     NSRange range;
     range = NSMakeRange ([[globalAccessToTextView string] length], 0);
-    [globalAccessToTextView scrollRangeToVisible: range];    
+    [globalAccessToTextView scrollRangeToVisible: range];
 }
 
 
@@ -2865,7 +3135,7 @@ BOOL isNumeric(NSString *s)
     NSLog([NSString stringWithFormat:@"Error parsing XML: %@", errorString]);
 
 
-    
+
     if ([errorString hasSuffix:@"512"])
     {
         NSLog(@"Parsing aborted programmatically.");

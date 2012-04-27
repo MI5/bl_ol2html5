@@ -53,6 +53,8 @@
 
 @property (strong, nonatomic) NSMutableString *cssOutput; // CSS-Ausgaben, die gesammelt werden, derzeit @Font-Face
 
+@property (strong, nonatomic) NSMutableString *externalJSFilesOutput; // per <script src=''> angegebene externe Skripte
+
 @property (nonatomic) BOOL errorParsing;
 @property (nonatomic) NSInteger idZaehler;
 @property (nonatomic) NSInteger verschachtelungstiefe;
@@ -124,7 +126,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize enclosingElement = _enclosingElement, tempVerschachtelungstiefe = _tempVerschachtelungstiefe;
 
-@synthesize output = _output, jsOutput = _jsOutput, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output, cssOutput = _cssOutput;
+@synthesize output = _output, jsOutput = _jsOutput, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput;
 
 @synthesize errorParsing = _errorParsing, verschachtelungstiefe = _verschachtelungstiefe;
 
@@ -182,7 +184,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         [[self log] appendString:@"\n"];
 
         // ToDo: Diese Zeile nur beim debuggen drin, damit ich nicht scrollen muss (tut extrem verlangsamen sonst)
-        [self jumpToEndOfTextView];
+        // [self jumpToEndOfTextView];
     }
 }
 
@@ -192,7 +194,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // Final Try:
 
 //////////////////////////////////////////////
-// #define NSLog(...) OLLog(self,__VA_ARGS__)
+#define NSLog(...) OLLog(self,__VA_ARGS__)
 //////////////////////////////////////////////
 /********** Dirty Trick um NSLog umzuleiten *********/
 
@@ -243,12 +245,16 @@ void OLLog(xmlParser *self, NSString* s,...)
         else
         {
             self.jsHead2Output = [[NSMutableString alloc] initWithString:@"// Globales Objekt für direkt in canvas global deklarierte Konstanten und Variablen\n"
-                "var canvas = new Object();\n\n"
+                //"var canvas = new Object();\n\n"
+                // statt dessen besser:
+                "function canvasKlasse() {\n}\nvar canvas = new canvasKlasse();\n"
+                "canvasKlasse.prototype.setAttribute = function(varname,value)\n{\n  eval('this.'+varname+' = '+value+';');\n}\n\n"
                 "// Globale Klasse für in verschiedenen Methoden (lokal?) deklarierte Methoden\n"
                 "function parentKlasse() {\n}\n"
                 "var parent = new parentKlasse(); // <-- Unbedingt nötg, damit es auch ein Objekt gibt\n\n"];
         }
         self.cssOutput = [[NSMutableString alloc] initWithString:@""];
+        self.externalJSFilesOutput = [[NSMutableString alloc] initWithString:@""];
 
         self.errorParsing = NO;
         self.verschachtelungstiefe = 0;
@@ -327,7 +333,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Zur Sicherheit mache ich von allem ne Copy.
         // Nicht, dass es beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.allJSGlobalVars copy], nil];
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy], nil];
         return r;
     }
 }
@@ -599,6 +605,8 @@ void OLLog(xmlParser *self, NSString* s,...)
                 s = [self.allJSGlobalVars valueForKey:[attributeDict valueForKey:@"resource"]];
             }
         }
+        if (s == nil || [s isEqualToString:@""])
+            [self instableXML:[NSString stringWithFormat:@"ERROR: The image-path '%@' isn't valid.",[attributeDict valueForKey:@"resource"]]];
 
 
 
@@ -662,12 +670,41 @@ void OLLog(xmlParser *self, NSString* s,...)
         if ([idVonDerEsAbhaengigIst isEqualToString:@"canvas"])
         {
             NSLog(@"ToDo: Sonderbehandlung");
+            /* alte Lösung per plain JS, und hat nicht auf spätere Änderungen der Var reagiert
             [code appendString:s];
             [code appendString:@" ? document.getElementById('"];
             [code appendString:idName];
             [code appendString:@"').style.visibility = 'visible' : document.getElementById('"];
             [code appendString:idName];
             [code appendString:@"').style.visibility = 'hidden';"];
+             */
+
+            // neue Lösung nun mit watch/unwatch-Methode
+            [self.jQueryOutput appendString:@"\n  // Die Visibility ändert sich abhängig von dem Wert einer woanders gesetzten Variable (bei jeder Änderung, deswegen watchen der Variable)\n"];
+            [self.jQueryOutput appendString:@"  canvas.watch('zusammenveranlagung', "];
+            [self.jQueryOutput appendString:@"function (id, oldval, newval)\n  {\n"];
+            [self.jQueryOutput appendString:@"    console.log('canvas.' + id + ' changed from ' + oldval + ' to ' + newval);\n"];
+            [self.jQueryOutput appendString:@"     $('#"];
+            [self.jQueryOutput appendString:idName];
+            [self.jQueryOutput appendString:@"').toggle("];
+            [self.jQueryOutput appendString:@"newval"]; // nicht 's', war's vorher, dann spinnt es.
+            [self.jQueryOutput appendString:@");\n"];
+            [self.jQueryOutput appendString:@"    // Dazu gehörigen Text auch mit entfernen\n"];
+            [self.jQueryOutput appendString:@"    if ($('#"];
+            [self.jQueryOutput appendString:idName];
+            [self.jQueryOutput appendString:@"').prev().is('span'))\n"];
+            [self.jQueryOutput appendString:@"      $('#"];
+            [self.jQueryOutput appendString:idName];
+            [self.jQueryOutput appendString:@"').prev().toggle("];
+            [self.jQueryOutput appendString:@"newval"]; // nicht 's', war's vorher, dann spinnt es.
+            [self.jQueryOutput appendString:@");\n"];
+            [self.jQueryOutput appendString:@"    return newval;\n  });\n"];
+
+            [self.jQueryOutput appendString:@"  // Und einmal sofort die Visibility anpassen durch setzen der Variable mit sich selber\n  "];
+            [self.jQueryOutput appendString:s];
+            [self.jQueryOutput appendString:@" = "];
+            [self.jQueryOutput appendString:s];
+            [self.jQueryOutput appendString:@";\n\n"];
         }
         else
         {
@@ -1015,7 +1052,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jsHeadOutput appendString:[result objectAtIndex:3]];
         [self.jsHead2Output appendString:[result objectAtIndex:4]];
         [self.cssOutput appendString:[result objectAtIndex:5]];
-        [self.allJSGlobalVars addEntriesFromDictionary:[result objectAtIndex:6]];
+        [self.externalJSFilesOutput appendString:[result objectAtIndex:6]];
+        [self.allJSGlobalVars addEntriesFromDictionary:[result objectAtIndex:7]];
     }
 
     NSLog(@"Leaving recursion");
@@ -1040,7 +1078,21 @@ didStartElement:(NSString *)elementName
 
 
 
-    // skipping All Elements in dataset without attribut 'src'
+    if ([elementName isEqualToString:@"items"])
+    {
+        element_bearbeitet = YES;
+        
+        
+        // markierung für den Beginn der item-Liste
+        self.datasetItemsCounter = 0;
+        
+        
+        // Hier muss ich auch die Var auf NO setzen, denn dann sind es nur normale 'items', die
+        // ich einsammeln kann und keine tags die im Tag-Namem den Variablennamen haben
+        self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags = NO;
+    }
+
+    // skipping All Elements in dataset without attribut 'src', die nicht 'items' sind
     // Muss ich dringend tun und wenn ich hier drin bin alle Tags einsammeln (ToDo)
     if (self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags)
     {
@@ -1342,17 +1394,12 @@ didStartElement:(NSString *)elementName
         element_bearbeitet = YES;
 
 
-
-        if (![attributeDict valueForKey:@"src"])
+        // Erstmal ignorieren
+        if ([attributeDict valueForKey:@"proxied"])
         {
-            // Dringend ToDo -> ungefähre Anleitung: Alle nachfolgenden Tags in eine eigene Data-Struktur überführen
-            // Und diese Tags nicht auswerten lassen vom XML-Parser
-
-            // [self instableXML:@"ERROR: No attribute 'src' given in dataset-tag"];
-            self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags = YES;
-            return;
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'proxied'.");
         }
-
 
 
 
@@ -1364,6 +1411,12 @@ didStartElement:(NSString *)elementName
         NSString *name = [attributeDict valueForKey:@"name"];
         self.lastUsedDataset = name; // item braucht es später
         NSLog(@"Using the attribute 'name' as name for a new JS-Array().");
+
+
+
+
+
+
 
         // Ein Array mit dem Namen des gefundenen datasets und den dataset-items als Elementen
         [self.jsHead2Output appendString:@"// Ein Array mit dem Namen des gefundenen datasets und den dataset-items als Elementen\n"];
@@ -1395,17 +1448,33 @@ didStartElement:(NSString *)elementName
             NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! So I am calling myself recursive with the file %@",[attributeDict valueForKey:@"src"]]);
             [self callMyselfRecursive:[attributeDict valueForKey:@"src"]];
         }
+        else
+        {
+            // Dringend ToDo -> ungefähre Anleitung: Alle nachfolgenden Tags in eine eigene Data-Struktur überführen
+            // Und diese Tags nicht auswerten lassen vom XML-Parser
+
+            // Aber wieder rückgängig machen in 'items', falls wir darauf stoßen
+            self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags = YES;
+        }
     }
 
-    if ([elementName isEqualToString:@"items"])
+    
+    if ([elementName isEqualToString:@"datapointer"])
     {
         element_bearbeitet = YES;
 
-
-        // markierung für den Beginn der item-Liste
-        self.datasetItemsCounter = 0;
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"xpath"])
+            self.attributeCount++;
     }
 
+
+
+
+
+    // ToDo falls kommerziell: Die gefunden Attribute automatisch hinzufügen zur Klasse und
+    // nicht wie hier, weil wir wissen welche Attribute es alles gibt bei 'item'
     if ([elementName isEqualToString:@"item"])
     {
         element_bearbeitet = YES;
@@ -1452,6 +1521,46 @@ didStartElement:(NSString *)elementName
         [self.jsHead2Output appendString:[attributeDict valueForKey:@"value"]];
         if (!isNumeric([attributeDict valueForKey:@"value"]))
             [self.jsHead2Output appendString:@"'"];
+
+        if ([attributeDict valueForKey:@"info"])
+        {
+            self.attributeCount++;
+
+            [self.jsHead2Output appendString:@",'"];
+            [self.jsHead2Output appendString:[attributeDict valueForKey:@"info"]];
+            [self.jsHead2Output appendString:@"'"];
+        }
+        else
+        {
+            [self.jsHead2Output appendString:@",''"];
+        }
+
+        if ([attributeDict valueForKey:@"afa"])
+        {
+            self.attributeCount++;
+            
+            [self.jsHead2Output appendString:@",'"];
+            [self.jsHead2Output appendString:[attributeDict valueForKey:@"afa"]];
+            [self.jsHead2Output appendString:@"'"];
+        }
+        else
+        {
+            [self.jsHead2Output appendString:@",''"];
+        }
+
+        if ([attributeDict valueForKey:@"check"])
+        {
+            self.attributeCount++;
+            
+            [self.jsHead2Output appendString:@",'"];
+            [self.jsHead2Output appendString:[attributeDict valueForKey:@"check"]];
+            [self.jsHead2Output appendString:@"'"];
+        }
+        else
+        {
+            [self.jsHead2Output appendString:@",''"];
+        }
+
         [self.jsHead2Output appendString:@",'"];
     }
 
@@ -1504,15 +1613,27 @@ didStartElement:(NSString *)elementName
         else
             self.attributeCount++;
 
-        if (![attributeDict valueForKey:@"type"])
-            [self instableXML:@"ERROR: No attribute 'type' given in attribute-tag"];
-        else
-            self.attributeCount++;
 
-        if (![attributeDict valueForKey:@"value"])
-            [self instableXML:@"ERROR: No attribute 'value' given in attribute-tag"];
-        else
+        // Es gibt auch attributes ohne type, dann mit 'number' initialisieren
+        NSString *type_;
+        if ([attributeDict valueForKey:@"type"])
+        {
             self.attributeCount++;
+            type_ = [attributeDict valueForKey:@"type"];
+        }
+        else
+            type_ = @"number";
+
+
+        // Es gibt auch attributes ohne Startvalue, dann mit einem leeren String initialisieren
+        NSString *value;
+        if ([attributeDict valueForKey:@"value"])
+        {
+            self.attributeCount++;
+            value = [attributeDict valueForKey:@"value"];
+        }
+        else
+            value = @""; // Quotes werden dann automatisch unten reingesetzt
 
 
         // ToDo: 'attrbute' kann bis jetzt nur globale Variable verarbeiten, die direkt in canvas liegen
@@ -1521,8 +1642,8 @@ didStartElement:(NSString *)elementName
             NSLog([NSString stringWithFormat:@"Setting '%@' as class-member in JavaScript-class 'canvas'.",[attributeDict valueForKey:@"name"]]);
 
             BOOL weNeedQuotes = YES;
-            if ([[attributeDict valueForKey:@"type"] isEqualTo:@"boolean"] ||
-                [[attributeDict valueForKey:@"type"] isEqualTo:@"number"])
+            if ([type_ isEqualTo:@"boolean"] ||
+                [type_ isEqualTo:@"number"])
                 weNeedQuotes = NO;
 
 
@@ -1531,7 +1652,7 @@ didStartElement:(NSString *)elementName
             [self.jsHead2Output appendString:@" = "];
             if (weNeedQuotes)
                 [self.jsHead2Output appendString:@"\""];
-            [self.jsHead2Output appendString:[attributeDict valueForKey:@"value"]];
+            [self.jsHead2Output appendString:value];
             if (weNeedQuotes)
                 [self.jsHead2Output appendString:@"\""];
             [self.jsHead2Output appendString:@";\n"];
@@ -2299,11 +2420,17 @@ didStartElement:(NSString *)elementName
         }
         if ([attributeDict valueForKey:@"src"])
         {
-            // self.attributeCount++;
-            // ToDo
-        }
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'src' as external JS-File in the <head> of our HTML-File.");
 
-        // JS-Code mit foundCharacters sammeln und beim schließen übernehmen
+            [self.externalJSFilesOutput appendString:@"<script src=\""];
+            [self.externalJSFilesOutput appendString:[attributeDict valueForKey:@"src"]];
+            [self.externalJSFilesOutput appendString:@"\" type=\"text/javascript\"></script>\n"];
+        }
+        else
+        {
+            // JS-Code mit foundCharacters sammeln und beim schließen übernehmen
+        }
     }
 
 
@@ -2460,12 +2587,27 @@ BOOL isNumeric(NSString *s)
 
 
 
+
+    // Schließen von dataset
+    if ([elementName isEqualToString:@"dataset"])
+    {
+        element_geschlossen = YES;
+
+        if (self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags)
+            self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags = NO;
+        else
+            [self.jsHead2Output appendString:@"\n"];
+    }
+
     // skipping All Elements in dataset without attribut 'src'
     if (self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags)
     {
+        element_geschlossen = YES;
+
         NSLog([NSString stringWithFormat:@"\nSkipping the closing Element %@ for now.", elementName]);
-        return;
     }
+
+
 
     if ([elementName isEqualToString:@"dlginfo"] || [elementName isEqualToString:@"dlgwarning"] || [elementName isEqualToString:@"dlgyesno"] || [elementName isEqualToString:@"nicepopup"] || [elementName isEqualToString:@"nicedialog"])
     {
@@ -2500,8 +2642,21 @@ BOOL isNumeric(NSString *s)
     }
 
 
-
-
+    // Damit wir nur einen when-Zweig berücksichtigen, überspringen wir ab jetzt alle weiteren Elemente
+    if ([elementName isEqualToString:@"when"])
+    {
+        element_geschlossen = YES;
+        self.weAreInTheTagSwitchAndNotInTheFirstWhen = YES;
+    }
+    if ([elementName isEqualToString:@"switch"])
+    {
+        element_geschlossen = YES;
+        self.weAreInTheTagSwitchAndNotInTheFirstWhen = NO;
+    }
+    // wenn wir aber trotzdem immer noch drin sind, dann raus hier, sonst würde er Elemente
+    // schließend bearbeiten, die im 'when'-Zweig drin liegen
+    if (self.weAreInTheTagSwitchAndNotInTheFirstWhen)
+        return;
 
 
 
@@ -2597,6 +2752,7 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"library"] ||
         [elementName isEqualToString:@"audio"] ||
         [elementName isEqualToString:@"include"] ||
+        [elementName isEqualToString:@"datapointer"] ||
         [elementName isEqualToString:@"attribute"])
     {
         element_geschlossen = YES;
@@ -2642,16 +2798,6 @@ BOOL isNumeric(NSString *s)
         [self.jsHead2Output appendString:@"');\n"];
     }
 
-    // Schließen von dataset
-    if ([elementName isEqualToString:@"dataset"])
-    {
-        element_geschlossen = YES;
-
-        if (self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags)
-            self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags = NO;
-        else
-            [self.jsHead2Output appendString:@"\n"];
-    }
 
 
     if ([elementName isEqualToString:@"rollUpDown"])
@@ -2676,17 +2822,7 @@ BOOL isNumeric(NSString *s)
     }
 
 
-    // Damit wir nur einen when-Zweig berücksichtigen, überspringen wir ab jetzt alle weiteren Elemente
-    if ([elementName isEqualToString:@"when"])
-    {
-        element_geschlossen = YES;
-        self.weAreInTheTagSwitchAndNotInTheFirstWhen = YES;
-    }
-    if ([elementName isEqualToString:@"switch"])
-    {
-        element_geschlossen = YES;
-        self.weAreInTheTagSwitchAndNotInTheFirstWhen = NO;
-    }
+
 
 
 
@@ -2726,13 +2862,23 @@ BOOL isNumeric(NSString *s)
         // Remove leading and ending Whitespaces and NewlineCharacters
         s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
+        // tabs eliminieren
+        while ([s rangeOfString:@"\t"].location != NSNotFound)
+        {
+            s = [s stringByReplacingOccurrencesOfString:@"\t" withString:@"  "];
+        }
+        // Leerzeichen zusammenfassen
+        while ([s rangeOfString:@"  "].location != NSNotFound)
+        {
+            s = [s stringByReplacingOccurrencesOfString:@"  " withString:@" "];
+        }
+
         // This ersetzen
         // s = [s stringByReplacingOccurrencesOfString:@"this" withString:@"$(this)"];
 
-
         //s = @"alert('test')";
         [self.jsHead2Output appendString:s];
-        [self.jsHead2Output appendString:@";\n}\n"];
+        [self.jsHead2Output appendString:@"\n}\n"];
     }
 
 
@@ -2792,7 +2938,9 @@ BOOL isNumeric(NSString *s)
 
     NSMutableString *pre = [[NSMutableString alloc] initWithString:@""];
 
-    [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n<title>Canvastest</title>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n<script type=\"text/javascript\" src=\"http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js\"></script>\n<script src=\"jsHelper.js\" type=\"text/javascript\"></script>\n\n<style type='text/css'>\n"];
+    [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n<title>Canvastest</title>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n<script type=\"text/javascript\" src=\"http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js\"></script>\n"];
+    [pre appendString:self.externalJSFilesOutput];
+    [pre appendString:@"<script src=\"jsHelper.js\" type=\"text/javascript\"></script>\n\n<style type='text/css'>\n"];
     // Falls latest jQuery-Version gewünscht:
     // '<script type="text/javascript" src="http://code.jquery.com/jquery-latest.min.js"></script>'
     // einbauen, aber dann kein Caching.
@@ -2911,6 +3059,7 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "ToDo\n"
+    "- in FF klappt der direkte Zugriff auf Elemente per id nicht (bei strictem doctype)"
     "- Bei views Layout-Attribut beachten: Dazu wohl Simplelayout-Test als eigene Methode;\n"
     "- Bei Links muss sich der Mauszeiger verändern\n"
     "- BaseButton ist noch in view integriert. Passt das so?\n"
@@ -3037,11 +3186,17 @@ BOOL isNumeric(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// datasetItem-Klasse für in OL deklarierte datasets (bzw. ein Objekt-Konstruktor dafür)\n"
     "/////////////////////////////////////////////////////////\n"
-    "function datasetItem(value, content)\n"
+    "function datasetItem(value, info, afa, check, content)\n"
     "{\n"
     "    // Die Propertys des Objekts\n"
     "    this.value = value;\n"
     "    this.content = content;\n"
+    "    // Manche items haben auch noch ein info-Attribut\n"
+    "    this.info = info;\n"
+    "    // Manche items haben auch noch ein afa-Attribut\n"
+    "    this.afa = afa;\n"
+    "    // Manche items haben auch noch ein check-Attribut\n"
+    "    this.check = check;\n"
     "}\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -3106,7 +3261,62 @@ BOOL isNumeric(NSString *s)
     "$(window).resize(function()\n"
     "{\n"
     "    adjustOffsetOnBrowserResize();\n"
-    "});";
+    "});"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// watch/unwatch-Skript um auf Änderungen von Variablen reagieren zu können\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/*\n"
+    "* object.watch polyfill\n"
+    "*\n"
+    "* 2012-04-03\n"
+    "*\n"
+    "* By Eli Grey, http://eligrey.com\n"
+    "* Public Domain.\n"
+    "* NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.\n"
+    "*/\n"
+    "\n"
+    "// object.watch\n"
+    "if (!Object.prototype.watch) {\n"
+    "    Object.defineProperty(Object.prototype, 'watch', {\n"
+    "    enumerable: false\n"
+    "        , configurable: true\n"
+    "        , writable: false\n"
+    "        , value: function (prop, handler) {\n"
+    "            var oldval = this[prop], newval = oldval,\n"
+    "            getter = function () {\n"
+    "                return newval;\n"
+    "            },\n"
+    "            setter = function (val) {\n"
+    "                oldval = newval;\n"
+    "                return newval = handler.call(this, prop, oldval, val);\n"
+    "            };\n"
+    "            if (delete this[prop]) { // can't watch constants\n"
+    "                Object.defineProperty(this, prop, {\n"
+    "                get: getter,\n"
+    "                set: setter,\n"
+    "                enumerable: true,\n"
+    "                configurable: true\n"
+    "                });\n"
+    "            }\n"
+    "        }\n"
+    "    });\n"
+    "}\n"
+    "\n"
+    "// object.unwatch\n"
+    "if (!Object.prototype.unwatch) {\n"
+    "    Object.defineProperty(Object.prototype, 'unwatch', {\n"
+    "    enumerable: false\n"
+    "        , configurable: true\n"
+    "        , writable: false\n"
+    "        , value: function (prop) {\n"
+    "            var val = this[prop];\n"
+    "            delete this[prop]; // remove accessors\n"
+    "            this[prop] = val;\n"
+    "        }\n"
+    "    });\n"
+    "}\n";
 
 
 

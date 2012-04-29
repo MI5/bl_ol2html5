@@ -81,6 +81,10 @@
 // Für das Element RollUpDownContainer
 @property (strong, nonatomic) NSString *animDuration;
 
+// jQuery UI braucht bei jedem auftauchen eines neuen Tabsheets-elements den Namen des aktuellen Tabsheets,
+// um dieses per add einfügen zu können
+@property (strong, nonatomic) NSString *lastUsedTabSheetContainerID;
+
 
 // Damit ich auch intern auf die Inhalte der Variablen zugreifen kann
 @property (strong, nonatomic) NSMutableDictionary *allJSGlobalVars;
@@ -98,10 +102,12 @@
 @property (nonatomic) BOOL weAreInBDStextAndThereMayBeHTMLTags;
 
 // Für dataset ohne Attribut 'src' muss ich die nachfolgenden tags einzeln aufsammeln
-@property (nonatomic) BOOL weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags;
+@property (nonatomic) BOOL weAreInDatasetAndNeedToCollectTheFollowingTags;
 
 // Derzeit überspringen wir alles im Element class, später ToDo
-@property (nonatomic) BOOL weAreInTheTagClass;
+// auch in anderen Fällen überspringen wir alle Inhalte, z.B. bei 'splash', das sollten wir so lassen
+// im Fall von 'fileUpload' müssen wir eine komplett neue Lösung finden weil es am iPad keine Files gibt
+@property (nonatomic) BOOL weAreSkippingTheCompleteContenInThisElement;
 @end
 
 
@@ -144,7 +150,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize datasetItemsCounter = _datasetItemsCounter;
 
-@synthesize animDuration = _animDuration;
+@synthesize animDuration = _animDuration, lastUsedTabSheetContainerID = _lastUsedTabSheetContainerID;
 
 @synthesize allJSGlobalVars = _allJSGlobalVars;
 
@@ -154,8 +160,8 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize weAreInTheTagSwitchAndNotInTheFirstWhen = _weAreInTheTagSwitchAndNotInTheFirstWhen;
 @synthesize weAreInBDStextAndThereMayBeHTMLTags = _weAreInBDStextAndThereMayBeHTMLTags;
-@synthesize weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags = _weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags;
-@synthesize weAreInTheTagClass = _weAreInTheTagClass;
+@synthesize weAreInDatasetAndNeedToCollectTheFollowingTags = _weAreInDatasetAndNeedToCollectTheFollowingTags;
+@synthesize weAreSkippingTheCompleteContenInThisElement = _weAreSkippingTheCompleteContenInThisElement;
 
 
 
@@ -276,6 +282,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.collectedFrameResources = [[NSMutableArray alloc] init];
 
         self.animDuration = @"slow";
+        self.lastUsedTabSheetContainerID = @"";
         self.lastUsedDataset = @"";
         self.datasetItemsCounter = 0;
 
@@ -283,8 +290,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         self.weAreInTheTagSwitchAndNotInTheFirstWhen = NO;
         self.weAreInBDStextAndThereMayBeHTMLTags = NO;
-        self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags = NO;
-        self.weAreInTheTagClass = NO;
+        self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
+        self.weAreSkippingTheCompleteContenInThisElement = NO;
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
     }
@@ -520,6 +527,16 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
 
+    if ([attributeDict valueForKey:@"fontstyle"])
+    {
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'fontstyle' as CSS 'font-weight'.");
+        
+        [style appendString:@"font-weight:"];
+        [style appendString:[attributeDict valueForKey:@"fontstyle"]];
+    }
+
+
 
     if ([attributeDict valueForKey:@"font"])
     {
@@ -572,45 +589,66 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.attributeCount++;
         NSLog(@"Skipping the attribute 'listwidth'.");
     }
-
-
-
-
-
-
-
-    if ([attributeDict valueForKey:@"resource"])
+    if ([attributeDict valueForKey:@"negativecolor"]) // ToDo
     {
         self.attributeCount++;
-        NSLog(@"Setting the attribute 'ressource' as CSS 'background-image:url()");
+        NSLog(@"Skipping the attribute 'negativecolor'.");
+    }
+    if ([attributeDict valueForKey:@"positivecolor"]) // ToDo
+    {
+        self.attributeCount++;
+        NSLog(@"Skipping the attribute 'positivecolor'.");
+    }
+
+
+
+
+
+
+    // Neuerding kann auch in 'source' der Pfad zu einer Datei enthalten sein, nicht nur in resource
+    if ([attributeDict valueForKey:@"resource"] || [attributeDict valueForKey:@"source"])
+    {
+        NSString *src = @"";
+        if ([attributeDict valueForKey:@"resource"])
+        {
+            NSLog(@"Setting the attribute 'resource' as CSS 'background-image:url()'");
+            src = [attributeDict valueForKey:@"resource"];
+        }
+        else
+        {
+            NSLog(@"Setting the attribute 'source' as CSS 'background-image:url()'");
+            src = [attributeDict valueForKey:@"source"];
+        }
+
+        self.attributeCount++;
         NSString *s = @"";
 
         // Wenn ein Punkt enthalten ist, ist es wohl eine Datei
-        if ([[attributeDict valueForKey:@"resource" ] rangeOfString:@"."].location != NSNotFound)
+        if ([src rangeOfString:@"."].location != NSNotFound)
         {
-            //Möglichkeit 1: Resource wird direkt als String angegeben!
-            s = [attributeDict valueForKey:@"resource"];
+            // Möglichkeit 1: Resource wird direkt als String angegeben!
+            s = src;
         }
         else
         {
             // Möglichkeit 2: Resource wurde vorher extern gesetzt
 
             // Namen des Bildes aus eigener vorher angelegter Res-DB ermitteln
-            if ([[self.allJSGlobalVars valueForKey:[attributeDict valueForKey:@"resource"]] isKindOfClass:[NSArray class]])
+            if ([[self.allJSGlobalVars valueForKey:src] isKindOfClass:[NSArray class]])
             {
-                s = [[self.allJSGlobalVars valueForKey:[attributeDict valueForKey:@"resource"]] objectAtIndex:0];
+                s = [[self.allJSGlobalVars valueForKey:src] objectAtIndex:0];
             }
             else
             {
-                s = [self.allJSGlobalVars valueForKey:[attributeDict valueForKey:@"resource"]];
+                s = [self.allJSGlobalVars valueForKey:src];
             }
         }
         if (s == nil || [s isEqualToString:@""])
-            [self instableXML:[NSString stringWithFormat:@"ERROR: The image-path '%@' isn't valid.",[attributeDict valueForKey:@"resource"]]];
+            [self instableXML:[NSString stringWithFormat:@"ERROR: The image-path '%@' isn't valid.",src]];
 
 
 
-        NSLog(@"Checking the image directly on file-system:");
+        NSLog(@"Checking the image-size directly on file-system:");
         // Dann erstmal width und height von dem Image auf Dateiebene ermitteln
         NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
 
@@ -633,6 +671,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         [style appendString:s];
         [style appendString:@");"];
     }
+
+
+
 
     return style;
 }
@@ -1033,6 +1074,10 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Wenn es eine Datei ist, die Items für ein Dataset enthält, dann muss das rekursiv
     // auferufene Objekt das letzte DataSet wissen, damit es die Items richtig zuordnen kann
     x.lastUsedDataset = self.lastUsedDataset;
+    // Zur Zeit ignorieren wir Datasets mit eigenen bennannten Tags, deswegen müssen wir
+    // falls diese in einer eigenen Datei definiert sind, dies mitteilen
+    x.weAreInDatasetAndNeedToCollectTheFollowingTags = self.weAreInDatasetAndNeedToCollectTheFollowingTags;
+
     NSArray* result = [x start];
 
     if ([[result objectAtIndex:0] isEqual:@"XML-File not found"])
@@ -1089,19 +1134,21 @@ didStartElement:(NSString *)elementName
         
         // Hier muss ich auch die Var auf NO setzen, denn dann sind es nur normale 'items', die
         // ich einsammeln kann und keine tags die im Tag-Namem den Variablennamen haben
-        self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags = NO;
+        self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
     }
 
     // skipping All Elements in dataset without attribut 'src', die nicht 'items' sind
     // Muss ich dringend tun und wenn ich hier drin bin alle Tags einsammeln (ToDo)
-    if (self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags)
+    if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
     {
         NSLog([NSString stringWithFormat:@"\nSkipping the Element %@ for now.", elementName]);
         return;
     }
 
-    // skipping All Elements in Class-elements
-    if (self.weAreInTheTagClass)
+    // skipping All Elements in Class-elements (ToDo)
+    // skipping all Elements in splash (ToDo)
+    // skipping all Elements in fileUpload (ToDo)
+    if (self.weAreSkippingTheCompleteContenInThisElement)
     {
         NSLog([NSString stringWithFormat:@"\nSkipping the Element %@", elementName]);
         return;
@@ -1121,6 +1168,34 @@ didStartElement:(NSString *)elementName
         {
             NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
             [self.textInProgress appendString:@"<br />"];
+            return;
+        }
+
+        if ([elementName isEqualToString:@"b"])
+        {
+            NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
+            [self.textInProgress appendString:@"<b>"];
+            return;
+        }
+
+        if ([elementName isEqualToString:@"u"])
+        {
+            NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
+            [self.textInProgress appendString:@"<u>"];
+            return;
+        }
+
+        if ([elementName isEqualToString:@"font"])
+        {
+            NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
+            [self.textInProgress appendString:@"<font"];
+            for (id e in attributeDict)
+            {
+                // Alle Elemente in font (color usw...) einfach ausgeben
+                [self.textInProgress appendString:[NSString stringWithFormat:@" %@",e]];
+                [self.textInProgress appendString:[NSString stringWithFormat:@"=\"%@\"",[attributeDict valueForKey:e]]];
+            }
+            [self.textInProgress appendString:@">"];
             return;
         }
     }
@@ -1146,11 +1221,15 @@ didStartElement:(NSString *)elementName
 
     if ([elementName isEqualToString:@"window"] ||
         [elementName isEqualToString:@"view"] ||
+        [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"basebutton"] ||
+        [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDStext"] ||
         [elementName isEqualToString:@"button"] ||
         [elementName isEqualToString:@"rollUpDownContainer"] ||
+        [elementName isEqualToString:@"BDStabsheetcontainer"] ||
+        [elementName isEqualToString:@"BDStabsheetTaxango"] ||
         [elementName isEqualToString:@"rollUpDown"])
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
@@ -1401,6 +1480,13 @@ didStartElement:(NSString *)elementName
             NSLog(@"Skipping the attribute 'proxied'.");
         }
 
+        // Erstmal ignorieren
+        if ([attributeDict valueForKey:@"timeout"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'timeout'.");
+        }
+
 
 
         if (![attributeDict valueForKey:@"name"])
@@ -1413,6 +1499,15 @@ didStartElement:(NSString *)elementName
         NSLog(@"Using the attribute 'name' as name for a new JS-Array().");
 
 
+
+
+
+
+        // Dringend ToDo -> ungefähre Anleitung: Alle nachfolgenden Tags in eine eigene Data-Struktur überführen
+        // Und diese Tags nicht auswerten lassen vom XML-Parser
+        // Aber wieder rückgängig machen in 'items', falls wir darauf stoßen
+        // Muss (logischerweise) vor der Rekursion stehen, deswegen steht es hier oben
+        self.weAreInDatasetAndNeedToCollectTheFollowingTags = YES;
 
 
 
@@ -1444,21 +1539,31 @@ didStartElement:(NSString *)elementName
                 NSLog(@"Skipping the attribute 'request'.");
             }
 
-
-            NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! So I am calling myself recursive with the file %@",[attributeDict valueForKey:@"src"]]);
-            [self callMyselfRecursive:[attributeDict valueForKey:@"src"]];
+            // querytype ist wohl ein request in die Wolke (auf eine .php-Datei), erstmal ignorieren
+            // Es gibt als Querytipe sowohl "POST", als auch "GET"
+            // ToDo onwerk
+            if ([attributeDict valueForKey:@"querytype"])
+            {
+                self.attributeCount++;
+                NSLog(@"Skipping the attribute 'querytype'.");
+                if ([[attributeDict valueForKey:@"querytype"] isEqualToString:@"POST"])
+                    NSLog(@"I will ignore this src-file for now (it's a POST-Request).");
+                else
+                    NSLog(@"I will ignore this src-file for now (it's a GET-Request).");
+            }
+            else
+            {
+                NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! So I am calling myself recursive with the file %@",[attributeDict valueForKey:@"src"]]);
+                [self callMyselfRecursive:[attributeDict valueForKey:@"src"]];
+            }
         }
         else
         {
-            // Dringend ToDo -> ungefähre Anleitung: Alle nachfolgenden Tags in eine eigene Data-Struktur überführen
-            // Und diese Tags nicht auswerten lassen vom XML-Parser
-
-            // Aber wieder rückgängig machen in 'items', falls wir darauf stoßen
-            self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags = YES;
+            // Die in <items> enthaltenen <item>-Elemente werden ausgelesen.
         }
     }
 
-    
+
     if ([elementName isEqualToString:@"datapointer"])
     {
         element_bearbeitet = YES;
@@ -1703,7 +1808,7 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"view"])
+    if ([elementName isEqualToString:@"view"] || [elementName isEqualToString:@"rotateNumber"])
     {
         element_bearbeitet = YES;
 
@@ -1735,10 +1840,16 @@ didStartElement:(NSString *)elementName
         if ([attributeDict valueForKey:@"layout"])
         {
             self.attributeCount++;
-            NSLog(@"Skipping layout-Attribute on view (ToDo).");
+            NSLog(@"Skipping the attribute 'layout' on view (ToDo).");
         }
 
 
+        // Wird derzeit noch übersprungen (ToDo)
+        if ([attributeDict valueForKey:@"placement"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'placement' on view.");
+        }
 
 
         [self.output appendString:@" class=\"ol_standard_view\" style=\""];
@@ -1801,13 +1912,15 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"basebutton"])
+    if ([elementName isEqualToString:@"basebutton"] || [elementName isEqualToString:@"imgbutton"])
     {
         element_bearbeitet = YES;
-        
-        
 
-        [self.output appendString:@"<!-- Basebutton: -->\n"];
+
+        if ([elementName isEqualToString:@"basebutton"])
+            [self.output appendString:@"<!-- Basebutton: -->\n"];
+        else
+            [self.output appendString:@"<!-- Imagebutton: -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
@@ -1824,6 +1937,14 @@ didStartElement:(NSString *)elementName
 
 
         [self.output appendString:@"\">\n"];
+
+
+        // ToDo: Wird derzeit nicht ausgewertet - gemäß Doku ist hier 'false' der Standardwert, aber puh
+        if ([attributeDict valueForKey:@"focusable"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'focusable' for now.");
+        }
 
         [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
     }
@@ -1854,6 +1975,15 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'multiline' for now.");
         }
+
+
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"onclick"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'onclick' for now.");
+        }
+
 
         if ([attributeDict valueForKey:@"text"])
         {
@@ -2016,6 +2146,7 @@ didStartElement:(NSString *)elementName
 
 
 
+
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
         [self.output appendString:@"<!-- Inhalt wird per jQuery von folgender Anweisung gesetzt "];
         [self.output appendString:id];
@@ -2032,6 +2163,103 @@ didStartElement:(NSString *)elementName
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<br />\n\n"];
     }
+
+
+
+
+
+
+
+    if ([elementName isEqualToString:@"BDSeditdate"])
+    {
+        element_bearbeitet = YES;
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+
+        // Wenn im Attribut title Code auftaucht, dann müssen wir es dynamisch setzen
+        // müssen aber erst abwarten bis wir die ID haben, weil wir die für den Zugriff brauchen.
+        // <span> drum herum, damit ich per jQuery darauf zugreifen kann
+        BOOL titelDynamischSetzen = NO;
+        if ([attributeDict valueForKey:@"title"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'title' in <span>-tags as text in front of datepicker.");
+            if ([[attributeDict valueForKey:@"title"] hasPrefix:@"$"])
+            {
+                titelDynamischSetzen = YES;
+                [self.output appendString:@"<span>CODE! - Wird dynamisch mit jQuery ersetzt.</span>\n"];
+            }
+            else
+            {
+                [self.output appendString:@"<span>"];
+                [self.output appendString:[attributeDict valueForKey:@"title"]];
+                [self.output appendString:@"</span>\n"];
+            }
+        }
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+
+        [self.output appendString:@"<p>Date: <input type=\"text\""];
+
+        NSString *id =[self addIdToElement:attributeDict];
+
+
+        // Jetzt erst haben wir die ID und können diese nutzen für den jQuery-Code
+        if (titelDynamischSetzen)
+        {
+            NSString *code = [attributeDict valueForKey:@"title"];
+            // Remove all occurrences of $,{,}
+            code = [code stringByReplacingOccurrencesOfString:@"$" withString:@""];
+            code = [code stringByReplacingOccurrencesOfString:@"{" withString:@""];
+            code = [code stringByReplacingOccurrencesOfString:@"}" withString:@""];
+
+            [self.jQueryOutput appendString:@"\n  // Datepicker-Text wird hier dynamisch gesetzt\n"];
+            // [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').before(%@);",id,code]];
+            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').parent().prev().text(%@);\n",id,code]];
+        }
+
+
+        [self.output appendString:@" style=\""];
+
+
+        // Im Prinzip nur wegen controlwidth
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+        [self.output appendString:@"\"></p>\n\n"];
+
+
+        // Jetzt noch den jQuery-Code für den Datepicker
+        [self.jQueryOutput appendString:@"\n  // Für das mit dieser id verbundene input-Field setzen wir einen jQUery UI Datepicker\n"];
+        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').datepicker();\n",id]];
+
+
+
+
+
+        if ([attributeDict valueForKey:@"dateErrorMaxDate"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'dateErrorMaxDate'.");
+        }
+        if ([attributeDict valueForKey:@"maxdate"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'maxdate'.");
+        }
+        if ([attributeDict valueForKey:@"mindate"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'mindate'.");
+        }
+
+
+
+
+        // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw.
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
+    }
+
+
+
 
 
 
@@ -2225,6 +2453,122 @@ didStartElement:(NSString *)elementName
     }
 
 
+
+
+
+
+    if ([elementName isEqualToString:@"BDStabsheetcontainer"])
+    {
+        element_bearbeitet = YES;
+
+        [self.output appendString:@"<!-- TabSheet-Container: -->\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+
+
+
+        [self.output appendString:@"<div"];
+
+        self.lastUsedTabSheetContainerID = [self addIdToElement:attributeDict];
+
+
+        [self.output appendString:@" style=\""];
+        [self.output appendString:[self addCSSAttributes:attributeDict forceWidthAndHeight:YES]];
+        [self.output appendString:@"\">\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"<ul>\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"</ul>\n"];
+
+
+
+        // tabwidth auslesen
+        int tabwidth = 127;
+        int tabwidthForLink;
+        if ([attributeDict valueForKey:@"tabwidth"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'tabwidth' as CSS-declaration in the jQuery UI option 'tabTemplate' of 'tabs'.");
+            tabwidth = [[attributeDict valueForKey:@"tabwidth"] intValue];
+            // Derzeit hat es wohl noch eine Border/Margin, nur so haben wir exakt den gleichen Abstand wie bei Taxango
+            tabwidth = tabwidth - 6;
+            // Damit man im Tab auf der kompletten Tableiste klicken kann
+            tabwidthForLink = tabwidth - 4*6;
+        }
+
+
+
+
+        // Hier legen wir den TabSheetContainer per jQuery an
+        [self.jQueryOutput appendString:@"\n  // Ein TabSheetContainer. Jetzt wird's kompliziert. Wird legen ihn hier an.\n  // Die einzelnen Tabs werden, sobald sie im Code auftauchen, per add hinzugefügt\n  // Mit der Option 'tabTemplate' legen wir die width fest\n  // Mit der Option 'fx' legen wir eine Animation für das Wechseln fest\n"];
+
+        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').tabs({ tabTemplate: '<li style=\"width:%dpx;\"><a href=\"#{href}\" style=\"width:%dpx;\"><span>#{label}</span></a></li>' });\n",self.lastUsedTabSheetContainerID,tabwidth,tabwidthForLink]];
+        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').tabs({ fx: { opacity: 'toggle' } });\n",self.lastUsedTabSheetContainerID]];
+        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').tabs();\n",self.lastUsedTabSheetContainerID]];
+
+
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"datapath"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'datapath' for now.");
+        }
+
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"showinfo"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'showinfo' for now.");
+        }
+    }
+
+    // Wir müssen hier 2 Sachen machen:
+    // 1) Ein div aufmachen mit einer ID
+    // 2) per jQuery das neu entdeckte tab mit der tabsheetcCntainerID und der gerade vergebenen tabsheet-ID hinzufügen
+    if ([elementName isEqualToString:@"BDStabsheetTaxango"])
+    {
+        element_bearbeitet = YES;
+
+        // normaler Output
+        [self.output appendString:@"<!-- Beginn eines neuen TabSheets: -->\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+
+        [self.output appendString:@"<div"];
+
+        NSString* geradeVergebeneID = [self addIdToElement:attributeDict];
+        [self.output appendString:@"\">\n"];
+
+
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"info"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'info' for now.");
+        }
+
+
+        if (![attributeDict valueForKey:@"title"])
+        {
+            [self instableXML:@"ERROR: No attribute 'title' given in BDStabsheetTaxango-tag"];
+        }
+        else
+        {
+            self.attributeCount++;
+            NSLog(@"Using the attribute 'title' as heading for the tabsheet.");
+        }
+
+
+
+        // jQuery-Output
+        [self.jQueryOutput appendString:@"\n  // Hinzufügen eines tabsheets in den tabsheetContainer\n"];
+        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').tabs('add', '#%@', '%@');\n",self.lastUsedTabSheetContainerID,geradeVergebeneID,[attributeDict valueForKey:@"title"]]];
+    }
+
+
+
+
+
+
+
     // Nichts zu tun
     if ([elementName isEqualToString:@"library"])
     {
@@ -2232,10 +2576,23 @@ didStartElement:(NSString *)elementName
     }
 
 
+    // Wohl nichts zu tun (ist eine eigens definierte class - ToDo, falls wir class-Tags auslesen wollen)
+    if ([elementName isEqualToString:@"SharedObject"])
+    {
+        element_bearbeitet = YES;
+
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"soid"])
+            self.attributeCount++;
+    }
+
+
     // ToDo Audio (ist wohl sehr ähnlich aufgebaut wie ressource. Trotzdem erstmal checken
     if ([elementName isEqualToString:@"audio"])
     {
         element_bearbeitet = YES;
+
         if ([attributeDict valueForKey:@"src"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"name"])
@@ -2329,7 +2686,24 @@ didStartElement:(NSString *)elementName
 
 
         // Alles was in class definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten
-        self.weAreInTheTagClass = YES;
+        self.weAreSkippingTheCompleteContenInThisElement = YES;
+    }
+    if ([elementName isEqualToString:@"splash"])
+    {
+        element_bearbeitet = YES;
+        self.weAreSkippingTheCompleteContenInThisElement = YES;
+    }
+    if ([elementName isEqualToString:@"fileUpload"])
+    {
+        element_bearbeitet = YES;
+        self.weAreSkippingTheCompleteContenInThisElement = YES;
+
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"filter"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"filterdesc"])
+            self.attributeCount++;
     }
     // ToDo
     if ([elementName isEqualToString:@"nicemodaldialog"])
@@ -2348,14 +2722,13 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
 
         // Alles was in nicemodaldialog definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        // Wir benutzen die Variable hier mit, da sie den gleichen Zweck erfüllt.
-        self.weAreInTheTagClass = YES;
+        self.weAreSkippingTheCompleteContenInThisElement = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"dlginfo"] || [elementName isEqualToString:@"dlgwarning"] || [elementName isEqualToString:@"dlgyesno"] || [elementName isEqualToString:@"nicepopup"] || [elementName isEqualToString:@"nicedialog"])
     {
         element_bearbeitet = YES;
-        
+
         if ([attributeDict valueForKey:@"height"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"id"])
@@ -2381,8 +2754,7 @@ didStartElement:(NSString *)elementName
 
 
         // Alles was in nicemodaldialog definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        // Wir benutzen die Variable hier mit, da sie den gleichen Zweck erfüllt.
-        self.weAreInTheTagClass = YES;
+        self.weAreSkippingTheCompleteContenInThisElement = YES;
     }
 
 
@@ -2462,12 +2834,82 @@ didStartElement:(NSString *)elementName
         else
         {
             self.attributeCount++;
-            NSLog(@"Using the attribute 'name' as method-name for a JS-Function, that is prototyped to the class 'parent'");
+            NSLog(@"Using the attribute 'name' as method-name for a JS-Function, that is prototyped to the class 'parentKlasse'");
+        }
+
+        // Es gibt nicht immer args
+        NSString *args = @"";
+        // Falls es default Values gibt, muss ich diese in JS extra setzen
+        NSMutableString *defaultValues = [[NSMutableString alloc] initWithString:@""];
+        if ([attributeDict valueForKey:@"args"])
+        {
+            self.attributeCount++;
+            NSLog(@"Using the attribute 'args' as arguments for this prototyped JS-Function");
+
+            args = [attributeDict valueForKey:@"args"];
+
+            // Überprüfen ob es default values gibt (mit RegExp)...
+            NSError *error = NULL;
+            NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:@"([\\w]+)=([\\w]+)" options:NSRegularExpressionCaseInsensitive error:&error];
+
+            NSUInteger numberOfMatches = [regexp numberOfMatchesInString:args options:0 range:NSMakeRange(0, [args length])];
+
+            if (numberOfMatches > 0)
+            {
+                NSLog([NSString stringWithFormat:@"There is/are %d argument(s) with a default argument. I will regexp them.",numberOfMatches]);
+
+                NSArray *matches = [regexp matchesInString:args options:0 range:NSMakeRange(0, [args length])];
+
+                NSMutableString *neueArgs = [[NSMutableString alloc] initWithString:@""];
+
+                for (NSTextCheckingResult *match in matches)
+                {
+                    // NSRange matchRange = [match range];
+                    NSRange varNameRange = [match rangeAtIndex:1];
+                    NSRange defaultValueRange = [match rangeAtIndex:2];
+
+                    NSString *varName = [args substringWithRange:varNameRange];
+                    NSLog([NSString stringWithFormat:@"%Resulting variable name: %@",varName]);
+                    NSString *defaultValue = [args substringWithRange:defaultValueRange];
+                    NSLog([NSString stringWithFormat:@"%Resulting default value: %@",defaultValue]);
+
+                    // ... dann die Variablennamen der args neu sammeln...
+                    if (![neueArgs isEqualToString:@""])
+                      [neueArgs appendString:@", "];
+                    [neueArgs appendString:varName];
+
+
+
+                    ///////////////////// Default- Variablen für JS setzen - Anfang /////////////////////
+                    [defaultValues appendString:@"  if(typeof("];
+                    [defaultValues appendString:varName];
+                    [defaultValues appendString:@")==='undefined') "];
+                    [defaultValues appendString:varName];
+                    [defaultValues appendString:@" = "];
+                    [defaultValues appendString:defaultValue];
+                    [defaultValues appendString:@";\n"];
+                    ///////////////////// Default- Variablen für JS setzen - Ende /////////////////////
+                }
+                // ... und hier setzen
+                args = neueArgs;
+            }
         }
 
         [self.jsHead2Output appendString:@"\nparentKlasse.prototype."];
         [self.jsHead2Output appendString:[attributeDict valueForKey:@"name"]];
-        [self.jsHead2Output appendString:@" = function()\n{\n  "];
+        [self.jsHead2Output appendString:@" = function("];
+        [self.jsHead2Output appendString:args];
+        [self.jsHead2Output appendString:@")\n{\n"];
+
+        // Falls es default values für die Argumente gibt, muss ich diese hier setzen
+        if (![defaultValues isEqualToString:@""])
+        {
+            [self.jsHead2Output appendString:defaultValues];
+            [self.jsHead2Output appendString:@"\n"];
+        }
+
+        // Um es auszurichten mit dem Rest
+        [self.jsHead2Output appendString:@" "];
 
         // Okay, jetzt Text der Methode sammeln und beim schließen einfügen
     }
@@ -2484,6 +2926,7 @@ didStartElement:(NSString *)elementName
             if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onclick"])
             {
                 self.attributeCount++;
+                NSLog(@"Binding the method in this handler to a jQuery-click-event.");
 
                 [self.jQueryOutput appendString:@"\n  // onclick-Handler für "];
                 [self.jQueryOutput appendString:self.zuletztGesetzteID];
@@ -2494,16 +2937,69 @@ didStartElement:(NSString *)elementName
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
 
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onvalue"])
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onvalue"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onnewvalue"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"ontext"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"ondata"]) // ToDo: Ist wirklich ondata = change?
             {
                 self.attributeCount++;
-                
+                NSLog(@"Binding the method in this handler to a jQuery-change-event.");
+
                 [self.jQueryOutput appendString:@"\n  // change-Handler für "];
                 [self.jQueryOutput appendString:self.zuletztGesetzteID];
                 [self.jQueryOutput appendString:@"\n"];
-                
+
                 [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").change(function()\n  {\n    ",self.zuletztGesetzteID]];
-                
+
+                // Okay, jetzt Text sammeln und beim schließen einfügen
+            }
+
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onerror"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"ontimeout"])
+            {
+                self.attributeCount++;
+                NSLog(@"Binding the method in this handler to a jQuery-error-event.");
+
+                [self.jQueryOutput appendString:@"\n  // error-Handler für "];
+                [self.jQueryOutput appendString:self.zuletztGesetzteID];
+                [self.jQueryOutput appendString:@"\n"];
+
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").error(function()\n  {\n    ",self.zuletztGesetzteID]];
+
+                // Okay, jetzt Text sammeln und beim schließen einfügen
+            }
+
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"oninit"])
+            {
+                self.attributeCount++;
+                NSLog(@"Binding the method in this handler to a jQuery-load-event.");
+
+                [self.jQueryOutput appendString:@"\n  // load-Handler für "];
+                [self.jQueryOutput appendString:self.zuletztGesetzteID];
+                [self.jQueryOutput appendString:@"\n"];
+
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").load(function()\n  {\n    ",self.zuletztGesetzteID]];
+
+                // Okay, jetzt Text sammeln und beim schließen einfügen
+            }
+
+
+            // ToDo - ich binde es an den unbekannten Handler
+            // Klappt laut jQuery-Doku, irgend jemand anderes muss das event dann z. B. per trigger() aufrufen
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onsavestate"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onpaypalclose"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"oninternalstate"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"ontabselected"])
+            {
+                self.attributeCount++;
+                NSLog(@"Binding the method in this handler to a custom jQuery-event (has to be triggered).");
+
+                [self.jQueryOutput appendString:@"\n  // load-Handler für "];
+                [self.jQueryOutput appendString:self.zuletztGesetzteID];
+                [self.jQueryOutput appendString:@"\n"];
+
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").bind('%@',function()\n  {\n    ",self.zuletztGesetzteID,[attributeDict valueForKey:@"name"]]];
+
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
         }
@@ -2511,10 +3007,11 @@ didStartElement:(NSString *)elementName
 
 
 
-        if ([attributeDict valueForKey:@"args"])
+        if ([attributeDict valueForKey:@"args"]) // Wohl dringend ToDo, wenn JS-Funktionalität voll da sein soll
         {
             // Erstmal ignorieren, bis ich es brauche
             self.attributeCount++;
+            NSLog(@"Skipping the attribute 'args' for now.");
         }
     }
 
@@ -2593,45 +3090,46 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-        if (self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags)
-            self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags = NO;
+        if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
+            self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
         else
             [self.jsHead2Output appendString:@"\n"];
     }
 
     // skipping All Elements in dataset without attribut 'src'
-    if (self.weAreInDatasetWithoutSrcAndNeedToCollectTheFollowingTags)
+    if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
     {
         element_geschlossen = YES;
 
         NSLog([NSString stringWithFormat:@"\nSkipping the closing Element %@ for now.", elementName]);
+        return;
     }
 
 
 
-    if ([elementName isEqualToString:@"dlginfo"] || [elementName isEqualToString:@"dlgwarning"] || [elementName isEqualToString:@"dlgyesno"] || [elementName isEqualToString:@"nicepopup"] || [elementName isEqualToString:@"nicedialog"])
+
+    if ([elementName isEqualToString:@"class"] ||
+        [elementName isEqualToString:@"splash"] ||
+        [elementName isEqualToString:@"fileUpload"] ||
+        [elementName isEqualToString:@"dlginfo"] ||
+        [elementName isEqualToString:@"dlgwarning"] ||
+        [elementName isEqualToString:@"dlgyesno"] ||
+        [elementName isEqualToString:@"nicepopup"] ||
+        [elementName isEqualToString:@"nicemodaldialog"] ||
+        [elementName isEqualToString:@"nicedialog"])
     {
         element_geschlossen = YES;
-        
-        self.weAreInTheTagClass = NO;
-    }
-    if ([elementName isEqualToString:@"nicemodaldialog"])
-    {
-        element_geschlossen = YES;
 
-        self.weAreInTheTagClass = NO;
+        self.weAreSkippingTheCompleteContenInThisElement = NO;
     }
-    if ([elementName isEqualToString:@"class"])
-    {
-        element_geschlossen = YES;
-
-        self.weAreInTheTagClass = NO;
-    }
-    // skipping All Elements in Class-elements
-    if (self.weAreInTheTagClass)
+    // If we are still skipping All Elements, let's return here
+    if (self.weAreSkippingTheCompleteContenInThisElement)
         return;
 
-    // Alle einzeln durchgehen, damit wir besser fehlende überprüfen können, deswegen ist dies kein redundanter Code
+
+
+
+    // Alle einzeln durchgehen, damit wir besser fehlende überprüfen können, deswegen ist hierin kein redundanter Code
     if (self.weAreInBDStextAndThereMayBeHTMLTags)
     {
         if ([elementName isEqualToString:@"br"])
@@ -2639,6 +3137,25 @@ BOOL isNumeric(NSString *s)
             element_geschlossen = YES;
         }
 
+        if ([elementName isEqualToString:@"b"])
+        {
+            element_geschlossen = YES;
+
+            [self.textInProgress appendString:@"</b>"];
+        }
+
+        if ([elementName isEqualToString:@"u"])
+        {
+            element_geschlossen = YES;
+
+            [self.textInProgress appendString:@"</u>"];
+        }
+        if ([elementName isEqualToString:@"font"])
+        {
+            element_geschlossen = YES;
+
+            [self.textInProgress appendString:@"</font>"];
+        }
     }
 
 
@@ -2662,8 +3179,12 @@ BOOL isNumeric(NSString *s)
 
     if ([elementName isEqualToString:@"window"] ||
         [elementName isEqualToString:@"view"] ||
+        [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"rollUpDownContainer"] ||
-        [elementName isEqualToString:@"basebutton"])
+        [elementName isEqualToString:@"BDStabsheetcontainer"] ||
+        [elementName isEqualToString:@"BDStabsheetTaxango"] ||
+        [elementName isEqualToString:@"basebutton"] ||
+        [elementName isEqualToString:@"imgbutton"])
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
     self.verschachtelungstiefe--;
@@ -2744,6 +3265,7 @@ BOOL isNumeric(NSString *s)
 
     // Bei diesen Elementen muss beim schließen nichts unternommen werden
     if ([elementName isEqualToString:@"BDSedit"] ||
+        [elementName isEqualToString:@"BDSeditdate"] ||
         [elementName isEqualToString:@"BDScombobox"] ||
         [elementName isEqualToString:@"button"] ||
         [elementName isEqualToString:@"frame"] ||
@@ -2753,7 +3275,8 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"audio"] ||
         [elementName isEqualToString:@"include"] ||
         [elementName isEqualToString:@"datapointer"] ||
-        [elementName isEqualToString:@"attribute"])
+        [elementName isEqualToString:@"attribute"] ||
+        [elementName isEqualToString:@"SharedObject"])
     {
         element_geschlossen = YES;
     }
@@ -2762,13 +3285,20 @@ BOOL isNumeric(NSString *s)
 
     // Schließen des Div's
     if ([elementName isEqualToString:@"view"] ||
+        [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"basebutton"] ||
-        [elementName isEqualToString:@"rollUpDownContainer"])
+        [elementName isEqualToString:@"imgbutton"] ||
+        [elementName isEqualToString:@"rollUpDownContainer"] ||
+        [elementName isEqualToString:@"BDStabsheetcontainer"] ||
+        [elementName isEqualToString:@"BDStabsheetTaxango"])
     {
         element_geschlossen = YES;
 
         [self.output appendString:@"</div>\n"];
     }
+
+
+
 
 
     // Schließen von BDStext
@@ -2938,7 +3468,23 @@ BOOL isNumeric(NSString *s)
 
     NSMutableString *pre = [[NSMutableString alloc] initWithString:@""];
 
-    [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n<title>Canvastest</title>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n<script type=\"text/javascript\" src=\"http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js\"></script>\n"];
+    [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n<title>Canvastest</title>\n"];
+
+    // CSS-Stylesheet-Datei
+    [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n"];
+
+    // CSS-Stylesheet-Datei für das Layout der TabSheets (ToDo, wohl leider nicht CSS-konform)
+    [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"humanity.css\">\n"];
+
+    // IE-Fallback für canvas (falls ich es benutze) - ToDo
+    [pre appendString:@"<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n"];
+
+    // jQuery laden
+    [pre appendString:@"<script type=\"text/javascript\" src=\"http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js\"></script>\n"];
+
+    // jQuery UI laden (wegen TabSheet)
+    [pre appendString:@"<script type=\"text/javascript\" src=\"http://ajax.googleapis.com/ajax/libs/jqueryui/1.8.18/jquery-ui.min.js\"></script>\n"];
+
     [pre appendString:self.externalJSFilesOutput];
     [pre appendString:@"<script src=\"jsHelper.js\" type=\"text/javascript\"></script>\n\n<style type='text/css'>\n"];
     // Falls latest jQuery-Version gewünscht:
@@ -3059,10 +3605,10 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "ToDo\n"
-    "- in FF klappt der direkte Zugriff auf Elemente per id nicht (bei strictem doctype)"
+    "- in FF klappt der direkte Zugriff auf Elemente per id nicht (bei strictem doctype)\n"
+    "- Von BDSeditdate und BDScombobox den Anfangscode zusammenfassen (ist gleich)\n"
     "- Bei views Layout-Attribut beachten: Dazu wohl Simplelayout-Test als eigene Methode;\n"
     "- Bei Links muss sich der Mauszeiger verändern\n"
-    "- BaseButton ist noch in view integriert. Passt das so?\n"
     "- Warum bricht er e-Mail beim Bindestrich um?\n"
     "- BLABLAparent.width macht er zu breit, wenn ich es nur mit einem width ersetze\n"
     "- style.height in check4somplelayout kann/muss ich wohl ersetzen mit offsetHeight\n"

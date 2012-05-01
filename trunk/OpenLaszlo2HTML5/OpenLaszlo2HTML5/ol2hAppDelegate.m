@@ -19,7 +19,7 @@
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification
 {
     // Insert code here to initialize your application
-    BOOL SOFORTSTART = NO;
+    BOOL SOFORTSTART = YES;
 
     
 

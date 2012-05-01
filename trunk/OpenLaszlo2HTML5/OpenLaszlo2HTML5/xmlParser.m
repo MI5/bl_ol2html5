@@ -108,6 +108,10 @@
 // auch in anderen Fällen überspringen wir alle Inhalte, z.B. bei 'splash', das sollten wir so lassen
 // im Fall von 'fileUpload' müssen wir eine komplett neue Lösung finden weil es am iPad keine Files gibt
 @property (nonatomic) BOOL weAreSkippingTheCompleteContenInThisElement;
+//auch ein 2. und 3., sonst gibt es Interferenzen wenn ein zu skippendes Element in einem anderen zuu skippenden liegt
+@property (nonatomic) BOOL weAreSkippingTheCompleteContenInThisElement2;
+@property (nonatomic) BOOL weAreSkippingTheCompleteContenInThisElement3;
+
 @end
 
 
@@ -162,6 +166,8 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize weAreInBDStextAndThereMayBeHTMLTags = _weAreInBDStextAndThereMayBeHTMLTags;
 @synthesize weAreInDatasetAndNeedToCollectTheFollowingTags = _weAreInDatasetAndNeedToCollectTheFollowingTags;
 @synthesize weAreSkippingTheCompleteContenInThisElement = _weAreSkippingTheCompleteContenInThisElement;
+@synthesize weAreSkippingTheCompleteContenInThisElement2 = _weAreSkippingTheCompleteContenInThisElement2;
+@synthesize weAreSkippingTheCompleteContenInThisElement3 = _weAreSkippingTheCompleteContenInThisElement3;
 
 
 
@@ -200,7 +206,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // Final Try:
 
 //////////////////////////////////////////////
-#define NSLog(...) OLLog(self,__VA_ARGS__)
+// #define NSLog(...) OLLog(self,__VA_ARGS__)
 //////////////////////////////////////////////
 /********** Dirty Trick um NSLog umzuleiten *********/
 
@@ -293,6 +299,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.weAreInBDStextAndThereMayBeHTMLTags = NO;
         self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
         self.weAreSkippingTheCompleteContenInThisElement = NO;
+        self.weAreSkippingTheCompleteContenInThisElement2 = NO;
+        self.weAreSkippingTheCompleteContenInThisElement3 = NO;
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
     }
@@ -643,6 +651,20 @@ void OLLog(xmlParser *self, NSString* s,...)
 
             [style appendString:@"margin:auto;"];
         }
+
+        // Hier mache ich erstmal nichts, align=left sollte eigentlich Ausgangswert sein, aber To Check (ToDo)
+        if ([[attributeDict valueForKey:@"align"] isEqual:@"left"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'align=left' for now.");
+        }
+
+        // ToDo, hierzu muss ich mir noch eine Lösung einfallen lassen
+        if ([[attributeDict valueForKey:@"align"] isEqual:@"right"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'align=right' for now.");
+        }
     }
 
 
@@ -764,6 +786,29 @@ void OLLog(xmlParser *self, NSString* s,...)
 }
 
 
+
+
+// titlewidth hier extra setzen, außerhalb addCSS, titlewidth bezieht sich  immer auf den Text VOR
+// einem input-Feld und nicht auf das input-Feld selber.
+- (NSMutableString*) addTitlewidth:(NSDictionary*) attributeDict
+{
+    NSMutableString *titlewidth = [[NSMutableString alloc] initWithString:@""];
+
+    if ([attributeDict valueForKey:@"titlewidth"])
+    {
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'titlewidth' as width for the leading text of the input-field.");
+
+        [titlewidth appendString:@" style=\"width:"];
+        [titlewidth appendString:[attributeDict valueForKey:@"titlewidth"]];
+        [titlewidth appendString:@"px;\""];
+    }
+
+    return titlewidth;
+}
+
+
+
 // Remove all occurrences of $,{,}
 - (NSString *) removeOccurrencesofDollarAndCurlyBracketsIn:(NSString*)s
 {
@@ -789,103 +834,136 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSString *s = [attributeDict valueForKey:@"visible"];
         s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
 
-        // Ich brauche den String bis zum Punkt, denn das ist unsere Variable für die ein
-        // onChange-Event eingerichtet werden muss.
-        // Die Position des Punktes:
-        NSRange positionDesPunktes = [s rangeOfString:@"."];
-        NSString *idVonDerEsAbhaengigIst = [s substringToIndex:positionDesPunktes.location];
-        NSString *bedingung = [s substringFromIndex:positionDesPunktes.location+1];
-        // NSLog([NSString stringWithFormat:@"Heimlicher Test: %@",bedingung]);
 
-
-
-        // Wenn wir hier in den ersten Zweig reinkommen, dann ist 'bedingung' was anderes,
-        // und zwar der Variablenname ohne vorstehendes 'canvas.'
-        if ([idVonDerEsAbhaengigIst isEqualToString:@"canvas"])
+        if ([s isEqualToString:@"false"] || [s isEqualToString:@"true"])
         {
-            NSLog(@"ToDo: Sonderbehandlung");
-            /* alte Lösung per plain JS (hat nicht auf spätere Änderungen der Var reagiert)
-            [code appendString:s];
-            [code appendString:@" ? document.getElementById('"];
-            [code appendString:idName];
-            [code appendString:@"').style.visibility = 'visible' : document.getElementById('"];
-            [code appendString:idName];
-            [code appendString:@"').style.visibility = 'hidden';"];
-             */
-
-            // neue Lösung nun mit watch/unwatch-Methode
-            [self.jQueryOutput appendString:@"\n  // Die Visibility ändert sich abhängig von dem Wert einer woanders gesetzten Variable (bei jeder Änderung, deswegen watchen der Variable)\n"];
-            [self.jQueryOutput appendString:@"  canvas.watch('"];
-            [self.jQueryOutput appendString:bedingung];
-            [self.jQueryOutput appendString:@"', "];
-            [self.jQueryOutput appendString:@"function (id, oldval, newval)\n  {\n"];
-            [self.jQueryOutput appendString:@"    console.log('canvas.' + id + ' changed from ' + oldval + ' to ' + newval);\n"];
-            [self.jQueryOutput appendString:@"     $('#"];
+            [self.jQueryOutput appendString:@"\n  // Die Visibility wurde nur per false oder true gesetzt und ist von nichts abhängig\n"];
+            [self.jQueryOutput appendString:@"   $('#"];
             [self.jQueryOutput appendString:idName];
             [self.jQueryOutput appendString:@"').toggle("];
-            [self.jQueryOutput appendString:@"newval"]; // nicht 's', war's vorher, dann spinnt es.
-            [self.jQueryOutput appendString:@");\n"];
-            [self.jQueryOutput appendString:@"    // Dazu gehörigen Text auch mit entfernen\n"];
-            [self.jQueryOutput appendString:@"    if ($('#"];
-            [self.jQueryOutput appendString:idName];
-            [self.jQueryOutput appendString:@"').prev().is('span'))\n"];
-            [self.jQueryOutput appendString:@"      $('#"];
-            [self.jQueryOutput appendString:idName];
-            [self.jQueryOutput appendString:@"').prev().toggle("];
-            [self.jQueryOutput appendString:@"newval"]; // nicht 's', war's vorher, dann spinnt es.
-            [self.jQueryOutput appendString:@");\n"];
-            [self.jQueryOutput appendString:@"    return newval;\n  });\n"];
-
-            [self.jQueryOutput appendString:@"  // Und einmal sofort die Visibility anpassen durch setzen der Variable mit sich selber\n  "];
             [self.jQueryOutput appendString:s];
-            [self.jQueryOutput appendString:@" = "];
-            [self.jQueryOutput appendString:s];
-            [self.jQueryOutput appendString:@";\n\n"];
+            [self.jQueryOutput appendString:@");\n"];
         }
         else
         {
-            [self.jQueryOutput appendString:@"\n  // Die Visibility ändert sich abhängig von dem Wert einer woanders gesetzten Variable (bei jeder Änderung)\n"];
-            [self.jQueryOutput appendString:@"  $('#"];
-            [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
-            [self.jQueryOutput appendString:@"').change(function()\n  {\n"];
-            [self.jQueryOutput appendString:@"    toggleVisibility('#"];
-            [self.jQueryOutput appendString:idName];
-            [self.jQueryOutput appendString:@"', '#"];
-            [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
-            // Da in den Bedingungen selber oft das ' verwendet wird, hier das "
-            [self.jQueryOutput appendString:@"', \""];
-            [self.jQueryOutput appendString:bedingung];
-            [self.jQueryOutput appendString:@"\");\n"];
+            // Ich brauche den String bis zum Punkt, denn das ist unsere Variable für die ein
+            // onChange-Event eingerichtet werden muss.
+            // Die Position des Punktes:
+            NSRange positionDesPunktes = [s rangeOfString:@"."];
+            NSString *idVonDerEsAbhaengigIst = [s substringToIndex:positionDesPunktes.location];
+            NSString *bedingung = [s substringFromIndex:positionDesPunktes.location+1];
+            // NSLog([NSString stringWithFormat:@"Heimlicher Test: %@",bedingung]);
 
-            /* Alte Lösung ohne externe Funktion (Nachteil war, dass ich die initiale
-            // Visibility nicht setzen konnte):
-            [self.jQueryOutput appendString:@"    var value = $(this).val();\n"];
-            [self.jQueryOutput appendString:@"    $('#"];
-            [self.jQueryOutput appendString:idName];
-            [self.jQueryOutput appendString:@"').toggle("];
-            [self.jQueryOutput appendString:bedingung];
-            [self.jQueryOutput appendString:@");\n"];
-            [self.jQueryOutput appendString:@"    // Dazu gehörigen Text auch mit entfernen\n"];
-            [self.jQueryOutput appendString:@"    if ($('#"];
-            [self.jQueryOutput appendString:idName];
-            [self.jQueryOutput appendString:@"').prev().is('span'))\n"];
-            [self.jQueryOutput appendString:@"      $('#"];
-            [self.jQueryOutput appendString:idName];
-            [self.jQueryOutput appendString:@"').prev().toggle("];
-            [self.jQueryOutput appendString:bedingung];
-            [self.jQueryOutput appendString:@");\n"];
-             */
-            [self.jQueryOutput appendString:@"  });\n"];
 
-            [self.jQueryOutput appendString:@"  // Und einmal sofort die Visibility anpassen\n"];
-            [self.jQueryOutput appendString:@"  toggleVisibility('#"];
-            [self.jQueryOutput appendString:idName];
-            [self.jQueryOutput appendString:@"', '#"];
-            [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
-            // Da in den Bedingungen selber oft das ' verwendet wird, hier das "
-            [self.jQueryOutput appendString:@"', \""];
-            [self.jQueryOutput appendString:bedingung];
-            [self.jQueryOutput appendString:@"\");\n"];
+
+            // Wenn wir hier in den ersten Zweig reinkommen, dann ist 'bedingung' was anderes,
+            // und zwar der Variablenname ohne vorstehendes 'canvas.'
+            if ([idVonDerEsAbhaengigIst isEqualToString:@"canvas"])
+            {
+                /* alte Lösung per plain JS (hat nicht auf spätere Änderungen der Var reagiert)
+                 [code appendString:s];
+                 [code appendString:@" ? document.getElementById('"];
+                 [code appendString:idName];
+                 [code appendString:@"').style.visibility = 'visible' : document.getElementById('"];
+                 [code appendString:idName];
+                 [code appendString:@"').style.visibility = 'hidden';"];
+                 */
+
+                // neue Lösung nun mit watch/unwatch-Methode
+                [self.jQueryOutput appendString:@"\n  // Die Visibility ändert sich abhängig von dem Wert einer woanders gesetzten Variable (bei jeder Änderung, deswegen watchen der Variable)\n"];
+                [self.jQueryOutput appendString:@"  canvas.watch('"];
+                [self.jQueryOutput appendString:bedingung];
+                [self.jQueryOutput appendString:@"', "];
+                [self.jQueryOutput appendString:@"function (id, oldval, newval)\n  {\n"];
+                [self.jQueryOutput appendString:@"    console.log('canvas.' + id + ' changed from ' + oldval + ' to ' + newval);\n"];
+                [self.jQueryOutput appendString:@"     $('#"];
+                [self.jQueryOutput appendString:idName];
+                [self.jQueryOutput appendString:@"').toggle("];
+                [self.jQueryOutput appendString:@"newval"]; // nicht 's', war's vorher, dann spinnt es.
+                [self.jQueryOutput appendString:@");\n"];
+                [self.jQueryOutput appendString:@"    // Wenn wir ein input oder ein select sind...\n"];
+                [self.jQueryOutput appendString:@"    if (($('#"];
+                [self.jQueryOutput appendString:idName];
+                [self.jQueryOutput appendString:@"').is('input') && $('#"];
+                [self.jQueryOutput appendString:idName];
+                [self.jQueryOutput appendString:@"').prev().is('span') && $('#"];
+                [self.jQueryOutput appendString:idName];
+                [self.jQueryOutput appendString:@"').parent().is('div')) ||\n"];
+                [self.jQueryOutput appendString:@"        ($('#"];
+                [self.jQueryOutput appendString:idName];
+                [self.jQueryOutput appendString:@"').is('select') && $('#"];
+                [self.jQueryOutput appendString:idName];
+                [self.jQueryOutput appendString:@"').prev().is('span') && $('#"];
+                [self.jQueryOutput appendString:idName];
+                [self.jQueryOutput appendString:@"').parent().is('div')))\n"];
+                [self.jQueryOutput appendString:@"      $('#"];
+                [self.jQueryOutput appendString:idName];
+                [self.jQueryOutput appendString:@"').parent().toggle("];
+                [self.jQueryOutput appendString:@"newval"]; // nicht 's', war's vorher, dann spinnt es.
+                [self.jQueryOutput appendString:@");\n"];
+                [self.jQueryOutput appendString:@"  else\n"];
+                [self.jQueryOutput appendString:@"      $('#"];
+                [self.jQueryOutput appendString:idName];
+                [self.jQueryOutput appendString:@"').toggle("];
+                [self.jQueryOutput appendString:@"newval"]; // nicht 's', war's vorher, dann spinnt es.
+                [self.jQueryOutput appendString:@");\n"];
+
+                [self.jQueryOutput appendString:@"    return newval;\n  });\n"];
+
+
+
+
+                [self.jQueryOutput appendString:@"  // Und einmal sofort die Visibility anpassen durch setzen der Variable mit sich selber\n  "];
+                [self.jQueryOutput appendString:s];
+                [self.jQueryOutput appendString:@" = "];
+                [self.jQueryOutput appendString:s];
+                [self.jQueryOutput appendString:@";\n\n"];
+            }
+            else
+            {
+                [self.jQueryOutput appendString:@"\n  // Die Visibility ändert sich abhängig von dem Wert einer woanders gesetzten Variable (bei jeder Änderung)\n"];
+                [self.jQueryOutput appendString:@"  $('#"];
+                [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
+                [self.jQueryOutput appendString:@"').change(function()\n  {\n"];
+                [self.jQueryOutput appendString:@"    toggleVisibility('#"];
+                [self.jQueryOutput appendString:idName];
+                [self.jQueryOutput appendString:@"', '#"];
+                [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
+                // Da in den Bedingungen selber oft das ' verwendet wird, hier das "
+                [self.jQueryOutput appendString:@"', \""];
+                [self.jQueryOutput appendString:bedingung];
+                [self.jQueryOutput appendString:@"\");\n"];
+
+                /* Alte Lösung ohne externe Funktion (Nachteil war, dass ich die initiale
+                 // Visibility nicht setzen konnte):
+                 [self.jQueryOutput appendString:@"    var value = $(this).val();\n"];
+                 [self.jQueryOutput appendString:@"    $('#"];
+                 [self.jQueryOutput appendString:idName];
+                 [self.jQueryOutput appendString:@"').toggle("];
+                 [self.jQueryOutput appendString:bedingung];
+                 [self.jQueryOutput appendString:@");\n"];
+                 [self.jQueryOutput appendString:@"    // Dazu gehörigen Text auch mit entfernen\n"];
+                 [self.jQueryOutput appendString:@"    if ($('#"];
+                 [self.jQueryOutput appendString:idName];
+                 [self.jQueryOutput appendString:@"').prev().is('span'))\n"];
+                 [self.jQueryOutput appendString:@"      $('#"];
+                 [self.jQueryOutput appendString:idName];
+                 [self.jQueryOutput appendString:@"').prev().toggle("];
+                 [self.jQueryOutput appendString:bedingung];
+                 [self.jQueryOutput appendString:@");\n"];
+                 */
+                [self.jQueryOutput appendString:@"  });\n"];
+
+                [self.jQueryOutput appendString:@"  // Und einmal sofort die Visibility anpassen\n"];
+                [self.jQueryOutput appendString:@"  toggleVisibility('#"];
+                [self.jQueryOutput appendString:idName];
+                [self.jQueryOutput appendString:@"', '#"];
+                [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
+                // Da in den Bedingungen selber oft das ' verwendet wird, hier das "
+                [self.jQueryOutput appendString:@"', \""];
+                [self.jQueryOutput appendString:bedingung];
+                [self.jQueryOutput appendString:@"\");\n"];
+            }
         }
     }
 
@@ -933,6 +1011,35 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+    // Skipping the attribute 'onblur'
+    // ToDo -> Implementierung wohl genau so wie eins weiter oben, nur als onblur
+    if ([attributeDict valueForKey:@"onblur"])
+    {
+        self.attributeCount++;
+        NSLog(@"ToDo: Implement later the attribute 'onblur'.");
+    }
+
+
+
+
+    // Skipping the attribute 'onvalue'
+    // ToDo -> Implementierung wohl genau so wie eins weiter oben, nur als onblur
+    if ([attributeDict valueForKey:@"onvalue"])
+    {
+        self.attributeCount++;
+        NSLog(@"ToDo: Implement later the attribute 'onvalue'.");
+    }
+
+
+
+
+    // Skipping the attribute 'onfocus'
+    // ToDo -> Implementierung wohl genau so wie eins weiter oben, nur als onblur
+    if ([attributeDict valueForKey:@"onfocus"])
+    {
+        self.attributeCount++;
+        NSLog(@"ToDo: Implement later the attribute 'onfocus'.");
+    }
 
 
 
@@ -1244,6 +1351,19 @@ didStartElement:(NSString *)elementName
     // skipping all Elements in splash (ToDo)
     // skipping all Elements in fileUpload (ToDo)
     if (self.weAreSkippingTheCompleteContenInThisElement)
+    {
+        NSLog([NSString stringWithFormat:@"\nSkipping the Element %@", elementName]);
+        return;
+    }
+    // skipping All Elements in BDSreplicator (ToDo)
+    // skipping all Elements in BDSinputgrid (ToDo)
+    if (self.weAreSkippingTheCompleteContenInThisElement2)
+    {
+        NSLog([NSString stringWithFormat:@"\nSkipping the Element %@", elementName]);
+        return;
+    }
+    // skipping All Elements in nicebox (ToDo)
+    if (self.weAreSkippingTheCompleteContenInThisElement3)
     {
         NSLog([NSString stringWithFormat:@"\nSkipping the Element %@", elementName]);
         return;
@@ -1815,7 +1935,9 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
 
 
-        // Es gibt auch attributes ohne type, dann mit 'number' initialisieren
+        // Es gibt auch attributes ohne type, dann mit 'number' initialisieren...
+        // ... das klappt leider nicht. Weil es auch Nichtzahlen gibt ohne 'type'
+        // Deswegen doch lieber als 'string' initialsieren.
         NSString *type_;
         if ([attributeDict valueForKey:@"type"])
         {
@@ -1823,7 +1945,7 @@ didStartElement:(NSString *)elementName
             type_ = [attributeDict valueForKey:@"type"];
         }
         else
-            type_ = @"number";
+            type_ = @"string";
 
 
         // Es gibt auch attributes ohne Startvalue, dann mit einem leeren String initialisieren
@@ -1923,7 +2045,7 @@ didStartElement:(NSString *)elementName
         if ([attributeDict valueForKey:@"name"])
         {
             self.attributeCount++;
-            NSLog(@"Setting the view's attribute 'name' as CSS 'name'.");
+            NSLog(@"Setting the views attribute 'name' as HTML 'name'.");
             [self.output appendString:@" name=\""];
             [self.output appendString:[attributeDict valueForKey:@"name"]];
             [self.output appendString:@"\""];
@@ -2032,6 +2154,22 @@ didStartElement:(NSString *)elementName
         NSString *id = [self addIdToElement:attributeDict];
 
 
+
+
+        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in buttonnext
+        // hätte sonst eventuell zu viele Seiteneffekte.
+        // Außerdem ist name nicht erlaubt gemäß HTML-Validator als Attribut bei DIVs
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the buttons attribute 'name' as HTML 'name'.");
+            [self.output appendString:@" name=\""];
+            [self.output appendString:[attributeDict valueForKey:@"name"]];
+            [self.output appendString:@"\""];
+        }
+
+
+
         [self.output appendString:@" class=\"ol_standard_view\" style=\""];
 
 
@@ -2046,6 +2184,13 @@ didStartElement:(NSString *)elementName
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'focusable' for now.");
+        }
+
+        // ToDo: Wird derzeit nicht ausgewertet - ist zum ersten mal bei einem imgbutton aufgetaicht (nur da?)
+        if ([attributeDict valueForKey:@"text"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'text' for now.");
         }
 
         [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
@@ -2064,6 +2209,26 @@ didStartElement:(NSString *)elementName
 
         [self addIdToElement:attributeDict];
 
+
+
+
+
+        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur hier,
+        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
+        // Und gemäß HTML-Spezifikation ist es in div auch nicht erlaubt
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
+            [self.output appendString:@" name=\""];
+            [self.output appendString:[attributeDict valueForKey:@"name"]];
+            [self.output appendString:@"\""];
+        }
+
+
+
+
+
         [self.output appendString:@" class=\"ol_text\" style=\""];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
@@ -2079,14 +2244,6 @@ didStartElement:(NSString *)elementName
         }
 
 
-        // ToDo: Wird derzeit nicht ausgewertet
-        if ([attributeDict valueForKey:@"onclick"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'onclick' for now.");
-        }
-
-
         if ([attributeDict valueForKey:@"text"])
         {
             self.attributeCount++;
@@ -2096,6 +2253,8 @@ didStartElement:(NSString *)elementName
 
         self.weAreInBDStextAndThereMayBeHTMLTags = YES;
         NSLog(@"We won't include possible following HTML-Tags, because it is content of the text.");
+
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]]];
     }
 
 
@@ -2153,9 +2312,19 @@ didStartElement:(NSString *)elementName
         // Umgebendes <Div> für die komplette Combobox inklusive Text
         // WOW, dieses vorangehende <br /> als Lösung zu setzen, hat mich 3 Stunden Zeit gekostet...
         // ToDo: Eigentlich muss ich per jQuery immer entsprechend der Höhe und der X-Koordinate
-        // des vorherigen Elements hier aufrücken
-        [self.output appendString:@"<div class=\"combobox\" >\n"];
+        // des vorherigen Elements hier aufrücken <--- Alles Quatsch jetzt, nach der neuen Lösung.
+        [self.output appendString:@"<div class=\"combobox\">\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+
+
+
+
+        [self.output appendString:@"<span"];
+        [self.output appendString:[self addTitlewidth:attributeDict]];
+        [self.output appendString:@">"];
+
+        
+
 
         // Wenn im Attribut title Code auftaucht, dann müssen wir es dynamisch setzen
         // müssen aber erst abwarten bis wir die ID haben, weil wir die für den Zugriff brauchen.
@@ -2168,20 +2337,37 @@ didStartElement:(NSString *)elementName
             if ([[attributeDict valueForKey:@"title"] hasPrefix:@"$"])
             {
                 titelDynamischSetzen = YES;
-                [self.output appendString:@"<span>CODE! - Wird dynamisch mit jQuery ersetzt.</span>\n"];
+                [self.output appendString:@"CODE! - Wird dynamisch mit jQuery ersetzt."];
             }
             else
             {
-                [self.output appendString:@"<span>"];
                 [self.output appendString:[attributeDict valueForKey:@"title"]];
-                [self.output appendString:@"</span>\n"];
             }
         }
+        [self.output appendString:@"</span>\n"];
+
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
         [self.output appendString:@"<select size=\"1\""];
 
         NSString *id =[self addIdToElement:attributeDict];
+
+
+
+
+        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in input type=checkbox,
+        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
+        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
+            [self.output appendString:@" name=\""];
+            [self.output appendString:[attributeDict valueForKey:@"name"]];
+            [self.output appendString:@"\""];
+        }
+
+
 
 
         // Jetzt erst haben wir die ID und können diese nutzen für den jQuery-Code
@@ -2191,7 +2377,7 @@ didStartElement:(NSString *)elementName
             // Remove all occurrences of $,{,}
             code = [self removeOccurrencesofDollarAndCurlyBracketsIn:code];
 
-            [self.jQueryOutput appendString:@"  // combobox-Text wird hier dynamisch gesetzt\n"];
+            [self.jQueryOutput appendString:@"\n  // combobox-Text wird hier dynamisch gesetzt\n"];
             // [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').before(%@);",id,code]];
             [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').prev().text(%@);\n",id,code]];
         }
@@ -2244,6 +2430,7 @@ didStartElement:(NSString *)elementName
             }
             else
             {
+                NSLog(@"Using the attribute 'initvalue' to set a starting value for the combobox.");
                 [self.jQueryOutput appendString:@"  // Vorauswahl für diese Combobox setzen\n"];
                 [self.jQueryOutput appendString:@"  $(\"#cbBundesland option[value="];
                 [self.jQueryOutput appendString:[attributeDict valueForKey:@"initvalue"]];
@@ -2262,6 +2449,267 @@ didStartElement:(NSString *)elementName
         // Select auch wieder schließen
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
         [self.output appendString:@"</select>\n"];
+
+        // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw. (und onblur)
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
+
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"</div>\n\n"];
+    }
+
+
+
+
+
+
+
+    if ([elementName isEqualToString:@"BDScheckbox"])
+    {
+        element_bearbeitet = YES;
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+
+        [self.output appendString:@"<div class=\"checkbox\" >\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+
+
+
+
+        [self.output appendString:@"<span"];
+        [self.output appendString:[self addTitlewidth:attributeDict]];
+        [self.output appendString:@">"];
+
+
+
+
+        // Wenn im Attribut title Code auftaucht, dann müssen wir es dynamisch setzen
+        // müssen aber erst abwarten bis wir die ID haben, weil wir die für den Zugriff brauchen.
+        // <span> drum herum, damit ich per jQuery darauf zugreifen kann
+        BOOL titelDynamischSetzen = NO;
+        if ([attributeDict valueForKey:@"title"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'title' in <span>-tags as text in front of checkbox.");
+            if ([[attributeDict valueForKey:@"title"] hasPrefix:@"$"])
+            {
+                titelDynamischSetzen = YES;
+                [self.output appendString:@"CODE! - Wird dynamisch mit jQuery ersetzt."];
+            }
+            else
+            {
+                [self.output appendString:[attributeDict valueForKey:@"title"]];
+            }
+        }
+        [self.output appendString:@"</span>\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+
+        [self.output appendString:@"<input type=\"checkbox\""];
+
+        NSString *id =[self addIdToElement:attributeDict];
+
+
+
+
+        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in input type=checkbox,
+        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
+        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
+            [self.output appendString:@" name=\""];
+            [self.output appendString:[attributeDict valueForKey:@"name"]];
+            [self.output appendString:@"\""];
+        }
+
+
+
+
+        // Jetzt erst haben wir die ID und können diese nutzen für den jQuery-Code
+        if (titelDynamischSetzen)
+        {
+            NSString *code = [attributeDict valueForKey:@"title"];
+            // Remove all occurrences of $,{,}
+            code = [self removeOccurrencesofDollarAndCurlyBracketsIn:code];
+
+            [self.jQueryOutput appendString:@"\n  // checkbox-Text wird hier dynamisch gesetzt\n"];
+            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').prev().text(%@);\n",id,code]];
+        }
+
+
+        [self.output appendString:@" style=\""];
+
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+        [self.output appendString:@"\">\n"];
+
+
+
+        if ([attributeDict valueForKey:@"controlpos"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'controlpos'.");
+        }
+
+        if ([attributeDict valueForKey:@"textalign"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'textalign'.");
+        }
+
+        // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw.
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
+
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"</div>\n\n"];
+    }
+
+
+
+
+
+
+    // ToDo: Bei BDSeditnumber nur Ziffern zulassen als Eingabe inkl. wohl '.' + ',' aber nochmal checken.
+    if ([elementName isEqualToString:@"BDSedittext"] ||
+        [elementName isEqualToString:@"BDSeditnumber"])
+    {
+        element_bearbeitet = YES;
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+
+        [self.output appendString:@"<div class=\"textfield\" >\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+
+
+
+
+
+        [self.output appendString:@"<span"];
+        [self.output appendString:[self addTitlewidth:attributeDict]];
+        [self.output appendString:@">"];
+
+
+
+        // Wenn im Attribut title Code auftaucht, dann müssen wir es dynamisch setzen
+        // müssen aber erst abwarten bis wir die ID haben, weil wir die für den Zugriff brauchen.
+        // <span> drum herum, damit ich per jQuery darauf zugreifen kann
+        BOOL titelDynamischSetzen = NO;
+        if ([attributeDict valueForKey:@"title"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'title' in <span>-tags as text in front of textfield.");
+            if ([[attributeDict valueForKey:@"title"] hasPrefix:@"$"])
+            {
+                titelDynamischSetzen = YES;
+                [self.output appendString:@"CODE! - Wird dynamisch mit jQuery ersetzt."];
+            }
+            else
+            {
+                [self.output appendString:[attributeDict valueForKey:@"title"]];
+            }
+        }
+        [self.output appendString:@"</span>\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+
+        [self.output appendString:@"<input type=\"text\""];
+
+        NSString *id =[self addIdToElement:attributeDict];
+
+
+
+        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in input type=checkbox,
+        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
+        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
+            [self.output appendString:@" name=\""];
+            [self.output appendString:[attributeDict valueForKey:@"name"]];
+            [self.output appendString:@"\""];
+        }
+
+
+
+
+        // Jetzt erst haben wir die ID und können diese nutzen für den jQuery-Code
+        if (titelDynamischSetzen)
+        {
+            NSString *code = [attributeDict valueForKey:@"title"];
+            // Remove all occurrences of $,{,}
+            code = [self removeOccurrencesofDollarAndCurlyBracketsIn:code];
+
+            [self.jQueryOutput appendString:@"\n  // textfield-Text wird hier dynamisch gesetzt\n"];
+            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').prev().text(%@);\n",id,code]];
+        }
+
+
+        [self.output appendString:@" style=\""];
+
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+        [self.output appendString:@"\">\n"];
+
+
+
+        if ([attributeDict valueForKey:@"required"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'required'.");
+        }
+        if ([attributeDict valueForKey:@"requiredErrorstring"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'requiredErrorstring'.");
+        }
+        if ([attributeDict valueForKey:@"infotext"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'infotext'.");
+        }
+        if ([attributeDict valueForKey:@"maxlength"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'maxlength'.");
+        }
+        if ([attributeDict valueForKey:@"pattern"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'pattern'.");
+        }
+
+
+
+        // Diese Attribute sind eigentlich nur für BDSeditnumber
+        if ([attributeDict valueForKey:@"minvalue"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'minvalue'.");
+        }
+        if ([attributeDict valueForKey:@"text"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'text'.");
+        }
+        if ([attributeDict valueForKey:@"enabled"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'enabled'.");
+        }
+        if ([attributeDict valueForKey:@"domain"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'domain'.");
+        }
+        if ([attributeDict valueForKey:@"minlength"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'minlength'.");
+        }
+
+
 
         // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw.
         [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
@@ -2285,6 +2733,15 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"<div class=\"datepicker\" >\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
+
+
+
+        [self.output appendString:@"<span"];
+        [self.output appendString:[self addTitlewidth:attributeDict]];
+        [self.output appendString:@">"];
+
+
+
         // Wenn im Attribut title Code auftaucht, dann müssen wir es dynamisch setzen
         // müssen aber erst abwarten bis wir die ID haben, weil wir die für den Zugriff brauchen.
         // <span> drum herum, damit ich per jQuery darauf zugreifen kann
@@ -2296,20 +2753,39 @@ didStartElement:(NSString *)elementName
             if ([[attributeDict valueForKey:@"title"] hasPrefix:@"$"])
             {
                 titelDynamischSetzen = YES;
-                [self.output appendString:@"<span>CODE! - Wird dynamisch mit jQuery ersetzt.</span>\n"];
+                [self.output appendString:@"CODE! - Wird dynamisch mit jQuery ersetzt."];
             }
             else
             {
-                [self.output appendString:@"<span>"];
                 [self.output appendString:[attributeDict valueForKey:@"title"]];
-                [self.output appendString:@"</span>\n"];
             }
         }
+        [self.output appendString:@"</span>\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
         [self.output appendString:@"<input type=\"text\""];
 
         NSString *id =[self addIdToElement:attributeDict];
+
+
+
+
+
+        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in input type=checkbox,
+        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
+        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
+            [self.output appendString:@" name=\""];
+            [self.output appendString:[attributeDict valueForKey:@"name"]];
+            [self.output appendString:@"\""];
+        }
+
+
+
+
 
 
         // Jetzt erst haben wir die ID und können diese nutzen für den jQuery-Code
@@ -2359,7 +2835,11 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'mindate'.");
         }
-
+        if ([attributeDict valueForKey:@"restrictyear"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'restrictyear'.");
+        }
 
 
 
@@ -2388,6 +2868,22 @@ didStartElement:(NSString *)elementName
         [self addIdToElement:attributeDict];
 
 
+
+        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur hier,
+        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
+        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
+            [self.output appendString:@" name=\""];
+            [self.output appendString:[attributeDict valueForKey:@"name"]];
+            [self.output appendString:@"\""];
+        }
+
+
+
+
         // Im Prinzip nur wegen Boxheight müssen wir in addCSSAttributes rein
         [self.output appendString:@" style=\""];
         [self.output appendString:[self addCSSAttributes:attributeDict forceWidthAndHeight:YES]];
@@ -2403,6 +2899,14 @@ didStartElement:(NSString *)elementName
         else
         {
             self.animDuration = @"slow";
+        }
+
+
+
+        if ([attributeDict valueForKey:@"mask"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'mask'.");
         }
     }
 
@@ -2427,9 +2931,27 @@ didStartElement:(NSString *)elementName
         NSString *id4rollUpDown = [self addIdToElement:nil];
 
 
+
+
+
+        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur hier,
+        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
+        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
+            [self.output appendString:@" name=\""];
+            [self.output appendString:[attributeDict valueForKey:@"name"]];
+            [self.output appendString:@"\""];
+        }
+
+
+
+
         [self.output appendString:@" style=\"width:inherit;height:inherit;"];
 
-        // [self.output appendString:[self addCSSAttributes:attributeDict]];
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
 
         [self.output appendString:@"\">\n"];
 
@@ -2457,6 +2979,7 @@ didStartElement:(NSString *)elementName
         }
         else
         {
+            [self instableXML:@"ERROR: No attribute 'id' given in rollupdown-tag"];
             //Sollte eigentlich nicht vorkommen, dass wir hier reinrutschen
             id4flipleiste = [NSString stringWithFormat:@"flipleiste_%d",1];
             id4panel = [NSString stringWithFormat:@"panel_%d",1];
@@ -2556,14 +3079,18 @@ didStartElement:(NSString *)elementName
         {
             self.attributeCount++;
 
-            // Falls down = false Menü einmal zuschieben.
+            // Falls down = false Menü einmal zuschieben (ohne Animation).
             if ([[attributeDict valueForKey:@"down"] isEqual:@"false"])
             {
                 NSLog(@"Using the attribute 'down' to close the menu.");
-
+                
                 [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").slideToggle(",id4panel]];
                 // [self.jQueryOutput appendString:self.animDuration];
                 [self.jQueryOutput appendString:@"0); // Einmal zuschieben das Menü\n"];
+            }
+            else
+            {
+                NSLog(@"Skipping the attribute 'down', because we are open.");
             }
         }
 
@@ -2843,6 +3370,7 @@ didStartElement:(NSString *)elementName
         if ([attributeDict valueForKey:@"setfocus"])
             self.attributeCount++;
 
+        // ToDO
         // Alles was in nicemodaldialog definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
         self.weAreSkippingTheCompleteContenInThisElement = YES;
     }
@@ -2875,9 +3403,135 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
 
 
+        // ToDo
         // Alles was in nicemodaldialog definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
         self.weAreSkippingTheCompleteContenInThisElement = YES;
     }
+    // ToDo
+    if ([elementName isEqualToString:@"rollUpDownContainerReplicator"])
+    {
+        element_bearbeitet = YES;
+
+        if ([attributeDict valueForKey:@"id"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"max"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"maxinfo"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"newdp"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"xpath"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"y"])
+            self.attributeCount++;
+
+
+
+        // ToDo
+        // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
+        self.weAreSkippingTheCompleteContenInThisElement = YES;
+    }
+    // ToDo
+    if ([elementName isEqualToString:@"BDSinputgrid"])
+    {
+        element_bearbeitet = YES;
+
+
+        if ([attributeDict valueForKey:@"contentdatapath"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"deletecols"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"deletevals"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"height"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"id"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"infotext"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"metadatapath"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"visible"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"headerheight"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"trashcol"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"x"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"addbutton"])
+            self.attributeCount++;
+
+        // ToDo
+        // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
+        self.weAreSkippingTheCompleteContenInThisElement2 = YES;
+    }
+    // ToDo
+    if ([elementName isEqualToString:@"BDSreplicator"])
+    {
+        element_bearbeitet = YES;
+
+
+
+        if ([attributeDict valueForKey:@"dataset"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"xpath"])
+            self.attributeCount++;
+
+
+        // ToDo
+        // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
+        self.weAreSkippingTheCompleteContenInThisElement2 = YES;
+    }
+    // ToDo
+    if ([elementName isEqualToString:@"nicebox"])
+    {
+        element_bearbeitet = YES;
+
+
+        if ([attributeDict valueForKey:@"width"])
+            self.attributeCount++;
+
+
+        // ToDo
+        // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
+        self.weAreSkippingTheCompleteContenInThisElement3 = YES;
+    }
+
+
+
+    // ToDo
+    if ([elementName isEqualToString:@"infobox_notsupported"] ||
+        [elementName isEqualToString:@"infobox_euerhinweis"] ||
+        [elementName isEqualToString:@"infobox_stnr"] ||
+        [elementName isEqualToString:@"infobox_plausi"])
+    {
+        element_bearbeitet = YES;
+
+        // Dringend ToDo - Name-Problem endlich lösen
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+
+        // ToDo - Wohl einfach addJS hier aufrufen dann
+        if ([attributeDict valueForKey:@"visible"])
+            self.attributeCount++;
+
+        // ToDo - info... ein eigenes Thema.
+        if ([attributeDict valueForKey:@"info"])
+            self.attributeCount++;
+    }
+
+
+
+
+
+
 
 
     // Das ist nur ein Schalter. Erst im Nachfolgenden schließenden Element 'when' müssen wir aktiv werden.
@@ -2929,8 +3583,119 @@ didStartElement:(NSString *)elementName
 
 
 
+    // Wohl Eine Art umgebende View für Check-Felder die eingeblendet werden, damit man für sie die
+    // Visibility z.B. nur einmal als ganzes ansprechen muss
+    if ([elementName isEqualToString:@"checkview"])
+    {
+        element_bearbeitet = YES;
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+        [self.output appendString:@"<!-- Checkview: -->\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+        [self.output appendString:@"<div"];
+
+        [self addIdToElement:attributeDict];
 
 
+
+
+        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur hier,
+        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
+        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
+            [self.output appendString:@" name=\""];
+            [self.output appendString:[attributeDict valueForKey:@"name"]];
+            [self.output appendString:@"\""];
+        }
+
+
+
+
+
+        [self.output appendString:@" style=\""];
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+        [self.output appendString:@"\">\n"];
+
+
+
+        if ([attributeDict valueForKey:@"layout"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'layout'.");
+        }
+        if ([attributeDict valueForKey:@"mask"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'mask'.");
+        }
+
+
+
+        // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw.
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]]];
+    }
+
+
+    // Eine View ohne ID, Attribute, ohne alles, Zweck ist mir noch nicht ganz klar
+    // Eine Art Verzögerungs-view?
+    if ([elementName isEqualToString:@"deferview"])
+    {
+        element_bearbeitet = YES;
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+        [self.output appendString:@"<!-- Deferview: -->\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+        [self.output appendString:@"<div>\n"];
+
+
+        if ([attributeDict valueForKey:@"name"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'name'.");
+        }
+    }
+
+
+    // Eine BDSFinanzaemter-View... ToDo (evtl. eher eine Art input-Feld und dort zuzuordnen?)
+    if ([elementName isEqualToString:@"BDSFinanzaemter"])
+    {
+        element_bearbeitet = YES;
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+        [self.output appendString:@"<!-- Finanzaemter-View: -->\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+        [self.output appendString:@"<div></div>\n"];
+
+
+        if ([attributeDict valueForKey:@"controlwidth"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'controlwidth'.");
+        }
+        if ([attributeDict valueForKey:@"datapath"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'datapath'.");
+        }
+        if ([attributeDict valueForKey:@"dptext"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'dptext'.");
+        }
+        if ([attributeDict valueForKey:@"id"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'id'.");
+        }
+        if ([attributeDict valueForKey:@"title"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'title'.");
+        }
+    }
 
 
     if ([elementName isEqualToString:@"text"])
@@ -3123,6 +3888,11 @@ didStartElement:(NSString *)elementName
             if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onsavestate"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"onpaypalclose"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"oninternalstate"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onrolldown"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onfirstdown"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"ondatedays"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onchecked"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onrolleddown"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"ontabselected"])
             {
                 self.attributeCount++;
@@ -3261,7 +4031,8 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"dlgyesno"] ||
         [elementName isEqualToString:@"nicepopup"] ||
         [elementName isEqualToString:@"nicemodaldialog"] ||
-        [elementName isEqualToString:@"nicedialog"])
+        [elementName isEqualToString:@"nicedialog"] ||
+        [elementName isEqualToString:@"rollUpDownContainerReplicator"])
     {
         element_geschlossen = YES;
 
@@ -3271,7 +4042,26 @@ BOOL isNumeric(NSString *s)
     if (self.weAreSkippingTheCompleteContenInThisElement)
         return;
 
+    if ([elementName isEqualToString:@"BDSinputgrid"] ||
+        [elementName isEqualToString:@"BDSreplicator"])
+    {
+        element_geschlossen = YES;
 
+        self.weAreSkippingTheCompleteContenInThisElement2 = NO;
+    }
+    // If we are still skipping All Elements, let's return here
+    if (self.weAreSkippingTheCompleteContenInThisElement2)
+        return;
+
+    if ([elementName isEqualToString:@"nicebox"])
+    {
+        element_geschlossen = YES;
+
+        self.weAreSkippingTheCompleteContenInThisElement3 = NO;
+    }
+    // If we are still skipping All Elements, let's return here
+    if (self.weAreSkippingTheCompleteContenInThisElement3)
+        return;
 
 
     // Alle einzeln durchgehen, damit wir besser fehlende überprüfen können, deswegen ist hierin kein redundanter Code
@@ -3324,6 +4114,8 @@ BOOL isNumeric(NSString *s)
 
     if ([elementName isEqualToString:@"window"] ||
         [elementName isEqualToString:@"view"] ||
+        [elementName isEqualToString:@"deferview"] ||
+        [elementName isEqualToString:@"checkview"] ||
         [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
@@ -3413,6 +4205,10 @@ BOOL isNumeric(NSString *s)
     if ([elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDSeditdate"] ||
         [elementName isEqualToString:@"BDScombobox"] ||
+        [elementName isEqualToString:@"BDScheckbox"] ||
+        [elementName isEqualToString:@"BDSedittext"] ||
+        [elementName isEqualToString:@"BDSeditnumber"] ||
+        [elementName isEqualToString:@"BDSFinanzaemter"] ||
         [elementName isEqualToString:@"button"] ||
         [elementName isEqualToString:@"frame"] ||
         [elementName isEqualToString:@"font"] ||
@@ -3422,7 +4218,11 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"include"] ||
         [elementName isEqualToString:@"datapointer"] ||
         [elementName isEqualToString:@"attribute"] ||
-        [elementName isEqualToString:@"SharedObject"])
+        [elementName isEqualToString:@"SharedObject"] ||
+        [elementName isEqualToString:@"infobox_notsupported"] ||
+        [elementName isEqualToString:@"infobox_euerhinweis"] ||
+        [elementName isEqualToString:@"infobox_stnr"] ||
+        [elementName isEqualToString:@"infobox_plausi"])
     {
         element_geschlossen = YES;
     }
@@ -3431,6 +4231,8 @@ BOOL isNumeric(NSString *s)
 
     // Schließen des Div's
     if ([elementName isEqualToString:@"view"] ||
+        [elementName isEqualToString:@"deferview"] ||
+        [elementName isEqualToString:@"checkview"] ||
         [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
@@ -3894,6 +4696,27 @@ BOOL isNumeric(NSString *s)
     "    margin-top: 8px;\n"
     "}\n"
     "\n"
+    "\n"
+    "/* Standard-checkbox (das umgebende Div) */\n"
+    "div.checkbox\n"
+    "{\n"
+    "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
+    "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
+    "    text-align:left;\n"
+    "    padding:4px;\n"
+    "    margin-top: 8px;\n"
+    "}\n"
+    "\n"
+    "/* Standard-textfiel (das umgebende Div) */\n"
+    "div.textfield\n"
+    "{\n"
+    "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
+    "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
+    "    text-align:left;\n"
+    "    padding:4px;\n"
+    "    margin-top: 8px;\n"
+    "}\n"
+    "\n"
     "/* Standard-Text (BDStext), position:relative, da nachfolgende Elemente aufrücken sollen */\n"
     "div.ol_text\n"
     "{\n"
@@ -3965,11 +4788,14 @@ BOOL isNumeric(NSString *s)
     "  // muss ich das von OpenLaszlo benutzte 'value' nicht intern parsen (nice Trick, I Think)\n"
     "  var bedingung = eval(bedingungAlsString);\n"
     "\n"
-    "  $(id).toggle(bedingung);\n"
-    "  // Dazu gehörigen Text auch mit entfernen\n"
-    "  if ($(id).prev().is('span'))\n"
-    "    $(id).prev().toggle(bedingung);\n"
-    "}"
+    "  // Wenn wir ein input sind, vor uns ist ein span und um uns herum ist ein div\n"
+    "  // dann müssen wir das umgebende div togglen, weil dies das komplette input-Feld umfasst\n"
+    "  if (($(id).is('input') && $(id).prev().is('span') && $(id).parent().is('div')) ||\n"
+    "      ($(id).is('select') && $(id).prev().is('span') && $(id).parent().is('div')))\n"
+    "    $(id).parent().toggle(bedingung);\n"
+    "  else\n"
+    "    $(id).toggle(bedingung);\n"
+    "}\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"

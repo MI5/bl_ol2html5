@@ -1337,6 +1337,10 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         if (!self.firstElementOfSimpleLayout_x)
         {
+            /**************************************
+            // Seit wir von absolute auf relative umgestiegen sind und zusätzlich auch noch auf
+            // float:left umgestellt haben, müssen wir die width GAR NICHT mehr korrigieren
+
             // Den allerersten sippling auslassen
             [self.jsOutput appendString:@"if (document.getElementById('"];
             [self.jsOutput appendString:id];
@@ -1347,15 +1351,16 @@ void OLLog(xmlParser *self, NSString* s,...)
 
             // parseInt removes the "px" at the end
             [self.jsOutput appendString:@"').style.left = ("];
-            // Seit wir von absolute auf relative umgestiegen sind, brauchen wir nur noch die Width
-             [self.jsOutput appendString:@"parseInt(document.getElementById('"];
-             [self.jsOutput appendString:id];
-             [self.jsOutput appendString:@"').previousElementSibling.offsetLeft)+"];
+            //  Seit wir von absolute auf relative umgestiegen sind, brauchen wir nur noch Width
+              [self.jsOutput appendString:@"parseInt(document.getElementById('"];
+              [self.jsOutput appendString:id];
+              [self.jsOutput appendString:@"').previousElementSibling.offsetLeft)+"];
             [self.jsOutput appendString:@"parseInt(document.getElementById('"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').previousElementSibling.offsetWidth)+"];
             [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
             [self.jsOutput appendString:@") + \"px\";\n\n"];
+            **************************************/
         }
         self.firstElementOfSimpleLayout_x = NO;
     }
@@ -2401,7 +2406,7 @@ didStartElement:(NSString *)elementName
                 if ([code rangeOfString:@"ShowEUR"].location == NSNotFound)
                 {
                     [self.jQueryOutput appendString:@"\n  // Der Text von BDSText wird hier dynamisch gesetzt\n"];
-                    [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').text(%@);\n",self.zuletztGesetzteID,code]];
+                    [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').html(%@);\n",self.zuletztGesetzteID,code]];
                 }
             }
             else
@@ -3088,6 +3093,9 @@ didStartElement:(NSString *)elementName
         element_bearbeitet = YES;
 
 
+        int breiteVonRollUpDown = 760;
+
+
         [self.output appendString:@"<!-- RollUpDown-Element: -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
@@ -3122,13 +3130,15 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@" style=\"top:"];
         [self.output appendString:[NSString stringWithFormat:@"%d",self.rollupDownElementeCounter*140]];
         self.rollupDownElementeCounter++;
-        [self.output appendString:@"px;width:600px;height:inherit;"];
+        [self.output appendString:@"px;width:"];
+        [self.output appendString:[NSString stringWithFormat:@"%d",breiteVonRollUpDown]];
+        [self.output appendString:@"px;height:inherit;"];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
         [self.output appendString:@"\">\n"];
 
-        /* *************CANVAS***************VERWORFEN************* SPÄTER NUTZEN FÜR DIE RUNDEN ECKEN
+        /* *************CANVAS***************VERWORFEN************* SPÄTER NUTZEN FÜR DIE RUNDEN ECKEN --- NE, DOCH NICHT, JETZT GELÖST ÜBER jQuery UI StyleSheets.
         [self.output appendString:@"<canvas style=\"position:absolute; top:37px; left:81px;\" id=\"leiste\" width=\"500\" height=\"200\"></canvas>"];
 
         [self.output appendString:@"<canvas style=\"position:absolute; top:61px; left:81px;\" id=\"details\" width=\"500\" height=\"200\"></canvas>"];
@@ -3196,7 +3206,8 @@ didStartElement:(NSString *)elementName
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<!-- Die Flipleiste -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:[NSString stringWithFormat:@"<div style=\"position:absolute; top:0px; left:0px; width:inherit; height:%dpx; background-color:lightblue; line-height: %dpx; vertical-align:middle;\" id=\"",heightOfFlipBar]];
+        [self.output appendString:@"<div style=\"position:absolute; top:0px; left:0px; width:"];
+        [self.output appendString:[NSString stringWithFormat:@"%dpx; height:%dpx; background-color:lightblue; line-height: %dpx; vertical-align:middle;\" class=\"ui-corner-top\" id=\"",breiteVonRollUpDown,heightOfFlipBar]];
         [self.output appendString:id4flipleiste];
         [self.output appendString:@"\">\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
@@ -3209,7 +3220,7 @@ didStartElement:(NSString *)elementName
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<!-- Das aufklappende Menü -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:[NSString stringWithFormat:@"<div style=\"position:absolute; top:%dpx; left:0px; width:inherit; height:200px; background-color:white;\" id=\"",heightOfFlipBar]];
+        [self.output appendString:[NSString stringWithFormat:@"<div style=\"position:absolute; top:%dpx; left:0px; width:%dpx; height:200px; border-width:2px; border-color:lightgrey; border-style:solid; background-color:white;\" class=\"ui-corner-bottom\" id=\"",heightOfFlipBar,breiteVonRollUpDown-4]];
         [self.output appendString:id4panel];
         [self.output appendString:@"\">\n"];
 
@@ -4750,6 +4761,34 @@ BOOL isNumeric(NSString *s)
 
 
 
+- (void) manuelleNachjustierung
+{
+    [self.jQueryOutput appendString:@"// Sachen, die ich leider, leider manuell nachjustieren muss (ToDo)\n "];
+    [self.jQueryOutput appendString:@"$('#element19').css('background-color','#D29860');\n"];
+    [self.jQueryOutput appendString:@"$('#element19').css('left','0');\n"];
+    [self.jQueryOutput appendString:@"$('#element19').css('top','0');\n"];
+    [self.jQueryOutput appendString:@"$('#element19').css('top','0');\n"];
+    [self.jQueryOutput appendString:@"$('#element19').css('float','none');\n"];
+    [self.jQueryOutput appendString:@"$('#element19').css('height','50px');\n"];
+    [self.jQueryOutput appendString:@"$('#element19').css('line-height','50px');\n"];
+    [self.jQueryOutput appendString:@"$('#element19').css('vertical-align','middle');\n"];
+    [self.jQueryOutput appendString:@""];
+    [self.jQueryOutput appendString:@"$('#element21').css('left','280px');\n"];
+    [self.jQueryOutput appendString:@"$('#element21').css('top','7px');\n"];
+    [self.jQueryOutput appendString:@"$('#element23').css('float','none');\n"];
+
+    // Steuertacho-Schriftzug
+    [self.jQueryOutput appendString:@"$('#element22').css('float','none');\n"];
+    [self.jQueryOutput appendString:@"$('#element22').css('left','-300');\n"];
+    [self.jQueryOutput appendString:@"$('#element22').css('top','3');\n"];
+
+    // Die unteren Ecken entfernen von der TabBar
+    [self.jQueryOutput appendString:@"$('ul').removeClass('ui-corner-all');\n"];
+    [self.jQueryOutput appendString:@"$('ul').addClass('ui-corner-top');\n"];
+}
+
+
+
 
 - (void) parserDidEndDocument:(NSXMLParser *)parser
 {
@@ -4758,10 +4797,13 @@ BOOL isNumeric(NSString *s)
     if (self.isRecursiveCall)
         return;
 
+    // Leider nötig, sonst verzweifel ich...
+    [self manuelleNachjustierung];
+
 
     NSMutableString *pre = [[NSMutableString alloc] initWithString:@""];
 
-    [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n<title>Canvastest</title>\n"];
+    [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n<title>taxango</title>\n"];
 
     // CSS-Stylesheet-Datei
     [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n"];
@@ -4773,10 +4815,10 @@ BOOL isNumeric(NSString *s)
     [pre appendString:@"<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n"];
 
     // jQuery laden
-    [pre appendString:@"<script type=\"text/javascript\" src=\"http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js\"></script>\n"];
+    [pre appendString:@"<script type=\"text/javascript\" src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js\"></script>\n"];
 
     // jQuery UI laden (wegen TabSheet)
-    [pre appendString:@"<script type=\"text/javascript\" src=\"http://ajax.googleapis.com/ajax/libs/jqueryui/1.8.18/jquery-ui.min.js\"></script>\n"];
+    [pre appendString:@"<script type=\"text/javascript\" src=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.18/jquery-ui.min.js\"></script>\n"];
 
     [pre appendString:self.externalJSFilesOutput];
     [pre appendString:@"<script src=\"jsHelper.js\" type=\"text/javascript\"></script>\n\n<style type='text/css'>\n"];
@@ -4806,7 +4848,7 @@ BOOL isNumeric(NSString *s)
     [self.output appendString:@"\n\n$(function()\n{\n"];
 
     [self.output appendString:@"  // globalhelp heimlich als Div einführen\n"];
-    [self.output appendString:@"  $('div:first').prepend('<div id=\"___globalhelp\" style=\"position:absolute;left:800px;top:150px;width:190px;height:300px;z-index:1000;background-color:white;\"></div>');\n\n"];
+    [self.output appendString:@"  $('div:first').prepend('<div id=\"___globalhelp\" class=\"ui-corner-all\" style=\"position:absolute;left:810px;top:150px;width:175px;height:300px;z-index:1000;background-color:white;padding:4px;\">Infocenter</div>');\n\n"];
 
     // dlgFamilienstandSingle -> ToDo, muss später selbständig erkannt werden
     [self.output appendString:@"  // dlgFamilienstandSingle heimlich als Objekt einführen (diesmal direkt im Objekt, ohne prototype)\n"];
@@ -4936,7 +4978,7 @@ BOOL isNumeric(NSString *s)
     "}\n"
     "\n"
     "img { border: 0 none; }\n"
-    //"* { float:left; } //ALLE Elemente sollen nur so viel Platz einnehmen, wie sie auch brauchen\n"
+    //"* { float:left; } //ALLE Elemente sollen nur so viel Platz einnehmen, wie sie auch brauchen\n" <-- Bricht zu viel, lieber einzeln durchgehen, wo nötig
     "\n"
     "/* Alle Divs müssen position:absolute sein, damit die Positionierung stimmt */\n"
     "/* Korrektur: Seit Benutzung jQuery UI müssen alle Divs position:relative sein */\n"
@@ -4944,6 +4986,7 @@ BOOL isNumeric(NSString *s)
     "div\n"
     "{\n"
 	"    position:relative;\n"
+    "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
     "\n"
     "    /* Damit auf jedenfall ein Startwert gesetzt ist,\n"
     "    sonst gibt es massive Probleme beim auslesen der Variable durch JS */\n"
@@ -4954,6 +4997,7 @@ BOOL isNumeric(NSString *s)
     "input\n"
     "{\n"
 	"    position:relative;\n"
+    "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
     "\n"
     "    /* Damit auf jedenfall ein Startwert gesetzt ist,\n"
     "    sonst gibt es massive Probleme beim auslesen der Variable durch JS */\n"
@@ -4994,7 +5038,7 @@ BOOL isNumeric(NSString *s)
     "    background-color:lightgrey;\n"
 	"    height:40px;\n"
 	"    width:50px;\n"
-	"    position:relative; /* ToDo: Ist hier dann nicht auch absolute? */\n"
+	"    position:relative;\n"
 	"    top:20px;\n"
 	"    left:20px;\n"
     "    text-align:left;\n"
@@ -5022,6 +5066,7 @@ BOOL isNumeric(NSString *s)
     "{\n"
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
+    "    float:none; /* Eine combobox soll immer die ganze Zeile einnehmen. */\n"
     "    text-align:left;\n"
     "    padding:4px;\n"
     "    margin-top: 8px;\n"
@@ -5032,6 +5077,7 @@ BOOL isNumeric(NSString *s)
     "{\n"
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
+    "    float:none; /* Ein datepicker soll immer die ganze Zeile einnehmen. */\n"
     "    text-align:left;\n"
     "    padding:4px;\n"
     "    margin-top: 8px;\n"
@@ -5048,7 +5094,7 @@ BOOL isNumeric(NSString *s)
     "    margin-top: 8px;\n"
     "}\n"
     "\n"
-    "/* Standard-textfiel (das umgebende Div) */\n"
+    "/* Standard-textfield (das umgebende Div) */\n"
     "div.textfield\n"
     "{\n"
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
@@ -5182,6 +5228,15 @@ BOOL isNumeric(NSString *s)
     "{\n"
     "    $('#___globalhelp').text(s);\n"
     "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// globales lz-Objekt, um Aufrufe darauf abzufangen\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var lz = new Object();\n"
+    "lz.Cursor = new Object();\n"
+    "lz.Cursor.restoreCursor = function() {};\n"
+    "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// jQuery\n"

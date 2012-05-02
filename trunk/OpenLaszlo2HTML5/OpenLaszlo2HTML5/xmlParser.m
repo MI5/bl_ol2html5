@@ -209,7 +209,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // Final Try:
 
 //////////////////////////////////////////////
-#define NSLog(...) OLLog(self,__VA_ARGS__)
+// #define NSLog(...) OLLog(self,__VA_ARGS__)
 //////////////////////////////////////////////
 /********** Dirty Trick um NSLog umzuleiten *********/
 
@@ -781,6 +781,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         [style appendString:@"background-image:url("];
         [style appendString:s];
         [style appendString:@");"];
+        // Aus irgendeinem Grund müssen nach meiner großen Änderung von absolute auf relative
+        // die Bilder trotzdem weiterhin absolute sein... aber nur die... hmmm.
+        [style appendString:@"position:absolute;"];
     }
 
 
@@ -1343,9 +1346,12 @@ void OLLog(xmlParser *self, NSString* s,...)
             [self.jsOutput appendString:id];
 
             // parseInt removes the "px" at the end
-            [self.jsOutput appendString:@"').style.left = (parseInt(document.getElementById('"];
-            [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').previousElementSibling.offsetLeft)+parseInt(document.getElementById('"];
+            [self.jsOutput appendString:@"').style.left = ("];
+            // Seit wir von absolute auf relative umgestiegen sind, brauchen wir nur noch die Width
+             [self.jsOutput appendString:@"parseInt(document.getElementById('"];
+             [self.jsOutput appendString:id];
+             [self.jsOutput appendString:@"').previousElementSibling.offsetLeft)+"];
+            [self.jsOutput appendString:@"parseInt(document.getElementById('"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').previousElementSibling.offsetWidth)+"];
             [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
@@ -3089,7 +3095,7 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"<div"];
 
 
-        // Das umgebende DIv bekommt die Haupt-ID, Panel und Leiste 2 Unter-IDs
+        // Das umgebende Div bekommt die Haupt-ID, Panel und Leiste 2 Unter-IDs
         NSString *id4rollUpDown =[self addIdToElement:attributeDict];
 
         NSString *id4flipleiste = [NSString stringWithFormat:@"%@_flipleiste",id4rollUpDown];;
@@ -3114,9 +3120,9 @@ didStartElement:(NSString *)elementName
 
 
         [self.output appendString:@" style=\"top:"];
-        [self.output appendString:[NSString stringWithFormat:@"%d",self.rollupDownElementeCounter*240]];
+        [self.output appendString:[NSString stringWithFormat:@"%d",self.rollupDownElementeCounter*140]];
         self.rollupDownElementeCounter++;
-        [self.output appendString:@"px;width:inherit;height:inherit;"];
+        [self.output appendString:@"px;width:600px;height:inherit;"];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
@@ -4930,6 +4936,7 @@ BOOL isNumeric(NSString *s)
     "}\n"
     "\n"
     "img { border: 0 none; }\n"
+    //"* { float:left; } //ALLE Elemente sollen nur so viel Platz einnehmen, wie sie auch brauchen\n"
     "\n"
     "/* Alle Divs müssen position:absolute sein, damit die Positionierung stimmt */\n"
     "/* Korrektur: Seit Benutzung jQuery UI müssen alle Divs position:relative sein */\n"
@@ -4946,7 +4953,7 @@ BOOL isNumeric(NSString *s)
     "\n"
     "input\n"
     "{\n"
-	"    position:absolute;\n"
+	"    position:relative;\n"
     "\n"
     "    /* Damit auf jedenfall ein Startwert gesetzt ist,\n"
     "    sonst gibt es massive Probleme beim auslesen der Variable durch JS */\n"
@@ -5001,7 +5008,7 @@ BOOL isNumeric(NSString *s)
     "\n"
 	"    height:auto;\n"
 	"    width:auto;\n"
-	"    position:absolute;\n"
+	"    position:relative;\n"
 	"    top:0px;\n"
 	"    left:0px;\n"
     "    /*\n"
@@ -5054,7 +5061,7 @@ BOOL isNumeric(NSString *s)
     "/* Standard-Text (BDStext), position:relative, da nachfolgende Elemente aufrücken sollen */\n"
     "div.ol_text\n"
     "{\n"
-    "    position:absolute;\n"
+    "    position:relative;\n"
     "    text-align:left;\n"
     "    padding:4px;\n"
     "}";

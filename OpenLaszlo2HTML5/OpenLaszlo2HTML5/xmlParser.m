@@ -78,6 +78,9 @@
 // Für das Element dataset, um die Variablen für das JS-Array durchzählen zu können
 @property (nonatomic) int datasetItemsCounter;
 
+// Für jeden Container die Elemente durchzählen, um den Abstand regeln zu können
+@property (nonatomic) int rollupDownElementeCounter;
+
 // Für das Element RollUpDownContainer
 @property (strong, nonatomic) NSString *animDuration;
 
@@ -152,7 +155,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize last_resource_name_for_frametag = _last_resource_name_for_frametag, collectedFrameResources = _collectedFrameResources;
 
-@synthesize datasetItemsCounter = _datasetItemsCounter;
+@synthesize datasetItemsCounter = _datasetItemsCounter, rollupDownElementeCounter = _rollupDownElementeCounter;
 
 @synthesize animDuration = _animDuration, lastUsedTabSheetContainerID = _lastUsedTabSheetContainerID;
 
@@ -206,7 +209,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // Final Try:
 
 //////////////////////////////////////////////
-// #define NSLog(...) OLLog(self,__VA_ARGS__)
+#define NSLog(...) OLLog(self,__VA_ARGS__)
 //////////////////////////////////////////////
 /********** Dirty Trick um NSLog umzuleiten *********/
 
@@ -292,6 +295,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.lastUsedTabSheetContainerID = @"";
         self.lastUsedDataset = @"";
         self.datasetItemsCounter = 0;
+        self.rollupDownElementeCounter = 0;
 
         self.issueWithRecursiveFileNotFound = @"";
 
@@ -820,6 +824,16 @@ void OLLog(xmlParser *self, NSString* s,...)
 }
 
 
+// Remove all occurrences of (,)
+- (NSString *) removeOccurrencesofBracketsIn:(NSString*)s
+{
+    s = [s stringByReplacingOccurrencesOfString:@"(" withString:@""];
+    s = [s stringByReplacingOccurrencesOfString:@")" withString:@""];
+
+    return s;
+}
+
+
 - (NSMutableString*) addJSCode:(NSDictionary*) attributeDict withId:(NSString*)idName
 {
     // Den ganzen Code in einem eigenen String sammeln, und nur JS ausgeben, wenn gefüllt
@@ -834,6 +848,28 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSString *s = [attributeDict valueForKey:@"visible"];
         s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
 
+
+
+        // Verkettete Bedingungen bei Visibility werden leider noch nicht unterstützt, dringend ToDo
+        // Auch Bedingungen mit > werden noch nicht unterstützt
+        if ([s rangeOfString:@"&&"].location != NSNotFound ||
+            [s rangeOfString:@"||"].location != NSNotFound ||
+            [s rangeOfString:@">"].location != NSNotFound)
+        {
+            // [self instableXML:@"Verkettete Bedingung oder >-Zeichen in Bedingung! Mist..."];
+        }
+        else
+        {
+
+
+
+
+
+
+
+        // Falls der string geklammert war, muss ich diese entfernen
+        // ToDo: Gibt es Fälle wo die Klammern lebensentscheidend sind?
+        s = [self removeOccurrencesofBracketsIn:s];
 
         if ([s isEqualToString:@"false"] || [s isEqualToString:@"true"])
         {
@@ -858,7 +894,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
             // Wenn wir hier in den ersten Zweig reinkommen, dann ist 'bedingung' was anderes,
             // und zwar der Variablenname ohne vorstehendes 'canvas.'
-            if ([idVonDerEsAbhaengigIst isEqualToString:@"canvas"])
+            if ([idVonDerEsAbhaengigIst isEqualToString:@"canvas"] ||
+                [idVonDerEsAbhaengigIst isEqualToString:@"!canvas"])
             {
                 /* alte Lösung per plain JS (hat nicht auf spätere Änderungen der Var reagiert)
                  [code appendString:s];
@@ -869,18 +906,17 @@ void OLLog(xmlParser *self, NSString* s,...)
                  [code appendString:@"').style.visibility = 'hidden';"];
                  */
 
+                BOOL wirMuessenNegieren = NO;
+                if ([idVonDerEsAbhaengigIst isEqualToString:@"!canvas"])
+                    wirMuessenNegieren = YES;
+
                 // neue Lösung nun mit watch/unwatch-Methode
                 [self.jQueryOutput appendString:@"\n  // Die Visibility ändert sich abhängig von dem Wert einer woanders gesetzten Variable (bei jeder Änderung, deswegen watchen der Variable)\n"];
-                [self.jQueryOutput appendString:@"  canvas.watch('"];
+                [self.jQueryOutput appendString:@"  canvas.watch(\""];
                 [self.jQueryOutput appendString:bedingung];
-                [self.jQueryOutput appendString:@"', "];
+                [self.jQueryOutput appendString:@"\", "];
                 [self.jQueryOutput appendString:@"function (id, oldval, newval)\n  {\n"];
                 [self.jQueryOutput appendString:@"    console.log('canvas.' + id + ' changed from ' + oldval + ' to ' + newval);\n"];
-                [self.jQueryOutput appendString:@"     $('#"];
-                [self.jQueryOutput appendString:idName];
-                [self.jQueryOutput appendString:@"').toggle("];
-                [self.jQueryOutput appendString:@"newval"]; // nicht 's', war's vorher, dann spinnt es.
-                [self.jQueryOutput appendString:@");\n"];
                 [self.jQueryOutput appendString:@"    // Wenn wir ein input oder ein select sind...\n"];
                 [self.jQueryOutput appendString:@"    if (($('#"];
                 [self.jQueryOutput appendString:idName];
@@ -899,19 +935,29 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [self.jQueryOutput appendString:@"      $('#"];
                 [self.jQueryOutput appendString:idName];
                 [self.jQueryOutput appendString:@"').parent().toggle("];
+                if (wirMuessenNegieren)
+                    [self.jQueryOutput appendString:@"!"];
                 [self.jQueryOutput appendString:@"newval"]; // nicht 's', war's vorher, dann spinnt es.
                 [self.jQueryOutput appendString:@");\n"];
                 [self.jQueryOutput appendString:@"  else\n"];
                 [self.jQueryOutput appendString:@"      $('#"];
                 [self.jQueryOutput appendString:idName];
                 [self.jQueryOutput appendString:@"').toggle("];
+                if (wirMuessenNegieren)
+                    [self.jQueryOutput appendString:@"!"];
                 [self.jQueryOutput appendString:@"newval"]; // nicht 's', war's vorher, dann spinnt es.
                 [self.jQueryOutput appendString:@");\n"];
 
                 [self.jQueryOutput appendString:@"    return newval;\n  });\n"];
 
 
+                // Wenn !='' oder ==0 auftaucht, dieses rausschmeißen, weil wir nur die Variable brauchen zum setzen.
+                s = [s stringByReplacingOccurrencesOfString:@"!=''" withString:@""];
+                s = [s stringByReplacingOccurrencesOfString:@"==0" withString:@""];
 
+
+                // Negationszeichen aus 's' entfernen, falls wir hier drin sind weil ein '!canvas' vorliegt
+                s = [s stringByReplacingOccurrencesOfString:@"!" withString:@""];
 
                 [self.jQueryOutput appendString:@"  // Und einmal sofort die Visibility anpassen durch setzen der Variable mit sich selber\n  "];
                 [self.jQueryOutput appendString:s];
@@ -921,49 +967,101 @@ void OLLog(xmlParser *self, NSString* s,...)
             }
             else
             {
-                [self.jQueryOutput appendString:@"\n  // Die Visibility ändert sich abhängig von dem Wert einer woanders gesetzten Variable (bei jeder Änderung)\n"];
-                [self.jQueryOutput appendString:@"  $('#"];
-                [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
-                [self.jQueryOutput appendString:@"').change(function()\n  {\n"];
-                [self.jQueryOutput appendString:@"    toggleVisibility('#"];
-                [self.jQueryOutput appendString:idName];
-                [self.jQueryOutput appendString:@"', '#"];
-                [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
-                // Da in den Bedingungen selber oft das ' verwendet wird, hier das "
-                [self.jQueryOutput appendString:@"', \""];
-                [self.jQueryOutput appendString:bedingung];
-                [self.jQueryOutput appendString:@"\");\n"];
+                if ([idVonDerEsAbhaengigIst isEqualToString:@"parent"] ||
+                    [idVonDerEsAbhaengigIst isEqualToString:@"!parent"])
+                {
+                    // Wenn wir hier drin sind, wurde gar keine andere Variable gesetzt, sondern 'nur' parent.
+                    // Auf parent greifen wir über die Ausgangsvariable selber zu, dazu teilen wir der Funktion
+                    // togglieVisibility anstatt der anderen Variable das Stichwort '__PARENT__' mit.
 
-                /* Alte Lösung ohne externe Funktion (Nachteil war, dass ich die initiale
-                 // Visibility nicht setzen konnte):
-                 [self.jQueryOutput appendString:@"    var value = $(this).val();\n"];
-                 [self.jQueryOutput appendString:@"    $('#"];
-                 [self.jQueryOutput appendString:idName];
-                 [self.jQueryOutput appendString:@"').toggle("];
-                 [self.jQueryOutput appendString:bedingung];
-                 [self.jQueryOutput appendString:@");\n"];
-                 [self.jQueryOutput appendString:@"    // Dazu gehörigen Text auch mit entfernen\n"];
-                 [self.jQueryOutput appendString:@"    if ($('#"];
-                 [self.jQueryOutput appendString:idName];
-                 [self.jQueryOutput appendString:@"').prev().is('span'))\n"];
-                 [self.jQueryOutput appendString:@"      $('#"];
-                 [self.jQueryOutput appendString:idName];
-                 [self.jQueryOutput appendString:@"').prev().toggle("];
-                 [self.jQueryOutput appendString:bedingung];
-                 [self.jQueryOutput appendString:@");\n"];
-                 */
-                [self.jQueryOutput appendString:@"  });\n"];
 
-                [self.jQueryOutput appendString:@"  // Und einmal sofort die Visibility anpassen\n"];
-                [self.jQueryOutput appendString:@"  toggleVisibility('#"];
-                [self.jQueryOutput appendString:idName];
-                [self.jQueryOutput appendString:@"', '#"];
-                [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
-                // Da in den Bedingungen selber oft das ' verwendet wird, hier das "
-                [self.jQueryOutput appendString:@"', \""];
-                [self.jQueryOutput appendString:bedingung];
-                [self.jQueryOutput appendString:@"\");\n"];
+                    BOOL wirMuessenNegieren = NO;
+                    if ([idVonDerEsAbhaengigIst isEqualToString:@"!parent"])
+                        wirMuessenNegieren = YES;
+
+
+                    [self.jQueryOutput appendString:@"\n  // Die Visibility ändert sich abhängig von dem Wert des parents! (bei jeder Änderung)\n"];
+                    [self.jQueryOutput appendString:@"  $('#"];
+                    [self.jQueryOutput appendString:idName];
+                    [self.jQueryOutput appendString:@"').parent().change(function()\n  {\n"];
+                    [self.jQueryOutput appendString:@"    toggleVisibility('#"];
+                    [self.jQueryOutput appendString:idName];
+                    [self.jQueryOutput appendString:@"', '"];
+                    [self.jQueryOutput appendString:@"__PARENT__', \""];
+                    if (wirMuessenNegieren)
+                        [self.jQueryOutput appendString:@"!"];
+                    [self.jQueryOutput appendString:bedingung];
+                    [self.jQueryOutput appendString:@"\");\n"];
+                    [self.jQueryOutput appendString:@"  });\n"];
+
+                    [self.jQueryOutput appendString:@"  // Und einmal sofort die Visibility anpassen\n"];
+                    [self.jQueryOutput appendString:@"  toggleVisibility('#"];
+                    [self.jQueryOutput appendString:idName];
+                    [self.jQueryOutput appendString:@"', '"];
+                    [self.jQueryOutput appendString:@"__PARENT__', \""];
+                    if (wirMuessenNegieren)
+                        [self.jQueryOutput appendString:@"!"];
+                    [self.jQueryOutput appendString:bedingung];
+                    [self.jQueryOutput appendString:@"\");\n"];
+                }
+                else
+                {
+                    BOOL wirMuessenNegieren = NO;
+                    if ([idVonDerEsAbhaengigIst rangeOfString:@"!"].location != NSNotFound)
+                    {
+                            idVonDerEsAbhaengigIst = [idVonDerEsAbhaengigIst stringByReplacingOccurrencesOfString:@"!" withString:@""];
+                            wirMuessenNegieren = YES;
+                    }
+
+                    [self.jQueryOutput appendString:@"\n  // Die Visibility ändert sich abhängig von dem Wert einer woanders gesetzten Variable (bei jeder Änderung)\n"];
+                    [self.jQueryOutput appendString:@"  $('#"];
+                    [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
+                    [self.jQueryOutput appendString:@"').change(function()\n  {\n"];
+                    [self.jQueryOutput appendString:@"    toggleVisibility('#"];
+                    [self.jQueryOutput appendString:idName];
+                    [self.jQueryOutput appendString:@"', '#"];
+                    [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
+                    // Da in den Bedingungen selber oft das ' verwendet wird, hier das "
+                    [self.jQueryOutput appendString:@"', \""];
+                    if (wirMuessenNegieren)
+                        [self.jQueryOutput appendString:@"!"];
+                    [self.jQueryOutput appendString:bedingung];
+                    [self.jQueryOutput appendString:@"\");\n"];
+
+                    /* Alte Lösung ohne externe Funktion (Nachteil war, dass ich die initiale
+                     // Visibility nicht setzen konnte):
+                     [self.jQueryOutput appendString:@"    var value = $(this).val();\n"];
+                     [self.jQueryOutput appendString:@"    $('#"];
+                     [self.jQueryOutput appendString:idName];
+                     [self.jQueryOutput appendString:@"').toggle("];
+                     [self.jQueryOutput appendString:bedingung];
+                     [self.jQueryOutput appendString:@");\n"];
+                     [self.jQueryOutput appendString:@"    // Dazu gehörigen Text auch mit entfernen\n"];
+                     [self.jQueryOutput appendString:@"    if ($('#"];
+                     [self.jQueryOutput appendString:idName];
+                     [self.jQueryOutput appendString:@"').prev().is('span'))\n"];
+                     [self.jQueryOutput appendString:@"      $('#"];
+                     [self.jQueryOutput appendString:idName];
+                     [self.jQueryOutput appendString:@"').prev().toggle("];
+                     [self.jQueryOutput appendString:bedingung];
+                     [self.jQueryOutput appendString:@");\n"];
+                     */
+                    [self.jQueryOutput appendString:@"  });\n"];
+
+                    [self.jQueryOutput appendString:@"  // Und einmal sofort die Visibility anpassen\n"];
+                    [self.jQueryOutput appendString:@"  toggleVisibility('#"];
+                    [self.jQueryOutput appendString:idName];
+                    [self.jQueryOutput appendString:@"', '#"];
+                    [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
+                    // Da in den Bedingungen selber oft das ' verwendet wird, hier das "
+                    [self.jQueryOutput appendString:@"', \""];
+                    if (wirMuessenNegieren)
+                        [self.jQueryOutput appendString:@"!"];
+                    [self.jQueryOutput appendString:bedingung];
+                    [self.jQueryOutput appendString:@"\");\n"];
+                }
             }
+        }
         }
     }
 
@@ -977,7 +1075,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"onclick"];
         // Remove all occurrences of $,{,}
-        s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
+        // Wohl doch nicht nötig (und bricht sonst auch selbst definierte Funktionen, welche { und } benutzen
+        // s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
 
         // Wir löschen erstmal 'canvas.', weil wir direkt die Funktin in JS deklarieren
         // Als Klassenmethode macht (noch) keinen Sinn, dann müssten wir ja erstmal mit new() ein objekt anlegen
@@ -986,7 +1085,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
         NSMutableString *gesammelterCode = [[NSMutableString alloc] initWithString:@""];
-        [gesammelterCode appendString:@"$('#"];
+        [gesammelterCode appendString:@"\n// JS-onClick-event\n  $('#"];
         [gesammelterCode appendString:idName];
         [gesammelterCode appendString:@"').click(function(){"];
         [gesammelterCode appendString:s];
@@ -2004,15 +2103,48 @@ didStartElement:(NSString *)elementName
         [self.collectedFrameResources addObject:[attributeDict valueForKey:@"src"]];
     }
 
+
+
     if ([elementName isEqualToString:@"window"])
     {
         element_bearbeitet = YES;
 
-        [self.output appendString:@"<div class=\"ol_standard_window\" style=\""];
+        [self.output appendString:@"<div class=\"ol_standard_window\""];
+
+        // id hinzufügen und gleichzeitg speichern
+        NSString *id = [self addIdToElement:attributeDict];
+        [self.output appendString:@" style=\""];
+
+
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
         [self.output appendString:@"\">\n"];
+
+        // ToDo: Wird derzeit nicht ausgewertet - macht es überhaupt Sinn Window anzuzeigen? Irgendwas mit debug
+        if ([attributeDict valueForKey:@"closeable"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'closeable' for now.");
+        }
+        if ([attributeDict valueForKey:@"resizable"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'resizable' for now.");
+        }
+        if ([attributeDict valueForKey:@"visible"])
+        {
+            // self.attributeCount++;
+            // NSLog(@"Skipping the attribute 'visible' for now.");
+        }
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'name' for now.");
+        }
+
+
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
     }
 
 
@@ -2247,8 +2379,30 @@ didStartElement:(NSString *)elementName
         if ([attributeDict valueForKey:@"text"])
         {
             self.attributeCount++;
-            NSLog(@"Setting the attribute 'text' as text between opening and closing tag.");
-            [self.output appendString:[attributeDict valueForKey:@"text"]];
+
+            if ([[attributeDict valueForKey:@"text"] hasPrefix:@"$"])
+            {
+                NSLog(@"Setting the attribute 'text' later with jQuery, because it is Code.");
+                [self.output appendString:@"CODE! - Wird dynamisch mit jQuery ersetzt."];
+
+
+                NSString *code = [attributeDict valueForKey:@"text"];
+                // Remove all occurrences of $,{,}
+                code = [self removeOccurrencesofDollarAndCurlyBracketsIn:code];
+
+
+                // ToDo, mit ShowEUR gibt es noch Probs
+                if ([code rangeOfString:@"ShowEUR"].location == NSNotFound)
+                {
+                    [self.jQueryOutput appendString:@"\n  // Der Text von BDSText wird hier dynamisch gesetzt\n"];
+                    [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').text(%@);\n",self.zuletztGesetzteID,code]];
+                }
+            }
+            else
+            {
+                NSLog(@"Setting the attribute 'text' as text between opening and closing tag.");
+                [self.output appendString:[attributeDict valueForKey:@"text"]];
+            }
         }
 
         self.weAreInBDStextAndThereMayBeHTMLTags = YES;
@@ -2406,11 +2560,17 @@ didStartElement:(NSString *)elementName
 
 
 
+        NSString *dataset = [attributeDict valueForKey:@"dataset"];
+        // Falls es ein Ausdruck ist, muss ich §,{,} entfernen
+        // Ich lasse den Ausdruck dann von JS auswerten
+        // Aber klappt das auch mit dem Attribut '.value' im Ausdruck? (ToDo)
+        dataset = [self removeOccurrencesofDollarAndCurlyBracketsIn:dataset];
+
         [self.jQueryOutput appendString:@"\n  // Dynamisch gesetzter Inhalt bezüglich combobox "];
         [self.jQueryOutput appendString:id];
         [self.jQueryOutput appendString:@"__CodeMarker\n"];
         [self.jQueryOutput appendString:@"  $.each("];
-        [self.jQueryOutput appendString:[attributeDict valueForKey:@"dataset"]];
+        [self.jQueryOutput appendString:dataset];
         [self.jQueryOutput appendString:@", function(index, option)\n  {\n    $('#"];
         [self.jQueryOutput appendString:id];
         [self.jQueryOutput appendString:@"').append( new Option(option.content, option.value"];
@@ -2573,6 +2733,7 @@ didStartElement:(NSString *)elementName
 
     // ToDo: Bei BDSeditnumber nur Ziffern zulassen als Eingabe inkl. wohl '.' + ',' aber nochmal checken.
     if ([elementName isEqualToString:@"BDSedittext"] ||
+        [elementName isEqualToString:@"edittext"] ||
         [elementName isEqualToString:@"BDSeditnumber"])
     {
         element_bearbeitet = YES;
@@ -2857,6 +3018,7 @@ didStartElement:(NSString *)elementName
     if ([elementName isEqualToString:@"rollUpDownContainer"])
     {
         element_bearbeitet = YES;
+        self.rollupDownElementeCounter = 0;
 
         [self.output appendString:@"<!-- Container für RollUpDown: -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
@@ -2919,17 +3081,19 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
+
         [self.output appendString:@"<!-- RollUpDown-Element: -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
         [self.output appendString:@"<div"];
 
-        // Das äußere Div erhält eine selbst generierte ID, die beiden inneren DIVs erhalten die
-        // in OpenLaszlo gesetzten Original-IDs, dazu müssen wir hier aber nil als attributeDict
-        // angeben, um vorzutäuschen es gäbe keine ID.
-        NSString *id4rollUpDown = [self addIdToElement:nil];
 
+        // Das umgebende DIv bekommt die Haupt-ID, Panel und Leiste 2 Unter-IDs
+        NSString *id4rollUpDown =[self addIdToElement:attributeDict];
+
+        NSString *id4flipleiste = [NSString stringWithFormat:@"%@_flipleiste",id4rollUpDown];;
+        NSString *id4panel = [NSString stringWithFormat:@"%@_panel",id4rollUpDown];
 
 
 
@@ -2949,7 +3113,10 @@ didStartElement:(NSString *)elementName
 
 
 
-        [self.output appendString:@" style=\"width:inherit;height:inherit;"];
+        [self.output appendString:@" style=\"top:"];
+        [self.output appendString:[NSString stringWithFormat:@"%d",self.rollupDownElementeCounter*240]];
+        self.rollupDownElementeCounter++;
+        [self.output appendString:@"px;width:inherit;height:inherit;"];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
@@ -2968,22 +3135,6 @@ didStartElement:(NSString *)elementName
          */
 
 
-        // Die id ermitteln
-        NSString *id4flipleiste;
-        NSString *id4panel;
-        if ([attributeDict valueForKey:@"id"])
-        {
-            self.attributeCount++;
-            id4flipleiste = [attributeDict valueForKey:@"id"];
-            id4panel = [NSString stringWithFormat:@"%@_panel",[attributeDict valueForKey:@"id"]];
-        }
-        else
-        {
-            [self instableXML:@"ERROR: No attribute 'id' given in rollupdown-tag"];
-            //Sollte eigentlich nicht vorkommen, dass wir hier reinrutschen
-            id4flipleiste = [NSString stringWithFormat:@"flipleiste_%d",1];
-            id4panel = [NSString stringWithFormat:@"panel_%d",1];
-        }
 
         // Text für Titelleiste ermitteln
         NSString *title = @"";
@@ -3434,6 +3585,50 @@ didStartElement:(NSString *)elementName
         self.weAreSkippingTheCompleteContenInThisElement = YES;
     }
     // ToDo
+    if ([elementName isEqualToString:@"calculator_anim"])
+    {
+        element_bearbeitet = YES;
+
+
+        if ([attributeDict valueForKey:@"id"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"initstage"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"visible"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"x"])
+            self.attributeCount++;
+
+        // ToDo
+        // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
+        self.weAreSkippingTheCompleteContenInThisElement = YES;
+    }
+    // ToDo
+    if ([elementName isEqualToString:@"certdatepicker"])
+    {
+        element_bearbeitet = YES;
+
+
+        if ([attributeDict valueForKey:@"closeonselect"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"id"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"initstage"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"selecteddate"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"visible"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"x"])
+            self.attributeCount++;
+
+
+
+        // ToDo
+        // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
+        self.weAreSkippingTheCompleteContenInThisElement = YES;
+    }
+    // ToDo
     if ([elementName isEqualToString:@"BDSinputgrid"])
     {
         element_bearbeitet = YES;
@@ -3495,9 +3690,16 @@ didStartElement:(NSString *)elementName
         element_bearbeitet = YES;
 
 
+        if ([attributeDict valueForKey:@"height"])
+            self.attributeCount++;
         if ([attributeDict valueForKey:@"width"])
             self.attributeCount++;
-
+        if ([attributeDict valueForKey:@"id"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"visible"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"layout"])
+            self.attributeCount++;
 
         // ToDo
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
@@ -3571,9 +3773,18 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Setting the attribute 'src' as external JS-File in the <head> of our HTML-File.");
 
-            [self.externalJSFilesOutput appendString:@"<script src=\""];
-            [self.externalJSFilesOutput appendString:[attributeDict valueForKey:@"src"]];
-            [self.externalJSFilesOutput appendString:@"\" type=\"text/javascript\"></script>\n"];
+            if ([[attributeDict valueForKey:@"src"] isEqualToString:@"app-includes/steuerberechnung.js"] ||
+                [[attributeDict valueForKey:@"src"] isEqualToString:@"app-includes/taxango.js"])
+            {
+                // Skippen, weil es da drin einen JS-Bug gibt
+                NSLog(@"Skipping this script (ToDo).");
+            }
+            else
+            {
+                [self.externalJSFilesOutput appendString:@"<script src=\""];
+                [self.externalJSFilesOutput appendString:[attributeDict valueForKey:@"src"]];
+                [self.externalJSFilesOutput appendString:@"\" type=\"text/javascript\"></script>\n"];
+            }
         }
         else
         {
@@ -3707,7 +3918,7 @@ didStartElement:(NSString *)elementName
 
 
 
-    // Ich füge erstmal alle Methoden in ein Objekt ein, dass ich 'parent' nenne, da OpenLaszlo
+    // Ich füge erstmal alle gefundenen Methoden in ein Objekt ein, dass ich 'parent' nenne, da OpenLaszlo
     // oft mit 'parent.*' arbeitet. Evtl. ist dieser Trick etwas zu dirty und muss überdacht werden
     // Die Klasse 'parent' habe ich vorher angelegt.
     if ([elementName isEqualToString:@"method"])
@@ -3735,7 +3946,7 @@ didStartElement:(NSString *)elementName
 
             args = [attributeDict valueForKey:@"args"];
 
-            // Überprüfen ob es default values gibt (mit RegExp)...
+            // Überprüfen ob es default values gibt im Handler direkt (mit RegExp)...
             NSError *error = NULL;
             NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:@"([\\w]+)=([\\w]+)" options:NSRegularExpressionCaseInsensitive error:&error];
 
@@ -3883,6 +4094,21 @@ didStartElement:(NSString *)elementName
             }
 
 
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onkeyup"])
+            {
+                self.attributeCount++;
+                NSLog(@"Binding the method in this handler to a jQuery-onkeyup-event.");
+
+                [self.jQueryOutput appendString:@"\n  // onkeyup-Handler für "];
+                [self.jQueryOutput appendString:self.zuletztGesetzteID];
+                [self.jQueryOutput appendString:@"\n"];
+
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").keyup(function()\n  {\n    ",self.zuletztGesetzteID]];
+
+                // Okay, jetzt Text sammeln und beim schließen einfügen
+            }
+
+
             // ToDo - ich binde es an den unbekannten Handler
             // Klappt laut jQuery-Doku, irgend jemand anderes muss das event dann z. B. per trigger() aufrufen
             if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onsavestate"] ||
@@ -3925,6 +4151,16 @@ didStartElement:(NSString *)elementName
                     self.attributeCount++;
                     NSLog(@"Found the attrubute 'args' with value 'oldvalue'.");
                     NSLog(@"Setting extra-code in the handler to retrieve the oldvalue");
+                }
+            }
+
+            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"k"])
+            {
+                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onkeyup"])
+                {
+                    self.attributeCount++;
+                    NSLog(@"Found the attrubute 'args' with value 'k'.");
+                    NSLog(@"Skipping for now (ToDo)");
                 }
             }
         }
@@ -4032,7 +4268,9 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"nicepopup"] ||
         [elementName isEqualToString:@"nicemodaldialog"] ||
         [elementName isEqualToString:@"nicedialog"] ||
-        [elementName isEqualToString:@"rollUpDownContainerReplicator"])
+        [elementName isEqualToString:@"rollUpDownContainerReplicator"] ||
+        [elementName isEqualToString:@"calculator_anim"] ||
+        [elementName isEqualToString:@"certdatepicker"])
     {
         element_geschlossen = YES;
 
@@ -4207,6 +4445,7 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"BDScombobox"] ||
         [elementName isEqualToString:@"BDScheckbox"] ||
         [elementName isEqualToString:@"BDSedittext"] ||
+        [elementName isEqualToString:@"edittext"] ||
         [elementName isEqualToString:@"BDSeditnumber"] ||
         [elementName isEqualToString:@"BDSFinanzaemter"] ||
         [elementName isEqualToString:@"button"] ||
@@ -4301,7 +4540,89 @@ BOOL isNumeric(NSString *s)
     if ([elementName isEqualToString:@"script"])
     {
         element_geschlossen = YES;
-        [self.jsHead2Output appendString:self.textInProgress];
+
+        NSString *s = self.textInProgress;
+        if (s == nil)
+            s = @"";
+
+
+        
+        // ToDo, DIESES DUMME REGEXP --- Statt dessen einfach return bei function..asdf.sd.fas.afgwe.
+        if ([s rangeOfString:@"function"].location != NSNotFound)
+            return;
+
+        // Jetzt wird's richtig schmutzig, ich muss defaultarguments raus-regexpen, weil es die in JS nicht gibt
+        // Überprüfen ob es default values gibt im Handler direkt (mit RegExp)...
+        NSError *error = NULL;
+        NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:@"function\\(.*?(\\w+)=(\\w+.*?\\))" options:NSRegularExpressionCaseInsensitive error:&error];
+        
+        NSUInteger numberOfMatches = [regexp numberOfMatchesInString:s options:0 range:NSMakeRange(0, [s length])];
+        if (numberOfMatches > 0)
+            NSLog([NSString stringWithFormat:@"Heimlicher RegExpTest: %d",numberOfMatches]);
+        
+        NSArray *matches = [regexp matchesInString:s options:0 range:NSMakeRange(0, [s length])];
+        
+        for (NSTextCheckingResult *match in matches)
+        {
+            NSRange varNameRange = [match rangeAtIndex:1];
+            NSRange defaultValueRange = [match rangeAtIndex:2];
+            
+            NSString *varName = [s substringWithRange:varNameRange];
+            NSLog([NSString stringWithFormat:@"Found variable name: %@",varName]);
+            NSString *defaultValue = [s substringWithRange:defaultValueRange];
+            NSLog([NSString stringWithFormat:@"Found default value: %@",defaultValue]);
+        }
+        
+        
+        
+        
+        //s = [regexp stringByReplacingMatchesInString:s options:0 range:NSMakeRange(0, [s length]) withTemplate:@"NIX"];
+        
+        /*
+         if (numberOfMatches > 0)
+         {
+         NSLog([NSString stringWithFormat:@"There is/are %d pieces of malformed code (default-arguments in function), that is not allowed in JavaScript! I tried to regexp the default arguments out. I hope it worked out.",numberOfMatches]);
+         
+         NSArray *matches = [regexp matchesInString:s options:0 range:NSMakeRange(0, [s length])];
+         
+         NSMutableString *neueArgs = [[NSMutableString alloc] initWithString:@""];
+         
+         for (NSTextCheckingResult *match in matches)
+         {
+         NSRange varNameRange = [match rangeAtIndex:1];
+         NSRange defaultValueRange = [match rangeAtIndex:2];
+         
+         NSString *varName = [s substringWithRange:varNameRange];
+         NSLog([NSString stringWithFormat:@"Found variable name: %@",varName]);
+         NSString *defaultValue = [s substringWithRange:defaultValueRange];
+         NSLog([NSString stringWithFormat:@"Found default value: %@",defaultValue]);
+         
+         // ... dann die Variablennamen der args neu sammeln...
+         if (![neueArgs isEqualToString:@""])
+         [neueArgs appendString:@", "];
+         [neueArgs appendString:varName];
+         
+         
+         
+         ///////////////////// Default- Variablen für JS setzen - Anfang /////////////////////
+         [defaultValues appendString:@"  if(typeof("];
+         [defaultValues appendString:varName];
+         [defaultValues appendString:@")==='undefined') "];
+         [defaultValues appendString:varName];
+         [defaultValues appendString:@" = "];
+         [defaultValues appendString:defaultValue];
+         [defaultValues appendString:@";\n"];
+         ///////////////////// Default- Variablen für JS setzen - Ende /////////////////////
+         }
+         // ... und hier setzen
+         args = neueArgs;
+         }
+         */
+        
+
+
+
+        [self.jsHead2Output appendString:s];
     }
 
 
@@ -4327,6 +4648,9 @@ BOOL isNumeric(NSString *s)
         // HTML-Attribut 'value' ersetzen (muss ich eventuell ändern, falls es Sideeffects gibt)
         // Habe es länger gemacht, um nicht z. B. die Phrase 'text' in einem String zu ersetzen
         s = [s stringByReplacingOccurrencesOfString:@".attr('text'" withString:@".attr('value'"];
+
+
+
 
 
         [self.jQueryOutput appendString:s];
@@ -4356,8 +4680,18 @@ BOOL isNumeric(NSString *s)
             s = [s stringByReplacingOccurrencesOfString:@"  " withString:@" "];
         }
 
+
+
+        // super ist nicht erlaubt in JS und gibt es auch nicht. Ich ersetze es erstmal durch this. ToDo
+        // Evtl. klappt das schon, weil ja eh alle Funktionen in parentKlasse stecken (To Check)
+        s = [s stringByReplacingOccurrencesOfString:@"super" withString:@"this"];
+
+
         // This ersetzen
         // s = [s stringByReplacingOccurrencesOfString:@"this" withString:@"$(this)"];
+
+
+
 
         //s = @"alert('test')";
         [self.jsHead2Output appendString:s];
@@ -4782,10 +5116,41 @@ BOOL isNumeric(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "function toggleVisibility(id, idAbhaengig, bedingungAlsString)\n"
     "{\n"
-    "  var value = $(idAbhaengig).val();\n"
+    "  // To To To - Solange ich noch nicht alles auswerte, muss ich hier\n"
+    "  // bestimmte objekte selber setzen, damit eval() sich nicht beschwert\n"
+    "  var replicator = typeof replicator !== 'undefined' ? replicator : new Object();\n"
+    "  var checked = typeof checked !== 'undefined' ? checked : new Object();\n"
+    "  var cbType = typeof cbType !== 'undefined' ? cbType : new Object();\n"
+    "  var Gewerbesteuerpflicht = typeof Gewerbesteuerpflicht !== 'undefined' ? Gewerbesteuerpflicht : new Object();\n"
+    "  var regelmaessig = typeof regelmaessig !== 'undefined' ? regelmaessig : new Object();\n"
+    "  var begruendet = typeof begruendet !== 'undefined' ? begruendet : new Object();\n"
+    "  var complete = typeof complete !== 'undefined' ? complete : new Object();\n"
+    "  var keinestnr = typeof keinestnr !== 'undefined' ? keinestnr : new Object();\n"
+    "  var isvalid = typeof isvalid !== 'undefined' ? isvalid : new Object();\n"
+    "\n"
+    "\n"
+    "\n"
     "  // 'value' wird intern von OpenLaszlo benutzt! Indem ich auch in JS 'value' in der Zeile\n"
     "  // vorher setze und danach den string auswerte, der 'value' in der Bedingung enthält,\n"
     "  // muss ich das von OpenLaszlo benutzte 'value' nicht intern parsen (nice Trick, I Think)\n"
+    "  if (idAbhaengig == \"__PARENT__\")\n"
+    "  {\n"
+    "      var value = $(idAbhaengig).parent().val();\n"
+    "      // Die nachfolgenden beiden Zeilen helfen mir jetzt bei parent().parent(), oder können sie weg? ToDo\n"
+    "      var parent = $(idAbhaengig).parent().parent();\n"
+    "      parent.value = $(idAbhaengig).parent().parent().val();\n"
+    "  }\n"
+    "  else\n"
+    "  {\n"
+    "      var value = $(idAbhaengig).val();\n"
+    "      // Die nachfolgenden beiden Zeilen helfen mir jetzt bei parent().parent(), oder können sie weg? ToDo\n"
+    "      var parent = $(idAbhaengig).parent();\n"
+    "      parent.value = $(idAbhaengig).parent().val();\n"
+    "  }\n"
+    "\n"
+    " parent.cbType = cbType; // Schummelvariable (ToDo)\n"
+    "\n"
+    "  console.log(bedingungAlsString)\n"
     "  var bedingung = eval(bedingungAlsString);\n"
     "\n"
     "  // Wenn wir ein input sind, vor uns ist ein span und um uns herum ist ein div\n"

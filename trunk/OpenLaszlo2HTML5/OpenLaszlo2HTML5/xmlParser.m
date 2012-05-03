@@ -198,7 +198,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         [[self log] appendString:s];
         [[self log] appendString:@"\n"];
 
-        // ToDo: Diese Zeile nur beim debuggen drin, damit ich nicht scrollen muss (tut extrem verlangsamen sonst)
+        // ToDo: Diese Zeile nur beim debuggen drin, damit ich nicht scrollen muss (tut extrem verlangsamen den Converter-Lauf sonst)
         // [self jumpToEndOfTextView];
     }
 }
@@ -209,7 +209,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // Final Try:
 
 //////////////////////////////////////////////
-// #define NSLog(...) OLLog(self,__VA_ARGS__)
+#define NSLog(...) OLLog(self,__VA_ARGS__)
 //////////////////////////////////////////////
 /********** Dirty Trick um NSLog umzuleiten *********/
 
@@ -4805,11 +4805,12 @@ BOOL isNumeric(NSString *s)
 
     [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n<title>taxango</title>\n"];
 
-    // CSS-Stylesheet-Datei
-    [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n"];
-
     // CSS-Stylesheet-Datei für das Layout der TabSheets (ToDo, wohl leider nicht CSS-konform)
-    [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"humanity.css\">\n"];
+    [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.19/themes/humanity/jquery-ui.css\">\n"];
+
+    // CSS-Stylesheet-Datei // Diese MUSS nach der Humanity-css kommen, da ich bestimmte Sachen
+    // überschreibe
+    [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n"];
 
     // IE-Fallback für canvas (falls ich es benutze) - ToDo
     [pre appendString:@"<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n"];
@@ -4828,7 +4829,7 @@ BOOL isNumeric(NSString *s)
     [pre appendString:self.cssOutput];
     [pre appendString:@"</style>\n\n<script type=\"text/javascript\">\n"];
 
-    // Wird derzeit nicht ins JS ausgegeben, da die Bilder usw. direkt im Code stehen. (Solle das so bleiben?)
+    // Wird derzeit nicht ins JS ausgegeben, da die Bilder usw. direkt im Code stehen. (Soll das so bleiben?)
     // [pre appendString:self.jsHeadOutput]; 
 
     // erstmal nur die mit resource gesammelten globalen vars ausgeben (+ globale Funktionen + globales JS)
@@ -4976,6 +4977,9 @@ BOOL isNumeric(NSString *s)
     "\n"
     "    text-align: center;\n"
     "}\n"
+    "\n"
+    "/* Damit der Hintergrund weiß wird, entgegen der Angabe in Humanity.css */\n"
+    ".ui-widget-content { border: 1px solid #e0cfc2; background: #ffffff; color: #1e1b1d; }\n"
     "\n"
     "img { border: 0 none; }\n"
     //"* { float:left; } //ALLE Elemente sollen nur so viel Platz einnehmen, wie sie auch brauchen\n" <-- Bricht zu viel, lieber einzeln durchgehen, wo nötig

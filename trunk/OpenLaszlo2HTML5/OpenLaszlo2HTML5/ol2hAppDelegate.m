@@ -19,22 +19,21 @@
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification
 {
     // Insert code here to initialize your application
-    BOOL SOFORTSTART = NO;
+    BOOL SOFORTSTART = YES;
 
-    
+
 
     if (SOFORTSTART)
     {
-        // erstmal so starten, weil ich es über den Klick auf den Button nicht hinbekommen
-        // NSString *filename = @"Test.txt";
-        // NSString *path = @"/Users/MI5/Downloads/";
-        // NSData* d = [[NSData alloc] initWithContentsOfFile:[NSString stringWithFormat:@"%@%@",path,filename]];
-        
         NSURL *u = [NSURL URLWithString:@"file://localhost/Users/MI5/Downloads/Taxango2012/Taxango.lzx"];
         BOOL fileExists = [[NSFileManager defaultManager] fileExistsAtPath:[u path]];
         if (!fileExists) // Damit es auch auf Arbeit klappt, dort anderes Verzeichnis
             u = [NSURL URLWithString:@"file://localhost/Users/Blanquett/Downloads/Taxango2012/Taxango.lzx"];
-        
+        fileExists = [[NSFileManager defaultManager] fileExistsAtPath:[u path]];
+        if (!fileExists)
+            return;
+
+
         xmlParser *x = [[xmlParser alloc] initWith:u];
         [x start];
 

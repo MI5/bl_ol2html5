@@ -9,8 +9,8 @@
 // Elementen gesetzt werden, damit es sich auf alle Geschwister-Elemente beziehen kann
 //
 //
-//
-//
+// Nach verdammt viel hin und her, ist die derzeitige Lösung: Standard ist position:relative;
+// Aber sobald x oder y gesetzt wird gilt position:absolute; (somit auch bei Bildern)
 //
 //
 //  Created by Matthias Blanquett on 13.04.12.
@@ -48,6 +48,7 @@
 @property (strong, nonatomic) NSMutableString *output;
 @property (strong, nonatomic) NSMutableString *jsOutput;
 @property (strong, nonatomic) NSMutableString *jQueryOutput;
+@property (strong, nonatomic) NSMutableString *jQueryOutput0;
 @property (strong, nonatomic) NSMutableString *jsHeadOutput;
 @property (strong, nonatomic) NSMutableString *jsHead2Output;   // die mit resource gesammelten globalen vars
                                                                 // (+ globale Funktionen + globales gefundenes JS)
@@ -140,7 +141,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize enclosingElement = _enclosingElement, tempVerschachtelungstiefe = _tempVerschachtelungstiefe;
 
-@synthesize output = _output, jsOutput = _jsOutput, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput;
+@synthesize output = _output, jsOutput = _jsOutput, jQueryOutput = _jQueryOutput, jQueryOutput0 = _jQueryOutput0, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput;
 
 @synthesize errorParsing = _errorParsing, verschachtelungstiefe = _verschachtelungstiefe;
 
@@ -249,6 +250,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.output = [[NSMutableString alloc] initWithString:@""];
         self.jsOutput = [[NSMutableString alloc] initWithString:@""];
         self.jQueryOutput = [[NSMutableString alloc] initWithString:@""];
+        self.jQueryOutput0 = [[NSMutableString alloc] initWithString:@""];
         self.jsHeadOutput = [[NSMutableString alloc] initWithString:@""];
         // Wir sammeln hierdrin die global gesetzten Konstanten/Variablen, auf die vom Open-
         // Laszlo-Skript per canvas.* zugegriffen wird. Dazu legen wir einfach ein
@@ -355,7 +357,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Zur Sicherheit mache ich von allem ne Copy.
         // Nicht, dass es beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy], nil];
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy], nil];
         return r;
     }
 }
@@ -431,10 +433,24 @@ void OLLog(xmlParser *self, NSString* s,...)
     if ([attributeDict valueForKey:@"valign"])
     {
         self.attributeCount++;
-        NSLog(@"Setting the attribute 'valign' as CSS 'vertical-align'.");
-        [style appendString:@"vertical-align:"];
-        [style appendString:[attributeDict valueForKey:@"valign"]];
-        [style appendString:@";"];
+        if ([[attributeDict valueForKey:@"valign"] isEqual:@"middle"])
+        {
+            // http://phrogz.net/css/vertical-align/index.html
+            NSLog(@"Setting the attribute 'valign:middle' as CSS 'position:absolute; top:50%; margin-top:-12px;'.");
+            // Dies beides klappt nicht wirklich...
+            // 1) [style appendString:@"position:absolute; top:50%; margin-top:-12px;"];
+            // 2) [style appendString:@"line-height:4em;"];
+            // Ich setze also über jQuery direkt ausgehend von der Höhe des Eltern-Elements
+            [self.jQueryOutput appendString:@"\n  // valign wurde als Attribut gefunden: Richte das Element entsprechend mittig (vertikal) aus\n"];
+            [self.jQueryOutput appendFormat:@"  $('#%@').css('top',toInt((parseInt($('#%@').parent().css('height'))-parseInt($('#%@').css('height')))/3));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
+        }
+        else
+        {
+            NSLog(@"Setting the attribute 'valign' as CSS 'vertical-align'.");
+            [style appendString:@"vertical-align:"];
+            [style appendString:[attributeDict valueForKey:@"valign"]];
+            [style appendString:@";"];
+        }
     }
 
     if ([attributeDict valueForKey:@"height"])
@@ -615,6 +631,8 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [style appendString:@"px"];
             [style appendString:@";"];
         }
+
+        [style appendString:@"position:absolute;"];
     }
 
     if ([attributeDict valueForKey:@"y"])
@@ -644,6 +662,8 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [style appendString:@"px"];
             [style appendString:@";"];
         }
+
+        [style appendString:@"position:absolute;"];
     }
 
 
@@ -687,8 +707,11 @@ void OLLog(xmlParser *self, NSString* s,...)
         {
             self.attributeCount++;
             NSLog(@"Setting the attribute 'align=center' as CSS 'margin:auto;'.");
+            // Funktioniert leider nicht:
+            //[style appendString:@"margin-left:auto; margin-right:auto;"];
 
-            [style appendString:@"margin:auto;"];
+            [self.jQueryOutput appendString:@"\n  // align wurde als Attribut gefunden: Richte das Element entsprechend mittig (horizontal) aus\n"];
+            [self.jQueryOutput appendFormat:@"  $('#%@').css('left',toInt((parseInt($('#%@').parent().css('width'))-parseInt($('#%@').css('width')))/2));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
         }
 
         // Hier mache ich erstmal nichts, align=left sollte eigentlich Ausgangswert sein, aber To Check (ToDo)
@@ -912,7 +935,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         if ([s isEqualToString:@"false"] || [s isEqualToString:@"true"])
         {
             [self.jQueryOutput appendString:@"\n  // Die Visibility wurde nur per false oder true gesetzt und ist von nichts abhängig\n"];
-            [self.jQueryOutput appendString:@"   $('#"];
+            [self.jQueryOutput appendString:@"  $('#"];
             [self.jQueryOutput appendString:idName];
             [self.jQueryOutput appendString:@"').toggle("];
             [self.jQueryOutput appendString:s];
@@ -1123,7 +1146,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
         NSMutableString *gesammelterCode = [[NSMutableString alloc] initWithString:@""];
-        [gesammelterCode appendString:@"\n// JS-onClick-event\n  $('#"];
+        [gesammelterCode appendString:@"\n  // JS-onClick-event\n  $('#"];
         [gesammelterCode appendString:idName];
         [gesammelterCode appendString:@"').click(function(){"];
         [gesammelterCode appendString:s];
@@ -1365,21 +1388,26 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jsOutput appendString:@"').previousElementSibling.lastElementChild.offsetWidth)+"];
         [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
         [self.jsOutput appendString:@") + \"px\";\n\n"];
-        
+
         wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_X = NO;
     }
     else if (self.simplelayout_x == self.verschachtelungstiefe) // > 0)
     {
         if (!self.firstElementOfSimpleLayout_x)
         {
-            /**************************************
             // Seit wir von absolute auf relative umgestiegen sind und zusätzlich auch noch auf
-            // float:left umgestellt haben, müssen wir die width GAR NICHT mehr korrigieren
+            // float:left umgestellt haben, müssen wir die width GAR NICHT mehr korrigieren */
+            // Stopp: Es gibt eine Ausnahme: Wenn unser Element position:absolute ist, z.B. Bilder
+            // dann müssen wir es doch immer noch verrücken.
 
             // Den allerersten sippling auslassen
+            [self.jsOutput appendString:@"// Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n// und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren.\n"];
             [self.jsOutput appendString:@"if (document.getElementById('"];
             [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').previousElementSibling)\n"];
+            [self.jsOutput appendString:@"').previousElementSibling && document.getElementById('"];
+            [self.jsOutput appendString:id];
+            [self.jsOutput appendString:@"').style.position == 'absolute'"];
+            [self.jsOutput appendString:@")\n"];
 
             [self.jsOutput appendString:@"  document.getElementById('"];
             [self.jsOutput appendString:id];
@@ -1387,15 +1415,24 @@ void OLLog(xmlParser *self, NSString* s,...)
             // parseInt removes the "px" at the end
             [self.jsOutput appendString:@"').style.left = ("];
             //  Seit wir von absolute auf relative umgestiegen sind, brauchen wir nur noch Width
-              [self.jsOutput appendString:@"parseInt(document.getElementById('"];
-              [self.jsOutput appendString:id];
-              [self.jsOutput appendString:@"').previousElementSibling.offsetLeft)+"];
+                //[self.jsOutput appendString:@"parseInt(document.getElementById('"];
+                //[self.jsOutput appendString:id];
+                //[self.jsOutput appendString:@"').previousElementSibling.offsetLeft)+"];
             [self.jsOutput appendString:@"parseInt(document.getElementById('"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').previousElementSibling.offsetWidth)+"];
             [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
             [self.jsOutput appendString:@") + \"px\";\n\n"];
-            **************************************/
+
+            // Ansonsten müssen wir halt nur entsprechend des spacing-Wertes nach rechts rücken.
+            // mit left klappt es nicht (zumindestens nicht bei mehr als 2 Elementen)
+            // mit padding klappt es auch nicht, aber mit margin... zum Glück
+            [self.jsOutput appendString:@"// wegen 'spacing' nach rechts rücken\n"];
+            [self.jsOutput appendString:@"document.getElementById('"];
+            [self.jsOutput appendString:id];
+            [self.jsOutput appendString:@"').style.marginLeft = '"];
+            [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
+            [self.jsOutput appendString:@"px';\n\n"];
         }
         self.firstElementOfSimpleLayout_x = NO;
     }
@@ -1440,12 +1477,13 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         [self.output appendString:[result objectAtIndex:0]];
         [self.jsOutput appendString:[result objectAtIndex:1]];
-        [self.jQueryOutput appendString:[result objectAtIndex:2]];
-        [self.jsHeadOutput appendString:[result objectAtIndex:3]];
-        [self.jsHead2Output appendString:[result objectAtIndex:4]];
-        [self.cssOutput appendString:[result objectAtIndex:5]];
-        [self.externalJSFilesOutput appendString:[result objectAtIndex:6]];
-        [self.allJSGlobalVars addEntriesFromDictionary:[result objectAtIndex:7]];
+        [self.jQueryOutput0 appendString:[result objectAtIndex:2]];
+        [self.jQueryOutput appendString:[result objectAtIndex:3]];
+        [self.jsHeadOutput appendString:[result objectAtIndex:4]];
+        [self.jsHead2Output appendString:[result objectAtIndex:5]];
+        [self.cssOutput appendString:[result objectAtIndex:6]];
+        [self.externalJSFilesOutput appendString:[result objectAtIndex:7]];
+        [self.allJSGlobalVars addEntriesFromDictionary:[result objectAtIndex:8]];
     }
 
     NSLog(@"Leaving recursion");
@@ -1647,9 +1685,26 @@ didStartElement:(NSString *)elementName
             [self.jsOutput appendString:@"').style.width = document.getElementById('"];
             [self.jsOutput appendString:self.zuletztGesetzteID];
             // ToDo: Hier muss ich eigentlich dasjenige Kind suchen, welches die größte Breite hat
+            // offsetWidth killt zu vieles, z.B. Width element9, deswegen style.width lassen
             [self.jsOutput appendString:@"').lastElementChild.style.width"];
             [self.jsOutput appendString:@";\n\n"];
             /*******************/
+
+
+            // Auch noch die Höhe setzen! (Damit die Angaben im umgebenden Div stimmen)
+            // Da sich valign=middle auf die Höhenangabe bezieht, muss diese mit jQueryOutput0
+            // noch vor allen anderen Angaben gesetzt werden.
+
+            [self.jQueryOutput0 appendString:@"\n\n  // Y-Simplelayout: Deswegen die Höhe aller beinhaltenden Elemente auf erster Ebene ermitteln und dem umgebenden div die Summe als Höhe mitgeben\n"];
+            [self.jQueryOutput0 appendString:@"  var sumH = 0;\n  var zaehler = 0;\n  $('#"];
+            [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
+            [self.jQueryOutput0 appendString:@"').children().each(function() {\n    sumH += $(this).outerHeight(true);\n    zaehler++;\n  });\n"];
+            [self.jQueryOutput0 appendString:@"  sumH += (zaehler-1) * "];
+            [self.jQueryOutput0 appendString:[self.simplelayout_y_spacing lastObject]];
+            [self.jQueryOutput0 appendString:@";\n  $('#"];
+            [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
+            [self.jQueryOutput0 appendString:@"').height(sumH);\n"];
+            // [self.jQueryOutput appendString:@"\n  console.log('Die Simplelayout-Höhe ist: ' + sumH);"];
         }
 
 
@@ -1698,6 +1753,21 @@ didStartElement:(NSString *)elementName
             [self.jsOutput appendString:@"').lastElementChild.style.height"];
             [self.jsOutput appendString:@";\n\n"];
             /*******************/
+
+
+            // Auch noch die Breite setzen! (Damit die Angaben im umgebenden Div stimmen)
+            // Da sich valign=middle auf die Höhenangabe bezieht, muss diese mit jQueryOutput0
+            // noch vor allen anderen Angaben gesetzt werden.
+
+            [self.jQueryOutput0 appendString:@"\n  // X-Simplelayout: Deswegen die Breite aller beinhaltenden Elemente auf erster Ebene ermitteln und dem umgebenden div die Summe als Breite mitgeben\n"];
+            [self.jQueryOutput0 appendString:@"  var sumW = 0;\n  var zaehler = 0;\n  $('#"];
+            [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
+            [self.jQueryOutput0 appendString:@"').children().each(function() {\n    sumW += $(this).outerWidth(true);\n    zaehler++;\n  });\n"];
+            [self.jQueryOutput0 appendString:@"  sumW += (zaehler-1) * "];
+            [self.jQueryOutput0 appendString:[self.simplelayout_x_spacing lastObject]];
+            [self.jQueryOutput0 appendString:@";\n  $('#"];
+            [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
+            [self.jQueryOutput0 appendString:@"').width(sumW);\n"];
         }
     }
 
@@ -2114,6 +2184,13 @@ didStartElement:(NSString *)elementName
                 [type_ isEqualTo:@"number"])
                 weNeedQuotes = NO;
 
+            // Kann auch ein berechneter Werte sein ($ davor). Wenn ja dann $ usw. entfernen
+            // und wir arbeiten dann natürlich ohne Quotes.
+            if ([value hasPrefix:@"$"])
+            {
+                value = [self removeOccurrencesofDollarAndCurlyBracketsIn:value];
+                weNeedQuotes = NO;
+            }
 
             [self.jsHead2Output appendString:@"canvas."];
             [self.jsHead2Output appendString:[attributeDict valueForKey:@"name"]];
@@ -2240,11 +2317,25 @@ didStartElement:(NSString *)elementName
         }
 
 
-        // Wird derzeit noch übersprungen (ToDo)
         if ([attributeDict valueForKey:@"placement"])
         {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'placement' on view.");
+            // Es gibt nur einmal im gesamten Code das Attribut placement
+            // Die zugehörige Klasse '_info' ist in BDSlib.lzx definiert
+            // Aber nur dafür extra 'class' auslesen lohnt nicht, stattdessen setzen wir die
+            // Attribute einfach manuell (Trick).
+            if ([[attributeDict valueForKey:@"placement"] isEqualToString:@"_info"])
+            {
+                self.attributeCount++;
+
+                [self.jQueryOutput appendString:@"\n  // Anstatt 'placement' auszuwerten...\n"];
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('background-color','#D29860');\n",id]];
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('left','2px');\n",id]];
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('top','40px');\n",id]];
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('width','inherit');\n",id]];
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('height','50px');\n",id]];
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('line-height','50px');\n",id]];
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').children().filter(':last').css('top','8px');\n",id]];
+            }
         }
 
 
@@ -2495,6 +2586,14 @@ didStartElement:(NSString *)elementName
         [self addIdToElement:attributeDict];
 
         [self.output appendString:@" style=\""];
+
+        // Die Width ist bei input-Feldern regelmäßig zu lang, vermutlich wegen interner
+        // border-/padding-/margin-/Angaben bei OpenLaszlo. Deswegen hier vorher Wert abändern.
+        if ([attributeDict valueForKey:@"width"])
+        {
+            int neueW = [[attributeDict valueForKey:@"width"] intValue]-10;
+            [attributeDict setValue:[NSString stringWithFormat:@"%d",neueW] forKey:@"width"];
+        }
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
@@ -2826,6 +2925,7 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"<input type=\"text\""];
 
+
         NSString *id =[self addIdToElement:attributeDict];
 
 
@@ -2858,6 +2958,16 @@ didStartElement:(NSString *)elementName
 
 
         [self.output appendString:@" style=\""];
+
+
+        // Die Width ist bei input-Feldern regelmäßig zu lang, vermutlich wegen interner
+        // border-/padding-/margin-/Angaben bei OpenLaszlo. Deswegen hier vorher Wert abändern.
+        if ([attributeDict valueForKey:@"width"])
+        {
+            int neueW = [[attributeDict valueForKey:@"width"] intValue]-10;
+            [attributeDict setValue:[NSString stringWithFormat:@"%d",neueW] forKey:@"width"];
+        }
+
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
@@ -3146,7 +3256,7 @@ didStartElement:(NSString *)elementName
         // Das umgebende Div bekommt die Haupt-ID, Panel und Leiste 2 Unter-IDs
         NSString *id4rollUpDown =[self addIdToElement:attributeDict];
 
-        NSString *id4flipleiste = [NSString stringWithFormat:@"%@_flipleiste",id4rollUpDown];;
+        NSString *id4flipleiste = [NSString stringWithFormat:@"%@_flipleiste",id4rollUpDown];
         NSString *id4panel = [NSString stringWithFormat:@"%@_panel",id4rollUpDown];
 
 
@@ -3168,7 +3278,7 @@ didStartElement:(NSString *)elementName
 
 
         [self.output appendString:@" style=\"top:"];
-        [self.output appendString:[NSString stringWithFormat:@"%d",self.rollupDownElementeCounter*140]];
+        [self.output appendString:[NSString stringWithFormat:@"%d",self.rollupDownElementeCounter*111]];
         self.rollupDownElementeCounter++;
         [self.output appendString:@"px;width:"];
         [self.output appendString:[NSString stringWithFormat:@"%d",breiteVonRollUpDown]];
@@ -3200,6 +3310,22 @@ didStartElement:(NSString *)elementName
             NSLog(@"Setting the attribute 'header' as text in <span> in front of element.");
 
             title = [attributeDict valueForKey:@"header"];
+
+
+
+            // Falls der Header variabel ($) ist und berechnet werden muss.
+            if ([[attributeDict valueForKey:@"header"] hasPrefix:@"$"])
+            {
+                NSLog(@"Setting the attribute 'header' later with jQuery, because it is Code.");
+                title = @"CODE! - Wird dynamisch mit jQuery ersetzt.";
+
+                NSString *code = [attributeDict valueForKey:@"header"];
+                // Remove all occurrences of $,{,}
+                code = [self removeOccurrencesofDollarAndCurlyBracketsIn:code];
+
+                [self.jQueryOutput appendString:@"\n  // Der Titel (header) von rollUpDown wird hier dynamisch gesetzt\n"];
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').html('<span style=\"margin-left:8px;\">'+%@+'</span>');\n",id4flipleiste,code]];
+            }
         }
 
         int heightOfFlipBar = 30;
@@ -3392,6 +3518,11 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"<div "];
 
         NSString* geradeVergebeneID = [self addIdToElement:attributeDict];
+
+        // Sonst verrutscht es alles wegen der zwischengeschobenen Leiste
+        // Etwas geschummelt, aber nun gut.
+        [self.output appendString:@" style=\"top:50px;\""];
+
         [self.output appendString:@">\n"];
 
 
@@ -4801,32 +4932,6 @@ BOOL isNumeric(NSString *s)
 
 
 
-- (void) manuelleNachjustierung
-{
-    [self.jQueryOutput appendString:@"// Sachen, die ich leider, leider manuell nachjustieren muss (ToDo)\n "];
-    [self.jQueryOutput appendString:@"$('#element19').css('background-color','#D29860');\n"];
-    [self.jQueryOutput appendString:@"$('#element19').css('left','0');\n"];
-    [self.jQueryOutput appendString:@"$('#element19').css('top','0');\n"];
-    [self.jQueryOutput appendString:@"$('#element19').css('top','0');\n"];
-    [self.jQueryOutput appendString:@"$('#element19').css('float','none');\n"];
-    [self.jQueryOutput appendString:@"$('#element19').css('height','50px');\n"];
-    [self.jQueryOutput appendString:@"$('#element19').css('line-height','50px');\n"];
-    [self.jQueryOutput appendString:@"$('#element19').css('vertical-align','middle');\n"];
-    [self.jQueryOutput appendString:@""];
-    [self.jQueryOutput appendString:@"$('#element21').css('left','280px');\n"];
-    [self.jQueryOutput appendString:@"$('#element21').css('top','7px');\n"];
-    [self.jQueryOutput appendString:@"$('#element23').css('float','none');\n"];
-
-    // Steuertacho-Schriftzug
-    [self.jQueryOutput appendString:@"$('#element22').css('float','none');\n"];
-    [self.jQueryOutput appendString:@"$('#element22').css('left','-300');\n"];
-    [self.jQueryOutput appendString:@"$('#element22').css('top','3');\n"];
-
-    // Die unteren Ecken entfernen von der TabBar
-    [self.jQueryOutput appendString:@"$('ul').removeClass('ui-corner-all');\n"];
-    [self.jQueryOutput appendString:@"$('ul').addClass('ui-corner-top');\n"];
-}
-
 
 
 
@@ -4837,8 +4942,9 @@ BOOL isNumeric(NSString *s)
     if (self.isRecursiveCall)
         return;
 
-    // Leider nötig, sonst verzweifel ich...
-    [self manuelleNachjustierung];
+
+
+
 
 
     NSMutableString *pre = [[NSMutableString alloc] initWithString:@""];
@@ -4911,9 +5017,18 @@ BOOL isNumeric(NSString *s)
     [self.output appendString:@"  function open()\n  {\n    alert('Willst du wirklich deine Ehefrau löschen? Usw...');\n  }\n"];
     [self.output appendString:@"  var dlgFamilienstandSingle = new dlg();\n\n"];
 
-
+    [self.output appendString:self.jQueryOutput0];
+    [self.output appendString:@"\n\n  /*****************************************************/\n\n"];
     [self.output appendString:self.jQueryOutput];
+
+    // Die unteren Ecken entfernen von der TabBar
+    [self.output appendString:@"\n  // Die unteren Ecken entfernen von der TabBar\n"];
+    [self.output appendString:@"  $('ul').removeClass('ui-corner-all');\n"];
+    [self.output appendString:@"  $('ul').addClass('ui-corner-top');\n"];
+
     [self.output appendString:@"});\n</script>\n\n"];
+
+
 
     // Und nur noch die schließenden Tags
     [self.output appendString:@"</body>\n</html>"];
@@ -5182,6 +5297,12 @@ BOOL isNumeric(NSString *s)
 - (void) createJSFile:(NSString*)path
 {
     NSString *js = @"/* DATEI: jsHelper.js */\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Wandelt eine float in einen korrekt gerundeten Integer\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function toInt(n){ return Math.round(Number(n)); };\n"
+    "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Hindere IE 9 am seitlichen scrollen mit dem Scrollrad!\n"

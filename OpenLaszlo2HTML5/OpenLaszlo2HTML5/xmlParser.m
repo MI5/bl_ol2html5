@@ -694,7 +694,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         self.attributeCount++;
         NSLog(@"Setting the attribute 'font' as CSS 'font-family'.");
-        
+
         [style appendString:@"font-family:"];
         [style appendString:[attributeDict valueForKey:@"font"]];
         [style appendString:@";"];
@@ -3277,10 +3277,12 @@ didStartElement:(NSString *)elementName
 
 
 
-        [self.output appendString:@" style=\"top:"];
+        [self.output appendString:@" style=\""];
+        [self.output appendString:@"top:"];
         [self.output appendString:[NSString stringWithFormat:@"%d",self.rollupDownElementeCounter*111]];
         self.rollupDownElementeCounter++;
-        [self.output appendString:@"px;width:"];
+        [self.output appendString:@"px;"];
+        [self.output appendString:@"width:"];
         [self.output appendString:[NSString stringWithFormat:@"%d",breiteVonRollUpDown]];
         [self.output appendString:@"px;height:inherit;"];
 
@@ -3405,7 +3407,6 @@ didStartElement:(NSString *)elementName
             [self.jQueryOutput appendString:@"function() {"];
             [self.jQueryOutput appendString:callback];
             [self.jQueryOutput appendString:@"}"];
-            // [self.jQueryOutput appendString:callback];
         }
         [self.jQueryOutput appendString:@");});\n"];
 
@@ -3417,7 +3418,7 @@ didStartElement:(NSString *)elementName
             if ([[attributeDict valueForKey:@"down"] isEqual:@"false"])
             {
                 NSLog(@"Using the attribute 'down' to close the menu.");
-                
+
                 [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").slideToggle(",id4panel]];
                 // [self.jQueryOutput appendString:self.animDuration];
                 [self.jQueryOutput appendString:@"0); // Einmal zuschieben das Menü\n"];

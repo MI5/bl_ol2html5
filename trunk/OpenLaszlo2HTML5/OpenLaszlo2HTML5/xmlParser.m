@@ -61,6 +61,9 @@
 @property (nonatomic) NSInteger idZaehler;
 @property (nonatomic) NSInteger verschachtelungstiefe;
 
+// je tiefer die Ebene, desto mehr muss ich einrücken
+@property (nonatomic) NSInteger rollUpDownVerschachtelungstiefe;
+
 @property (nonatomic) NSInteger simplelayout_y;
 @property (strong, nonatomic) NSMutableArray *simplelayout_y_spacing;
 @property (nonatomic) NSInteger firstElementOfSimpleLayout_y;
@@ -81,7 +84,7 @@
 @property (nonatomic) int datasetItemsCounter;
 
 // Für jeden Container die Elemente durchzählen, um den Abstand regeln zu können
-@property (nonatomic) int rollupDownElementeCounter;
+@property (strong, nonatomic) NSMutableArray *rollupDownElementeCounter;
 
 // Für das Element RollUpDownContainer
 @property (strong, nonatomic) NSString *animDuration;
@@ -143,7 +146,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize output = _output, jsOutput = _jsOutput, jQueryOutput = _jQueryOutput, jQueryOutput0 = _jQueryOutput0, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput;
 
-@synthesize errorParsing = _errorParsing, verschachtelungstiefe = _verschachtelungstiefe;
+@synthesize errorParsing = _errorParsing, verschachtelungstiefe = _verschachtelungstiefe, rollUpDownVerschachtelungstiefe = _rollUpDownVerschachtelungstiefe;
 
 @synthesize idZaehler = _idZaehler;
 
@@ -278,6 +281,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         self.errorParsing = NO;
         self.verschachtelungstiefe = 0;
+        self.rollUpDownVerschachtelungstiefe = 0;
         self.idZaehler = 0;
 
         self.simplelayout_y = 0;
@@ -299,7 +303,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.lastUsedTabSheetContainerID = @"";
         self.lastUsedDataset = @"";
         self.datasetItemsCounter = 0;
-        self.rollupDownElementeCounter = 0;
+        self.rollupDownElementeCounter = [[NSMutableArray alloc] init];
 
         self.issueWithRecursiveFileNotFound = @"";
 
@@ -3179,7 +3183,14 @@ didStartElement:(NSString *)elementName
     if ([elementName isEqualToString:@"rollUpDownContainer"])
     {
         element_bearbeitet = YES;
-        self.rollupDownElementeCounter = 0;
+
+        // Beim Betreten eins hochzählen, beim Verlassen runterzählen
+        self.rollUpDownVerschachtelungstiefe++;
+
+        // Nicht länger als int gelöst, sondern als Array,
+        // weil es ja verschachtelte rollUpDownContainer geben kann
+        // Beim Betreten Element dazunehmen, beim Verlassen entfernen
+        [self.rollupDownElementeCounter addObject:[NSNumber numberWithInt:0]];
 
         [self.output appendString:@"<!-- Container für RollUpDown: -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
@@ -3244,6 +3255,13 @@ didStartElement:(NSString *)elementName
 
 
         int breiteVonRollUpDown = 760;
+        int abstandNachAussenBeiVerschachtelung = 20;
+        int abstand = (self.rollUpDownVerschachtelungstiefe-1)*abstandNachAussenBeiVerschachtelung;
+        breiteVonRollUpDown = (breiteVonRollUpDown - abstand*2);
+        // Wenn wir verschachtelt sind auch noch die Breite des Rahmens (links und rechts)
+        // abziehen. Erst dann ist es geometrisch.
+        if (abstand > 0)
+            breiteVonRollUpDown -= 4;
 
 
         [self.output appendString:@"<!-- RollUpDown-Element: -->\n"];
@@ -3261,7 +3279,6 @@ didStartElement:(NSString *)elementName
 
 
 
-
         // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur hier,
         // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
         // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
@@ -3276,11 +3293,22 @@ didStartElement:(NSString *)elementName
 
 
 
+        // Den Counter aus dem Array rausziehen und als int auslesen
+        int counter = [[self.rollupDownElementeCounter objectAtIndex:self.rollUpDownVerschachtelungstiefe-1] intValue];
 
         [self.output appendString:@" style=\""];
         [self.output appendString:@"top:"];
-        [self.output appendString:[NSString stringWithFormat:@"%d",self.rollupDownElementeCounter*111]];
-        self.rollupDownElementeCounter++;
+
+        // [self.output appendString:[NSString stringWithFormat:@"%d",counter*111]];
+        // wtf...
+        [self.output appendString:@"6"];
+
+        // Und Zähler um eins erhöhen an der richtigen Stelle im Array
+        [self.rollupDownElementeCounter replaceObjectAtIndex:self.rollUpDownVerschachtelungstiefe-1 withObject:[NSNumber numberWithInt:(counter+1)]];
+
+        [self.output appendString:@"px;"];
+        [self.output appendString:@"left:"];
+        [self.output appendFormat:@"%d",abstand];
         [self.output appendString:@"px;"];
         [self.output appendString:@"width:"];
         [self.output appendString:[NSString stringWithFormat:@"%d",breiteVonRollUpDown]];
@@ -3374,7 +3402,7 @@ didStartElement:(NSString *)elementName
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<!-- Die Flipleiste -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"<div style=\"position:absolute; top:0px; left:0px; width:"];
+        [self.output appendString:@"<div style=\"position:relative; top:0px; left:0px; width:"];
         [self.output appendString:[NSString stringWithFormat:@"%dpx; height:%dpx; background-color:lightblue; line-height: %dpx; vertical-align:middle;\" class=\"ui-corner-top\" id=\"",breiteVonRollUpDown,heightOfFlipBar]];
         [self.output appendString:id4flipleiste];
         [self.output appendString:@"\">\n"];
@@ -3388,7 +3416,7 @@ didStartElement:(NSString *)elementName
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<!-- Das aufklappende Menü -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:[NSString stringWithFormat:@"<div style=\"position:absolute; top:%dpx; left:0px; width:%dpx; height:200px; border-width:2px; border-color:lightgrey; border-style:solid; background-color:white;\" class=\"ui-corner-bottom\" id=\"",heightOfFlipBar,breiteVonRollUpDown-4]];
+        [self.output appendString:[NSString stringWithFormat:@"<div style=\"position:relative; top:%dpx; left:0px; width:%dpx; height:200px; border-width:2px; border-color:lightgrey; border-style:solid; background-color:white;\" class=\"ui-corner-bottom\" id=\"",/*heightOfFlipBar*/ 0,breiteVonRollUpDown-4]];
         [self.output appendString:id4panel];
         [self.output appendString:@"\">\n"];
 
@@ -4665,7 +4693,6 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"buttonnext"] ||
-        [elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"])
     {
@@ -4675,7 +4702,18 @@ BOOL isNumeric(NSString *s)
     }
 
 
+    // Schließen von rollUpDownContainer
+    if ([elementName isEqualToString:@"rollUpDownContainer"])
+    {
+        // Beim Betreten eins hochzählen, beim Verlassen runterzählen
+        self.rollUpDownVerschachtelungstiefe--;
+        // Beim Betreten Element dazunehmen, beim Verlassen entfernen
+        [self.rollupDownElementeCounter removeLastObject];
 
+        element_geschlossen = YES;
+
+        [self.output appendString:@"</div>\n"];
+    }
 
 
     // Schließen von BDStext

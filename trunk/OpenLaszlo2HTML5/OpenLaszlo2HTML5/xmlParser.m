@@ -112,6 +112,10 @@
 // Für dataset ohne Attribut 'src' muss ich die nachfolgenden tags einzeln aufsammeln
 @property (nonatomic) BOOL weAreInDatasetAndNeedToCollectTheFollowingTags;
 
+// Wenn ich in RollUpDown bin, ohne einen umgebenden RollUpDownContainer,
+// muss ich den Abstand leider gesondert regeln.
+@property (nonatomic) BOOL weAreInRollUpDownWithoutSurroundingRUDContainer;
+
 // Derzeit überspringen wir alles im Element class, später ToDo
 // auch in anderen Fällen überspringen wir alle Inhalte, z.B. bei 'splash', das sollten wir so lassen
 // im Fall von 'fileUpload' müssen wir eine komplett neue Lösung finden weil es am iPad keine Files gibt
@@ -173,6 +177,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize weAreInTheTagSwitchAndNotInTheFirstWhen = _weAreInTheTagSwitchAndNotInTheFirstWhen;
 @synthesize weAreInBDStextAndThereMayBeHTMLTags = _weAreInBDStextAndThereMayBeHTMLTags;
 @synthesize weAreInDatasetAndNeedToCollectTheFollowingTags = _weAreInDatasetAndNeedToCollectTheFollowingTags;
+@synthesize weAreInRollUpDownWithoutSurroundingRUDContainer = _weAreInRollUpDownWithoutSurroundingRUDContainer;
 @synthesize weAreSkippingTheCompleteContenInThisElement = _weAreSkippingTheCompleteContenInThisElement;
 @synthesize weAreSkippingTheCompleteContenInThisElement2 = _weAreSkippingTheCompleteContenInThisElement2;
 @synthesize weAreSkippingTheCompleteContenInThisElement3 = _weAreSkippingTheCompleteContenInThisElement3;
@@ -310,6 +315,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.weAreInTheTagSwitchAndNotInTheFirstWhen = NO;
         self.weAreInBDStextAndThereMayBeHTMLTags = NO;
         self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
+        self.weAreInRollUpDownWithoutSurroundingRUDContainer = NO;
         self.weAreSkippingTheCompleteContenInThisElement = NO;
         self.weAreSkippingTheCompleteContenInThisElement2 = NO;
         self.weAreSkippingTheCompleteContenInThisElement3 = NO;
@@ -870,7 +876,12 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         [titlewidth appendString:@" style=\"width:"];
         [titlewidth appendString:[attributeDict valueForKey:@"titlewidth"]];
-        [titlewidth appendString:@"px;\""];
+        //[titlewidth appendString:@"px;top:3px;\""]; // vom Rand wegrückenm damit es zentriert ist
+    }
+    else
+    {
+        // vom Rand wegrückenm damit es zentriert ist
+        //[titlewidth appendString:@" style=\"top:3px;\""];
     }
 
     return titlewidth;
@@ -1698,14 +1709,19 @@ didStartElement:(NSString *)elementName
             // Auch noch die Höhe setzen! (Damit die Angaben im umgebenden Div stimmen)
             // Da sich valign=middle auf die Höhenangabe bezieht, muss diese mit jQueryOutput0
             // noch vor allen anderen Angaben gesetzt werden.
+            // Jedoch darf die Höhe nicht bei RollUpDownContainern gesetzt werden, da diese immer
+            // auf 'auto' gestellt sein müssen, damit es gescheit mit scrollt.
 
-            [self.jQueryOutput0 appendString:@"\n\n  // Y-Simplelayout: Deswegen die Höhe aller beinhaltenden Elemente auf erster Ebene ermitteln und dem umgebenden div die Summe als Höhe mitgeben\n"];
+            [self.jQueryOutput0 appendString:@"\n\n  // Y-Simplelayout: Deswegen die Höhe aller beinhaltenden Elemente auf erster Ebene ermitteln\n  // und dem umgebenden div die Summe als Höhe mitgeben (nur bei rudElement MUSS es auto bleiben)\n"];
             [self.jQueryOutput0 appendString:@"  var sumH = 0;\n  var zaehler = 0;\n  $('#"];
             [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
             [self.jQueryOutput0 appendString:@"').children().each(function() {\n    sumH += $(this).outerHeight(true);\n    zaehler++;\n  });\n"];
             [self.jQueryOutput0 appendString:@"  sumH += (zaehler-1) * "];
             [self.jQueryOutput0 appendString:[self.simplelayout_y_spacing lastObject]];
-            [self.jQueryOutput0 appendString:@";\n  $('#"];
+            [self.jQueryOutput0 appendString:@";\n  if (!($('#"];
+            [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
+            [self.jQueryOutput0 appendString:@"').hasClass('rudElement')))"];
+            [self.jQueryOutput0 appendString:@"\n    $('#"];
             [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
             [self.jQueryOutput0 appendString:@"').height(sumH);\n"];
             // [self.jQueryOutput appendString:@"\n  console.log('Die Simplelayout-Höhe ist: ' + sumH);"];
@@ -2789,6 +2805,32 @@ didStartElement:(NSString *)elementName
 
 
 
+        [self.output appendString:@"<input type=\"checkbox\""];
+
+        NSString *id =[self addIdToElement:attributeDict];
+
+
+        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in input type=checkbox,
+        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
+        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
+            [self.output appendString:@" name=\""];
+            [self.output appendString:[attributeDict valueForKey:@"name"]];
+            [self.output appendString:@"\""];
+        }
+
+        [self.output appendString:@" style=\""];
+        
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+        
+        [self.output appendString:@"vertical-align: middle;\">\n"];
+
+
+
+
         [self.output appendString:@"<span"];
         [self.output appendString:[self addTitlewidth:attributeDict]];
         [self.output appendString:@">"];
@@ -2817,24 +2859,6 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"</span>\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
-        [self.output appendString:@"<input type=\"checkbox\""];
-
-        NSString *id =[self addIdToElement:attributeDict];
-
-
-
-
-        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in input type=checkbox,
-        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
-        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
-            [self.output appendString:@" name=\""];
-            [self.output appendString:[attributeDict valueForKey:@"name"]];
-            [self.output appendString:@"\""];
-        }
 
 
 
@@ -2847,15 +2871,10 @@ didStartElement:(NSString *)elementName
             code = [self removeOccurrencesofDollarAndCurlyBracketsIn:code];
 
             [self.jQueryOutput appendString:@"\n  // checkbox-Text wird hier dynamisch gesetzt\n"];
-            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').prev().text(%@);\n",id,code]];
+            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').next().text(%@);\n",id,code]];
         }
 
 
-        [self.output appendString:@" style=\""];
-
-        [self.output appendString:[self addCSSAttributes:attributeDict]];
-
-        [self.output appendString:@"\">\n"];
 
 
 
@@ -3132,7 +3151,7 @@ didStartElement:(NSString *)elementName
         // Im Prinzip nur wegen controlwidth
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
-        [self.output appendString:@"\">\n"];
+        [self.output appendString:@"margin-left:4px;\">\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"</div>\n\n"];
 
@@ -3184,6 +3203,10 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
+
+        self.weAreInRollUpDownWithoutSurroundingRUDContainer = NO;
+
+
         // Beim Betreten eins hochzählen, beim Verlassen runterzählen
         self.rollUpDownVerschachtelungstiefe++;
 
@@ -3197,7 +3220,7 @@ didStartElement:(NSString *)elementName
 
 
 
-        [self.output appendString:@"<div"];
+        [self.output appendString:@"<div class=\"rudContainer\""];
 
         [self addIdToElement:attributeDict];
 
@@ -3254,21 +3277,59 @@ didStartElement:(NSString *)elementName
         element_bearbeitet = YES;
 
 
+        // Weil es auch verschachtelte rollUpDowns gibt ohne umschließenden Container,
+        // muss ich den Zähler auch hier berücksichtigen.
+        // Beim Betreten eins hochzählen, beim Verlassen runterzählen.
+        self.rollUpDownVerschachtelungstiefe++;
+
+        // Anzahl der rollUpDown-Elemente auf der aktuellen Ebene
+        [self.rollupDownElementeCounter addObject:[NSNumber numberWithInt:0]];
+
+
+
         int breiteVonRollUpDown = 760;
         int abstandNachAussenBeiVerschachtelung = 20;
-        int abstand = (self.rollUpDownVerschachtelungstiefe-1)*abstandNachAussenBeiVerschachtelung;
-        breiteVonRollUpDown = (breiteVonRollUpDown - abstand*2);
-        // Wenn wir verschachtelt sind auch noch die Breite des Rahmens (links und rechts)
-        // abziehen. Erst dann ist es geometrisch.
-        if (abstand > 0)
-            breiteVonRollUpDown -= 4;
 
+        // -2 einmal für den Container und einmal für das rollUpDown-Element selber,
+        // so kommen wir bei 0 raus für die allererste Ebene.
+        // Alte Lösung: (Dann rückt er aber bei dreifach verschachtelten RollUpDowns zu viel ein)
+        // int abstand = (self.rollUpDownVerschachtelungstiefe-2)*abstandNachAussenBeiVerschachtelung;
+        // Neue Lösung:
+        int abstand = 0;
+
+
+        if (self.weAreInRollUpDownWithoutSurroundingRUDContainer)
+        {
+            if (self.rollUpDownVerschachtelungstiefe-2 > 0)
+                abstand = abstandNachAussenBeiVerschachtelung;
+        }
+        else
+        {
+            if (self.rollUpDownVerschachtelungstiefe-2 > 0)
+                abstand = abstandNachAussenBeiVerschachtelung-14;
+        }
+
+
+        // Alte Lösung:
+        // breiteVonRollUpDown = (breiteVonRollUpDown - abstand*2);
+        // Folgeänderung Neue Lösung:
+        breiteVonRollUpDown = (breiteVonRollUpDown - (abstand*2*(self.rollUpDownVerschachtelungstiefe-2)));
+
+        // Auch noch die Breite des Rahmens (links und rechts) abziehen.
+        // Erst dann ist es geometrisch.
+        breiteVonRollUpDown -= 2*2*(self.rollUpDownVerschachtelungstiefe-2);
+
+
+        if (!self.weAreInRollUpDownWithoutSurroundingRUDContainer)
+        {
+            breiteVonRollUpDown -= 6*(self.rollUpDownVerschachtelungstiefe-2);
+        }
 
         [self.output appendString:@"<!-- RollUpDown-Element: -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
-        [self.output appendString:@"<div"];
+        [self.output appendString:@"<div class=\"rudElement\""];
 
 
         // Das umgebende Div bekommt die Haupt-ID, Panel und Leiste 2 Unter-IDs
@@ -3294,7 +3355,7 @@ didStartElement:(NSString *)elementName
 
 
         // Den Counter aus dem Array rausziehen und als int auslesen
-        int counter = [[self.rollupDownElementeCounter objectAtIndex:self.rollUpDownVerschachtelungstiefe-1] intValue];
+        int counter = [[self.rollupDownElementeCounter objectAtIndex:self.rollUpDownVerschachtelungstiefe-2] intValue];
 
         [self.output appendString:@" style=\""];
         [self.output appendString:@"top:"];
@@ -3304,17 +3365,22 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"6"];
 
         // Und Zähler um eins erhöhen an der richtigen Stelle im Array
-        [self.rollupDownElementeCounter replaceObjectAtIndex:self.rollUpDownVerschachtelungstiefe-1 withObject:[NSNumber numberWithInt:(counter+1)]];
+        [self.rollupDownElementeCounter replaceObjectAtIndex:self.rollUpDownVerschachtelungstiefe-2 withObject:[NSNumber numberWithInt:(counter+1)]];
 
-        [self.output appendString:@"px;"];
-        [self.output appendString:@"left:"];
-        [self.output appendFormat:@"%d",abstand];
         [self.output appendString:@"px;"];
         [self.output appendString:@"width:"];
         [self.output appendString:[NSString stringWithFormat:@"%d",breiteVonRollUpDown]];
-        [self.output appendString:@"px;height:inherit;"];
+        [self.output appendString:@"px;"];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+        // left MUSS als letztes, um evtl. x-Angaben zu überschreiben.
+        // Dies betrifft nur das Tab "Vermögenswirksame Leistungen".
+        // Durch die dortige X-Angabe wird es auch position:absolute;
+        // Hoffe das hat keine Seiteneffekte, lasse es aber erstmal so.
+        [self.output appendString:@"left:"];
+        [self.output appendFormat:@"%d",abstand];
+        [self.output appendString:@"px;"];
 
         [self.output appendString:@"\">\n"];
 
@@ -3416,7 +3482,13 @@ didStartElement:(NSString *)elementName
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<!-- Das aufklappende Menü -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:[NSString stringWithFormat:@"<div style=\"position:relative; top:%dpx; left:0px; width:%dpx; height:200px; border-width:2px; border-color:lightgrey; border-style:solid; background-color:white;\" class=\"ui-corner-bottom\" id=\"",/*heightOfFlipBar*/ 0,breiteVonRollUpDown-4]];
+        [self.output appendFormat:@"<div style=\"position:relative; top:0px; left:0px; width:%dpx; ",breiteVonRollUpDown-4];
+        // Bei ganz äußeren RUDs soll die Höhe fix sein, ansonsten nicht
+        if (self.rollUpDownVerschachtelungstiefe-2 == 0)
+            [self.output appendString:@"height:350px; "];
+        else
+            [self.output appendString:@"height:auto; "];
+        [self.output appendString:@"border-width:2px; border-color:lightgrey; border-style:solid; margin-bottom:6px; background-color:white;\" class=\"ui-corner-bottom\" id=\""];
         [self.output appendString:id4panel];
         [self.output appendString:@"\">\n"];
 
@@ -3462,6 +3534,13 @@ didStartElement:(NSString *)elementName
 
         // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw.
         [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id4rollUpDown]]];
+
+
+        // Ich setze es hier auf YES, wenn ein schließendes kommt, dann ist er sofort wieder auf NO
+        // Genauso bei öffnenem RUD-Container auf NO.
+        // Falls erst ein öffnendes kommt, weiß ich so Bescheid und kann die left-Angabe gesondert
+        // berücksichtigen
+        self.weAreInRollUpDownWithoutSurroundingRUDContainer = YES;
     }
 
 
@@ -3503,6 +3582,8 @@ didStartElement:(NSString *)elementName
             tabwidth = [[attributeDict valueForKey:@"tabwidth"] intValue];
             // Derzeit hat es wohl noch eine Border/Margin, nur so haben wir exakt den gleichen Abstand wie bei Taxango
             tabwidth = tabwidth - 6;
+            // Beim IE9 gibt es wohl noch nen extra Randpixel... deswegen nochmal -1
+            tabwidth = tabwidth-1;
             // Damit man im Tab auf der kompletten Tableiste klicken kann
             tabwidthForLink = tabwidth - 4*6;
         }
@@ -4702,19 +4783,6 @@ BOOL isNumeric(NSString *s)
     }
 
 
-    // Schließen von rollUpDownContainer
-    if ([elementName isEqualToString:@"rollUpDownContainer"])
-    {
-        // Beim Betreten eins hochzählen, beim Verlassen runterzählen
-        self.rollUpDownVerschachtelungstiefe--;
-        // Beim Betreten Element dazunehmen, beim Verlassen entfernen
-        [self.rollupDownElementeCounter removeLastObject];
-
-        element_geschlossen = YES;
-
-        [self.output appendString:@"</div>\n"];
-    }
-
 
     // Schließen von BDStext
     if ([elementName isEqualToString:@"BDStext"])
@@ -4749,8 +4817,36 @@ BOOL isNumeric(NSString *s)
 
 
 
+
+    // Schließen von rollUpDownContainer
+    if ([elementName isEqualToString:@"rollUpDownContainer"])
+    {
+        // Beim Betreten eins hochzählen, beim Verlassen runterzählen
+        self.rollUpDownVerschachtelungstiefe--;
+        // Beim Betreten Element dazunehmen, beim Verlassen entfernen
+        [self.rollupDownElementeCounter removeLastObject];
+        
+        element_geschlossen = YES;
+        
+        [self.output appendString:@"</div>\n"];
+    }
+
+
+
+
+    // Schließen von rollUpDown
     if ([elementName isEqualToString:@"rollUpDown"])
     {
+        self.weAreInRollUpDownWithoutSurroundingRUDContainer = NO;
+
+        // Weil es auch verschachtelte rollUpDowns gibt ohne umschließenden Container,
+        // muss ich den Zähler auch hier berücksichtigen.
+        // Beim Betreten eins hochzählen, beim Verlassen runterzählen.
+        self.rollUpDownVerschachtelungstiefe--;
+        // Beim Betreten Element dazunehmen, beim Verlassen entfernen
+        [self.rollupDownElementeCounter removeLastObject];
+
+
         element_geschlossen = YES;
 
         // Wir schließen hier gleich 2 Elemente, da rollUpDown intern aus mehreren Elementen besteht
@@ -5192,7 +5288,7 @@ BOOL isNumeric(NSString *s)
     "/* Alle Divs müssen position:absolute sein, damit die Positionierung stimmt */\n"
     "/* Korrektur: Seit Benutzung jQuery UI müssen alle Divs position:relative sein */\n"
     "/* sonst bricht jQuery UI */\n"
-    "div\n"
+    "div, span\n"
     "{\n"
 	"    position:relative;\n"
     "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
@@ -5281,12 +5377,27 @@ BOOL isNumeric(NSString *s)
     "    margin-top: 8px;\n"
     "}\n"
     "\n"
+    "/* CSS-Angaben für den RollUpDownContainer */\n"
+    "div.rudContainer\n"
+    "{\n"
+    "    margin-left:14px;\n"
+    "}\n"
+    "\n"
+    "/* CSS-Angaben für ein RollUpDownElement */\n"
+    "div.rudElement\n"
+    "{\n"
+    "    height:auto;\n" // War mal 'inherit', aber 'auto' erscheint mir logischer, ob was bricht?
+    "    margin-bottom:6px;\n"
+    "}\n"
+    "\n"
     "/* Standard-datepicker (das umgebende Div) */\n"
     "div.datepicker\n"
     "{\n"
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
     "    float:none; /* Ein datepicker soll immer die ganze Zeile einnehmen. */\n"
+    "    height:30px; /* Sonst ist er nicht richtig anklickbar. */\n"
+    "    line-height:26px; /* Damit der Text vor dem Datepicker vertikal zentriert ist. */\n"
     "    text-align:left;\n"
     "    padding:4px;\n"
     "    margin-top: 8px;\n"
@@ -5298,9 +5409,12 @@ BOOL isNumeric(NSString *s)
     "{\n"
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
+    "    width:100%; /* Eine checkbox soll immer die ganze Zeile einnehmen. */\n"
+    //"    height:24px;\n"
     "    text-align:left;\n"
     "    padding:4px;\n"
     "    margin-top: 8px;\n"
+    "    \n"
     "}\n"
     "\n"
     "/* Standard-textfield (das umgebende Div) */\n"

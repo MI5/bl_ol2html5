@@ -1416,7 +1416,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             // dann müssen wir es doch immer noch verrücken.
 
             // Den allerersten sippling auslassen
-            [self.jsOutput appendString:@"// Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n// und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren.\n"];
+            [self.jsOutput appendString:@"// Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n// und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Spacing wird bei absolute NICHT korrigiert.\n"];
             [self.jsOutput appendString:@"if (document.getElementById('"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').previousElementSibling && document.getElementById('"];
@@ -1435,15 +1435,22 @@ void OLLog(xmlParser *self, NSString* s,...)
                 //[self.jsOutput appendString:@"').previousElementSibling.offsetLeft)+"];
             [self.jsOutput appendString:@"parseInt(document.getElementById('"];
             [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').previousElementSibling.offsetWidth)+"];
-            [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
-            [self.jsOutput appendString:@") + \"px\";\n\n"];
+            [self.jsOutput appendString:@"').previousElementSibling.offsetWidth)"];
 
-            // Ansonsten müssen wir halt nur entsprechend des spacing-Wertes nach rechts rücken.
-            // mit left klappt es nicht (zumindestens nicht bei mehr als 2 Elementen)
+            // Bei position:absolute wirkt sich die Spacing-Angabe NICHT aus, bei allen
+            // betroffenen Elementen so festgestellt...
+            // [self.jsOutput appendFormat:@"+%d", spacing_x];
+
+            [self.jsOutput appendString:@") + \"px\";\n"];
+
+            // ...Deswegen kommt hier auch ein Else hin
+            [self.jsOutput appendString:@"else\n"];
+
+            // Ansonsten müssen wir halt nur/noch entsprechend des spacing-Wertes nach rechts
+            // rücken. Mit left klappt es nicht (zumindestens nicht bei mehr als 2 Elementen)
             // mit padding klappt es auch nicht, aber mit margin... zum Glück
-            [self.jsOutput appendString:@"// wegen 'spacing' nach rechts rücken\n"];
-            [self.jsOutput appendString:@"document.getElementById('"];
+            [self.jsOutput appendString:@"  // ansonsten wegen 'spacing' nach rechts rücken\n"];
+            [self.jsOutput appendString:@"  document.getElementById('"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').style.marginLeft = '"];
             [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
@@ -1778,14 +1785,26 @@ didStartElement:(NSString *)elementName
             // Auch noch die Breite setzen! (Damit die Angaben im umgebenden Div stimmen)
             // Da sich valign=middle auf die Höhenangabe bezieht, muss diese mit jQueryOutput0
             // noch vor allen anderen Angaben gesetzt werden.
+            // Update: Bricht Element9 (z.B.), es wird dann zu breit, deswegen bei
+            // position:absolute es sich per CSS-Angabe -> width:Auto und float:left sich selbst
+            // optimal ausrichten lassen.
+            // Nur bei position:relative muss ich nachhelfen, weil es dort sonst 0 wäre
+            // Auf sowas erstmal zu kommen.... oh man.
 
-            [self.jQueryOutput0 appendString:@"\n  // X-Simplelayout: Deswegen die Breite aller beinhaltenden Elemente auf erster Ebene ermitteln und dem umgebenden div die Summe als Breite mitgeben\n"];
+            [self.jQueryOutput0 appendString:@"\n  // X-Simplelayout: Deswegen die Breite aller beinhaltenden Elemente auf erster Ebene ermitteln und dem umgebenden div die Summe als\n  // Breite mitgeben (das darf nur bei position:relative gemacht werden, position:absolute nimmt von selbst die perfekte Breite an)\n"];
             [self.jQueryOutput0 appendString:@"  var sumW = 0;\n  var zaehler = 0;\n  $('#"];
             [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
             [self.jQueryOutput0 appendString:@"').children().each(function() {\n    sumW += $(this).outerWidth(true);\n    zaehler++;\n  });\n"];
             [self.jQueryOutput0 appendString:@"  sumW += (zaehler-1) * "];
             [self.jQueryOutput0 appendString:[self.simplelayout_x_spacing lastObject]];
-            [self.jQueryOutput0 appendString:@";\n  $('#"];
+            [self.jQueryOutput0 appendString:@";\n"];
+
+            [self.jQueryOutput0 appendString:@"  if ($('#"];
+            [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
+            [self.jQueryOutput0 appendString:@"').css('position') == 'relative'"];
+            [self.jQueryOutput0 appendString:@")\n"];
+
+            [self.jQueryOutput0 appendString:@"    $('#"];
             [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
             [self.jQueryOutput0 appendString:@"').width(sumW);\n"];
         }
@@ -1879,8 +1898,8 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"\">\n"];
 
-        // Wir deklarieren Angaben zur Schriftart und Schriftgröße lieber nochmal als CSS für das body-Element.
-        // Aber nur wenn fontart oder wenigstens fontsize auch angegeben wurde
+        // Wir deklarieren Angaben zur Schriftart und Schriftgröße lieber nochmal als CSS für das
+        // body-Element. Aber nur wenn font-art oder wenigstens fontsize auch angegeben wurde
         if ([attributeDict valueForKey:@"fontsize"] || [attributeDict valueForKey:@"font"])
         {
             NSString *fontsize;
@@ -2348,9 +2367,10 @@ didStartElement:(NSString *)elementName
                 self.attributeCount++;
 
                 [self.jQueryOutput appendString:@"\n  // Anstatt 'placement' auszuwerten...\n"];
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('background-color','#D29860');\n",id]];
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('background-color','#D3964D');\n",id]];
+                // [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('border-right','#D29860 1px solid');\n",id]];
                 [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('left','2px');\n",id]];
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('top','40px');\n",id]];
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('top','39px');\n",id]]; // 39 anstatt 40, damit der Strich am iPad verschwindet
                 [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('width','inherit');\n",id]];
                 [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('height','50px');\n",id]];
                 [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('line-height','50px');\n",id]];
@@ -2611,7 +2631,7 @@ didStartElement:(NSString *)elementName
         // border-/padding-/margin-/Angaben bei OpenLaszlo. Deswegen hier vorher Wert abändern.
         if ([attributeDict valueForKey:@"width"])
         {
-            int neueW = [[attributeDict valueForKey:@"width"] intValue]-10;
+            int neueW = [[attributeDict valueForKey:@"width"] intValue]-14;
             [attributeDict setValue:[NSString stringWithFormat:@"%d",neueW] forKey:@"width"];
         }
 
@@ -4386,7 +4406,7 @@ didStartElement:(NSString *)elementName
                 [self.jQueryOutput appendString:self.zuletztGesetzteID];
                 [self.jQueryOutput appendString:@"\n"];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").load(function()\n  {\n    ",self.zuletztGesetzteID]];
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').load(function()\n  {\n    ",self.zuletztGesetzteID]];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -4426,7 +4446,7 @@ didStartElement:(NSString *)elementName
                 [self.jQueryOutput appendString:self.zuletztGesetzteID];
                 [self.jQueryOutput appendString:@"\n"];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $(\"#%@\").bind('%@',function()\n  {\n    ",self.zuletztGesetzteID,[attributeDict valueForKey:@"name"]]];
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').bind('%@',function()\n  {\n    ",self.zuletztGesetzteID,[attributeDict valueForKey:@"name"]]];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -5087,7 +5107,13 @@ BOOL isNumeric(NSString *s)
     [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n"];
     
     // Nicht HTML5-Konform, aber zum testen um sicherzustellen, dass wir nichts aus dem Cache laden
-    [pre appendString:@"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\n<meta http-equiv=\"pragma\" content=\"no-cache\">\n<meta http-equiv=\"cache-control\" content=\"no-cache\">\n<meta http-equiv=\"expires\" content=\"0\">\n"];
+    [pre appendString:@"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />\n<meta http-equiv=\"pragma\" content=\"no-cache\" />\n<meta http-equiv=\"cache-control\" content=\"no-cache\" />\n<meta http-equiv=\"expires\" content=\"0\" />\n"];
+
+    // Viewport für mobile Devices anpassen...
+    // ...width=device-width funktioniert nicht im Portrait-Modus.
+    // initial-scale baut links und rechts einen kleinen Abstand ein. Wollen wir das? ToDo
+    // [pre appendString:@"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n"];
+    [pre appendString:@"<meta name=\"viewport\" content=\"\" />\n"];
     [pre appendString:@"<title>taxango</title>\n"];
 
     // CSS-Stylesheet-Datei für das Layout der TabSheets (wohl leider nicht CSS-konform, aber
@@ -5450,6 +5476,75 @@ BOOL isNumeric(NSString *s)
 - (void) createJSFile:(NSString*)path
 {
     NSString *js = @"/* DATEI: jsHelper.js */\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Falls sich die Höhe ändert am iPad (orientationchange)\n"
+    "/////////////////////////////////////////////////////////\n"
+    "$(window).bind('orientationchange', function(event)\n"
+    "{\n"
+    "    alert('new orientation:' + window.orientation);\n"
+    "});\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// ! A fix for the iOS orientationchange zoom bug.       \n"
+    "/////////////////////////////////////////////////////////\n"
+    "/*\n"
+    " Script by @scottjehl, rebound by @wilto.\n"
+    " MIT License.\n"
+    " */ /*\n"
+    "(function(w)\n"
+    "{\n"
+    "    // This fix addresses an iOS bug, so return early if the UA claims it's something else.\n"
+    "    if( !( /iPhone|iPad|iPod/.test( navigator.platform ) && navigator.userAgent.indexOf( \"AppleWebKit\" ) > -1 ) ){\n"
+    "        return;\n"
+    "    }\n"
+    "\n"
+    "    var doc = w.document;\n"
+    "\n"
+    "    if( !doc.querySelector ){ return; }\n"
+    "\n"
+    "    var meta = doc.querySelector( \"meta[name=viewport]\" ),\n"
+    "       initialContent = meta && meta.getAttribute( \"content\" ),\n"
+    "       disabledZoom = initialContent + \",maximum-scale=1.024\", // weil wir width= 1024 haben, klappt trotzdem nur manchmal...\n"
+    "       enabledZoom = initialContent + \",maximum-scale=10\",\n"
+    "       enabled = true,\n"
+    "    x, y, z, aig;\n"
+    "\n"
+    "   if( !meta ){ return; }\n"
+    "\n"
+    "   function restoreZoom(){\n"
+    "       meta.setAttribute('content', enabledZoom );\n"
+    "       enabled = true;\n"
+    "    }\n"
+    "\n"
+    "    function disableZoom(){\n"
+    "        meta.setAttribute('content', disabledZoom );\n"
+    "        enabled = false;\n"
+    "     }\n"
+    "\n"
+    "    function checkTilt( e ){\n"
+    "        aig = e.accelerationIncludingGravity;\n"
+    "        x = Math.abs( aig.x );\n"
+    "        y = Math.abs( aig.y );\n"
+    "        z = Math.abs( aig.z );\n"
+    "\n"
+    "        // If portrait orientation and in one of the danger zones\n"
+    "        if( !w.orientation && ( x > 7 || ( ( z > 6 && y < 8 || z < 8 && y > 6 ) && x > 5 ) ) ){\n"
+    "            if( enabled ){\n"
+    "                disableZoom();\n"
+    "            }\n"
+    "            }\n"
+    "        else if( !enabled ){\n"
+    "            restoreZoom();\n"
+    "            }\n"
+    "        }\n"
+    "\n"
+    "    w.addEventListener('orientationchange', restoreZoom, false );\n"
+    "    w.addEventListener('devicemotion', checkTilt, false );\n"
+    "\n"
+    "})( this ); */\n"
+    "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Wandelt eine float in einen korrekt gerundeten Integer\n"

@@ -1416,7 +1416,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             // dann müssen wir es doch immer noch verrücken.
 
             // Den allerersten sippling auslassen
-            [self.jsOutput appendString:@"// Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n// und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Spacing wird bei absolute NICHT korrigiert.\n"];
+            [self.jsOutput appendString:@"// Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n// und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Spacing wird bei 'absolute' NICHT korrigiert.\n"];
             [self.jsOutput appendString:@"if (document.getElementById('"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').previousElementSibling && document.getElementById('"];
@@ -1533,12 +1533,12 @@ didStartElement:(NSString *)elementName
     if ([elementName isEqualToString:@"items"])
     {
         element_bearbeitet = YES;
-        
-        
+
+
         // markierung für den Beginn der item-Liste
         self.datasetItemsCounter = 0;
-        
-        
+
+
         // Hier muss ich auch die Var auf NO setzen, denn dann sind es nur normale 'items', die
         // ich einsammeln kann und keine tags die im Tag-Namem den Variablennamen haben
         self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
@@ -5436,7 +5436,6 @@ BOOL isNumeric(NSString *s)
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
     "    width:100%; /* Eine checkbox soll immer die ganze Zeile einnehmen. */\n"
-    //"    height:24px;\n"
     "    text-align:left;\n"
     "    padding:4px;\n"
     "    margin-top: 8px;\n"
@@ -5489,6 +5488,8 @@ BOOL isNumeric(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// ! A fix for the iOS orientationchange zoom bug.       \n"
     "/////////////////////////////////////////////////////////\n"
+    "// <meta name=\"viewport\" content=\"\" /> muss dazu angegeben worden sein.\n"
+    "// (in content kann natürlich irgendwas rein)\n"
     "/*\n"
     " Script by @scottjehl, rebound by @wilto.\n"
     " MIT License.\n"

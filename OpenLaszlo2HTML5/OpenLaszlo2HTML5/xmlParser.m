@@ -47,8 +47,9 @@
 
 @property (strong, nonatomic) NSMutableString *output;
 @property (strong, nonatomic) NSMutableString *jsOutput;
-@property (strong, nonatomic) NSMutableString *jQueryOutput;
+@property (strong, nonatomic) NSMutableString *jsOLClassesOutput; // Gefundene <class> werden hier gesammelt
 @property (strong, nonatomic) NSMutableString *jQueryOutput0;
+@property (strong, nonatomic) NSMutableString *jQueryOutput;
 @property (strong, nonatomic) NSMutableString *jsHeadOutput;
 @property (strong, nonatomic) NSMutableString *jsHead2Output;   // die mit resource gesammelten globalen vars
                                                                 // (+ globale Funktionen + globales gefundenes JS)
@@ -57,8 +58,12 @@
 
 @property (strong, nonatomic) NSMutableString *externalJSFilesOutput; // per <script src=''> angegebene externe Skripte
 
+@property (strong, nonatomic) NSMutableString *collectedContentOfClass;
+
 @property (nonatomic) BOOL errorParsing;
 @property (nonatomic) NSInteger idZaehler;
+@property (nonatomic) NSInteger elementeZaehler;
+@property (strong, nonatomic) NSString* element_merker; // Für <class>, um erkennen zu können, ob sich das Tag sich direkt wieder schließt: <tag />
 @property (nonatomic) NSInteger verschachtelungstiefe;
 
 // je tiefer die Ebene, desto mehr muss ich einrücken
@@ -91,11 +96,17 @@
 
 // jQuery UI braucht bei jedem auftauchen eines neuen Tabsheets-elements den Namen des aktuellen Tabsheets,
 // um dieses per add einfügen zu können
+// Außerdem wird, wenn diese Variable gesetzt wurde, und somit im Quellcode ein TabSheetContainer aufgetaucht ist
+// eine entsprechende Anpassung der dafür von jQueri UI benutzten Klassen vorgenommen
 @property (strong, nonatomic) NSString *lastUsedTabSheetContainerID;
 
 
 // Damit ich auch intern auf die Inhalte der Variablen zugreifen kann
 @property (strong, nonatomic) NSMutableDictionary *allJSGlobalVars;
+
+// Gefundene <class>-Tags, die definiert wurden
+@property (strong, nonatomic) NSMutableDictionary *allFoundClasses;
+
 
 // Zum internen testen, ob wir alle Attribute erfasst haben
 @property (nonatomic) int attributeCount;
@@ -119,6 +130,7 @@
 // Derzeit überspringen wir alles im Element class, später ToDo
 // auch in anderen Fällen überspringen wir alle Inhalte, z.B. bei 'splash', das sollten wir so lassen
 // im Fall von 'fileUpload' müssen wir eine komplett neue Lösung finden weil es am iPad keine Files gibt
+// ToDo: Umbenennen in: weAreCollectingTheCompleteContentInThisElement
 @property (nonatomic) BOOL weAreSkippingTheCompleteContenInThisElement;
 //auch ein 2. und 3., sonst gibt es Interferenzen wenn ein zu skippendes Element in einem anderen zuu skippenden liegt
 @property (nonatomic) BOOL weAreSkippingTheCompleteContenInThisElement2;
@@ -148,11 +160,11 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize enclosingElement = _enclosingElement, tempVerschachtelungstiefe = _tempVerschachtelungstiefe;
 
-@synthesize output = _output, jsOutput = _jsOutput, jQueryOutput = _jQueryOutput, jQueryOutput0 = _jQueryOutput0, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput;
+@synthesize output = _output, jsOutput = _jsOutput, jsOLClassesOutput = _jsOLClassesOutput, jQueryOutput0 = _jQueryOutput0, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput, collectedContentOfClass = _collectedContentOfClass;
 
 @synthesize errorParsing = _errorParsing, verschachtelungstiefe = _verschachtelungstiefe, rollUpDownVerschachtelungstiefe = _rollUpDownVerschachtelungstiefe;
 
-@synthesize idZaehler = _idZaehler;
+@synthesize idZaehler = _idZaehler, elementeZaehler = _elementeZaehler, element_merker = _element_merker;
 
 @synthesize simplelayout_y = _simplelayout_y, simplelayout_y_spacing = _simplelayout_y_spacing;
 @synthesize firstElementOfSimpleLayout_y = _firstElementOfSimpleLayout_y, simplelayout_y_tiefe = _simplelayout_y_tiefe;
@@ -169,6 +181,8 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize animDuration = _animDuration, lastUsedTabSheetContainerID = _lastUsedTabSheetContainerID;
 
 @synthesize allJSGlobalVars = _allJSGlobalVars;
+
+@synthesize allFoundClasses = _allFoundClasses;
 
 @synthesize attributeCount = _attributeCount;
 
@@ -257,8 +271,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         
         self.output = [[NSMutableString alloc] initWithString:@""];
         self.jsOutput = [[NSMutableString alloc] initWithString:@""];
-        self.jQueryOutput = [[NSMutableString alloc] initWithString:@""];
+        self.jsOLClassesOutput = [[NSMutableString alloc] initWithString:@""];
         self.jQueryOutput0 = [[NSMutableString alloc] initWithString:@""];
+        self.jQueryOutput = [[NSMutableString alloc] initWithString:@""];
         self.jsHeadOutput = [[NSMutableString alloc] initWithString:@""];
         // Wir sammeln hierdrin die global gesetzten Konstanten/Variablen, auf die vom Open-
         // Laszlo-Skript per canvas.* zugegriffen wird. Dazu legen wir einfach ein
@@ -276,6 +291,8 @@ void OLLog(xmlParser *self, NSString* s,...)
                 "function canvasKlasse() {\n}\nvar canvas = new canvasKlasse();\n"
                 "canvasKlasse.prototype.setAttribute = function(varname,value)\n{\n  eval('this.'+varname+' = '+value+';');\n}\n"
                 "canvas.height = $(window).height(); // <-- Var, auf die zugegriffen wird\n\n"
+                // ToDo: 1000 muss natürlich aus dem canvas-element ausgelesen werden
+                // und fixer wert nur wenn keine Prozentangabe dabei
                 "canvas.width = 1000; // $(window).width(); // <-- Var, auf die zugegriffen wird\n\n"
                 "// Globale Klasse für in verschiedenen Methoden (lokal?) deklarierte Methoden\n"
                 "function parentKlasse() {\n}\n"
@@ -283,11 +300,14 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
         self.cssOutput = [[NSMutableString alloc] initWithString:@""];
         self.externalJSFilesOutput = [[NSMutableString alloc] initWithString:@""];
+        self.collectedContentOfClass = [[NSMutableString alloc] initWithString:@""];
 
         self.errorParsing = NO;
         self.verschachtelungstiefe = 0;
         self.rollUpDownVerschachtelungstiefe = 0;
         self.idZaehler = 0;
+        self.elementeZaehler = 0;
+        self.element_merker = @"";
 
         self.simplelayout_y = 0;
         self.simplelayout_y_spacing = [[NSMutableArray alloc] init];
@@ -321,18 +341,20 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.weAreSkippingTheCompleteContenInThisElement3 = NO;
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
+        self.allFoundClasses = [[NSMutableDictionary alloc] initWithCapacity:200];
     }
     return self;
 }
 
 
--(NSArray*) start
+-(NSArray*) startWithString:(NSString*)s
 {
     // NSLog(@"GATTV: %@",[[globalAccessToTextView textStorage] string]);
     // NSLog(@"SharedSingleton: %@",[[sharedSingleton.textView textStorage] string]);
     // [[[sharedSingleton.textView textStorage] mutableString] appendString: @"Dahinter"];
     // [self.log appendString:@"Länger und"];
     // OLLog(self, @"sogar noch länger");
+
 
 
 
@@ -349,9 +371,24 @@ void OLLog(xmlParser *self, NSString* s,...)
     else
     {
         // Create a parser
-        // NSXMLParser *parser = [[NSXMLParser alloc] initWithData:xml];
-        // Die alte Lösung mit Data war nicht perfekt. Per URL ist besser:
-        self.parser = [[NSXMLParser alloc] initWithContentsOfURL:self.pathToFile];
+        if ([s isEqualToString:@""])
+        {
+            self.parser = [[NSXMLParser alloc] initWithContentsOfURL:self.pathToFile];
+        }
+        else
+        {
+            NSData* d = [s dataUsingEncoding:NSUTF8StringEncoding];
+            self.parser = [[NSXMLParser alloc] initWithData:d];
+
+
+            // Ich muss es jetzt sofort nullen, sonst kann es zu einer Endlos-Schleife kommen, wenn ein Include folgt!
+            // Denn vor dem rekursiven Aufruf wird ja getestet ib in self.collectedContentOfClass was drin ist und nur
+            // daran wird erkannt ob wir 's' durchparsen oder den Filename!
+            self.collectedContentOfClass = [[NSMutableString alloc] initWithString:@""];
+            s = @"";
+            // Oder? Check auch mal mit auskommentieren // ToDo
+        }
+
         [self.parser setDelegate:self];
 
         // You may need to turn some of these on depending on the type of XML file you are parsing
@@ -367,9 +404,15 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Zur Sicherheit mache ich von allem ne Copy.
         // Nicht, dass es beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy], nil];
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy], nil];
         return r;
     }
+}
+
+
+-(NSArray*) start
+{
+    return [self startWithString:@""];
 }
 
 
@@ -426,13 +469,13 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Egal welcher String da drin steht, hauptsache nicht Canvas
     // Für canvas muss ich bei bestimmten Attributen anders vorgehen
     // insbesondere font-size wird dann global deklariert usw.
-    return [self addCSSAttributes:attributeDict onElement:@"xyz"];
+    return [self addCSSAttributes:attributeDict toElement:@"xyz"];
 }
 
 
 
 
-- (NSMutableString*) addCSSAttributes:(NSDictionary*) attributeDict onElement:(NSString*) elemName
+- (NSMutableString*) addCSSAttributes:(NSDictionary*) attributeDict toElement:(NSString*) elemName
 {
     // Alle Styles in einem eigenen String sammeln, könnte nochmal nützlich werden
     NSMutableString *style = [[NSMutableString alloc] initWithString:@""];
@@ -1291,7 +1334,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    // Skipping this attributes
+    // Skipping this attribute // ToDo...
     if ([attributeDict valueForKey:@"datapath"])
     {
         self.attributeCount++;
@@ -1590,13 +1633,15 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         [self.output appendString:[result objectAtIndex:0]];
         [self.jsOutput appendString:[result objectAtIndex:1]];
-        [self.jQueryOutput0 appendString:[result objectAtIndex:2]];
-        [self.jQueryOutput appendString:[result objectAtIndex:3]];
-        [self.jsHeadOutput appendString:[result objectAtIndex:4]];
-        [self.jsHead2Output appendString:[result objectAtIndex:5]];
-        [self.cssOutput appendString:[result objectAtIndex:6]];
-        [self.externalJSFilesOutput appendString:[result objectAtIndex:7]];
-        [self.allJSGlobalVars addEntriesFromDictionary:[result objectAtIndex:8]];
+        [self.jsOLClassesOutput appendString:[result objectAtIndex:2]];
+        [self.jQueryOutput0 appendString:[result objectAtIndex:3]];
+        [self.jQueryOutput appendString:[result objectAtIndex:4]];
+        [self.jsHeadOutput appendString:[result objectAtIndex:5]];
+        [self.jsHead2Output appendString:[result objectAtIndex:6]];
+        [self.cssOutput appendString:[result objectAtIndex:7]];
+        [self.externalJSFilesOutput appendString:[result objectAtIndex:8]];
+        [self.allJSGlobalVars addEntriesFromDictionary:[result objectAtIndex:9]];
+        [self.allFoundClasses addEntriesFromDictionary:[result objectAtIndex:10]];
     }
 
     NSLog(@"Leaving recursion");
@@ -1619,6 +1664,10 @@ didStartElement:(NSString *)elementName
     // Zum internen testen, ob wir alle Attribute erfasst haben
     self.attributeCount = 0;
 
+    // Zählt alle Elemente durch
+    // Berücksichtigt noch keine rekursiv erfassten Element
+    // Hat derzeit nur rein statistische Zwecke bzw. keinen Zweck (ToDo - Delete?)
+    self.elementeZaehler++;
 
 
     if ([elementName isEqualToString:@"items"])
@@ -1639,6 +1688,8 @@ didStartElement:(NSString *)elementName
     // Muss ich dringend tun und wenn ich hier drin bin alle Tags einsammeln (ToDo)
     if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
     {
+        [self.collectedContentOfClass appendString:@""];
+
         NSLog([NSString stringWithFormat:@"\nSkipping the Element %@ for now.", elementName]);
         return;
     }
@@ -1648,6 +1699,30 @@ didStartElement:(NSString *)elementName
     // skipping all Elements in fileUpload (ToDo)
     if (self.weAreSkippingTheCompleteContenInThisElement)
     {
+        // Wenn wir in <class> sind, sammeln wir alles (wird erst später rekursiv ausgewertet)
+        // Erst den Elementnamen hinzufügen
+        [self.collectedContentOfClass appendFormat:@"<%@",elementName];
+
+        // Dann die Attribute
+        NSArray *keys = [attributeDict allKeys];
+        if ([keys count] > 0)
+        {
+            for (NSString *key in keys)
+            {
+                [self.collectedContentOfClass appendString:@" "];
+                [self.collectedContentOfClass appendString:key];
+                [self.collectedContentOfClass appendString:@"=\""];
+                [self.collectedContentOfClass appendString:[attributeDict valueForKey:key]];
+                [self.collectedContentOfClass appendString:@"\""];
+            }
+        }
+
+        [self.collectedContentOfClass appendString:@">"];
+
+        // Falls der unverändert bleibt, muss ich das eben gesetzte '>' wieder entfernen und durch '/>' ersetzen
+        self.element_merker = elementName;
+
+
         NSLog([NSString stringWithFormat:@"\nSkipping the Element %@", elementName]);
         return;
     }
@@ -2036,7 +2111,7 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@" class=\"ol_standard_canvas\" style=\""];
 
-        [self.output appendString:[self addCSSAttributes:attributeDict onElement:elementName]];
+        [self.output appendString:[self addCSSAttributes:attributeDict toElement:elementName]];
 
         [self.output appendString:@"\">\n"];
 
@@ -2347,6 +2422,7 @@ didStartElement:(NSString *)elementName
         NSString *type_;
         if ([attributeDict valueForKey:@"type"])
         {
+            NSLog(@"Using the attribute 'type' to determine if we need quotes.");
             self.attributeCount++;
             type_ = [attributeDict valueForKey:@"type"];
         }
@@ -2358,11 +2434,20 @@ didStartElement:(NSString *)elementName
         NSString *value;
         if ([attributeDict valueForKey:@"value"])
         {
+            NSLog(@"Setting the attribute 'value' as value of the class-member (see next line).");
             self.attributeCount++;
             value = [attributeDict valueForKey:@"value"];
         }
         else
             value = @""; // Quotes werden dann automatisch unten reingesetzt
+
+
+        // Das Attribut 'setter' hmmm, ToDo
+        if ([attributeDict valueForKey:@"setter"])
+        {
+            NSLog(@"Skipping the attribute 'setter' (ToDo).");
+            self.attributeCount++;
+        }
 
 
         // ToDo: 'attrbute' kann bis jetzt nur globale Variable verarbeiten, die direkt in canvas liegen
@@ -2396,6 +2481,13 @@ didStartElement:(NSString *)elementName
             // Auch intern die Var speichern? Erstmal nein. Wir wollen bewusst per JS/jQuery immer
             // drauf zugreifen! Weil die Variablen nach dem Export noch benutzbar sein sollen.
             // [self.allJSGlobalVars setObject:[attributeDict valueForKey:@"src"] forKey:[attributeDict valueForKey:@"name"]];
+        }
+
+        // Das Attribut 'when' taucht in Doku nicht auf, wird ignoriert
+        if ([attributeDict valueForKey:@"when"])
+        {
+            NSLog(@"Skipping the attribute 'when'.");
+            self.attributeCount++;
         }
     }
 
@@ -3846,7 +3938,8 @@ didStartElement:(NSString *)elementName
 
 
     // Nichts zu tun
-    if ([elementName isEqualToString:@"library"])
+    if ([elementName isEqualToString:@"library"] ||
+        [elementName isEqualToString:@"passthrough"])
     {
         element_bearbeitet = YES;
     }
@@ -3875,13 +3968,125 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
     }
 
+
+    // ToDo
+    if ([elementName isEqualToString:@"calcDisplay"] || // Ist das eine selbst defineirte Klasse? ToDo
+        [elementName isEqualToString:@"calcButton"]) // Ist das eine selbst defineirte Klasse? ToDo
+    {
+        element_bearbeitet = YES;
+        
+        if ([attributeDict valueForKey:@"id"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"buttLabel"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"resource"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"labelX"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"align"])
+            self.attributeCount++;
+    }
+
+
     // MEGA MEGA ToDo ToDo ToDo class
     if ([elementName isEqualToString:@"class"])
     {
         element_bearbeitet = YES;
 
+
         if ([attributeDict valueForKey:@"name"])
+        {
             self.attributeCount++;
+
+            NSString * name = [attributeDict valueForKey:@"name"];
+
+            // Wir sammeln alle gefundenen 'name'-Attribute von class in einem eigenen Dictionary. Weil die names
+            // können später eigene <tags> werden! Ich muss dann später darauf testen, ob das ELement vorher
+            // definiert wurde.
+            [self.allFoundClasses setObject:@"Blabla Blub ToDo" forKey:name];
+
+            // Auserdem speichere ich die gefunden Klasse als JS-Objekt und schreibe es nach collectedClasses.js
+            // Weil die Attribute ja neu gesetzt werden können, muss ich sie einzeln speichern und später,
+            // wenn die Klasse instanziert wird auf eventuell überschriebene Attribute checken
+
+
+            NSArray *keys = [attributeDict allKeys];
+
+
+            [self.jsOLClassesOutput appendString:@"\n\n"];
+            [self.jsOLClassesOutput appendString:@"///////////////////////////////////////////////////////////////\n"];
+            [self.jsOLClassesOutput appendFormat:@"// class = %@ //\n",name];
+            [self.jsOLClassesOutput appendString:@"///////////////////////////////////////////////////////////////\n"];
+            [self.jsOLClassesOutput appendFormat:@"var %@ = function() {\n",name];
+
+
+            if ([keys count] > 0)
+            {
+                // Alle Attributnamen als Array hinzufügen
+                [self.jsOLClassesOutput appendString:@"  this.attributeNames = ["];
+
+                int i = 0;
+                for (NSString *key in keys)
+                {
+                    i++;
+
+                    [self.jsOLClassesOutput appendString:@"'"];
+                    [self.jsOLClassesOutput appendString:key];
+                    [self.jsOLClassesOutput appendString:@"'"];
+
+                    if (i < [keys count])
+                        [self.jsOLClassesOutput appendString:@", "];
+                }
+
+                [self.jsOLClassesOutput appendString:@"];\n"];
+
+
+                // Und alle Attributwerte als Array hinzufügen
+                [self.jsOLClassesOutput appendString:@"  this.attributeValues = ["];
+
+                i = 0;
+                for (NSString *key in keys)
+                {
+                    i++;
+                    
+                    [self.jsOLClassesOutput appendString:@"'"];
+                    [self.jsOLClassesOutput appendString:[attributeDict valueForKey:key]];
+                    [self.jsOLClassesOutput appendString:@"'"];
+                    
+                    if (i < [keys count])
+                        [self.jsOLClassesOutput appendString:@", "];
+                }
+
+                [self.jsOLClassesOutput appendString:@"];\n\n"];
+            }
+
+            // Den Content von der Klasse ermitteln wir so:
+            // Wir lassen es einmal rekrusiv durchlaufen und können so die OL-Elemente in HTML-Elemente umwandeln
+            // Später fügt jQuery diese HTML-Elemente, beim auslesen des JS-Objekts, als HTML-Code ein.
+            // Hier den String leeren, und dann alles innerhalb <class> definierte da drin sammeln.
+            // Wenn <class> geschlossen wird, dann hinzufügen.
+            self.collectedContentOfClass = [[NSMutableString alloc] initWithString:@""];
+        }
+        else
+        {
+            [self instableXML:@"Eine class ohne 'name'-Attribut macht wohl keinen Sinn. Wie soll man sie sonst später ansprechen?"];
+        }
+
+
+
+
+
+
+        // Theoretisch könnte auch eine id gesetzt worden sein, auch wenn OL-Doku davon abrät!
+        // http://www.openlaszlo.org/lps4.9/docs/developers/tutorials/classes-tutorial.html (1.1)
+        // Dann hier aussteigen
+        if ([attributeDict valueForKey:@"id"])
+        {
+            [self instableXML:@"ID attribute on class found!!! It's important to note that you should not assign an id attribute in a class definition. Each id should be unique; ids are global and if you were to include an id assignment in the class definition, then creating several instances of a class would several views with the same id, which would cause unpredictable behavior. http://www.openlaszlo.org/lps4.9/docs/developers/tutorials/classes-tutorial.html (1.1)"];
+        }
+
+
+        // ToDo: ALL This attributes
         if ([attributeDict valueForKey:@"clickable"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"extends"])
@@ -3964,12 +4169,12 @@ didStartElement:(NSString *)elementName
         // Alles was in class definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten
         self.weAreSkippingTheCompleteContenInThisElement = YES;
     }
-    if ([elementName isEqualToString:@"splash"])
+    if ([elementName isEqualToString:@"splash"]) // ToDo (ist das vielleicht selbst definierte Klasse?)
     {
         element_bearbeitet = YES;
         self.weAreSkippingTheCompleteContenInThisElement = YES;
     }
-    if ([elementName isEqualToString:@"fileUpload"])
+    if ([elementName isEqualToString:@"fileUpload"]) // ToDo (ist selbst defnierte Klasse)
     {
         element_bearbeitet = YES;
         self.weAreSkippingTheCompleteContenInThisElement = YES;
@@ -4212,6 +4417,14 @@ didStartElement:(NSString *)elementName
 
 
 
+
+
+
+
+
+
+
+
     // Das ist nur ein Schalter. Erst im Nachfolgenden schließenden Element 'when' müssen wir aktiv werden.
     // Jedoch im schließenden 'switch' schalten wir wieder zurück.
     if ([elementName isEqualToString:@"switch"])
@@ -4394,14 +4607,56 @@ didStartElement:(NSString *)elementName
 
         [self addIdToElement:attributeDict];
 
+
+
+
+
+        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur hier,
+        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
+        // Und gemäß HTML-Spezifikation ist es hier auch nicht erlaubt
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
+            [self.output appendString:@" name=\""];
+            [self.output appendString:[attributeDict valueForKey:@"name"]];
+            [self.output appendString:@"\""];
+        }
+
+
+
+
+
         [self.output appendString:@" class=\"ol_text\" style=\""];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
         [self.output appendString:@"\">"];
 
+        // Dann Text mit foundCharacters sammeln und beim schließen anzeigen
 
-        // Text mit foundCharacters sammeln und beim schließen anzeigen
+
+
+
+
+        if ([attributeDict valueForKey:@"resize"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'resize'.");
+        }
+
+        // Puh, Text kann auch direkt gesetzt werden... erstmal ToDo, aber wohl nur Copy von BDSText oder so.
+        // ToDo ToDo
+        if ([attributeDict valueForKey:@"text"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'text'.");
+        }
+
+
+
+        // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw.
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]]];
     }
 
 
@@ -4581,6 +4836,47 @@ didStartElement:(NSString *)elementName
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
 
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onfocus"])
+            {
+                self.attributeCount++;
+                NSLog(@"Binding the method in this handler to a jQuery-focus-event.");
+
+                [self.jQueryOutput appendString:@"\n  // focus-Handler für "];
+                [self.jQueryOutput appendString:self.zuletztGesetzteID];
+                [self.jQueryOutput appendString:@"\n"];
+
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').focus(function()\n  {\n    ",self.zuletztGesetzteID]];
+
+                // Okay, jetzt Text sammeln und beim schließen einfügen
+            }
+
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onmouseover"])
+            {
+                self.attributeCount++;
+                NSLog(@"Binding the method in this handler to a jQuery-mouseover-event.");
+
+                [self.jQueryOutput appendString:@"\n  // mouseover-Handler für "];
+                [self.jQueryOutput appendString:self.zuletztGesetzteID];
+                [self.jQueryOutput appendString:@"\n"];
+
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').mouseover(function()\n  {\n    ",self.zuletztGesetzteID]];
+
+                // Okay, jetzt Text sammeln und beim schließen einfügen
+            }
+
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onmouseout"])
+            {
+                self.attributeCount++;
+                NSLog(@"Binding the method in this handler to a jQuery-mouseout-event.");
+
+                [self.jQueryOutput appendString:@"\n  // mouseout-Handler für "];
+                [self.jQueryOutput appendString:self.zuletztGesetzteID];
+                [self.jQueryOutput appendString:@"\n"];
+
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').mouseout(function()\n  {\n    ",self.zuletztGesetzteID]];
+
+                // Okay, jetzt Text sammeln und beim schließen einfügen
+            }
 
             if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onkeyup"])
             {
@@ -4606,13 +4902,15 @@ didStartElement:(NSString *)elementName
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"onfirstdown"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"ondatedays"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"onchecked"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onhasdefault"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"onrolleddown"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onvisible"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"ontabselected"])
             {
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a custom jQuery-event (has to be triggered).");
 
-                [self.jQueryOutput appendString:@"\n  // load-Handler für "];
+                [self.jQueryOutput appendString:@"\n  // 'custom'-Handler für "];
                 [self.jQueryOutput appendString:self.zuletztGesetzteID];
                 [self.jQueryOutput appendString:@"\n"];
 
@@ -4642,6 +4940,7 @@ didStartElement:(NSString *)elementName
                 }
             }
 
+            // ToDo:
             if ([[attributeDict valueForKey:@"args"] isEqualToString:@"k"])
             {
                 if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onkeyup"])
@@ -4651,11 +4950,54 @@ didStartElement:(NSString *)elementName
                     NSLog(@"Skipping for now (ToDo)");
                 }
             }
+            // ToDo:
+            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"invoker"])
+            {
+                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"oninit"])
+                {
+                    self.attributeCount++;
+                    NSLog(@"Found the attrubute 'args' with value 'k'.");
+                    NSLog(@"Skipping for now (ToDo)");
+                }
+            }
+        }
+    }
+
+    // ToDo - events sind wohl sehr ähnlich <handler>
+    // s. http://www.openlaszlo.org/lps4.9/docs/developers/methods-events-attributes.html
+    // Überhaupt alles da drin ToDo
+    if ([elementName isEqualToString:@"event"])
+    {
+        element_bearbeitet = YES;
+
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'name' now (ToDo)");
         }
     }
 
 
 
+
+
+    // Okay, letzte Chance: Wenn es vorher nicht gematcht hat. Dann war es eventuell eine selbst definierte Klasse?
+    // Haben wir die Klasse auch vorher aufgesammelt? Nur dann geht es hier weiter.
+    if (!element_bearbeitet && ([self.allFoundClasses objectForKey:elementName] != nil))
+    {
+        element_bearbeitet = YES;
+
+        NSLog(@"Öffnendes Tag einer selbst definierten Klasse gefunden!");
+        // NSLog([NSString stringWithFormat:@"%@",elementName]);
+        // NSLog([NSString stringWithFormat:@"%@",[self.allFoundClasses objectForKey:elementName]]);
+
+        // ToDo
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+
+
+        // ToDo: Okay, hier muss ich jetzt per jQuery die Objekte auslesen aus der JS-Datei collectedClasses.js
+    }
 
 
 
@@ -4747,6 +5089,97 @@ BOOL isNumeric(NSString *s)
 
 
 
+
+
+
+    // Okay, beim schließen den gesammelten String rekursiv auswerten und dann das Ergebnis der JS-Klasse hinzufügen
+    if ([elementName isEqualToString:@"class"])
+    {
+        NSLog(@"Starting recursion (with String, not file, because of <class>) Content of string:");
+
+
+        // Es muss ein gesamtumfassendes Tag geben, sonst ist es kein valides XML.
+        // <library>, weil dies einerseits bereits in OL vorkommt und andererseits neutral ist.
+        self.collectedContentOfClass = [[NSMutableString alloc] initWithFormat:@"<library>%@",self.collectedContentOfClass];
+        [self.collectedContentOfClass appendString:@"</library>"];
+
+
+        NSLog(self.collectedContentOfClass);
+        xmlParser *x = [[xmlParser alloc] initWith:self.pathToFile recursiveCall:YES];
+
+        // In <class> definierte Elemente greifen auch auf extern definierte Ressourcen zurück.
+        // Muss ich deswegen hier übertragen.
+        x.allJSGlobalVars = self.allJSGlobalVars;
+
+        NSArray* result = [x startWithString:self.collectedContentOfClass];
+        NSLog(@"Leaving recursion (with String, not file, because of <class>)");
+
+
+        // NATÜRLICH DARF ICH HIER NICH APPENDEN, bzw. nicht immer. :-)
+        // Ich nehme die einzelnen Resultate und muss schauen was davon relevant ist.
+        NSString *rekurisveRueckgabeOutput = [result objectAtIndex:0];
+        if (![rekurisveRueckgabeOutput isEqualToString:@""])
+            NSLog(@"String 0 aus der Rekursion wird unser content für das JS-Objekt.");
+
+
+        NSString *rekursiveRueckgabeJsOutput = [result objectAtIndex:1];
+        if (![rekursiveRueckgabeJsOutput isEqualToString:@""])
+            NSLog(@"String 1 aus der Rekursion wird unser content für ??? ToDo");
+
+        NSString *rekursiveRueckgabeJsOLClassesOutput = [result objectAtIndex:2];
+        if (![rekursiveRueckgabeJsOLClassesOutput isEqualToString:@""])
+            [self instableXML:@"<class> liefert was in 2 zurück. Da muss ich mir was überlegen!"];
+
+        NSString *rekursiveRueckgabeJQueryOutput0 = [result objectAtIndex:3];
+        if (![rekursiveRueckgabeJQueryOutput0 isEqualToString:@""])
+            NSLog(@"String 3 aus der Rekursion wird unser content für ??? ToDo");
+
+        NSString *rekursiveRueckgabeJQueryOutput = [result objectAtIndex:4];
+        if (![rekursiveRueckgabeJQueryOutput isEqualToString:@""])
+            NSLog(@"String 4 aus der Rekursion wird unser content für das JS-Objekt.?? ToDo");
+        NSString *rekursiveRueckgabeJsHeadOutput = [result objectAtIndex:5];
+        if (![rekursiveRueckgabeJsHeadOutput isEqualToString:@""])
+            [self instableXML:@"<class> liefert was in 5 zurück. Da muss ich mir was überlegen!"];
+
+        // ToDo: Diesen String muss ich noch auswerten und irgendwie verbauen
+        NSString *rekursiveRueckgabeJsHead2Output = [result objectAtIndex:6];
+        if (![rekursiveRueckgabeJsHead2Output isEqualToString:@""])
+            NSLog(@"String 6 aus der Rekursion wird unser content für ??? ToDo");
+
+        NSString *rekursiveRueckgabeCssOutput = [result objectAtIndex:7];
+        if (![rekursiveRueckgabeCssOutput isEqualToString:@""])
+            [self instableXML:@"<class> liefert was in 7 zurück. Da muss ich mir was überlegen!"];
+        NSString *rekursiveRueckgabeExternalJSFilesOutput = [result objectAtIndex:8];
+        if (![rekursiveRueckgabeExternalJSFilesOutput isEqualToString:@""])
+            [self instableXML:@"<class> liefert was in 8 zurück. Da muss ich mir was überlegen!"];
+
+        // ToDo: Dieses Dictionary muss ich noch auswerten und irgendwie verbauen
+        // Wohl einfach an das alte appenden, suche dazu nach "[result objectAtIndex:9]"
+        NSDictionary *rekursiveRueckgabeAllJSGlobalVars = [result objectAtIndex:9];
+        if ([rekursiveRueckgabeAllJSGlobalVars count] > 0)
+            NSLog(@"Dictionary 9 aus der Rekursion wird unser content für ??? ToDo");
+
+        NSDictionary *rekursiveRueckgabeAllFoundClasses = [result objectAtIndex:10];
+        if ([rekursiveRueckgabeAllFoundClasses count] > 0)
+            [self instableXML:@"<class> liefert was in 10 zurück. Da muss ich mir was überlegen!"];
+
+
+
+
+
+        [self.jsOLClassesOutput appendString:@"  this.content = '"];
+
+        // Überträgt den gesammelten OL-Code in die Datei
+        // [self.jsOLClassesOutput appendString:self.collectedContentOfClass];
+        // Aber wir wollen ja den schon ausgewerteten Code übertragen:
+        [self.jsOLClassesOutput appendString:rekurisveRueckgabeOutput];
+        // grrr - hier weitermachen - welche zurückgegebenen Werte muss ich noch auslesen?
+        [self.jsOLClassesOutput appendString:@"\n\nAND\n\n"];
+        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJQueryOutput];
+
+        [self.jsOLClassesOutput appendString:@"';\n};\n"];
+    }
+
     if ([elementName isEqualToString:@"class"] ||
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"fileUpload"] ||
@@ -4766,7 +5199,39 @@ BOOL isNumeric(NSString *s)
     }
     // If we are still skipping All Elements, let's return here
     if (self.weAreSkippingTheCompleteContenInThisElement)
+    {
+        // Wenn wir in <class> sind, sammeln wir alles (wird erst später rekursiv ausgewertet)
+
+        NSString *s = @"";
+        if (self.textInProgress != nil)
+            s = self.textInProgress;
+
+        // Nachdem ausgelesen, auf nil setzen, sonst haben wir ein rekursives Chaos...
+        self.textInProgress = nil;
+
+        // Remove leading and ending Whitespaces and NewlineCharacters
+        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+        // Wenn wir nichts eingeschlossen haben und uns sofort wieder schließen. <tag />
+        if ([s isEqualToString:@""] && ([self.element_merker isEqualToString:elementName]))
+        {
+            // Dann sind wir ein Element, was kein schließendes Tag hat
+            // Deswegen das '>' am Ende entfernen
+            // Und dafür ein '/>' einfügen
+
+            // Das letzte Char des Strings entfernen:
+            self.collectedContentOfClass = [[NSMutableString alloc] initWithString:[self.collectedContentOfClass substringToIndex:[self.collectedContentOfClass length] - 1]];
+
+            [self.collectedContentOfClass appendString:@" />"];
+        }
+        else
+        {
+            [self.collectedContentOfClass appendString:s];
+            [self.collectedContentOfClass appendFormat:@"</%@>",elementName];
+        }
+
         return;
+    }
 
     if ([elementName isEqualToString:@"BDSinputgrid"] ||
         [elementName isEqualToString:@"BDSreplicator"])
@@ -4867,7 +5332,11 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-        NSString *s = self.textInProgress;
+        // Immer auf nil testen, sonst kann es abstürzen hier
+        NSString *s = @"";
+        if (self.textInProgress != nil)
+            s = self.textInProgress;
+
         // Remove leading and ending Whitespaces and NewlineCharacters
         s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
@@ -4954,7 +5423,10 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"infobox_notsupported"] ||
         [elementName isEqualToString:@"infobox_euerhinweis"] ||
         [elementName isEqualToString:@"infobox_stnr"] ||
-        [elementName isEqualToString:@"infobox_plausi"])
+        [elementName isEqualToString:@"infobox_plausi"] ||
+        [elementName isEqualToString:@"calcDisplay"] ||
+        [elementName isEqualToString:@"calcButton"] ||
+        [elementName isEqualToString:@"passthrough"])
     {
         element_geschlossen = YES;
     }
@@ -4984,7 +5456,11 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-        NSString *s = self.textInProgress;
+        // Immer auf nil testen, sonst kann es abstürzen hier
+        NSString *s = @"";
+        if (self.textInProgress != nil)
+            s = self.textInProgress;
+
         // Remove leading and ending Whitespaces and NewlineCharacters
         s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
@@ -5152,7 +5628,11 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-        NSString *s = self.textInProgress;
+        // Immer auf nil testen, sonst kann es abstürzen hier
+        NSString *s = @"";
+        if (self.textInProgress != nil)
+            s = self.textInProgress;
+
         // Remove leading and ending Whitespaces and NewlineCharacters
         s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
@@ -5174,6 +5654,11 @@ BOOL isNumeric(NSString *s)
         [self.jQueryOutput appendString:s];
         [self.jQueryOutput appendString:@"\n  });\n"];
     }
+    // ToDo - Analog <handler>? siehe auch bei öffnendem Element von <event>
+    if ([elementName isEqualToString:@"event"])
+    {
+        element_geschlossen = YES;
+    }
 
 
 
@@ -5183,7 +5668,11 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-        NSString *s = self.textInProgress;
+        // Immer auf nil testen, sonst kann es abstürzen hier
+        NSString *s = @"";
+        if (self.textInProgress != nil)
+            s = self.textInProgress;
+
         // Remove leading and ending Whitespaces and NewlineCharacters
         s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
@@ -5214,6 +5703,17 @@ BOOL isNumeric(NSString *s)
         //s = @"alert('test')";
         [self.jsHead2Output appendString:s];
         [self.jsHead2Output appendString:@"\n}\n"];
+    }
+
+
+
+
+
+    // Okay, letzte Chance: Wenn es vorher nicht gematcht hat. Dann war es eventuell eine selbst definierte Klasse?
+    // Haben wir die Klasse auch vorher aufgesammelt? Nur dann geht es hier weiter.
+    if (!element_geschlossen && ([self.allFoundClasses objectForKey:elementName] != nil))
+    {
+        element_geschlossen = YES;
     }
 
 
@@ -5275,8 +5775,6 @@ BOOL isNumeric(NSString *s)
 
 
 
-
-
     NSMutableString *pre = [[NSMutableString alloc] initWithString:@""];
 
     [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n"];
@@ -5289,7 +5787,10 @@ BOOL isNumeric(NSString *s)
     // initial-scale baut links und rechts einen kleinen Abstand ein. Wollen wir das? ToDo
     // [pre appendString:@"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n"];
     [pre appendString:@"<meta name=\"viewport\" content=\"\" />\n"];
-    [pre appendString:@"<title>taxango</title>\n"];
+
+
+    // Als <title> nutzen wir den Dateinamen der Datei
+    [pre appendFormat:@"<title>%@</title>\n",[[self.pathToFile lastPathComponent] stringByDeletingPathExtension]];
 
     // CSS-Stylesheet-Datei für das Layout der TabSheets (wohl leider nicht CSS-konform, aber
     // die CSS-Konformität herzustellen ist wohl leider zu viel Aufwand, von daher greifen wir
@@ -5303,24 +5804,34 @@ BOOL isNumeric(NSString *s)
     // IE-Fallback für canvas (falls ich es benutze) - ToDo
     // [pre appendString:@"<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n"];
 
+
     // jQuery laden
     [pre appendString:@"<script type=\"text/javascript\" src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js\"></script>\n"];
 
+    // Falls latest jQuery-Version gewünscht:
+    // '<script type="text/javascript" src="http://code.jquery.com/jquery-latest.min.js"></script>'
+    // einbauen, aber dann kein Caching!
+
     // jQuery UI laden (wegen TabSheet)
     [pre appendString:@"<script type=\"text/javascript\" src=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.19/jquery-ui.min.js\"></script>\n"];
+
+    if (![self.jsOLClassesOutput isEqualToString:@""])
+    {
+        // Die von OpenLaszlo gefundenen Klassen werden zuerst integriert
+        [pre appendString:@"<script type=\"text/javascript\" src=\"collectedClasses.js\"></script>\n"];
+    }
 
     // Unser eigenes Skript lieber zuerst
     [pre appendString:@"<script type=\"text/javascript\" src=\"jsHelper.js\"></script>\n"];
     // Dann erst externe gefundene Skripte
     [pre appendString:self.externalJSFilesOutput];
 
-    [pre appendString:@"\n<style type='text/css'>\n"];
-
-    // Falls latest jQuery-Version gewünscht:
-    // '<script type="text/javascript" src="http://code.jquery.com/jquery-latest.min.js"></script>'
-    // einbauen, aber dann kein Caching.
-    [pre appendString:self.cssOutput];
-    [pre appendString:@"</style>\n\n<script type=\"text/javascript\">\n"];
+    if (![self.cssOutput isEqualToString:@""])
+    {
+        [pre appendString:@"\n<style type='text/css'>\n"];
+        [pre appendString:self.cssOutput];
+        [pre appendString:@"</style>\n\n<script type=\"text/javascript\">\n"];
+    }
 
     // Wird derzeit nicht ins JS ausgegeben, da die Bilder usw. direkt im Code stehen.
     // (Soll das so bleiben?)
@@ -5329,7 +5840,7 @@ BOOL isNumeric(NSString *s)
     // erstmal nur die mit resource gesammelten globalen vars ausgeben
     // (+ globale Funktionen + globales JS)
     [pre appendString:self.jsHead2Output];
-    [pre appendString:@"</script>\n\n</head>\n\n<body style=\"margin:0px;\">\n"];
+    [pre appendString:@"</script>\n\n</head>\n\n<body>\n"];
 
 
     // Kurzer Tausch damit ich den Header davorschalten kann
@@ -5353,14 +5864,29 @@ BOOL isNumeric(NSString *s)
     [self.output appendString:@"  function open()\n  {\n    alert('Willst du wirklich deine Ehefrau löschen? Usw...');\n  }\n"];
     [self.output appendString:@"  var dlgFamilienstandSingle = new dlg();\n\n"];
 
-    [self.output appendString:self.jQueryOutput0];
-    [self.output appendString:@"\n\n  /*****************************************************/\n\n"];
+
+    // Vorgezogene jQuery-Ausgaben:
+    if (![self.jQueryOutput0 isEqualToString:@""])
+    {
+        [self.output appendString:self.jQueryOutput0];
+        [self.output appendString:@"\n\n  /****************************************************************/\n"];
+        [self.output appendString:@"  /*****************************Grenze*****************************/\n"];
+        [self.output appendString:@"  /***********Vorgezogene JQuery-Ausgaben sind hier vor ***********/\n"];
+        [self.output appendString:@"  /***Diese müssen zwingend vor folgenden jQuery-Ausgaben kommen***/\n"];
+        [self.output appendString:@"  /****************************************************************/\n\n\n"];
+    }
+
+    // Normale jQuery-Ausgaben
     [self.output appendString:self.jQueryOutput];
 
-    // Die unteren Ecken entfernen von der TabBar
-    [self.output appendString:@"\n  // Die unteren Ecken entfernen von der TabBar\n"];
-    [self.output appendString:@"  $('ul').removeClass('ui-corner-all');\n"];
-    [self.output appendString:@"  $('ul').addClass('ui-corner-top');\n"];
+    // Falls es mindestens einen TabSheetContainer gab, das Design hier noch anpassen (nur oben Ecken)
+    if (![self.lastUsedTabSheetContainerID isEqualToString:@""])
+    {
+        // Die unteren Ecken entfernen von der TabBar
+        [self.output appendString:@"\n  // Die unteren Ecken entfernen von der TabBar\n"];
+        [self.output appendString:@"  $('ul').removeClass('ui-corner-all');\n"];
+        [self.output appendString:@"  $('ul').addClass('ui-corner-top');\n"];
+    }
 
     [self.output appendString:@"});\n</script>\n\n"];
 
@@ -5382,6 +5908,8 @@ BOOL isNumeric(NSString *s)
 
     NSString *pathToCSSFile = [NSString stringWithFormat:@"%@/formate.css",path];
     NSString *pathToJSFile = [NSString stringWithFormat:@"%@/jsHelper.js",path];
+    NSString *pathToCollectedClassesFile = [NSString stringWithFormat:@"%@/collectedClasses.js",path];
+
 
     path = [path stringByAppendingString: @"/output_ol2x.html"];
 
@@ -5410,6 +5938,12 @@ BOOL isNumeric(NSString *s)
         // Unterstützende JS-Datei schreiben
         [self createJSFile:pathToJSFile];
 
+        if (![self.jsOLClassesOutput isEqualToString:@""])
+        {
+            // Unterstützende collectedOlClasses-Datei schreiben
+            [self createCollectedClassesFile:pathToCollectedClassesFile];
+        }
+
         NSLog(@"Job done.");
     }
     else
@@ -5437,7 +5971,7 @@ BOOL isNumeric(NSString *s)
 
 - (void) createCSSFile:(NSString*)path
 {
-    NSString *css = @"/* DATEI: formate.css */\n"
+    NSString *css = @"/* FILE: formate.css */\n"
     "\n"
     "/* Enthaelt standard-Definitionen, die das Aussehen von OpenLaszlo simulieren */\n"
     "/*\n"
@@ -5660,7 +6194,7 @@ BOOL isNumeric(NSString *s)
 
 - (void) createJSFile:(NSString*)path
 {
-    NSString *js = @"/* DATEI: jsHelper.js */\n"
+    NSString *js = @"/* FILE: jsHelper.js */\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Falls sich die Höhe ändert am iPad (orientationchange)\n"
@@ -5978,6 +6512,50 @@ BOOL isNumeric(NSString *s)
 
 
 
+
+- (void) createCollectedClassesFile:(NSString*)path
+{
+    NSString *js = @"/* FILE: collectedClasses.js */\n"
+    "\n"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////\n"
+    "// Beinhaltet alle von OpenLaszlo mittels <class> definierte Klassen. Es werden korrespondierende //\n"
+    "// 'Constructor Functions' angelegt, welche später von jQuery verarbeitet werden. Sobald          //\n"
+    "// der Converter auf die Klasse dann stößt, legt er ein hier definiertes Objekt per new an.       //\n"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////////////////////////////////////////\n"
+    "//  class = x //\n"
+    "/////////////////////////////////////////////////////////////////////////////////////////////\n"
+    "var Person = function(name) {\n"
+    "  this.name = name;\n"
+    "  this.say = function () {\n"
+    "    return 'I am ' + this.name;\n"
+    "  };\n"
+    "};\n"
+    "Person.prototype.say2 = function() {};\n"
+    "Person.prototype.say3 = 2;\n"
+    "\n";
+
+
+
+    js = [NSString stringWithFormat:@"%@%@", js, self.jsOLClassesOutput];
+
+
+
+
+    bool success = [js writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
+
+    if (success)
+        NSLog(@"Writing JS-file (collectedClasses.js)... succeeded.");
+    else
+        NSLog(@"Writing JS-file (collectedClasses.js)... failed.");  
+}
+
+
+
+
 - (void) jumpToEndOfTextView
 {
     // Move NSTextView to the end
@@ -6008,13 +6586,16 @@ BOOL isNumeric(NSString *s)
 
     if ([errorString hasSuffix:@"5"])
     {
-        NSLog(@"XML-Dokument unvollständig geladen bzw Datei nicht vorhanden bzw kein vollständiges XML-Tag enthalten.");
+        NSLog(@"XML-Dokument unvollständig geladen bzw Datei nicht vorhanden bzw kein vollständiges XML-Tag enthalten bzw. rekursiv aufgerufene Instanz wirft einen Error bzw. malformed XML.");
     }
 
     NSLog(@"\nI had no success parsing the document. I'm sorry.");
 
     self.errorParsing=YES;
     [self jumpToEndOfTextView];
+
+    // ToDo: Dieses Exit entfernen, das musste ich zum Bugsuchen hinzufügen weil ich eine endlose Rekursion hatte
+    exit(0);
 }
 
 

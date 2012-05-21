@@ -498,6 +498,19 @@ void OLLog(xmlParser *self, NSString* s,...)
         [style appendString:@";"];
     }
 
+    if ([attributeDict valueForKey:@"topmargin"])
+    {
+        NSString *s = [attributeDict valueForKey:@"topmargin"];
+
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'topmargin' as CSS 'margin-top'.");
+        [style appendString:@"margin-top:"];
+        [style appendString:s];
+        if ([s rangeOfString:@"%"].location == NSNotFound)
+            [style appendString:@"px"];
+        [style appendString:@";"];
+    }
+
     if ([attributeDict valueForKey:@"valign"])
     {
         if ([[attributeDict valueForKey:@"valign"] isEqual:@"middle"])
@@ -828,6 +841,13 @@ void OLLog(xmlParser *self, NSString* s,...)
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'align=right' for now.");
         }
+
+        // ToDo, hierzu muss ich mir noch eine Lösung einfallen lassen
+        if ([[attributeDict valueForKey:@"align"] isEqual:@"${classroot.textalign}"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'align=${classroot.textalign}' for now.");
+        }
     }
 
 
@@ -894,7 +914,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSString *s = @"";
 
         // Wenn ein Punkt enthalten ist, ist es wohl eine Datei
-        if ([src rangeOfString:@"."].location != NSNotFound)
+        if ([src rangeOfString:@"."].location != NSNotFound ||
+            [src isEqualToString:@"lzgridsortarrow_rsrc"] /* ... Keine Ahnung wo diese Res herkommen soll. Super nervig sowas. */ )
         {
             // Möglichkeit 1: Resource wird direkt als String angegeben!
             s = src;
@@ -1034,7 +1055,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-        // Verkettete Bedingungen bei Visibility werden leider noch nicht unterstützt, dringend ToDo
+        // Verkettete Bedingungen bei Visibility werden leider noch nicht unterstützt
+        // dringend ToDo !!! ToDo ToDo
         // Auch Bedingungen mit > werden noch nicht unterstützt
         if ([s rangeOfString:@"&&"].location != NSNotFound ||
             [s rangeOfString:@"||"].location != NSNotFound ||
@@ -1312,7 +1334,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
     // Skipping the attribute 'onvalue'
-    // ToDo -> Implementierung wohl genau so wie eins weiter oben, nur als onblur
+    // ToDo -> Implementierung wohl genau so wie weiter oben, nur als onvalue
     if ([attributeDict valueForKey:@"onvalue"])
     {
         self.attributeCount++;
@@ -1323,12 +1345,51 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
     // Skipping the attribute 'onfocus'
-    // ToDo -> Implementierung wohl genau so wie eins weiter oben, nur als onblur
+    // ToDo -> Implementierung wohl genau so wie eins oben, nur als onfocus
     if ([attributeDict valueForKey:@"onfocus"])
     {
         self.attributeCount++;
         NSLog(@"ToDo: Implement later the attribute 'onfocus'.");
     }
+
+
+    // Skipping the attribute 'onmousedown'
+    // ToDo -> Implementierung wohl genau so wie weiter oben, nur als onmousedown
+    if ([attributeDict valueForKey:@"onmousedown"])
+    {
+        self.attributeCount++;
+        NSLog(@"ToDo: Implement later the attribute 'onmousedown'.");
+    }
+
+
+    // Skipping the attribute 'onmouseout'
+    // ToDo -> Implementierung wohl genau so wie weiter oben, nur als onmouseout
+    if ([attributeDict valueForKey:@"onmouseout"])
+    {
+        self.attributeCount++;
+        NSLog(@"ToDo: Implement later the attribute 'onmouseout'.");
+    }
+
+
+    // Skipping the attribute 'onmouseover'
+    // ToDo -> Implementierung wohl genau so wie weiter oben, nur als onmouseover
+    if ([attributeDict valueForKey:@"onmouseover"])
+    {
+        self.attributeCount++;
+        NSLog(@"ToDo: Implement later the attribute 'onmouseover'.");
+    }
+
+
+    // Skipping the attribute 'onmouseup'
+    // ToDo -> Implementierung wohl genau so wie weiter oben, nur als onmouseup
+    if ([attributeDict valueForKey:@"onmouseup"])
+    {
+        self.attributeCount++;
+        NSLog(@"ToDo: Implement later the attribute 'onmouseup'.");
+    }
+
+
+
 
 
 
@@ -1342,6 +1403,13 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
 
+
+    // ToDo
+    if ([attributeDict valueForKey:@"clickable"])
+    {
+        self.attributeCount++;
+        NSLog(@"Skipping the attribute 'clickable'.");
+    }
 
 
 
@@ -1703,6 +1771,7 @@ didStartElement:(NSString *)elementName
         // Erst den Elementnamen hinzufügen
         [self.collectedContentOfClass appendFormat:@"<%@",elementName];
 
+
         // Dann die Attribute
         NSArray *keys = [attributeDict allKeys];
         if ([keys count] > 0)
@@ -1712,7 +1781,21 @@ didStartElement:(NSString *)elementName
                 [self.collectedContentOfClass appendString:@" "];
                 [self.collectedContentOfClass appendString:key];
                 [self.collectedContentOfClass appendString:@"=\""];
-                [self.collectedContentOfClass appendString:[attributeDict valueForKey:key]];
+
+
+                // Es ist mir folgendes passiert: XML-Parser beschwert sich über '<'-Zeichen im
+                // Attribut. Dies ist tatsächlich ein XML-Verstoß. Tatsächlich steht im OL-Code
+                // auch '&lt;' und nicht '<'. Warum wandelt der Parser dies um????
+                // Jedenfalls muss ich durch alle Attribute durch und dort '<' durch '&lt;'
+                // wieder zurück ersetzen. Das gleiche gilt für & und &amp;
+                NSString *s = [attributeDict valueForKey:key];
+                // Das &-ersetzen muss natürlich als erstes kommen, weil ich danach ja wieder
+                // welche einfüge (durch die Entitys).
+                s = [s stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"];
+                s = [s stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
+
+                
+                [self.collectedContentOfClass appendString:s];
                 [self.collectedContentOfClass appendString:@"\""];
             }
         }
@@ -1832,6 +1915,20 @@ didStartElement:(NSString *)elementName
         if ([attributeDict valueForKey:@"spacing"])
             self.attributeCount++;
 
+
+
+        // ToDo - Eine Abstandsangabe für das erste Element.
+        if ([attributeDict valueForKey:@"inset"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'inset' for now.");
+        }
+        // ToDo - Name... puh... dabei hat SimpleLayout gar kein eigenes div, oder?
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'name' for now.");
+        }
 
 
         // Simplelayout mit Achse Y berücksichtigen
@@ -2579,7 +2676,7 @@ didStartElement:(NSString *)elementName
 
         // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in view wegen 'cobrand-view',
         // hätte sonst eventuell zu viele Seiteneffekte.
-        // Außerdem ist name nicht erlaubt gemäß HTML-Validator als Attribut bei DIVs
+        // Außerdem ist name hier nicht erlaubt gemäß HTML-Validator als Attribut bei DIVs
         if ([attributeDict valueForKey:@"name"])
         {
             self.attributeCount++;
@@ -2598,17 +2695,38 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'layout' on view (ToDo).");
         }
+        // Wird derzeit noch übersprungen (ToDo)
+        if ([attributeDict valueForKey:@"frame"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'frame' on view (ToDo).");
+        }
+        // Wird derzeit noch übersprungen (ToDo)
+        if ([attributeDict valueForKey:@"clip"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'clip' on view (ToDo).");
+        }
+        // Wird derzeit noch übersprungen (ToDo)
+        if ([attributeDict valueForKey:@"ignoreplacement"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'ignoreplacement' on view (ToDo).");
+        }
 
 
+        // ToDo: Seit auswerten von <class> gibt es placement doch merhmals....
         if ([attributeDict valueForKey:@"placement"])
         {
-            // Es gibt nur einmal im gesamten Code das Attribut placement
+            self.attributeCount++; // ToDo, dann einzeln reinschieben in die isEqualToString:@"x"
+
+            // Es gibt nur einmal im gesamten Code das Attribut placement mit _info
             // Die zugehörige Klasse '_info' ist in BDSlib.lzx definiert
             // Aber nur dafür extra 'class' auslesen lohnt nicht, stattdessen setzen wir die
             // Attribute einfach manuell (Trick).
             if ([[attributeDict valueForKey:@"placement"] isEqualToString:@"_info"])
             {
-                self.attributeCount++;
+
 
                 [self.jQueryOutput appendString:@"\n  // Anstatt 'placement' auszuwerten...\n"];
                 [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('background-color','#D3964D');\n",id]];
@@ -2649,6 +2767,27 @@ didStartElement:(NSString *)elementName
         // id hinzufügen und gleichzeitg speichern
         NSString *id = [self addIdToElement:attributeDict];
 
+
+
+
+
+
+        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur hier
+        // hätte sonst eventuell zu viele Seiteneffekte.
+        // Außerdem ist name hier nicht erlaubt gemäß HTML-Validator als Attribut bei DIVs
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the views attribute 'name' as HTML 'name'.");
+            [self.output appendString:@" name=\""];
+            [self.output appendString:[attributeDict valueForKey:@"name"]];
+            [self.output appendString:@"\""];
+        }
+
+
+
+
+
         [self.output appendString:@" class=\"ol_standard_view\" style=\""];
         [self.output appendString:[self addCSSAttributes:attributeDict]];
         [self.output appendString:@"\" "];
@@ -2670,6 +2809,43 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'isdefault' for now.");
         }
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"placement"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'placement' for now.");
+        }
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"focusable"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'focusable' for now.");
+        }
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"doesenter"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'doesenter' for now.");
+        }
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"clip"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'clip' for now.");
+        }
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"text_padding_x"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'text_padding_x' for now.");
+        }
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"text_x"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'text_x' for now.");
+        }
+
 
 
 
@@ -2832,7 +3008,7 @@ didStartElement:(NSString *)elementName
     }
 
 
-    // ToDo: Eigentlich sollte das hier selbständig hinzugefügt werden und anhand der definierten Klasse erkannt werden
+    // ToDo ToDo: Eigentlich sollte das hier selbständig hinzugefügt werden und anhand der definierten Klasse erkannt werden
     if ([elementName isEqualToString:@"BDSedit"])
     {
         element_bearbeitet = YES;
@@ -2881,6 +3057,32 @@ didStartElement:(NSString *)elementName
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
         [self.output appendString:@"\" />\n"];
+
+
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"maxlength"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'maxlength' for now.");
+        }
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"name"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'name' for now.");
+        }
+        // ToDo: Wird derzeit nicht ausgewertet
+        if ([attributeDict valueForKey:@"text"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'text' for now.");
+        }
+
+
+
+
+        // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw.
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]]];
     }
 
 
@@ -3032,7 +3234,6 @@ didStartElement:(NSString *)elementName
 
 
 
-
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+3];
         [self.output appendString:@"<!-- Inhalt wird per jQuery von folgender Anweisung gesetzt: "];
         [self.output appendString:id];
@@ -3046,6 +3247,16 @@ didStartElement:(NSString *)elementName
         [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
 
 
+
+        if ([attributeDict valueForKey:@"simple"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'simple'.");
+        }
+
+
+
+
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"</div>\n\n"];
     }
@@ -3056,7 +3267,8 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"BDScheckbox"])
+    if ([elementName isEqualToString:@"BDScheckbox"] ||
+        [elementName isEqualToString:@"checkbox"])
     {
         element_bearbeitet = YES;
 
@@ -3152,6 +3364,14 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'textalign'.");
         }
+        if ([attributeDict valueForKey:@"value"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'value'.");
+        }
+
+
+
 
         // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw.
         [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
@@ -3315,6 +3535,11 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'minlength'.");
         }
+        if ([attributeDict valueForKey:@"simple"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'simple'.");
+        }
 
 
 
@@ -3448,7 +3673,11 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'restrictyear'.");
         }
-
+        if ([attributeDict valueForKey:@"simple"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'simple'.");
+        }
 
 
         // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw.
@@ -4381,14 +4610,20 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
         if ([attributeDict valueForKey:@"layout"])
             self.attributeCount++;
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"ignoreplacement"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"y"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"x"])
+            self.attributeCount++;
+
 
         // ToDo
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
         self.weAreSkippingTheCompleteContenInThisElement3 = YES;
     }
-
-
-
     // ToDo
     if ([elementName isEqualToString:@"infobox_notsupported"] ||
         [elementName isEqualToString:@"infobox_euerhinweis"] ||
@@ -4409,24 +4644,234 @@ didStartElement:(NSString *)elementName
         if ([attributeDict valueForKey:@"info"])
             self.attributeCount++;
     }
+    // ToDo - Tooltip kann wie <text>TEXT</text> Text in der Mitte beinhalten!!!
+    // Evtl. dort mit inkludieren
+    if ([elementName isEqualToString:@"tooltip"])
+    {
+        element_bearbeitet = YES;
+    }
+    // ToDo
+    if ([elementName isEqualToString:@"state"])
+    {
+        element_bearbeitet = YES;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"applied"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"placement"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"onremove"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"pooling"])
+            self.attributeCount++;
+    }
+    // ToDo
+    if ([elementName isEqualToString:@"animatorgroup"])
+    {
+        element_bearbeitet = YES;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"duration"])
+            self.attributeCount++;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"process"])
+            self.attributeCount++;
+    }
+    // ToDo
+    if ([elementName isEqualToString:@"animator"])
+    {
+        element_bearbeitet = YES;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"attribute"])
+            self.attributeCount++;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"to"])
+            self.attributeCount++;
+    }
+    // ToDo
+    if ([elementName isEqualToString:@"datapath"])
+    {
+        element_bearbeitet = YES;
+    }
+    // ToDo
+    if ([elementName isEqualToString:@"int_vscrollbar"])
+    {
+        element_bearbeitet = YES;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"visible"])
+            self.attributeCount++;
+    }
+    if ([elementName isEqualToString:@"stableborderlayout"])
+    {
+        element_bearbeitet = YES;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"axis"])
+            self.attributeCount++;
+    }
+    if ([elementName isEqualToString:@"combobox"])
+    {
+        element_bearbeitet = YES;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"defaulttext"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"doesenter"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"editable"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"onblur"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"onfocus"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"searchable"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"shownitems"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"width"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"y"])
+            self.attributeCount++;
+    }
+    if ([elementName isEqualToString:@"textlistitem"])
+    {
+        element_bearbeitet = YES;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"datapath"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"text"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"value"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+    }
+    if ([elementName isEqualToString:@"datacombobox"])
+    {
+        element_bearbeitet = YES;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"defaulttext"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"itemdatapath"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"listwidth"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"onblur"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"onfocus"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"shownitems"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"textdatapath"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"valuedatapath"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"width"])
+            self.attributeCount++;
+    }
+    if ([elementName isEqualToString:@"statictext"])
+    {
+        element_bearbeitet = YES;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"align"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"resize"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"text"])
+            self.attributeCount++;
+    }
+    if ([elementName isEqualToString:@"multistatebutton"])
+    {
+        element_bearbeitet = YES;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"focusable"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"maxstate"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"onblur"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"onfocus"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"reference"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"resource"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"statelength"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"statenum"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"text"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"width"])
+            self.attributeCount++;
+    }
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-    // Das ist nur ein Schalter. Erst im Nachfolgenden schließenden Element 'when' müssen wir aktiv werden.
-    // Jedoch im schließenden 'switch' schalten wir wieder zurück.
+    // Das ist nur ein Schalter. Erst im Nachfolgenden schließenden Element 'when' müssen wir
+    // aktiv werden. Jedoch im schließenden 'switch' schalten wir wieder zurück.
     if ([elementName isEqualToString:@"switch"])
     {
         element_bearbeitet = YES;
@@ -4778,7 +5223,8 @@ didStartElement:(NSString *)elementName
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
 
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onvalue"] ||
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onchanged"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onvalue"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"onnewvalue"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"ontext"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"ondata"]) // ToDo: Ist wirklich ondata = change-event?
@@ -4850,6 +5296,34 @@ didStartElement:(NSString *)elementName
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
 
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onselect"])
+            {
+                self.attributeCount++;
+                NSLog(@"Binding the method in this handler to a jQuery-select-event.");
+    
+                [self.jQueryOutput appendString:@"\n  // select-Handler für "];
+                [self.jQueryOutput appendString:self.zuletztGesetzteID];
+                [self.jQueryOutput appendString:@"\n"];
+
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').select(function()\n  {\n    ",self.zuletztGesetzteID]];
+
+                // Okay, jetzt Text sammeln und beim schließen einfügen
+            }
+
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onblur"])
+            {
+                self.attributeCount++;
+                NSLog(@"Binding the method in this handler to a jQuery-blur-event.");
+
+                [self.jQueryOutput appendString:@"\n  // blur-Handler für "];
+                [self.jQueryOutput appendString:self.zuletztGesetzteID];
+                [self.jQueryOutput appendString:@"\n"];
+
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').blur(function()\n  {\n    ",self.zuletztGesetzteID]];
+
+                // Okay, jetzt Text sammeln und beim schließen einfügen
+            }
+
             if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onmouseover"])
             {
                 self.attributeCount++;
@@ -4881,13 +5355,27 @@ didStartElement:(NSString *)elementName
             if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onkeyup"])
             {
                 self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-onkeyup-event.");
+                NSLog(@"Binding the method in this handler to a jQuery-keyup-event.");
 
-                [self.jQueryOutput appendString:@"\n  // onkeyup-Handler für "];
+                [self.jQueryOutput appendString:@"\n  // keyup-Handler für "];
                 [self.jQueryOutput appendString:self.zuletztGesetzteID];
                 [self.jQueryOutput appendString:@"\n"];
 
                 [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').keyup(function()\n  {\n    ",self.zuletztGesetzteID]];
+
+                // Okay, jetzt Text sammeln und beim schließen einfügen
+            }
+
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onkeydown"])
+            {
+                self.attributeCount++;
+                NSLog(@"Binding the method in this handler to a jQuery-keydown-event.");
+
+                [self.jQueryOutput appendString:@"\n  // keydown-Handler für "];
+                [self.jQueryOutput appendString:self.zuletztGesetzteID];
+                [self.jQueryOutput appendString:@"\n"];
+
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').keydown(function()\n  {\n    ",self.zuletztGesetzteID]];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -4905,6 +5393,28 @@ didStartElement:(NSString *)elementName
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"onhasdefault"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"onrolleddown"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"onvisible"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onstop"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onmask"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onheight"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"ontitlewidth"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"oncontrolpos"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onblurintextfield"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onxxx"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onpattern"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onmaxlength"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onminvalue"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"ondomain"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onyes"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onno"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onlistwidth"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onmousewheeldelta"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onisopen"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"ontextclick"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"ondataset"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onboxheight"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onactual"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onanimation"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"ondown"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"ontabselected"])
             {
                 self.attributeCount++;
@@ -4918,6 +5428,15 @@ didStartElement:(NSString *)elementName
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
+        }
+
+
+
+        // ToDo
+        if ([attributeDict valueForKey:@"reference"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'reference'.");
         }
 
 
@@ -4951,9 +5470,99 @@ didStartElement:(NSString *)elementName
                 }
             }
             // ToDo:
+            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"newp"])
+            {
+                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onblur"])
+                {
+                    self.attributeCount++;
+                    NSLog(@"Found the attrubute 'args' with value 'newp'.");
+                    NSLog(@"Skipping for now (ToDo)");
+                }
+            }
+            // ToDo:
+            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"d"])
+            {
+                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onmousewheeldelta"])
+                {
+                    self.attributeCount++;
+                    NSLog(@"Found the attrubute 'args' with value 'd'.");
+                    NSLog(@"Skipping for now (ToDo)");
+                }
+            }
+            // ToDo:
             if ([[attributeDict valueForKey:@"args"] isEqualToString:@"invoker"])
             {
                 if ([[attributeDict valueForKey:@"name"] isEqualToString:@"oninit"])
+                {
+                    self.attributeCount++;
+                    NSLog(@"Found the attrubute 'args' with value 'invoker'.");
+                    NSLog(@"Skipping for now (ToDo)");
+                }
+            }
+            // ToDo:
+            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"rowdp"])
+            {
+                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onblurintextfield"])
+                {
+                    self.attributeCount++;
+                    NSLog(@"Found the attrubute 'args' with value 'rowdp'.");
+                    NSLog(@"Skipping for now (ToDo)");
+                }
+            }
+            // ToDo:
+            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"key"])
+            {
+                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onkeydown"])
+                {
+                    self.attributeCount++;
+                    NSLog(@"Found the attrubute 'args' with value 'key'.");
+                    NSLog(@"Skipping for now (ToDo)");
+                }
+                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onkeyup"])
+                {
+                    self.attributeCount++;
+                    NSLog(@"Found the attrubute 'args' with value 'key'.");
+                    NSLog(@"Skipping for now (ToDo)");
+                }
+            }
+            // ToDo:
+            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"val"])
+            {
+                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"oninit"])
+                {
+                    self.attributeCount++;
+                    NSLog(@"Found the attrubute 'args' with value 'val'.");
+                    NSLog(@"Skipping for now (ToDo)");
+                }
+                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"ontext"])
+                {
+                    self.attributeCount++;
+                    NSLog(@"Found the attrubute 'args' with value 'val'.");
+                    NSLog(@"Skipping for now (ToDo)");
+                }
+                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onisopen"])
+                {
+                    self.attributeCount++;
+                    NSLog(@"Found the attrubute 'args' with value 'val'.");
+                    NSLog(@"Skipping for now (ToDo)");
+                }
+                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onyes"])
+                {
+                    self.attributeCount++;
+                    NSLog(@"Found the attrubute 'args' with value 'val'.");
+                    NSLog(@"Skipping for now (ToDo)");
+                }
+                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onno"])
+                {
+                    self.attributeCount++;
+                    NSLog(@"Found the attrubute 'args' with value 'val'.");
+                    NSLog(@"Skipping for now (ToDo)");
+                }
+            }
+            // ToDo:
+            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"leave"])
+            {
+                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onblur"])
                 {
                     self.attributeCount++;
                     NSLog(@"Found the attrubute 'args' with value 'k'.");
@@ -5211,8 +5820,11 @@ BOOL isNumeric(NSString *s)
 
         // Remove leading and ending Whitespaces and NewlineCharacters
         s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        // alle '<' müssen ersetzt werden, sonst meckert der XML-Parser
+        s = [s stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
 
         // Wenn wir nichts eingeschlossen haben und uns sofort wieder schließen. <tag />
+        /*
         if ([s isEqualToString:@""] && ([self.element_merker isEqualToString:elementName]))
         {
             // Dann sind wir ein Element, was kein schließendes Tag hat
@@ -5220,15 +5832,16 @@ BOOL isNumeric(NSString *s)
             // Und dafür ein '/>' einfügen
 
             // Das letzte Char des Strings entfernen:
+            
             self.collectedContentOfClass = [[NSMutableString alloc] initWithString:[self.collectedContentOfClass substringToIndex:[self.collectedContentOfClass length] - 1]];
 
             [self.collectedContentOfClass appendString:@" />"];
         }
         else
-        {
+        { */
             [self.collectedContentOfClass appendString:s];
             [self.collectedContentOfClass appendFormat:@"</%@>",elementName];
-        }
+        /* } */
 
         return;
     }
@@ -5406,6 +6019,7 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"BDSeditdate"] ||
         [elementName isEqualToString:@"BDScombobox"] ||
         [elementName isEqualToString:@"BDScheckbox"] ||
+        [elementName isEqualToString:@"checkbox"] ||
         [elementName isEqualToString:@"BDSedittext"] ||
         [elementName isEqualToString:@"edittext"] ||
         [elementName isEqualToString:@"BDSeditnumber"] ||
@@ -5424,6 +6038,18 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"infobox_euerhinweis"] ||
         [elementName isEqualToString:@"infobox_stnr"] ||
         [elementName isEqualToString:@"infobox_plausi"] ||
+        [elementName isEqualToString:@"tooltip"] ||
+        [elementName isEqualToString:@"state"] ||
+        [elementName isEqualToString:@"animatorgroup"] ||
+        [elementName isEqualToString:@"animator"] ||
+        [elementName isEqualToString:@"datapath"] ||
+        [elementName isEqualToString:@"int_vscrollbar"] ||
+        [elementName isEqualToString:@"combobox"] ||
+        [elementName isEqualToString:@"datacombobox"] ||
+        [elementName isEqualToString:@"multistatebutton"] ||
+        [elementName isEqualToString:@"statictext"] ||
+        [elementName isEqualToString:@"stableborderlayout"] ||
+        [elementName isEqualToString:@"textlistitem"] ||
         [elementName isEqualToString:@"calcDisplay"] ||
         [elementName isEqualToString:@"calcButton"] ||
         [elementName isEqualToString:@"passthrough"])
@@ -6577,16 +7203,24 @@ BOOL isNumeric(NSString *s)
         NSLog(@"Parsing aborted programmatically.");
     }
 
-
     if ([errorString hasSuffix:@"76"])
     {
         NSLog(@"z. B. schließendes Tag gefunden ohne korrespondierendes öffnendes Tag.");
     }
 
-
     if ([errorString hasSuffix:@"5"])
     {
-        NSLog(@"XML-Dokument unvollständig geladen bzw Datei nicht vorhanden bzw kein vollständiges XML-Tag enthalten bzw. rekursiv aufgerufene Instanz wirft einen Error bzw. malformed XML.");
+        NSLog(@"XML-Dokument unvollständig geladen bzw Datei nicht vorhanden bzw kein vollständiges XML-Tag enthalten bzw. malformed XML (z. B. kein umschließendes Tag um alles).");
+    }
+
+    if ([errorString hasSuffix:@"38"])
+    {
+        NSLog(@"Kleiner-Zeichen (<) in Attribut (NSXMLParserLessThanSymbolInAttributeError) ");
+    }
+
+    if ([errorString hasSuffix:@"68"])
+    {
+        NSLog(@"Z. B. '/ />' am Elementende oder Ampersand (&) im Attribut (NSXMLParserNAMERequiredError) ");
     }
 
     NSLog(@"\nI had no success parsing the document. I'm sorry.");
@@ -6594,8 +7228,7 @@ BOOL isNumeric(NSString *s)
     self.errorParsing=YES;
     [self jumpToEndOfTextView];
 
-    // ToDo: Dieses Exit entfernen, das musste ich zum Bugsuchen hinzufügen weil ich eine endlose Rekursion hatte
-    exit(0);
+    [self instableXML:@"ERROR: XML-Parser hat einen Error geworfen."];
 }
 
 

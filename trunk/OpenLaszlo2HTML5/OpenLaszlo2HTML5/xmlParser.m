@@ -1065,7 +1065,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 - (void) changeMouseCursorOnHoverOverElement:(NSString*)idName
 {
-    [self.jQueryOutput appendString:@"\n  // onClick-Funktionalität, deswegen anderer Mouscursor\n"];
+    [self.jQueryOutput appendString:@"\n  // onClick-Funktionalität, deswegen anderer Mauscursor\n"];
     [self.jQueryOutput appendFormat:@"  $('#%@').hover(function() {  $(this).css('cursor','pointer');}, function() {$(this).css('cursor','auto');});\n",idName];
 }
 

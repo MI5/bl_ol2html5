@@ -1316,17 +1316,32 @@ void OLLog(xmlParser *self, NSString* s,...)
         // Wohl doch nicht nötig (und bricht sonst auch selbst definierte Funktionen, welche { und } benutzen
         // s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
 
-        // Wir löschen erstmal 'canvas.', weil wir direkt die Funktin in JS deklarieren
-        // Als Klassenmethode macht (noch) keinen Sinn, dann müssten wir ja erstmal mit new() ein objekt anlegen
-        // Außerdem wäre canvas ja der Klassenname und nicht der Objektname. Objekt bringt uns also hier nicht weiter
+        // Wir löschen erstmal 'canvas.', weil wir direkt die Funktion in JS deklarieren
+        // Als Klassenmethode macht (noch) keinen Sinn, dann müssten wir ja erstmal mit new()
+        // ein objekt anlegen. Außerdem wäre canvas ja der Klassenname und nicht der Objektname.
+        // Objekt bringt uns also hier nicht weiter
         s = [s stringByReplacingOccurrencesOfString:@"canvas." withString:@""];
+
+        // ToDo: Habe eine eigen JS-Methode angelegt, die setAttribute ersetzt.
+        // Aber besser wäre wohl eine Lösung per jQuery, da ich somit auch das Firefox-Problem
+        // lösen könnte. (ToDo)
+        // Es gibt auch noch andere Stellen wo Code angepasst wird (Handler, method...)
+        // Da muss es dann eine generelle Lösung für geben (ToDo)
+        //s = [s stringByReplacingOccurrencesOfString:@".setAttribute(" withString:@".setAttribute_("];
+        // Ne, wir definieren einfach ein globales setAttribute mit defineProperty
+        // Dazu muss ich dann nur das this immer aktualisieren, da es auch passieren kann, dass
+        // setAttribute ohne vorangehende Variable aufgerufen wird.
 
 
         NSMutableString *gesammelterCode = [[NSMutableString alloc] initWithString:@""];
         [gesammelterCode appendString:@"\n  // JS-onClick-event\n  $('#"];
         [gesammelterCode appendString:idName];
         [gesammelterCode appendString:@"').click(function(){"];
+        [gesammelterCode appendString:@"setMeWithThis(this); "];
         [gesammelterCode appendString:s];
+        if (![s hasSuffix:@";"])
+            [gesammelterCode appendString:@";"];
+        [gesammelterCode appendString:@" unsetMeWithThis;"];
         [gesammelterCode appendString:@"});"];
 
 
@@ -1476,6 +1491,10 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         self.attributeCount++;
         self.zuletztGesetzteID = [attributeDict valueForKey:@"id"];
+
+        // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein!
+        [self.jQueryOutput0 appendString:@"\n  // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein.\n"];
+        [self.jQueryOutput0 appendFormat:@"  var %@ = document.getElementById('%@');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
     }
     else
     {
@@ -4178,6 +4197,8 @@ didStartElement:(NSString *)elementName
         }
     }
 
+
+
     // Wir müssen hier 2 Sachen machen:
     // 1) Ein div aufmachen mit einer ID
     // 2) per jQuery das neu entdeckte tab mit der tabsheetcCntainerID und der gerade vergebenen tabsheet-ID hinzufügen
@@ -6588,10 +6609,10 @@ BOOL isNumeric(NSString *s)
         // Remove leading and ending Whitespaces and NewlineCharacters
         s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
-        // This ersetzen
+        // This ersetzen - JQuery-Zugriff herstellen
         s = [s stringByReplacingOccurrencesOfString:@"this" withString:@"$(this)"];
 
-        // setAttribute ersetzen
+        // setAttribute ersetzen = jQuery-Methode
         s = [s stringByReplacingOccurrencesOfString:@"setAttribute" withString:@"attr"];
 
         // ToDo ToCheck
@@ -7305,7 +7326,7 @@ BOOL isNumeric(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "function toggleVisibility(id, idAbhaengig, bedingungAlsString)\n"
     "{\n"
-    "  // To To To - Solange ich noch nicht alles auswerte, muss ich hier\n"
+    "  // To Do ToDo To Do - Solange ich noch nicht alles auswerte, muss ich hier\n"
     "  // bestimmte objekte selber setzen, damit eval() sich nicht beschwert\n"
     "  var replicator = typeof replicator !== 'undefined' ? replicator : new Object();\n"
     "  var checked = typeof checked !== 'undefined' ? checked : new Object();\n"
@@ -7423,10 +7444,10 @@ BOOL isNumeric(NSString *s)
     "// object.watch\n"
     "if (!Object.prototype.watch) {\n"
     "    Object.defineProperty(Object.prototype, 'watch', {\n"
-    "    enumerable: false\n"
-    "        , configurable: true\n"
-    "        , writable: false\n"
-    "        , value: function (prop, handler) {\n"
+    "        enumerable: false,\n"
+    "        configurable: true,\n"
+    "        writable: false,\n"
+    "        value: function (prop, handler) {\n"
     "            var oldval = this[prop], newval = oldval,\n"
     "            getter = function () {\n"
     "                return newval;\n"
@@ -7450,15 +7471,71 @@ BOOL isNumeric(NSString *s)
     "// object.unwatch\n"
     "if (!Object.prototype.unwatch) {\n"
     "    Object.defineProperty(Object.prototype, 'unwatch', {\n"
-    "    enumerable: false\n"
-    "        , configurable: true\n"
-    "        , writable: false\n"
-    "        , value: function (prop) {\n"
+    "        enumerable: false,\n"
+    "        configurable: true,\n"
+    "        writable: false,\n"
+    "        value: function (prop) {\n"
     "            var val = this[prop];\n"
     "            delete this[prop]; // remove accessors\n"
     "            this[prop] = val;\n"
     "        }\n"
     "    });\n"
+    "}"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Eigene setAttribute-Methode für alle Objekte        //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/*\n"
+    "Object.prototype.setAttribute_ = function(attributeName,value)\n"
+    "{\n"
+    "    if (attributeName == undefined || attributeName == '')\n"
+    "        return;\n"
+    "    if (value == undefined)\n"
+    "        return;\n"
+    "\n"
+    "    if (attributeName == 'text')\n"
+    "        $(this).html(value);\n"
+    "};\n"
+    "*/\n"
+    "// Object.prototype ist verboten und bricht jQuery! Deswegen über defineProperty\n"
+    "// https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Object/defineProperty\n"
+    "// Ich hoffe unsere eigene setAttribute-Methode bricht nicht die eingebaute.\n"
+    "// Sonst umbennenen in setAttribute_ und alle Skript-Aufrufe entsprechend anpassen.\n"
+    "Object.defineProperty(Object.prototype, 'setAttribute', {\n"
+    "    enumerable: false, // Darf nicht auf 'true' gesetzt werden! Sonst bricht jQuery!\n"
+    "    configurable: true,\n"
+    "    writable: false,\n"
+    "    value: function (attributeName, value) {\n"
+    "        if (attributeName == undefined || attributeName == '')\n"
+    "            throw 'Error calling setAttribute, no argument attributeName given (this is '+this+').';\n"
+    "        if (value == undefined)\n"
+    "            throw 'Error calling setAttribute, no argument value given (this is '+this+').';\n"
+    "\n"
+    "\n"
+    "        var me = globalMe;\n"
+    "        if (attributeName == 'text')\n"
+    "            $(me).html(value);\n"
+    "        else if (attributeName == 'bgcolor')\n"
+    "            $(me).css('background-color',value);\n"
+    "    }\n"
+    "});\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Damit setAttribute zwischen this und me unterscheiden kann//\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Globaler Zugriff auf letztes this\n"
+    "var globalMe = undefined;\n"
+    "function setMeWithThis(me_)\n"
+    "{\n"
+    "    globalMe = me_;\n"
+    "}\n"
+    "// Wird nach jedem this wieder aufgerufen, damit ich unterscheiden kann ob ich in\n"
+    "// setAttribute this oder me verwenden muss\n"
+    "function unsetMeWithThis()\n"
+    "{\n"
+    "    globalMe = undefined;\n"
     "}";
 
 

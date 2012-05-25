@@ -298,7 +298,7 @@ void OLLog(xmlParser *self, NSString* s,...)
                 //"var canvas = new Object();\n\n"
                 // statt dessen besser:
                 "function canvasKlasse() {\n}\nvar canvas = new canvasKlasse();\n"
-                "canvasKlasse.prototype.setAttribute = function(varname,value)\n{\n  eval('this.'+varname+' = '+value+';');\n}\n"
+                // "canvasKlasse.prototype.setAttribute = function(varname,value)\n{\n  eval('this.'+varname+' = '+value+';');\n}\n"
                 "canvas.height = $(window).height(); // <-- Var, auf die zugegriffen wird\n\n"
                 // ToDo: 1000 muss natürlich aus dem canvas-element ausgelesen werden
                 // und fixer wert nur wenn keine Prozentangabe dabei
@@ -1071,8 +1071,34 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+// Genauso wie die ID muss auch das Name-Attribut global im JS-Raum vefügbar sein
+// Muss immer nach addIdToElement aufgerufen werden, weil ich auf self.zuletztgesetzteID
+// zurückgreife.
+- (void) convertNameAttributeToGlobalJSVar:(NSDictionary*) attributeDict
+{
+    if ([attributeDict valueForKey:@"name"])
+    {
+        NSString *name = [attributeDict valueForKey:@"name"];
+
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'name' as global JS variable.");
+
+        [self.jQueryOutput0 appendString:@"\n  // All 'name'-attributes, set by OpenLaszlo, need to be global JS-Variables.\n"];
+        // Das ist Unsinn, weil ich das name-tag ja gerade nicht setze!
+        // [self.jQueryOutput0 appendFormat:@"  var %@ = document.getElementsByName('%@');\n",name, name];
+        [self.jQueryOutput0 appendFormat:@"  var %@ = document.getElementById('%@');\n",name, self.zuletztGesetzteID];
+    }
+}
+
+
+
 - (NSMutableString*) addJSCode:(NSDictionary*) attributeDict withId:(NSString*)idName
 {
+    // 'name'-Attribut auswerten und als Leading jQuery Code davorschalten
+    // Weil Zugriff auf die Variable von Anfang an sicher gestellt sein muss.
+    [self convertNameAttributeToGlobalJSVar:attributeDict];
+
+
     // Den ganzen Code in einem eigenen String sammeln, und nur JS ausgeben, wenn gefüllt
     NSMutableString *code = [[NSMutableString alloc] initWithString:@""];
 
@@ -1322,9 +1348,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         // Objekt bringt uns also hier nicht weiter
         s = [s stringByReplacingOccurrencesOfString:@"canvas." withString:@""];
 
-        // ToDo: Habe eine eigen JS-Methode angelegt, die setAttribute ersetzt.
-        // Aber besser wäre wohl eine Lösung per jQuery, da ich somit auch das Firefox-Problem
-        // lösen könnte. (ToDo)
+
+        // Habe in jsHelper.js eine JS-Methode angelegt, die setAttribute ersetzt.
         // Es gibt auch noch andere Stellen wo Code angepasst wird (Handler, method...)
         // Da muss es dann eine generelle Lösung für geben (ToDo)
         //s = [s stringByReplacingOccurrencesOfString:@".setAttribute(" withString:@".setAttribute_("];
@@ -1337,11 +1362,11 @@ void OLLog(xmlParser *self, NSString* s,...)
         [gesammelterCode appendString:@"\n  // JS-onClick-event\n  $('#"];
         [gesammelterCode appendString:idName];
         [gesammelterCode appendString:@"').click(function(){"];
-        [gesammelterCode appendString:@"setMeWithThis(this); "];
+        [gesammelterCode appendString:@"setGlobalMe(this); "];
         [gesammelterCode appendString:s];
-        if (![s hasSuffix:@";"])
-            [gesammelterCode appendString:@";"];
-        [gesammelterCode appendString:@" unsetMeWithThis;"];
+        // if (![s hasSuffix:@";"])
+        //     [gesammelterCode appendString:@";"];
+        // [gesammelterCode appendString:@" unsetGlobalMe;"];
         [gesammelterCode appendString:@"});"];
 
 
@@ -1351,13 +1376,13 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-        // Hiermit kann ich es jederzeit auch direkt im Div anzeigen, damit ich es schneller finde bei Debug-Suche
+        // Hiermit kann ich es jederzeit auch direkt im Div anzeigen,
+        // damit ich es schneller finde bei Debug-Suche.
         BOOL jQueryAusgabe = TRUE;
 
 
         if (jQueryAusgabe)
         {
-            [self.jQueryOutput appendString:@"  "];
             [self.jQueryOutput appendString:gesammelterCode];
             [self.jQueryOutput appendString:@"\n"];
         }
@@ -1480,7 +1505,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 // Die ID ermitteln
-// self.zuletztGesetzteID wird hier gesetzt, wird vom Simplelayout gebraucht
+// self.zuletztGesetzteID wird hier gesetzt
+// und die ID wird global verfügbar gemacht.
 - (NSString*) addIdToElement:(NSDictionary*) attributeDict
 {
     // Erstmal auch dann setzen, wenn wir eine gegebene ID von OpenLaszlo haben, evtl. zu ändern
@@ -1493,6 +1519,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.zuletztGesetzteID = [attributeDict valueForKey:@"id"];
 
         // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein!
+        // insbesondere auch wegen Firefox
         [self.jQueryOutput0 appendString:@"\n  // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein.\n"];
         [self.jQueryOutput0 appendFormat:@"  var %@ = document.getElementById('%@');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
     }
@@ -1521,6 +1548,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     return self.zuletztGesetzteID;
 }
+
+
 
 
 // Muss immer nach addIDToElement aufgerufen werden, da wir auf die zuletzt gesetzten id zurückgreifen
@@ -2702,26 +2731,17 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"\">\n"];
 
-        // ToDo: Wird derzeit nicht ausgewertet - macht es überhaupt Sinn Window anzuzeigen? Irgendwas mit debug
+        // ToDo: Wird derzeit nicht ausgewertet
         if ([attributeDict valueForKey:@"closeable"])
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'closeable' for now.");
         }
+        // ToDo
         if ([attributeDict valueForKey:@"resizable"])
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'resizable' for now.");
-        }
-        if ([attributeDict valueForKey:@"visible"])
-        {
-            // self.attributeCount++;
-            // NSLog(@"Skipping the attribute 'visible' for now.");
-        }
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'name' for now.");
         }
 
 
@@ -2749,22 +2769,6 @@ didStartElement:(NSString *)elementName
 
         // id hinzufügen und gleichzeitg speichern
         NSString *id = [self addIdToElement:attributeDict];
-
-
-
-        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in view wegen 'cobrand-view',
-        // hätte sonst eventuell zu viele Seiteneffekte.
-        // Außerdem ist name hier nicht erlaubt gemäß HTML-Validator als Attribut bei DIVs
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the views attribute 'name' as HTML 'name'.");
-            [self.output appendString:@" name=\""];
-            [self.output appendString:[attributeDict valueForKey:@"name"]];
-            [self.output appendString:@"\""];
-        }
-
-
 
 
         // Wird derzeit noch übersprungen (ToDo)
@@ -2844,26 +2848,6 @@ didStartElement:(NSString *)elementName
 
         // id hinzufügen und gleichzeitg speichern
         NSString *id = [self addIdToElement:attributeDict];
-
-
-
-
-
-
-        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur hier
-        // hätte sonst eventuell zu viele Seiteneffekte.
-        // Außerdem ist name hier nicht erlaubt gemäß HTML-Validator als Attribut bei DIVs
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the views attribute 'name' as HTML 'name'.");
-            [self.output appendString:@" name=\""];
-            [self.output appendString:[attributeDict valueForKey:@"name"]];
-            [self.output appendString:@"\""];
-        }
-
-
-
 
 
         [self.output appendString:@" class=\"ol_standard_view\" style=\""];
@@ -2960,22 +2944,6 @@ didStartElement:(NSString *)elementName
         NSString *id = [self addIdToElement:attributeDict];
 
 
-
-
-        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in buttonnext
-        // hätte sonst eventuell zu viele Seiteneffekte.
-        // Außerdem ist name nicht erlaubt gemäß HTML-Validator als Attribut bei DIVs
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the buttons attribute 'name' as HTML 'name'.");
-            [self.output appendString:@" name=\""];
-            [self.output appendString:[attributeDict valueForKey:@"name"]];
-            [self.output appendString:@"\""];
-        }
-
-
-
         [self.output appendString:@" class=\"ol_standard_view\" style=\""];
 
 
@@ -3020,25 +2988,6 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"<div"];
 
         [self addIdToElement:attributeDict];
-
-
-
-
-
-        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur hier,
-        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
-        // Und gemäß HTML-Spezifikation ist es in div auch nicht erlaubt
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
-            [self.output appendString:@" name=\""];
-            [self.output appendString:[attributeDict valueForKey:@"name"]];
-            [self.output appendString:@"\""];
-        }
-
-
-
 
 
         [self.output appendString:@" class=\"ol_text\" style=\""];
@@ -3092,7 +3041,7 @@ didStartElement:(NSString *)elementName
     }
 
 
-    // ToDo ToDo: Eigentlich sollte das hier selbständig hinzugefügt werden und anhand der definierten Klasse erkannt werden
+    // ToDo ToDo ToDo: Eigentlich sollte das hier selbständig hinzugefügt werden und anhand der definierten Klasse erkannt werden
     if ([elementName isEqualToString:@"BDSedit"])
     {
         element_bearbeitet = YES;
@@ -3148,12 +3097,6 @@ didStartElement:(NSString *)elementName
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'maxlength' for now.");
-        }
-        // ToDo: Wird derzeit nicht ausgewertet
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'name' for now.");
         }
         // ToDo: Wird derzeit nicht ausgewertet
         if ([attributeDict valueForKey:@"text"])
@@ -3223,22 +3166,6 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"<select size=\"1\""];
 
         NSString *id =[self addIdToElement:attributeDict];
-
-
-
-
-        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in input type=checkbox,
-        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
-        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
-            [self.output appendString:@" name=\""];
-            [self.output appendString:[attributeDict valueForKey:@"name"]];
-            [self.output appendString:@"\""];
-        }
-
 
 
 
@@ -3369,17 +3296,6 @@ didStartElement:(NSString *)elementName
         NSString *id =[self addIdToElement:attributeDict];
 
 
-        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in input type=checkbox,
-        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
-        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
-            [self.output appendString:@" name=\""];
-            [self.output appendString:[attributeDict valueForKey:@"name"]];
-            [self.output appendString:@"\""];
-        }
 
         [self.output appendString:@" style=\""];
         
@@ -3470,7 +3386,8 @@ didStartElement:(NSString *)elementName
 
 
 
-    // ToDo: Bei BDSeditnumber nur Ziffern zulassen als Eingabe inkl. wohl '.' + ',' aber nochmal checken.
+    // ToDo: Bei BDSeditnumber nur Ziffern zulassen als Eingabe inkl. wohl '.' + ','
+    // Aber nochmal checken (To Check).
     if ([elementName isEqualToString:@"BDSedittext"] ||
         [elementName isEqualToString:@"edittext"] ||
         [elementName isEqualToString:@"BDSeditnumber"])
@@ -3517,21 +3434,6 @@ didStartElement:(NSString *)elementName
 
 
         NSString *id =[self addIdToElement:attributeDict];
-
-
-
-        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in input type=checkbox,
-        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
-        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
-            [self.output appendString:@" name=\""];
-            [self.output appendString:[attributeDict valueForKey:@"name"]];
-            [self.output appendString:@"\""];
-        }
-
 
 
 
@@ -3685,25 +3587,6 @@ didStartElement:(NSString *)elementName
 
 
 
-
-
-        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur in input type=checkbox,
-        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
-        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
-            [self.output appendString:@" name=\""];
-            [self.output appendString:[attributeDict valueForKey:@"name"]];
-            [self.output appendString:@"\""];
-        }
-
-
-
-
-
-
         // Jetzt erst haben wir die ID und können diese nutzen für den jQuery-Code
         if (titelDynamischSetzen)
         {
@@ -3802,25 +3685,13 @@ didStartElement:(NSString *)elementName
 
 
 
-        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur hier,
-        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
-        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
-            [self.output appendString:@" name=\""];
-            [self.output appendString:[attributeDict valueForKey:@"name"]];
-            [self.output appendString:@"\""];
-        }
-
-
-
-
-        // Im Prinzip nur wegen Boxheight müssen wir in addCSSAttributes rein
+        // Im Prinzip nur wegen boxheight müssen wir in addCSSAttributes rein
         [self.output appendString:@" style=\""];
         [self.output appendString:[self addCSSAttributes:attributeDict forceWidthAndHeight:YES]];
         [self.output appendString:@"\">\n"];
+
+        // Javascript aufrufen hier, im Prinzip nur wegen name
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]]];
 
 
         // Setz die MiliSekunden für die Animationszeit, damit die 'rollUpDown'-Elemente darauf zugreifen können
@@ -3913,20 +3784,6 @@ didStartElement:(NSString *)elementName
 
         NSString *id4flipleiste = [NSString stringWithFormat:@"%@_flipleiste",id4rollUpDown];
         NSString *id4panel = [NSString stringWithFormat:@"%@_panel",id4rollUpDown];
-
-
-
-        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur hier,
-        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
-        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
-            [self.output appendString:@" name=\""];
-            [self.output appendString:[attributeDict valueForKey:@"name"]];
-            [self.output appendString:@"\""];
-        }
 
 
 
@@ -5147,23 +5004,6 @@ didStartElement:(NSString *)elementName
 
 
 
-
-        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur hier,
-        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
-        // Und gemäß HTML-Spezifikation ist es auch (fast) nur hier in 'input' erlaubt
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
-            [self.output appendString:@" name=\""];
-            [self.output appendString:[attributeDict valueForKey:@"name"]];
-            [self.output appendString:@"\""];
-        }
-
-
-
-
-
         [self.output appendString:@" style=\""];
         [self.output appendString:[self addCSSAttributes:attributeDict]];
         [self.output appendString:@"\">\n"];
@@ -5255,24 +5095,6 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"<div"];
 
         [self addIdToElement:attributeDict];
-
-
-
-
-
-        // Ich will 'name'-Attribut erstmal nicht immer dazusetzen, erstmal nur hier,
-        // hätte sonst eventuell zu viele Seiteneffekte. (Deswegen ist es nicht in 'addCSS')
-        // Und gemäß HTML-Spezifikation ist es hier auch nicht erlaubt
-        if ([attributeDict valueForKey:@"name"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'name' as HTML 'name'.");
-            [self.output appendString:@" name=\""];
-            [self.output appendString:[attributeDict valueForKey:@"name"]];
-            [self.output appendString:@"\""];
-        }
-
-
 
 
 
@@ -7483,9 +7305,9 @@ BOOL isNumeric(NSString *s)
     "}"
     "\n"
     "\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// Eigene setAttribute-Methode für alle Objekte        //\n"
-    "/////////////////////////////////////////////////////////\n"
+    "//////////////////////////////////////////////////////////\n"
+    "// Eigene setAttribute-Methode für ALLE Objekte (JS+DOM)//\n"
+    "//////////////////////////////////////////////////////////\n"
     "/*\n"
     "Object.prototype.setAttribute_ = function(attributeName,value)\n"
     "{\n"
@@ -7498,45 +7320,69 @@ BOOL isNumeric(NSString *s)
     "        $(this).html(value);\n"
     "};\n"
     "*/\n"
+    "\n"
+    "\n"
+    "// Diese Funktion werde ich gleich 3 mal prototypen müssen um setAttribute in allen Browsern zu überschreiben\n"
+    "var setAttributeFunc = function (attributeName, value) {"
+    "    if (attributeName == undefined || attributeName == '')\n"
+    "        throw 'Error calling setAttribute, no argument attributeName given (this = '+this+').';\n"
+    "    if (value == undefined)\n"
+    "        throw 'Error calling setAttribute, no argument value given (this = '+this+').';\n"
+    "\n"
+    "\n"
+    "    var me = globalMe;\n"
+    "    if (this.nodeName == 'DIV' || this.nodeName == 'INPUT')\n"
+    "      me = this;\n"
+    "\n"
+    "    if (attributeName == 'text')\n"
+    "        $(me).html(value);\n"
+    "    else if (attributeName == 'bgcolor')\n"
+    "        $(me).css('background-color',value);\n"
+    "}\n"
+    "\n"
     "// Object.prototype ist verboten und bricht jQuery! Deswegen über defineProperty\n"
     "// https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Object/defineProperty\n"
-    "// Ich hoffe unsere eigene setAttribute-Methode bricht nicht die eingebaute.\n"
-    "// Sonst umbennenen in setAttribute_ und alle Skript-Aufrufe entsprechend anpassen.\n"
+    "// Für alle JS-Objekte (insbesondere window => direkter Aufruf von setAttribute => Dann\n"
+    "// auch Zusammenspiel mit globalMe (s.u))\n"
     "Object.defineProperty(Object.prototype, 'setAttribute', {\n"
-    "    enumerable: false, // Darf nicht auf 'true' gesetzt werden! Sonst bricht jQuery!\n"
-    "    configurable: true,\n"
-    "    writable: false,\n"
-    "    value: function (attributeName, value) {\n"
-    "        if (attributeName == undefined || attributeName == '')\n"
-    "            throw 'Error calling setAttribute, no argument attributeName given (this is '+this+').';\n"
-    "        if (value == undefined)\n"
-    "            throw 'Error calling setAttribute, no argument value given (this is '+this+').';\n"
-    "\n"
-    "\n"
-    "        var me = globalMe;\n"
-    "        if (attributeName == 'text')\n"
-    "            $(me).html(value);\n"
-    "        else if (attributeName == 'bgcolor')\n"
-    "            $(me).css('background-color',value);\n"
-    "    }\n"
+    "enumerable: false, // Darf nicht auf 'true' gesetzt werden! Sonst bricht jQuery!\n"
+    "configurable: true,\n"
+    "writable: false,\n"
+    "value: setAttributeFunc\n"
     "});\n"
+    "\n"
+    "// Für alle DOM-Objekte\n"
+    "// Ohne enumerabe und configurable, sonst beschwert sich Safari\n"
+    "// bricht leider jQuery.... deswegen auskommentiert. HTMLDivElement (s. u.) muss reichen.\n"
+    "// Object.defineProperty(Element.prototype, 'setAttribute', {\n"
+    "// value: setAttributeFunc\n"
+    "// } );\n"
+    "\n"
+    "// Sonderbehandlung für Firefox:\n"
+    "// https://developer.mozilla.org/en/JavaScript-DOM_Prototypes_in_Mozilla\n"
+    "// Node klappt nicht...\n"
+    "// Element klappt nicht...\n"
+    "// HTMLElement klappt auch nicht...\n"
+    "// Aber HTMLDivElement... wtf Firefox??\n"
+    "HTMLDivElement.prototype.setAttribute = setAttributeFunc;\n"
+    "HTMLInputElement.prototype.setAttribute = setAttributeFunc;\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Damit setAttribute zwischen this und me unterscheiden kann//\n"
+    "// Damit setAttribute zwischen direkten (window) und direkten Aufrufen unterscheiden kann//\n"
     "/////////////////////////////////////////////////////////\n"
     "// Globaler Zugriff auf letztes this\n"
     "var globalMe = undefined;\n"
-    "function setMeWithThis(me_)\n"
+    "function setGlobalMe(me_)\n"
     "{\n"
     "    globalMe = me_;\n"
     "}\n"
     "// Wird nach jedem this wieder aufgerufen, damit ich unterscheiden kann ob ich in\n"
     "// setAttribute this oder me verwenden muss\n"
-    "function unsetMeWithThis()\n"
+    "/* ----wohl doch nicht nötig. ToDo (Delete)---- function unsetGlobalMe()\n"
     "{\n"
     "    globalMe = undefined;\n"
-    "}";
+    "} */";
 
 
 

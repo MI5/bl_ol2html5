@@ -530,7 +530,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
             // [self.jQueryOutput appendFormat:@"  $('#%@').css('top',toInt((parseInt($('#%@').parent().css('height'))-parseInt($('#%@').css('height')))/3));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
             // So wohl korrekter:
-            [self.jQueryOutput appendFormat:@"  $('#%@').css('top',toInt((parseInt($('#%@').parent().css('height'))-parseInt($('#%@').outerHeight()))/2));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
+            [self.jQueryOutput appendFormat:@"  $('#%@').css('top',toIntFloor((parseInt($('#%@').parent().css('height'))-parseInt($('#%@').outerHeight()))/2));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
         }
 
 
@@ -846,7 +846,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             //[style appendString:@"margin-left:auto; margin-right:auto;"];
 
             [self.jQueryOutput appendString:@"\n  // align wurde als Attribut gefunden: Richte das Element entsprechend mittig (horizontal) aus\n"];
-            [self.jQueryOutput appendFormat:@"  $('#%@').css('left',toInt((parseInt($('#%@').parent().css('width'))-parseInt($('#%@').css('width')))/2));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
+            [self.jQueryOutput appendFormat:@"  $('#%@').css('left',toIntFloor((parseInt($('#%@').parent().css('width'))-parseInt($('#%@').outerWidth()))/2));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
         }
 
         // Hier mache ich erstmal nichts, align=left sollte eigentlich Ausgangswert sein, aber To Check (ToDo)
@@ -1088,6 +1088,19 @@ void OLLog(xmlParser *self, NSString* s,...)
         // [self.jQueryOutput0 appendFormat:@"  var %@ = document.getElementsByName('%@');\n",name, name];
         [self.jQueryOutput0 appendFormat:@"  var %@ = document.getElementById('%@');\n",name, self.zuletztGesetzteID];
     }
+}
+
+
+
+// Ne, wir definieren einfach ein globales setAttribute_ mit defineProperty
+// Dazu muss ich dann nur das this immer aktualisieren, da es auch passieren kann, dass
+// setAttribute ohne vorangehende Variable aufgerufen wird.
+- (NSString*) modifySetAttributeInJSCode:(NSString*)s
+{
+    // ToDo: per RegExp nichts erfassen was in strings ist
+    s = [s stringByReplacingOccurrencesOfString:@"setAttribute(" withString:@"setAttribute_("];
+
+    return s;
 }
 
 
@@ -1349,13 +1362,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         s = [s stringByReplacingOccurrencesOfString:@"canvas." withString:@""];
 
 
-        // Habe in jsHelper.js eine JS-Methode angelegt, die setAttribute ersetzt.
-        // Es gibt auch noch andere Stellen wo Code angepasst wird (Handler, method...)
-        // Da muss es dann eine generelle Lösung für geben (ToDo)
-        //s = [s stringByReplacingOccurrencesOfString:@".setAttribute(" withString:@".setAttribute_("];
-        // Ne, wir definieren einfach ein globales setAttribute mit defineProperty
-        // Dazu muss ich dann nur das this immer aktualisieren, da es auch passieren kann, dass
-        // setAttribute ohne vorangehende Variable aufgerufen wird.
+        s = [self modifySetAttributeInJSCode:s];
 
 
         NSMutableString *gesammelterCode = [[NSMutableString alloc] initWithString:@""];
@@ -2305,7 +2312,7 @@ didStartElement:(NSString *)elementName
 
         [self addIdToElement:attributeDict];
 
-        [self.output appendString:@" class=\"ol_standard_canvas\" style=\""];
+        [self.output appendString:@" class=\"canvas_standard\" style=\""];
 
         [self.output appendString:[self addCSSAttributes:attributeDict toElement:elementName]];
 
@@ -2822,7 +2829,7 @@ didStartElement:(NSString *)elementName
         }
 
 
-        [self.output appendString:@" class=\"ol_standard_view\" style=\""];
+        [self.output appendString:@" class=\"div_standard\" style=\""];
 
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
@@ -2850,7 +2857,7 @@ didStartElement:(NSString *)elementName
         NSString *id = [self addIdToElement:attributeDict];
 
 
-        [self.output appendString:@" class=\"ol_standard_view\" style=\""];
+        [self.output appendString:@" class=\"div_standard\" style=\""];
         [self.output appendString:[self addCSSAttributes:attributeDict]];
         [self.output appendString:@"\" "];
 
@@ -2944,7 +2951,7 @@ didStartElement:(NSString *)elementName
         NSString *id = [self addIdToElement:attributeDict];
 
 
-        [self.output appendString:@" class=\"ol_standard_view\" style=\""];
+        [self.output appendString:@" class=\"div_standard\" style=\""];
 
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
@@ -3913,8 +3920,8 @@ didStartElement:(NSString *)elementName
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<!-- Das aufklappende Menü -->\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendFormat:@"<div style=\"position:relative; top:0px; left:0px; width:%dpx; ",breiteVonRollUpDown-4];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1]; // overflow, damit es scrollt, falls zu viel drin
+        [self.output appendFormat:@"<div style=\"position:relative; overflow-y:auto; overflow-x:hidden; top:0px; left:0px; width:%dpx; ",breiteVonRollUpDown-4];
         // Bei ganz äußeren RUDs soll die Höhe fix sein, ansonsten nicht
         if (self.rollUpDownVerschachtelungstiefe-2 == 0)
             [self.output appendString:@"height:350px; "];
@@ -4178,12 +4185,16 @@ didStartElement:(NSString *)elementName
             // definiert wurde.
             [self.allFoundClasses setObject:@"Blabla Blub ToDo" forKey:name];
 
+
             // Auserdem speichere ich die gefunden Klasse als JS-Objekt und schreibe es nach collectedClasses.js
-            // Weil die Attribute ja neu gesetzt werden können, muss ich sie einzeln speichern und später,
-            // wenn die Klasse instanziert wird auf eventuell überschriebene Attribute checken
+            // Die Attribute speichere ich einzeln ab und lese sie durch jQuery aus, sobald sie instanziert wird.
+            // (Wenn die Klasse instanziert wird auf eventuell überschriebene Attribute checken??)
+            // (=> Eher nein, class-Attribute kommen einfach nur in ein umgebendes Div) -> ToDo To Check
 
 
-            NSArray *keys = [attributeDict allKeys];
+
+            NSArray *keys_ = [attributeDict allKeys];
+            NSMutableArray *keys = [[NSMutableArray alloc] initWithArray:keys_];
 
 
             [self.jsOLClassesOutput appendString:@"\n\n"];
@@ -4200,7 +4211,39 @@ didStartElement:(NSString *)elementName
             [self.jsOLClassesOutput appendFormat:@"var %@ = function() {\n",name];
 
 
-            if ([keys count] > 0)
+            [self.jsOLClassesOutput appendFormat:@"  this.name = '%@';\n",name];
+
+            // Das Attribut 'name' brauchen wir jetzt nicht mehr.
+            int i = [keys count]; // Test, ob es auch klappt
+            [keys removeObject:@"name"];
+            if (i == [keys count])
+                [self instableXML:@"Konnte Attribut 'name' in <class> nicht löschen."];
+
+            // extends auslesen und speichern, dann extends aus der Attributliste löschen
+            NSString *parent = [attributeDict valueForKey:@"extends"];
+            if (parent == nil || parent.length == 0)
+              [self.jsOLClassesOutput appendString:@"  this.parent = new view();\n\n"];
+            else
+              [self.jsOLClassesOutput appendFormat:@"  this.parent = new %@;\n\n",parent];
+            [keys removeObject:@"extends"];
+
+            // Dass klappt so nicht, weil es auch CSS-Eigenschaften gibt, die sich erst auswerten lassen,
+            // wenn ein Objekt instanziert wurde. (z.B. Breite, Höhe des Parents)
+            // Deswegen werden dort die CSS-Eigenschaften ausgewertet
+            // Dazu gebe ich die CSS-Eigenschaften einzeln (!) der Klasse mit (s.u.)
+            // CSS-Eigenschaften auswerten...
+            // NSString *styles = [self addCSSAttributes:attributeDict];
+            // ...und der Klasse mitgeben
+            // [self.jsOLClassesOutput appendFormat:@"  this.style = '%@';\n\n",styles];
+
+            // Mit JS-Eigenschaften klappt es auch nicht..., da hier keine Rekursion am Start ist,
+            // schreibt die Funktion in das Output-File. Ich löse es jetzt so, indem ich die JS-Attribute ebenfalls
+            // auf JS-Ebene in der Funktion interpretObject() auswerte.
+            // [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",ID_REPLACE_STRING]]];
+
+            // Falls keine Attribute vorhanden, muss trotdzem ein leeres Array erzeugt werden!
+            // Denn deleteAttributesPreviousDeclared() verlässt sich auf die Existenz.
+            // if ([keys count] > 0)
             {
                 // Alle Attributnamen als Array hinzufügen
                 [self.jsOLClassesOutput appendString:@"  this.attributeNames = ["];
@@ -4242,6 +4285,7 @@ didStartElement:(NSString *)elementName
                 [self.jsOLClassesOutput appendString:@"];\n\n"];
             }
 
+
             // Den Content von der Klasse ermitteln wir so:
             // Wir lassen es einmal rekrusiv durchlaufen und können so die OL-Elemente in HTML-Elemente umwandeln
             // Später fügt jQuery diese HTML-Elemente, beim auslesen des JS-Objekts, als HTML-Code ein.
@@ -4269,6 +4313,12 @@ didStartElement:(NSString *)elementName
 
 
         // ToDo: ALL This attributes
+        if ([attributeDict valueForKey:@"bgcolor"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"width"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"height"])
+            self.attributeCount++;
         if ([attributeDict valueForKey:@"clickable"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"extends"])
@@ -4289,15 +4339,9 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
         if ([attributeDict valueForKey:@"styleable"])
             self.attributeCount++;
-        if ([attributeDict valueForKey:@"height"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"width"])
-            self.attributeCount++;
         if ([attributeDict valueForKey:@"clip"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"fontstyle"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"bgcolor"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"bgcolor0"])
             self.attributeCount++;
@@ -5134,7 +5178,7 @@ didStartElement:(NSString *)elementName
 
     // Ich füge erstmal alle gefundenen Methoden in ein Objekt ein, dass ich 'parent' nenne,
     // da OpenLaszlo oft mit 'parent.*' arbeitet. Evtl. ist dieser Trick etwas zu dirty und
-    // muss überdacht werden. Die Klasse 'parent' habe ich vorher angelegt.
+    // muss überdacht werden. Die Klasse 'parent' habe ich vorher angelegt. (To Do To Check)
     if ([elementName isEqualToString:@"method"])
     {
         element_bearbeitet = YES;
@@ -5678,32 +5722,53 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+
         NSLog(@"Öffnendes Tag einer selbst definierten Klasse gefunden!");
         // NSLog([NSString stringWithFormat:@"%@",elementName]);
         // NSLog([NSString stringWithFormat:@"%@",[self.allFoundClasses objectForKey:elementName]]);
 
-        // ToDo
+
         if ([attributeDict valueForKey:@"name"])
             self.attributeCount++;
 
+
+        // Ich muss die Stelle einmal markieren...
+        // standardmäßig wird immer von 'view' geerbt, deswegen hier als class 'div_standard'.
+        // Wird falls nötig auf Javascript-Ebene von der Funktion interpretObject() ausgetauscht.
+        [self.output appendString:@"<div"];
+        [self addIdToElement:attributeDict];
+        [self.output appendString:@" class=\"div_standard\"></div>\n"];
+
+
+        // Und dann kann ich es per jQuery flexibel einfügen.
         // Grrr
         // ToDo: Okay, hier muss ich jetzt per jQuery die Objekte auslesen aus der JS-Datei collectedClasses.js
+        [self.jQueryOutput appendFormat:@"\n  // Klasse '%@' wurde instanziert in '%@'",elementName,self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"\n  // Instanz erzeugen, id holen, Objekt auswerten"];
+        [self.jQueryOutput appendFormat:@"\n  var obj = new %@();",elementName];
+        [self.jQueryOutput appendFormat:@"\n  var id = document.getElementById('%@');",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"\n  interpretObject(obj,id);\n",elementName, self.zuletztGesetzteID];
     }
 
 
 
 
+    BOOL debugmode = YES;
     /////////////////////////////////////////////////
     // Abfragen ob wir alles erfasst haben (Debug) //
     /////////////////////////////////////////////////
-    if (!element_bearbeitet)
-        [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht erfasstes öffnendes Element: '%@'", elementName]];
-
-    NSLog([NSString stringWithFormat:@"Es wurden %d von %d Attributen berücksichtigt.",self.attributeCount,[attributeDict count]]);
-
-    if (self.attributeCount != [attributeDict count])
+    if (debugmode)
     {
-        [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht alle Attribute verwertet."]];
+        if (!element_bearbeitet)
+            [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht erfasstes öffnendes Element: '%@'", elementName]];
+
+        NSLog([NSString stringWithFormat:@"Es wurden %d von %d Attributen berücksichtigt.",self.attributeCount,[attributeDict count]]);
+
+        if (self.attributeCount != [attributeDict count])
+        {
+            [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht alle Attribute verwertet."]];
+        }
     }
     /////////////////////////////////////////////////
     // Abfragen ob wir alles erfasst haben (Debug) //
@@ -5716,7 +5781,7 @@ didStartElement:(NSString *)elementName
     // 'attribute' muss wissen in welchem umschließenen Tag wir uns befinden
     if (self.tempVerschachtelungstiefe == self.verschachtelungstiefe)
     {
-        // ToDo // ToDo // ToDO
+        // ToDo // ToDo // ToDo
         self.enclosingElement = elementName;
         self.tempVerschachtelungstiefe = self.verschachtelungstiefe;
     }
@@ -5899,11 +5964,12 @@ BOOL isNumeric(NSString *s)
         // Deswegen muss ich diese aus dem String entfernen.
         // Eine wirklich gute Multi-Line-String-Lösung gibt es wohl nicht.
         // Siehe auch: http://google-styleguide.googlecode.com/svn/trunk/javascriptguide.xml?showone=Multiline_string_literals#Multiline_string_literals
-        rekursiveRueckgabeOutput = [rekursiveRueckgabeOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"' + \n  '"];
-        rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\" + \n  \""];
-        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\n" withString:@"\" + \n  \""];
-        rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"\n" withString:@"\" + \n  \""];
-        rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\" + \n  \""];
+        // Am Ende innerhalb der JS-String-Zeile muss ein \\n stehen, damit Kommentare nur für eine Zeile gelten
+        rekursiveRueckgabeOutput = [rekursiveRueckgabeOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n' + \n  '"];
+        rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
+        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
+        rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
+        rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
 
 
         [self.jsOLClassesOutput appendString:@"  this.contentHTML = '"];
@@ -5916,22 +5982,21 @@ BOOL isNumeric(NSString *s)
         [self.jsOLClassesOutput appendString:@"';\n\n"];
 
 
-        [self.jsOLClassesOutput appendString:@"  this.contentJQuery = \""];
-        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJQueryOutput];
-        [self.jsOLClassesOutput appendString:@"\";\n\n"];
-
-        [self.jsOLClassesOutput appendString:@"  this.contentLeadingJQuery = \""];
-        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJQueryOutput0];
-        [self.jsOLClassesOutput appendString:@"\";\n\n"];
-
         [self.jsOLClassesOutput appendString:@"  this.contentJsHead2 = \""];
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsHead2Output];
         [self.jsOLClassesOutput appendString:@"\";\n\n"];
 
         [self.jsOLClassesOutput appendString:@"  this.contentJS = \""];
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsOutput];
-        [self.jsOLClassesOutput appendString:@"\";\n"];
+        [self.jsOLClassesOutput appendString:@"\";\n\n"];
 
+        [self.jsOLClassesOutput appendString:@"  this.contentLeadingJQuery = \""];
+        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJQueryOutput0];
+        [self.jsOLClassesOutput appendString:@"\";\n\n"];
+
+        [self.jsOLClassesOutput appendString:@"  this.contentJQuery = \""];
+        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJQueryOutput];
+        [self.jsOLClassesOutput appendString:@"\";\n"];
 
 
         [self.jsOLClassesOutput appendString:@"};\n"];
@@ -6431,6 +6496,7 @@ BOOL isNumeric(NSString *s)
         // Remove leading and ending Whitespaces and NewlineCharacters
         s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
+        /*
         // This ersetzen - JQuery-Zugriff herstellen
         s = [s stringByReplacingOccurrencesOfString:@"this" withString:@"$(this)"];
 
@@ -6442,6 +6508,9 @@ BOOL isNumeric(NSString *s)
         // HTML-Attribut 'value' ersetzen (muss ich eventuell ändern, falls es Sideeffects gibt)
         // Habe es länger gemacht, um nicht z. B. die Phrase 'text' in einem String zu erwischen.
         s = [s stringByReplacingOccurrencesOfString:@".attr('text'" withString:@".attr('value'"];
+        */
+        // Statt dessen: (ToCheck)
+        s = [self modifySetAttributeInJSCode:s];
 
 
 
@@ -6483,7 +6552,7 @@ BOOL isNumeric(NSString *s)
             s = [s stringByReplacingOccurrencesOfString:@"  " withString:@" "];
         }
 
-
+        s = [self modifySetAttributeInJSCode:s];
 
         // super ist nicht erlaubt in JS und gibt es auch nicht. Ich ersetze es erstmal durch this. ToDo
         // Evtl. klappt das schon, weil ja eh alle Funktionen in parentKlasse stecken (To Check)
@@ -6602,7 +6671,7 @@ BOOL isNumeric(NSString *s)
 
     // CSS-Stylesheet-Datei // Diese MUSS nach der Humanity-css kommen, da ich bestimmte Sachen
     // überschreibe
-    [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"formate.css\">\n"];
+    [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"styles.css\">\n"];
 
     // IE-Fallback für canvas (falls ich es benutze) - ToDo
     // [pre appendString:@"<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n"];
@@ -6647,6 +6716,15 @@ BOOL isNumeric(NSString *s)
     [pre appendString:self.jsHead2Output];
     [pre appendString:@"</script>\n\n</head>\n\n<body>\n"];
 
+    // Splashscreen vorschalten
+    if ([[[self.pathToFile lastPathComponent] stringByDeletingPathExtension] isEqualToString:@"Taxango"])
+    {
+        [pre appendString:@"<span id=\"splashscreen_\" style=\"background-color:white;width:100%;height:100%;z-index:10000;background-image:url(resources/logo.png);font-size:100px;\">LOADING...</span>\n\n"];
+    }
+    else
+    {
+        [pre appendString:@"<span id=\"splashscreen_\" style=\"background-color:white;width:100%;height:100%;z-index:10000;font-size:100px;\">LOADING...</span>\n\n"];
+    }
 
     // Kurzer Tausch damit ich den Header davorschalten kann
     NSMutableString *temp = [[NSMutableString alloc] initWithString:self.output];
@@ -6692,6 +6770,8 @@ BOOL isNumeric(NSString *s)
         [self.output appendString:@"  $('ul').removeClass('ui-corner-all');\n"];
         [self.output appendString:@"  $('ul').addClass('ui-corner-top');\n"];
     }
+    // Remove Splashscreen
+    [self.output appendString:@"\n  $('#splashscreen_').remove();\n"];
 
     [self.output appendString:@"});\n</script>\n\n"];
 
@@ -6711,7 +6791,7 @@ BOOL isNumeric(NSString *s)
     NSString *path = [[self.pathToFile URLByDeletingLastPathComponent] relativePath];
 
 
-    NSString *pathToCSSFile = [NSString stringWithFormat:@"%@/formate.css",path];
+    NSString *pathToCSSFile = [NSString stringWithFormat:@"%@/styles.css",path];
     NSString *pathToJSFile = [NSString stringWithFormat:@"%@/jsHelper.js",path];
     NSString *pathToCollectedClassesFile = [NSString stringWithFormat:@"%@/collectedClasses.js",path];
 
@@ -6776,7 +6856,7 @@ BOOL isNumeric(NSString *s)
 
 - (void) createCSSFile:(NSString*)path
 {
-    NSString *css = @"/* FILE: formate.css */\n"
+    NSString *css = @"/* FILE: styles.css */\n"
     "\n"
     "/* Enthaelt standard-Definitionen, die das Aussehen von OpenLaszlo simulieren */\n"
     "/*\n"
@@ -6814,8 +6894,8 @@ BOOL isNumeric(NSString *s)
     "\n"
     "    /* Prevents scrolling */\n"
     "    overflow: hidden;\n"
-    "\n"
-    "    text-align: center;\n"
+    // "\n"
+    // "    text-align: center;\n"
     "}\n"
     "\n"
     "/* Damit der Hintergrund weiß wird, entgegen der Angabe in Humanity.css */\n"
@@ -6859,7 +6939,7 @@ BOOL isNumeric(NSString *s)
     "}\n"
     "\n"
     "/* Das Standard-Canvas, welches den Rahmen darstellt */\n"
-    "div.ol_standard_canvas\n"
+    ".canvas_standard\n"
     "{\n"
     "    background-color:white;\n"
 	"    height:100%;\n"
@@ -6890,7 +6970,7 @@ BOOL isNumeric(NSString *s)
     "}\n"
     "\n"
     "/* Das Standard-View, wie es ungefaehr in OpenLaszlo aussieht */\n"
-    "div.ol_standard_view\n"
+    ".div_standard\n"
     "{\n"
     "    /* background-color:red; /* Standard ist hier keine (=transparent), zum testen red */\n"
     "\n"
@@ -6899,6 +6979,9 @@ BOOL isNumeric(NSString *s)
 	"    position:relative;\n"
 	"    top:0px;\n"
 	"    left:0px;\n"
+    "\n"
+    "    border-style:solid;\n"
+    "    border-width:0;\n"
     "    /*\n"
     "    text-align:left;\n"
     "    padding:4px;\n"
@@ -7077,6 +7160,15 @@ BOOL isNumeric(NSString *s)
     "function toInt(n){ return Math.round(Number(n)); };\n"
     "\n"
     "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Wandelt eine float in einen korrekt gerundeten Integer\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function toIntFloor(n){ return Math.floor(Number(n)); };\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Höchte Zahl in Array\n"
+    "/////////////////////////////////////////////////////////\n"
     "function getMaxOfArray(numArray)\n"
     "{\n"
     "    return Math.max.apply(null, numArray);\n"
@@ -7086,6 +7178,9 @@ BOOL isNumeric(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// Hindere IE 9 am seitlichen scrollen mit dem Scrollrad!\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Bricht das scrollen von RollUpDown-Elementen, deswegen auskommentiert\n"
+    "// ToDo: Check this again with IE\n"
+    "/*\n"
     "function wheel(event)\n"
     "{\n"
     "    if (!event)\n"
@@ -7100,6 +7195,7 @@ BOOL isNumeric(NSString *s)
     "if (window.addEventListener)\n"
     "    window.addEventListener('DOMMouseScroll', wheel, false);\n"
     "window.onmousewheel = document.onmousewheel = wheel;\n"
+    "*/\n"
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////\n"
@@ -7323,7 +7419,9 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "// Diese Funktion werde ich gleich 3 mal prototypen müssen um setAttribute in allen Browsern zu überschreiben\n"
-    "var setAttributeFunc = function (attributeName, value) {"
+    "// Neu: Leider bricht setAttribute jQuery.attr(), ein Zurückbehalten auf das originale setAttribute hat wirklich nicht geklapopt \n"
+    "// Deswegen arbeite ich nun mit setAttribute_ und replacement dieser Funktionen im OL-Code \n"
+    "var setAttributeFunc = function (attributeName, value) {\n"
     "    if (attributeName == undefined || attributeName == '')\n"
     "        throw 'Error calling setAttribute, no argument attributeName given (this = '+this+').';\n"
     "    if (value == undefined)\n"
@@ -7338,13 +7436,15 @@ BOOL isNumeric(NSString *s)
     "        $(me).html(value);\n"
     "    else if (attributeName == 'bgcolor')\n"
     "        $(me).css('background-color',value);\n"
+    "    else\n"
+    "      alert('ToDo. Aufruf von setAttribute, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
     "}\n"
     "\n"
     "// Object.prototype ist verboten und bricht jQuery! Deswegen über defineProperty\n"
     "// https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Object/defineProperty\n"
     "// Für alle JS-Objekte (insbesondere window => direkter Aufruf von setAttribute => Dann\n"
     "// auch Zusammenspiel mit globalMe (s.u))\n"
-    "Object.defineProperty(Object.prototype, 'setAttribute', {\n"
+    "Object.defineProperty(Object.prototype, 'setAttribute_', {\n"
     "enumerable: false, // Darf nicht auf 'true' gesetzt werden! Sonst bricht jQuery!\n"
     "configurable: true,\n"
     "writable: false,\n"
@@ -7364,8 +7464,8 @@ BOOL isNumeric(NSString *s)
     "// Element klappt nicht...\n"
     "// HTMLElement klappt auch nicht...\n"
     "// Aber HTMLDivElement... wtf Firefox??\n"
-    "HTMLDivElement.prototype.setAttribute = setAttributeFunc;\n"
-    "HTMLInputElement.prototype.setAttribute = setAttributeFunc;\n"
+    "// HTMLDivElement.prototype.setAttribute = setAttributeFunc; <- Nicht mehr nötig seit setAttribute_\n"
+    "// HTMLInputElement.prototype.setAttribute = setAttributeFunc; <- Nicht mehr nötig seit setAttribute_\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -7409,19 +7509,174 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "\n"
-    "/////////////////////////////////////////////////////////////////////////////////////////////\n"
-    "//  class = x //\n"
-    "/////////////////////////////////////////////////////////////////////////////////////////////\n"
-    "var Person = function(name) {\n"
-    "  this.name = name;\n"
-    "  this.say = function () {\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  PLatzhalter-ID, die in allen Objekten ersetzt wird       //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "var platzhalterID = '@@@P-L,A#TZHALTER@@@';\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  Mit dieser funktion werden alle Objekte ausgewert        //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "function interpretObject(obj,id)\n"
+    "{\n"
+    "  // Alle Attribute von Vorfahren werden geerbt. Dazu solange nach Vorfahren suchen, bis 'view' kommt\n"
+    "  // und die Attribute übernehmen (bei gleichen gelten die hierachiemäßig allernächsten).\n"
+    "  var currentObj = obj; // Zwischenspeichern\n"
+    "  while (obj.parent.name !== 'view')\n"
+    "  {\n"
+    "    // Doppelte Einträge entfernen\n"
+    "    obj.parent = deleteAttributesPreviousDeclared(currentObj.attributeNames,obj.parent);\n"
+    "\n"
+    "    // attributeNames übernehmen\n"
+    "    if (obj.parent.attributeNames.length > 0)\n"
+    "      currentObj.attributeNames = currentObj.attributeNames.concat(obj.parent.attributeNames);\n"
+    "\n"
+    "    // attributeValues übernehmen\n"
+    "    if (obj.parent.attributeValues.length > 0)\n"
+    "      currentObj.attributeValues = currentObj.attributeValues.concat(obj.parent.attributeValues);\n"
+    "\n"
+    "    // Dann den HTML-Content hinzufügen\n"
+    "    // Prepend! Da es der OpenLaszlo-Logik entspricht, tiefer verschachtelte Vorfahren immer davor zu setzen\n"
+    "    $(id).prepend(obj.parent.contentHTML);\n"
+    "\n"
+    "    // Objekt der nächsten Vererbung-Stufe holen\n"
+    "    obj = obj.parent;\n"
+    "  }\n"
+    "  obj = currentObj;\n"
+    "\n"
+    "\n"
+    "  // 'view' (HTML-Element und/oder CSS-class) wird standardmäßig benutzt. Ansonsten muss ich hier austauschen."
+    "  if (obj.parent !== 'view')\n"
+    "  {\n"
+    "    //alert(obj.parent);\n"
+    "  }\n"
+    "\n"
+    "  // Erst die Attribute auswerten\n"
+    "  var an = obj.attributeNames;\n"
+    "  var av = obj.attributeValues;\n"
+    "  for (i = 0;i<an.length;i++)\n"
+    "  {\n"
+    //"    alert(an[i]);\n"
+    //"    alert(av[i]);\n"
+    "    var cssAttributes = ['bgcolor','width','height'];\n"
+    "    var jsAttributes = ['onclick'];\n"
+    "    if (jQuery.inArray(an[i],cssAttributes) != -1)\n"
+    "    {\n"
+    "      if (an[i] === 'bgcolor')\n"
+    "        an[i] = 'background-color';\n"
+    "      $(id).css(an[i],av[i]);\n"
+    "    }\n"
+    "    else if (jQuery.inArray(an[i],jsAttributes) != -1)\n"
+    "    {\n"
+    "      $(id).bind('click', function()\n"
+    "      {\n"
+    "        alert('User clicked on \"foo.\"');\n"
+    "      });\n"
+    "    }\n"
+    "    else { alert('Whoops, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() ausgewertet werden.'); }\n"
+    "  }\n"
+    // "  $(id).css('background-color','black').css('width','200').css('height','5');\n"
+    // "  $(id).attr('style',obj.style);\n"
+    "\n"
+    "  // Allgemeine Replacement-Vorbereitungen des Platzhalters\n"
+    "  var from = new RegExp(platzhalterID, 'g');\n"
+    "  var to = '' + $(id).attr('id')+'_objekt';\n"
+    "\n"
+    "  // Replace-IDs von contentHTML ersetzen\n"
+    "  var s = obj.contentHTML;\n"
+    "  s = s.replace(from, to);\n"
+    "\n"
+    "  // Dann den HTML-Content hinzufügen\n"
+    //"  // $(id).html(s);\n"
+    "  $(id).append(s);\n"
+    "\n"
+    "  // Replace-IDs von contentJQuery ersetzen\n"
+    "  var s = obj.contentJQuery;\n"
+    "  s = s.replace(from, to);\n"
+    "\n"
+    "  // Dann den jQuery-Content hinzufügen\n"
+    "  evalCode(s);\n"
+    "\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  executes code from string                                //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "function evalCode(code)\n"
+    "{\n"
+    "    // Möglichkeit 1: als eval, aber eval is evil (angeblich)\n"
+    "    // eval(code);\n"
+    "\n"
+    "    // Möglichkeit 2: Als Funktion\n"
+    "    // var F=new Function (code);\n"
+    "    // F();\n"
+    "\n"
+    "    // Möglichkeit 3: per jQuery den Code an das Ende von body anfügen\n"
+    "    var script = '<script type=\"text/javascript\"> ' + code + ' </script>';\n"
+    "    $('body').append(script);\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  Löscht doppelte Attribute (ältere bleiben erhalten)      //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "function deleteAttributesPreviousDeclared(bestand,neu)\n"
+    "{\n"
+    "    var an = neu.attributeNames;\n"
+    "    var av = neu.attributeValues;\n"
+    "\n"
+    "    for (i = 0;i<an.length;i++)\n"
+    "    {\n"
+    "        if (jQuery.inArray(an[i],bestand) != -1)\n"
+    "        {\n"
+    "            an.splice(i,1);\n"
+    "            av.splice(i,1);\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "    return neu;\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = view (native class)                              //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "var view = function() {\n"
+    "  this.name = 'view';\n"
+    "  this.parent = undefined;\n"
+    "\n"
+    "  this.attributeNames = [];\n"
+    "  this.attributeValues = [];\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = button (native class)                            //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "var button = function() {\n" //"var button = function(name) {\n"
+    "  this.name = 'button';\n"
+    "  this.parent = new view();\n"
+    "\n"
+    "  this.attributeNames = [];\n"
+    "  this.attributeValues = [];\n"
+    "\n"
+    "  this.contentHTML = '<input type=\"button\" id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_standard\">';\n"
+    "\n"
+    "  this.test1 = function () { // Intern definierte Methode\n"
     "    return 'I am ' + this.name;\n"
     "  };\n"
     "};\n"
-    "Person.prototype.say2 = function() {};\n"
-    "Person.prototype.say3 = 2;\n"
+    "button.prototype.test2 = function() {}; // extern definierte Methode\n"
+    "button.prototype.test3 = 2; // extern definierte Variable\n"
     "\n";
-
+    js = [js stringByReplacingOccurrencesOfString:@"@@@P-L,A#TZHALTER@@@" withString:ID_REPLACE_STRING];
 
 
     js = [NSString stringWithFormat:@"%@%@", js, self.jsOLClassesOutput];
@@ -7466,9 +7721,9 @@ BOOL isNumeric(NSString *s)
         NSLog(@"z. B. schließendes Tag gefunden ohne korrespondierendes öffnendes Tag.");
     }
 
-    if ([errorString hasSuffix:@"5"])
+    if ([errorString hasSuffix:@"68"])
     {
-        NSLog(@"XML-Dokument unvollständig geladen bzw Datei nicht vorhanden bzw kein vollständiges XML-Tag enthalten bzw. malformed XML (z. B. kein umschließendes Tag um alles).");
+        NSLog(@"Z. B. '/ />' am Elementende oder Ampersand (&) im Attribut (NSXMLParserNAMERequiredError) ");
     }
 
     if ([errorString hasSuffix:@"38"])
@@ -7476,10 +7731,16 @@ BOOL isNumeric(NSString *s)
         NSLog(@"Kleiner-Zeichen (<) in Attribut (NSXMLParserLessThanSymbolInAttributeError) ");
     }
 
-    if ([errorString hasSuffix:@"68"])
+    if ([errorString hasSuffix:@"5"])
     {
-        NSLog(@"Z. B. '/ />' am Elementende oder Ampersand (&) im Attribut (NSXMLParserNAMERequiredError) ");
+        NSLog(@"XML-Dokument unvollständig geladen bzw Datei nicht vorhanden bzw kein vollständiges XML-Tag enthalten bzw. malformed XML (z. B. kein umschließendes Tag um alles).");
     }
+
+    if ([errorString hasSuffix:@"4"])
+    {
+        NSLog(@"Keine XML-Daten im Dokument vorhanden! (NSXMLParserEmptyDocumentError).");
+    }
+
 
     NSLog(@"\nI had no success parsing the document. I'm sorry.");
 

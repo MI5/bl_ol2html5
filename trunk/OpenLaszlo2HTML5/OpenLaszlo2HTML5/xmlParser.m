@@ -18,8 +18,8 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = YES; // Yes ist gemäß OL-Inspektion richtig, aber leider ist der Code nach an zu vielen Stellen
-// auf position: relative ausgerichtet.
+BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code nach an zu
+                            // Stellen auf position: relative ausgerichtet.
 
 
 
@@ -814,7 +814,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         {
             // Die Eigenschaft fontsize überträgt sich auf alle Kinder und Enkel
             [self.jQueryOutput appendString:@"\n\n  // Alle Kinder und Enkel kriegen ebenfalls diese Eigenschaft mit\n"];
-            [self.jQueryOutput appendFormat:@"  $('#%@').find('.ol_text').css('font-size','%@px');\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"fontsize"]];
+            [self.jQueryOutput appendFormat:@"  $('#%@').find('.div_text').css('font-size','%@px');\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"fontsize"]];
         }
     }
 
@@ -1001,6 +1001,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+    // ToDo To Check -> Ist dies überhaupt noch notwendig? Vermutlich korrigiere ich schon bei SimpleLayout
 
     // Immer wenn ein Element von uns hier auf "absolute" gesetzt wurde
     // Dann muss ich die größe des Parents erweitern
@@ -1616,10 +1617,11 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Simplelayout Y
     if (wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y)
     {
-        // If-Abfrage bauen
-        [self.jsOutput appendString:@"if (document.getElementById('"];
-        [self.jsOutput appendString:id];
-        [self.jsOutput appendString:@"').previousElementSibling && document.getElementById('"];
+        [self instableXML:@"Bei tax kommen wir hier gar nicht rein, wtf. (Simplelayout Y). Für was gibt es das dann? ToDo: Test mit SimpleLayout-OL-Doku."];
+
+        [self.jsOutput appendString:@"if ("];
+        [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
+        [self.jsOutput appendString:@"document.getElementById('"];
         [self.jsOutput appendString:id];
         [self.jsOutput appendString:@"').previousElementSibling.lastElementChild)\n"];
 
@@ -1647,9 +1649,10 @@ void OLLog(xmlParser *self, NSString* s,...)
 
             // Den allerersten sippling auslassen
             [self.jsOutput appendString:@"// Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n// und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Inklusive spacing.\n"];
-            [self.jsOutput appendString:@"if (document.getElementById('"];
-            [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').previousElementSibling && $('#"];
+            [self.jsOutput appendString:@"if ("];
+            // Test ob es überhaupt ein vorheriges Geschwisterelement gibt, muss drin sein, sonst Absturz
+            [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
+            [self.jsOutput appendString:@"$('#"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').css('position') == 'absolute')\n"];
 
@@ -1675,13 +1678,21 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Ansonsten müssen wir halt nur entsprechend des spacing-Wertes nach unten
             // rücken. Mit top klappt es nicht (zumindestens nicht bei mehr als 2 Elementen)
             // mit padding klappt es auch nicht, aber mit margin... zum Glück
+            // Korrektur: margin bricht position:absolute, weil es dann eventuell rechts runter in die nächste
+            // Zeile fallen kann, deswegen doch mit left arbeiten. Einfach multiplizieren mit Anzahl der sipplings!
+            // Dann klappt left.
             [self.jsOutput appendString:@"else\n"];
             [self.jsOutput appendString:@"  // ansonsten wegen 'spacing' nach unten rücken\n"];
-            [self.jsOutput appendString:@"  document.getElementById('"];
+            [self.jsOutput appendString:@"  $('#"];
             [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').style.marginTop = '"];
+            // [self.jsOutput appendString:@"').css('margin-top','"];
+            // [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_y]];
+            // [self.jsOutput appendString:@"px');\n\n"];
+            [self.jsOutput appendString:@"').css('top',"];
+            // += klappt nicht wegen der Startvorgabe 'auto'. Da kann man nicht draufaddieren. Aber klappt auch ohne +=
+            // [self.jsOutput appendString:@"'+=' + "];
             [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_y]];
-            [self.jsOutput appendString:@"px';\n\n"];
+            [self.jsOutput appendFormat:@" * $('#%@').prevAll().length);\n\n",id];
         }
         self.firstElementOfSimpleLayout_y = NO;
     }
@@ -1691,10 +1702,12 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Simplelayout X
     if (wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_X)
     {
-        // If-Abfrage bauen
-        [self.jsOutput appendString:@"if (document.getElementById('"];
-        [self.jsOutput appendString:id];
-        [self.jsOutput appendString:@"').previousElementSibling && document.getElementById('"];
+        [self instableXML:@"Bei tax kommen wir hier gar nicht rein, wtf. (Simplelayout X). Für was gibt es das dann? ToDo: Test mit SimpleLayout-OL-Doku."];
+
+        [self.jsOutput appendString:@"if ("];
+        [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
+
+        [self.jsOutput appendString:@"document.getElementById('"];
         [self.jsOutput appendString:id];
         [self.jsOutput appendString:@"').previousElementSibling.lastElementChild)\n"];
 
@@ -1723,9 +1736,10 @@ void OLLog(xmlParser *self, NSString* s,...)
 
             // Den allerersten sippling auslassen
             [self.jsOutput appendString:@"// Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n// und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Inklusive spacing.\n"];
-            [self.jsOutput appendString:@"if (document.getElementById('"];
-            [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').previousElementSibling && $('#"];
+            [self.jsOutput appendString:@"if ("];
+            // Test ob es überhaupt ein vorheriges Geschwisterelement gibt, muss drin sein, sonst Absturz
+            [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
+            [self.jsOutput appendString:@"$('#"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').css('position') == 'absolute')\n"];
 
@@ -1756,12 +1770,20 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Ansonsten müssen wir halt nur entsprechend des spacing-Wertes nach rechts
             // rücken. Mit left klappt es nicht (zumindestens nicht bei mehr als 2 Elementen)
             // mit padding klappt es auch nicht, aber mit margin... zum Glück
-            [self.jsOutput appendString:@"  // ansonsten wegen 'spacing' nach rechts rücken\n"];
-            [self.jsOutput appendString:@"  document.getElementById('"];
+            // Korrektur: margin bricht position:absolute, weil es dann eventuell rechts runter in die nächste
+            // Zeile fallen kann, deswegen doch mit left arbeiten. Einfach multiplizieren mit Anzahl der sipplings!
+            // Dann klappt left.
+            [self.jsOutput appendString:@"  // ansonsten wegen 'spacing' nach rechts rücken (spacing * Anzahl vorheriger Geschwister)\n"];
+            [self.jsOutput appendString:@"  $('#"];
             [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').style.marginLeft = '"];
+            // [self.jsOutput appendString:@"').css('margin-left','"];
+            // [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
+            // [self.jsOutput appendString:@"px');\n\n"];
+            [self.jsOutput appendString:@"').css('left',"];
+            // += klappt nicht wegen der Startvorgabe 'auto'. Da kann man nicht draufaddieren. Aber klappt auch ohne +=
+            // [self.jsOutput appendString:@"'+=' + "];
             [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
-            [self.jsOutput appendString:@"px';\n\n"];
+            [self.jsOutput appendFormat:@" * $('#%@').prevAll().length);\n\n",id];
         }
         self.firstElementOfSimpleLayout_x = NO;
     }
@@ -1833,6 +1855,61 @@ void OLLog(xmlParser *self, NSString* s,...)
     NSLog(@"Leaving recursion");
 }
 
+
+
+// Muss rückwärts gesetzt werden, weil die Höhe der Kinder ja bereits bekannt sein muss!
+-(void) korrigiereHoeheDesUmgebendenDivBeiSimpleLayout
+{
+    NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
+
+    [s appendString:@"// Eventuell nachfolgende Simplelayouts müssen entsprechend der Höhe des vorherigen umgebenden Divs aufrücken.\n// Deswegen wird hier explizit die Höhe gesetzt (ermittelt anhand des höchsten Kindes).\n// Eventuelle Kinder wurden vorher gesetzt.\n"];
+
+    // Schutz gegen unbekannte Elemente oder wenn simplelayout nicht das
+    // erste Element mehrerer Geschwister ist, was nicht unterstützt wird
+    [s appendFormat:@"if (document.getElementById('%@').lastElementChild",self.zuletztGesetzteID];
+
+    // Bei positionabsolute = YES muss ich diese Zeile auskommentieren, damit es funktioniert
+    // Bei positionabsolute = NO muss diese Zeile aktiv sein, damit es funktioniert
+/*marker*/ //[s appendFormat:@" && $('#%@').css('position') == 'relative'",self.zuletztGesetzteID];
+
+    [s appendFormat:@")\n{\n  var heights = $('#%@').children().map(function () { return $(this).outerHeight(); }).get();\n",self.zuletztGesetzteID];
+
+    // [s appendString:@"  alert(heights);\n"];
+    // [s appendString:@"  alert(getMaxOfArray(heights));\n"];
+
+    [s appendFormat:@"  $('#%@').css('height',getMaxOfArray(heights));\n}\n\n",self.zuletztGesetzteID];
+
+    // Vor den String davorsetzen!
+    [self.jsOutput insertString:s atIndex:0];
+}
+
+
+
+// Muss rückwärts gesetzt werden, weil die Breite der Kinder ja bereits bekannt sein muss!
+-(void) korrigiereBreiteDesUmgebendenDivBeiSimpleLayout
+{
+    NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
+
+    [s appendString:@"// Eventuell nachfolgende Simplelayouts müssen entsprechend der Breite des vorherigen umgebenden Divs aufrücken.\n// Deswegen wird hier explizit die Breite gesetzt (ermittelt anhand des breitesten Kindes).\n// Eventuelle Kinder wurden vorher gesetzt.\n"];
+
+    // Schutz gegen unbekannte Elemente oder wenn simplelayout nicht das
+    // erste Element mehrerer Geschwister ist, was nicht unterstützt wird
+    [s appendFormat:@"if (document.getElementById('%@').lastElementChild",self.zuletztGesetzteID];
+
+    // Ich nehme Test auf position: relative hier mal raus
+    // Leider klappt es nur dann z.B. bei dem 'Taxango Foren'-Button
+    // [s appendFormat:@"&& $('#%@').css('position') == 'relative'",self.zuletztGesetzteID];
+
+    [s appendFormat:@")\n{\n  var widths = $('#%@').children().map(function () { return $(this).outerWidth(); }).get();\n",self.zuletztGesetzteID];
+
+    // [s appendString:@"  alert(widths);\n"];
+    // [s appendString:@"  alert(getMaxOfArray(widths));\n"];
+
+    [s appendFormat:@"  $('#%@').css('width',getMaxOfArray(widths));\n}\n\n",self.zuletztGesetzteID];
+
+    // Vor den String davorsetzen!
+    [self.jsOutput insertString:s atIndex:0];
+}
 
 
 
@@ -2072,48 +2149,13 @@ didStartElement:(NSString *)elementName
             // SimpleLayout-Tiefenzähler (y) um 1 erhöhen
             self.simplelayout_y_tiefe++;
 
+
             /*******************/
             // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Breite
             // der beinhaltenden Elemente an.
             // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
             // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
-            [self.jsOutput appendString:@"// Eventuell nachfolgende Simplelayouts müssen entsprechend der Breite des vorherigen umgebenden Divs aufrücken.\n"];
-
-            // [self.jsOutput appendString:@"// position:absolute richtet sich perfekt selber aus, nur bei position:relative ist es nötig.\n"];
-
-            // If-Abfrage drum herum als Schutz gegen unbekannte Elemente oder wenn simplelayout
-            // das letzte Element mehrerer Geschwister ist, was nicht unterstützt wird (es muss
-            // stets das erste sein)
-            [self.jsOutput appendString:@"if (document.getElementById('"];
-            [self.jsOutput appendString:self.zuletztGesetzteID];
-            [self.jsOutput appendString:@"').lastElementChild"];
-
-            // Ich nehme Test auf position: relative hier mal raus
-            // Leider klappt es nur dann z.B. bei dem 'Taxango Foren'-Button
-            // [self.jsOutput appendFormat:@"&& $('#%@').css('position') == 'relative'",self.zuletztGesetzteID];
-
-            [self.jsOutput appendString:@")\n{\n"];
-            [self.jsOutput appendFormat:@"  var widths = $('#%@').children().map(function () { return $(this).outerWidth(); }).get();\n",self.zuletztGesetzteID];
-
-            // [self.jsOutput appendString:@"  alert(widths);\n"];
-            // [self.jsOutput appendString:@"  alert(getMaxOfArray(widths));\n"];
-
-            [self.jsOutput appendFormat:@"  $('#%@').css('width',getMaxOfArray(widths));\n}\n\n",self.zuletztGesetzteID];
-
-
-
-
-
-
-            // Alte Lösung ohne jQuery - nicht mehr nötig.
-            //[self.jsOutput appendString:@"  document.getElementById('"];
-            //[self.jsOutput appendString:self.zuletztGesetzteID];
-            //[self.jsOutput appendString:@"').style.width = document.getElementById('"];
-            //[self.jsOutput appendString:self.zuletztGesetzteID];
-            // ToDo -> Done!: Hier muss ich eigentlich dasjenige Kind suchen, welches die größte Breite hat
-            // offsetWidth killt zu vieles, z.B. Width element9, deswegen style.width lassen
-            //[self.jsOutput appendString:@"').lastElementChild.style.width"];
-            //[self.jsOutput appendString:@";\n\n"];
+            [self korrigiereBreiteDesUmgebendenDivBeiSimpleLayout];
             /*******************/
 
 
@@ -2125,18 +2167,19 @@ didStartElement:(NSString *)elementName
 
             [self.jQueryOutput0 appendString:@"\n\n  // Y-Simplelayout: Deswegen die Höhe aller beinhaltenden Elemente auf erster Ebene ermitteln\n  // und dem umgebenden div die Summe als Höhe mitgeben (nur bei rudElement MUSS es auto bleiben)\n"];
             [self.jQueryOutput0 appendString:@"  var sumH = 0;\n"];
-            // [self.jQueryOutput0 appendString:@"  var zaehler = 0;\n"];
+            [self.jQueryOutput0 appendString:@"  var zaehler = 0;\n"];
             [self.jQueryOutput0 appendString:@"  $('#"];
             [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
             [self.jQueryOutput0 appendString:@"').children().each(function() {\n    sumH += $(this).outerHeight(true);\n"];
-            // [self.jQueryOutput0 appendString:@"    zaehler++;\n"];
+            [self.jQueryOutput0 appendString:@"    zaehler++;\n"];
             [self.jQueryOutput0 appendString:@"  });\n"];
 
-            // Seitdem ich den y-abstand stets per margin setze, darf ich den y-abstand nicht mehr
-            // setzen, da er in outerWidth(true) ja bereits enthalten ist!
-            // [self.jQueryOutput0 appendString:@"  sumH += (zaehler-1) * "];
-            // [self.jQueryOutput0 appendString:[self.simplelayout_y_spacing lastObject]];
-            // [self.jQueryOutput0 appendString:@";\n"];
+            // Muss natürlich auch den y-spacing-Abstand zwischen den Elementen mit berücksichtigen
+            // und auf die Höhe aufaddieren.
+            // Keine Ahnung, aber wenn ich es auskommentiere, stimmt es mit dem Original eher überein.
+            [self.jQueryOutput0 appendString:@"  sumH += (zaehler-1) * "];
+            [self.jQueryOutput0 appendString:[self.simplelayout_y_spacing lastObject]];
+            [self.jQueryOutput0 appendString:@";\n"];
 
             [self.jQueryOutput0 appendString:@"  if (!($('#"];
             [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
@@ -2178,32 +2221,7 @@ didStartElement:(NSString *)elementName
             // der beinhaltenden Elemente an.
             // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
             // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
-            [self.jsOutput appendString:@"// Eventuell nachfolgende Simplelayouts müssen entsprechend der Höhe des vorherigen umgebenden Divs aufrücken.\n"];
-            [self.jsOutput appendString:@"// position:absolute richtet sich perfekt selber aus, nur bei position:relative ist es nötig.\n"];
-
-            // If-Abfrage drum herum als Schutz gegen unbekannte Elemente oder wenn simplelayout
-            // das letzte Element mehrerer Geschwister ist, was nicht unterstützt wird (es muss
-            // stets das erste sein)
-            [self.jsOutput appendString:@"if (document.getElementById('"];
-            [self.jsOutput appendString:self.zuletztGesetzteID];
-            [self.jsOutput appendString:@"').lastElementChild"];
-/*marker*/ //[self.jsOutput appendFormat:@"&& $('#%@').css('position') == 'relative'",self.zuletztGesetzteID];
-            [self.jsOutput appendString:@")\n{\n"];
-            [self.jsOutput appendFormat:@"  var heights = $('#%@').children().map(function () { return $(this).outerHeight(); }).get();\n",self.zuletztGesetzteID];
-
-            // [self.jsOutput appendString:@"  alert(heights);\n"];
-            // [self.jsOutput appendString:@"  alert(getMaxOfArray(heights));\n"];
-
-            [self.jsOutput appendFormat:@"  $('#%@').css('height',getMaxOfArray(heights));\n}\n\n",self.zuletztGesetzteID];
-
-            // Alte Lösung ohne jQuery - nicht mehr nötig.
-            //[self.jsOutput appendString:@"  document.getElementById('"];
-            //[self.jsOutput appendString:self.zuletztGesetzteID];
-            //[self.jsOutput appendString:@"').style.height = document.getElementById('"];
-            //[self.jsOutput appendString:self.zuletztGesetzteID];
-            // ToDo -> Done!: Hier muss ich eigentlich dasjenige Kind suchen, welches die größte height hat
-            //[self.jsOutput appendString:@"').lastElementChild.style.height"];
-            //[self.jsOutput appendString:@";\n}\n\n"];
+            [self korrigiereHoeheDesUmgebendenDivBeiSimpleLayout];
             /*******************/
 
 
@@ -2215,26 +2233,29 @@ didStartElement:(NSString *)elementName
             // optimal ausrichten lassen.
             // Nur bei position:relative muss ich nachhelfen, weil es dort sonst 0 wäre
             // Auf sowas erstmal zu kommen.... oh man.
+            // Neu: Ich richte es immer korrekt aus, selbst bei position:absolute muss ich nachhelfen!
+            // Deswegen die Einschränkung auf position:relative unten auskommentiert
 
-            [self.jQueryOutput0 appendString:@"\n  // X-Simplelayout: Deswegen die Breite aller beinhaltenden Elemente auf erster Ebene ermitteln und dem umgebenden div die Summe als\n  // Breite mitgeben (das darf nur bei position:relative gemacht werden, position:absolute nimmt von selbst die perfekte Breite an)\n"];
+            [self.jQueryOutput0 appendString:@"\n  // X-Simplelayout: Deswegen die Breite aller beinhaltenden Elemente erster Ebene ermitteln und dem umgebenden div die Summe als\n  // Breite mitgeben (das darf nur bei position:relative gemacht werden, position:absolute nimmt von selbst die perfekte Breite an)\n"];
             [self.jQueryOutput0 appendString:@"  var sumW = 0;\n"];
-            //[self.jQueryOutput0 appendString:@"  var zaehler = 0;\n"];
+            [self.jQueryOutput0 appendString:@"  var zaehler = 0;\n"];
             [self.jQueryOutput0 appendString:@"  $('#"];
             [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
             [self.jQueryOutput0 appendString:@"').children().each(function() {\n    sumW += $(this).outerWidth(true);\n"];
-            // [self.jQueryOutput0 appendString:@"    zaehler++;\n"];
+             [self.jQueryOutput0 appendString:@"    zaehler++;\n"];
             [self.jQueryOutput0 appendString:@"  });\n"];
 
-            // Seitdem ich den x-abstand stets per margin setze, darf ich den x-abstand nicht mehr
-            // setzen, da er in outerWidth(true) ja bereits enthalten ist!
-            // [self.jQueryOutput0 appendString:@"  sumW += (zaehler-1) * "];
-            // [self.jQueryOutput0 appendString:[self.simplelayout_x_spacing lastObject]];
-            // [self.jQueryOutput0 appendString:@";\n"];
+            // Muss natürlich auch den x-spacing-Abstand zwischen den Elementen mit berücksichtigen
+            // und auf die Breite aufaddieren.
+            [self.jQueryOutput0 appendString:@"  sumW += (zaehler-1) * "];
+            [self.jQueryOutput0 appendString:[self.simplelayout_x_spacing lastObject]];
+            [self.jQueryOutput0 appendString:@";\n"];
 
-/*marker*/            [self.jQueryOutput0 appendString:@"  if ($('#"];
-            [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
-            [self.jQueryOutput0 appendString:@"').css('position') == 'relative'"];
-            [self.jQueryOutput0 appendString:@")\n"];
+            // Keine Einschränkung mehr auf position:relative
+            // [self.jQueryOutput0 appendString:@"  if ($('#"];
+            // [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
+            // [self.jQueryOutput0 appendString:@"').css('position') == 'relative'"];
+            // [self.jQueryOutput0 appendString:@")\n"];
 
             [self.jQueryOutput0 appendString:@"    $('#"];
             [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
@@ -2364,8 +2385,8 @@ didStartElement:(NSString *)elementName
             [self.cssOutput appendString:@"}\n\n"];
 
 
-            // auch für div.ol_text muss ich font-size und font-family übernehmen
-            [self.cssOutput appendString:@"div.ol_text\n{\n  font-size: "];
+            // auch für .div_text muss ich font-size und font-family übernehmen
+            [self.cssOutput appendString:@".div_text\n{\n  font-size: "];
             [self.cssOutput appendString:fontsize];
             [self.cssOutput appendString:@"px;\n"];
             [self.cssOutput appendString:@"  font-family: "];
@@ -3009,7 +3030,7 @@ didStartElement:(NSString *)elementName
         [self addIdToElement:attributeDict];
 
 
-        [self.output appendString:@" class=\"ol_text\" style=\""];
+        [self.output appendString:@" class=\"div_text\" style=\""];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
@@ -5154,7 +5175,7 @@ didStartElement:(NSString *)elementName
 
 
 
-        [self.output appendString:@" class=\"ol_text\" style=\""];
+        [self.output appendString:@" class=\"div_text\" style=\""];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
@@ -6746,8 +6767,26 @@ BOOL isNumeric(NSString *s)
 
     // Füge noch die nötigen JS ein:
     [self.output appendString:@"\n<script type=\"text/javascript\">\n"];
+
+
+    // Vorgezogene jQuery-Ausgaben:
+    if (![self.jQueryOutput0 isEqualToString:@""])
+    {
+        [self.output appendString:self.jQueryOutput0];
+        [self.output appendString:@"\n\n  /****************************************************************/\n"];
+        [self.output appendString:@"  /*****************************Grenze*****************************/\n"];
+        [self.output appendString:@"  /***********Vorgezogene JQuery-Ausgaben sind hier vor ***********/\n"];
+        [self.output appendString:@"  /***Diese müssen zwingend vor folgenden JS/jQuery-Ausgaben kommen***/\n"];
+        [self.output appendString:@"  /****************************************************************/\n\n\n"];
+    }
+
+
     [self.output appendString:self.jsOutput];
-    [self.output appendString:@"\n\n$(function()\n{\n"];
+
+    // Und die jQuery-Anweisungen:
+
+    [self.output appendString:@"\n\n// '$(function() {' ist leider zu unverlässig. Bricht z. B. das korrekte setzen der Breite von element9, weil es die direkten Kinder-Elemente nicht richtig auslesen kann\n// Dieses Problem trat nur beim Reloaden auf, nicht beim direkten Betreten der Seite per URL. Very strange!\n// Jedenfalls lässt sich das Problem über '$(window).load(function() {});' anstatt '$(document).ready(function() {});' lösen.\n// http://stackoverflow.com/questions/6504982/jquery-behaving-strange-after-page-refresh-f5-in-chrome\n// Eventuell muss ich dadurch auch nicht mehr alle width/height-Startwerte per css auf 'auto' setzen (To Check).\n"];
+    [self.output appendString:@"$(window).load(function()\n{\n"];
 
     [self.output appendString:@"  // globalhelp heimlich als Div einführen\n"];
     [self.output appendString:@"  $('div:first').prepend('<div id=\"___globalhelp\" class=\"ui-corner-all\" style=\"position:absolute;left:810px;top:150px;width:175px;height:300px;z-index:1000;background-color:white;padding:4px;\">Infocenter</div>');\n\n"];
@@ -6760,16 +6799,7 @@ BOOL isNumeric(NSString *s)
     [self.output appendString:@"  var dlgFamilienstandSingle = new dlg();\n\n"];
 
 
-    // Vorgezogene jQuery-Ausgaben:
-    if (![self.jQueryOutput0 isEqualToString:@""])
-    {
-        [self.output appendString:self.jQueryOutput0];
-        [self.output appendString:@"\n\n  /****************************************************************/\n"];
-        [self.output appendString:@"  /*****************************Grenze*****************************/\n"];
-        [self.output appendString:@"  /***********Vorgezogene JQuery-Ausgaben sind hier vor ***********/\n"];
-        [self.output appendString:@"  /***Diese müssen zwingend vor folgenden jQuery-Ausgaben kommen***/\n"];
-        [self.output appendString:@"  /****************************************************************/\n\n\n"];
-    }
+
 
     // Normale jQuery-Ausgaben
     [self.output appendString:self.jQueryOutput];
@@ -6942,7 +6972,7 @@ BOOL isNumeric(NSString *s)
     "/* ausrichten zu können. So, dass sie nicht umbrechen, weil Sie position: absolute sind. */\n"
     "/* Andererseits braucht simplelayout eben position:absolute  -  evtl. ToDo */\n"
     "div > div > div > div > div > div > div > div > input,\n"
-    "div > div > div > div > div > div > div > div[class=\"ol_text\"]\n"
+    "div > div > div > div > div > div > div > div[class=\"div_text\"]\n"
     "{\n"
     "    position:relative;\n"
     "}\n"
@@ -7084,7 +7114,7 @@ BOOL isNumeric(NSString *s)
     "}\n"
     "\n"
     "/* Standard-Text (Text/BDStext) */\n"
-    "div.ol_text\n"
+    ".div_text\n"
     "{\n"
     "    position:relative;\n"
     "    text-align:left;\n"

@@ -17,6 +17,12 @@
 //  Copyright (c) 2012 Buhl. All rights reserved.
 //
 
+BOOL debugmode = YES;
+BOOL positionAbsolute = YES; // Yes ist gemäß OL-Inspektion richtig, aber leider ist der Code nach an zu vielen Stellen
+// auf position: relative ausgerichtet.
+
+
+
 #import "xmlParser.h"
 
 #import "globalVars.h"
@@ -1640,11 +1646,12 @@ void OLLog(xmlParser *self, NSString* s,...)
             // position:absolute ist. Dann müssen wir es doch immer noch verrücken.
 
             // Den allerersten sippling auslassen
+            [self.jsOutput appendString:@"// Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n// und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Inklusive spacing.\n"];
             [self.jsOutput appendString:@"if (document.getElementById('"];
             [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').previousElementSibling && document.getElementById('"];
+            [self.jsOutput appendString:@"').previousElementSibling && $('#"];
             [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').style.position == 'absolute')\n"];
+            [self.jsOutput appendString:@"').css('position') == 'absolute')\n"];
 
             [self.jsOutput appendString:@"  document.getElementById('"];
             [self.jsOutput appendString:id];
@@ -1652,17 +1659,20 @@ void OLLog(xmlParser *self, NSString* s,...)
             // parseInt removes the "px" at the end
             [self.jsOutput appendString:@"').style.top = (parseInt(document.getElementById('"];
             [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').previousElementSibling.offsetTop)+"];
+            [self.jsOutput appendString:@"').previousElementSibling.offsetTop)"];
 
-            // Seit wir von absolute auf relative umgestiegen sind,brauchen wir nur noch offsetTop?
-               [self.jsOutput appendString:@"parseInt(document.getElementById('"];
+            // Nur bei relative: Dann könnte man die eingerückten Zeilen auskommentieren
+            // Aber sie scheinen auch nichts zu schaden.
+            // Bei position:absolute sind sie definitiv erforderlich!
+               [self.jsOutput appendString:@"+parseInt(document.getElementById('"];
                [self.jsOutput appendString:id];
                [self.jsOutput appendString:@"').previousElementSibling.style.height)"];
-            // Bei position:absolute wirkt sich die Spacing-Angabe wohl auch hier nicht aus
-            // [self.jsOutput appendFormat:@"+%d", spacing_y];
+
+            // Spacing-Angabe auch gleich hier mitkorrigieren
+            [self.jsOutput appendFormat:@"+%d", spacing_y];
             [self.jsOutput appendString:@") + 'px';\n"];
-            
-            // Ansonsten müssen wir halt nur/noch entsprechend des spacing-Wertes nach unten
+
+            // Ansonsten müssen wir halt nur entsprechend des spacing-Wertes nach unten
             // rücken. Mit top klappt es nicht (zumindestens nicht bei mehr als 2 Elementen)
             // mit padding klappt es auch nicht, aber mit margin... zum Glück
             [self.jsOutput appendString:@"else\n"];
@@ -1712,36 +1722,38 @@ void OLLog(xmlParser *self, NSString* s,...)
             // müssen wir es doch immer noch verrücken.
 
             // Den allerersten sippling auslassen
-            [self.jsOutput appendString:@"// Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n// und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Spacing wird bei 'absolute' NICHT korrigiert.\n"];
+            [self.jsOutput appendString:@"// Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n// und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Inklusive spacing.\n"];
             [self.jsOutput appendString:@"if (document.getElementById('"];
             [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').previousElementSibling && document.getElementById('"];
+            [self.jsOutput appendString:@"').previousElementSibling && $('#"];
             [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').style.position == 'absolute')\n"];
+            [self.jsOutput appendString:@"').css('position') == 'absolute')\n"];
 
             [self.jsOutput appendString:@"  document.getElementById('"];
             [self.jsOutput appendString:id];
 
             // parseInt removes the "px" at the end
             [self.jsOutput appendString:@"').style.left = ("];
-            //  Seit wir von absolute auf relative umgestiegen sind, brauchen wir nur noch Width
-                //[self.jsOutput appendString:@"parseInt(document.getElementById('"];
-                //[self.jsOutput appendString:id];
-                //[self.jsOutput appendString:@"').previousElementSibling.offsetLeft)+"];
+
+            // Nur bei relative: Dann könnte man die eingerückten Zeilen auskommentieren
+            // Aber sie scheinen auch nichts zu schaden.
+            // Bei position:absolute sind sie definitiv erforderlich!
+                [self.jsOutput appendString:@"parseInt(document.getElementById('"];
+                [self.jsOutput appendString:id];
+                [self.jsOutput appendString:@"').previousElementSibling.offsetLeft)+"];
             [self.jsOutput appendString:@"parseInt(document.getElementById('"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').previousElementSibling.offsetWidth)"];
 
-            // Bei position:absolute wirkt sich die Spacing-Angabe NICHT aus, bei allen
-            // betroffenen Elementen so festgestellt...
-            // [self.jsOutput appendFormat:@"+%d", spacing_x];
+            // Spacing-Angabe auch gleich hier mitkorrigieren
+            [self.jsOutput appendFormat:@"+%d", spacing_x];
 
             [self.jsOutput appendString:@") + 'px';\n"];
 
             // ...Deswegen kommt hier auch ein Else hin
             [self.jsOutput appendString:@"else\n"];
 
-            // Ansonsten müssen wir halt nur/noch entsprechend des spacing-Wertes nach rechts
+            // Ansonsten müssen wir halt nur entsprechend des spacing-Wertes nach rechts
             // rücken. Mit left klappt es nicht (zumindestens nicht bei mehr als 2 Elementen)
             // mit padding klappt es auch nicht, aber mit margin... zum Glück
             [self.jsOutput appendString:@"  // ansonsten wegen 'spacing' nach rechts rücken\n"];
@@ -2175,7 +2187,7 @@ didStartElement:(NSString *)elementName
             [self.jsOutput appendString:@"if (document.getElementById('"];
             [self.jsOutput appendString:self.zuletztGesetzteID];
             [self.jsOutput appendString:@"').lastElementChild"];
-            [self.jsOutput appendFormat:@"&& $('#%@').css('position') == 'relative'",self.zuletztGesetzteID];
+/*marker*/ //[self.jsOutput appendFormat:@"&& $('#%@').css('position') == 'relative'",self.zuletztGesetzteID];
             [self.jsOutput appendString:@")\n{\n"];
             [self.jsOutput appendFormat:@"  var heights = $('#%@').children().map(function () { return $(this).outerHeight(); }).get();\n",self.zuletztGesetzteID];
 
@@ -2219,7 +2231,7 @@ didStartElement:(NSString *)elementName
             // [self.jQueryOutput0 appendString:[self.simplelayout_x_spacing lastObject]];
             // [self.jQueryOutput0 appendString:@";\n"];
 
-            [self.jQueryOutput0 appendString:@"  if ($('#"];
+/*marker*/            [self.jQueryOutput0 appendString:@"  if ($('#"];
             [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
             [self.jQueryOutput0 appendString:@"').css('position') == 'relative'"];
             [self.jQueryOutput0 appendString:@")\n"];
@@ -3084,7 +3096,7 @@ didStartElement:(NSString *)elementName
 
         [self addIdToElement:attributeDict];
 
-        [self.output appendString:@" style=\""];
+        [self.output appendString:@"class=\"input_standard\" style=\""];
 
         // Die Width ist bei input-Feldern regelmäßig zu lang, vermutlich wegen interner
         // border-/padding-/margin-/Angaben bei OpenLaszlo. Deswegen hier vorher Wert abändern.
@@ -4004,7 +4016,7 @@ didStartElement:(NSString *)elementName
 
 
 
-        [self.output appendString:@"<div"];
+        [self.output appendString:@"<div class=\"div_tsc\""];
 
         self.lastUsedTabSheetContainerID = [self addIdToElement:attributeDict];
 
@@ -4074,7 +4086,7 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"<!-- Beginn eines neuen TabSheets: -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
-        [self.output appendString:@"<div "];
+        [self.output appendString:@"<div class=\"div_standard\""];
 
         NSString* geradeVergebeneID = [self addIdToElement:attributeDict];
 
@@ -5754,7 +5766,7 @@ didStartElement:(NSString *)elementName
 
 
 
-    BOOL debugmode = YES;
+
     /////////////////////////////////////////////////
     // Abfragen ob wir alles erfasst haben (Debug) //
     /////////////////////////////////////////////////
@@ -6904,29 +6916,26 @@ BOOL isNumeric(NSString *s)
     "img { border: 0 none; }\n"
     //"* { float:left; } //ALLE Elemente sollen nur so viel Platz einnehmen, wie sie auch brauchen\n" <-- Bricht zu viel, lieber einzeln durchgehen, wo nötig
     "\n"
-    "/* Alle Divs müssen position:absolute sein, damit die Positionierung stimmt */\n"
-    "/* Korrektur: Seit Benutzung jQuery UI müssen alle Divs position:relative sein */\n"
-    "/* sonst bricht jQuery UI */\n"
     "div, span\n"
     "{\n"
-	"    position:relative;\n"
+	//"    position:relative;\n"
     "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
-    "\n"
-    "    /* Damit auf jedenfall ein Startwert gesetzt ist,\n"
-    "    sonst gibt es massive Probleme beim auslesen der Variable durch JS */\n"
-	"    height:auto;\n"
-	"    width:auto;\n"
+    //"\n"
+    //"    /* Damit auf jedenfall ein Startwert gesetzt ist,\n"
+    //"    sonst gibt es massive Probleme beim auslesen der Variable durch JS */\n"
+	//"    height:auto;\n"
+	//"    width:auto;\n"
     "}\n"
     "\n"
     "input\n"
     "{\n"
-	"    position:relative;\n"
+	//"    position:relative;\n"
     "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
-    "\n"
-    "    /* Damit auf jedenfall ein Startwert gesetzt ist,\n"
-    "    sonst gibt es massive Probleme beim auslesen der Variable durch JS */\n"
-	"    height:auto;\n"
-	"    width:auto;\n"
+    //"\n"
+    //"    /* Damit auf jedenfall ein Startwert gesetzt ist,\n"
+    //"    sonst gibt es massive Probleme beim auslesen der Variable durch JS */\n"
+	//"    height:auto;\n"
+	//"    width:auto;\n"
     "}\n"
     "\n"
     "/* Ziemlich dirty Trick um '<inputs>' und 'Text' innerhalb der TabSheets besser */\n"
@@ -6969,13 +6978,17 @@ BOOL isNumeric(NSString *s)
 	"    padding:4px;\n"
     "}\n"
     "\n"
+    "/* Alle Divs müssen position:absolute sein, damit die Positionierung stimmt */\n"
+    "/* Korrektur: Seit Benutzung jQuery UI müssen alle Divs position: relative sein */\n" // ToDo: Delete?
+    "/* sonst bricht jQuery UI */\n"
+    "\n"
     "/* Das Standard-View, wie es ungefaehr in OpenLaszlo aussieht */\n"
     ".div_standard\n"
     "{\n"
     "    /* background-color:red; /* Standard ist hier keine (=transparent), zum testen red */\n"
     "\n"
-	"    height:auto;\n"
-	"    width:auto;\n"
+	"    height:auto; /* Wirklich wichtig. Damit es einen Startwert gibt. */\n"
+	"    width:auto; /* Sonst kann JS die Variable nicht richtig auslesen.  */\n"
 	"    position:relative;\n"
 	"    top:0px;\n"
 	"    left:0px;\n"
@@ -6986,6 +6999,29 @@ BOOL isNumeric(NSString *s)
     "    text-align:left;\n"
     "    padding:4px;\n"
     "    */\n"
+    "}\n"
+    "\n"
+    "/* Das Standard-input-Feld (Der Rand soll nicht überschrieben werden)*/\n"
+    ".input_standard\n"
+    "{\n"
+	"    height:auto;\n"
+	"    width:auto;\n"
+	"    position:relative;\n"
+	"    top:0px;\n"
+	"    left:0px;\n"
+    "}\n"
+    "\n"
+    "/* TabSheetContainer (Der Rand darf nicht gesetzt werden, bzw. doch. hmmm) */\n"
+    ".div_tsc\n"
+    "{\n"
+    "    height:auto;\n"
+    "    width:auto;\n"
+    "    position:relative;\n"
+    "    top:0px;\n"
+    "    left:0px;\n"
+    "\n"
+    "    border-style:solid; /* Bei Bedarf auskommentieren */\n"
+    "    border-width:0; /* Bei Bedarf auskommentieren */\n"
     "}\n"
     "\n"
     "/* Standard-combobox (das umgebende Div) */\n"
@@ -7066,8 +7102,12 @@ BOOL isNumeric(NSString *s)
     "    white-space: nowrap;\n"
     "    word-wrap: break-word; */\n"
     "}";
-
-
+    if (positionAbsolute)
+    {
+      css = [css stringByReplacingOccurrencesOfString:@"float:left;" withString:@""];
+      css = [css stringByReplacingOccurrencesOfString:@"float:none;" withString:@""];
+      css = [css stringByReplacingOccurrencesOfString:@"position:relative;" withString:@"position:absolute;"];
+    }
 
     bool success = [css writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
 

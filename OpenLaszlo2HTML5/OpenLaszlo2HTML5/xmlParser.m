@@ -18,8 +18,8 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code nach an zu
-                            // Stellen auf position: relative ausgerichtet.
+BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+                             // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
 
@@ -489,6 +489,19 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Alle Styles in einem eigenen String sammeln, könnte nochmal nützlich werden
     NSMutableString *style = [[NSMutableString alloc] initWithString:@""];
 
+    if ([attributeDict valueForKey:@"multiline"])
+    {
+        self.attributeCount++;
+
+        // False ist wohl der in '.div_text' definierte CSS-Wert 'white-space:nowrap;'
+        // Nur bei true muss ich es abändern auf 'white-space:normal;'
+        if ([[attributeDict valueForKey:@"multiline"] isEqualToString:@"true"])
+        {
+            NSLog(@"Setting the attribute 'multiline:true' as CSS 'white-space:normal'.");
+            [self.output appendString:@"white-space:normal;"];
+        }
+    }
+
     if ([attributeDict valueForKey:@"bgcolor"])
     {
         self.attributeCount++;
@@ -812,9 +825,16 @@ void OLLog(xmlParser *self, NSString* s,...)
         // ToDo: Die in 'canvas' gesetzten Attribute hier her verlagern
         if (![elemName isEqualToString:@"canvas"])
         {
-            // Die Eigenschaft fontsize überträgt sich auf alle Kinder und Enkel
-            [self.jQueryOutput appendString:@"\n\n  // Alle Kinder und Enkel kriegen ebenfalls diese Eigenschaft mit\n"];
-            [self.jQueryOutput appendFormat:@"  $('#%@').find('.div_text').css('font-size','%@px');\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"fontsize"]];
+            NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
+
+            // Die Eigenschaft font-size überträgt sich auf alle Kinder und Enkel
+            [s appendString:@"  // Alle Kinder und Enkel kriegen ebenfalls die font-size-Eigenschaft mit\n"];
+            [s appendFormat:@"  $('#%@').find('.div_text').css('font-size','%@px');\n\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"fontsize"]];
+
+            // Muss GANZ Am Anfang stehen, da die width-eigenschaft, die ausgelesen wird,
+            // von der Schriftgröße abhängt. Diese muss aber vorher korrekt gesetzt werden!!
+            // Oh man, das endlich herausgefunden zu haben!
+            [self.jsOutput insertString:s atIndex:0];
         }
     }
 
@@ -1004,13 +1024,25 @@ void OLLog(xmlParser *self, NSString* s,...)
     // ToDo To Check -> Ist dies überhaupt noch notwendig? Vermutlich korrigiere ich schon bei SimpleLayout
 
     // Immer wenn ein Element von uns hier auf "absolute" gesetzt wurde
+    // => Sprich es wurde entweder der x- oder der y-Wert gesetzt.
     // Dann muss ich die größe des Parents erweitern
+
     if ([style rangeOfString:@"position:absolute"].location != NSNotFound)
     {
-        [self.jQueryOutput appendString:@"\n  // Ein position:absolute! Wir müssen eventuell deswegen die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n"];
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  var h = parseInt($('#%@').css('top'))+($('#%@').outerHeight('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
+        [self.jQueryOutput appendString:@"\n  // Eine x- oder y-Angabe! Wir müssen eventuell deswegen die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n"];
+        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  var h = $('#%@').position().top+($('#%@').outerHeight('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
+        // Hier war früher ein >-Zeichen. Jedoch macht er es von Haus aus zu hoch.
+        // Und ich muss dann nach unten korrigieren
         [self.jQueryOutput appendString:[NSString stringWithFormat:@"  if (h > $('#%@').parent().height())\n",self.zuletztGesetzteID]];
         [self.jQueryOutput appendString:[NSString stringWithFormat:@"    $('#%@').parent().height(h);\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID]];
+
+/*
+        // Analog muss die Breite gesetzt werden
+        [self.jQueryOutput appendString:@"  // Analog muss die Breite gesetzt werden\n"];
+        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  var w = parseInt($('#%@').css('left'))+($('#%@').outerWidth('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
+        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  if (w > $('#%@').parent().width())\n",self.zuletztGesetzteID]];
+        [self.jQueryOutput appendString:[NSString stringWithFormat:@"    $('#%@').parent().width(w);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID]];
+ */
     }
 
 
@@ -1195,7 +1227,7 @@ void OLLog(xmlParser *self, NSString* s,...)
                     wirMuessenNegieren = YES;
 
                 // neue Lösung nun mit watch/unwatch-Methode
-                [self.jQueryOutput appendString:@"\n  // Die Visibility ändert sich abhängig von dem Wert einer woanders gesetzten Variable (bei jeder Änderung, deswegen watchen der Variable)\n"];
+                [self.jQueryOutput appendString:@"\n  // Die Visibility ändert sich abhängig von dem Wert einer woanders gesetzten Variable (Bei jeder Änderung, deswegen watchen der Variable).\n"];
                 [self.jQueryOutput appendString:@"  canvas.watch(\""];
                 [self.jQueryOutput appendString:bedingung];
                 [self.jQueryOutput appendString:@"\", "];
@@ -1647,16 +1679,16 @@ void OLLog(xmlParser *self, NSString* s,...)
             // float:left umgestellt haben, müssen wir die width nur korrigieren, wenn das Element
             // position:absolute ist. Dann müssen wir es doch immer noch verrücken.
 
-            // Den allerersten sippling auslassen
-            [self.jsOutput appendString:@"// Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n// und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Inklusive spacing.\n"];
-            [self.jsOutput appendString:@"if ("];
+            // Den allerersten sibling auslassen
+            [self.jsOutput appendString:@"  // Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n  // und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Inklusive spacing.\n"];
+            [self.jsOutput appendString:@"  if ("];
             // Test ob es überhaupt ein vorheriges Geschwisterelement gibt, muss drin sein, sonst Absturz
             [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
             [self.jsOutput appendString:@"$('#"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').css('position') == 'absolute')\n"];
 
-            [self.jsOutput appendString:@"  document.getElementById('"];
+            [self.jsOutput appendString:@"    document.getElementById('"];
             [self.jsOutput appendString:id];
 
             // parseInt removes the "px" at the end
@@ -1681,9 +1713,9 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Korrektur: margin bricht position:absolute, weil es dann eventuell rechts runter in die nächste
             // Zeile fallen kann, deswegen doch mit left arbeiten. Einfach multiplizieren mit Anzahl der sipplings!
             // Dann klappt left.
-            [self.jsOutput appendString:@"else\n"];
-            [self.jsOutput appendString:@"  // ansonsten wegen 'spacing' nach unten rücken\n"];
-            [self.jsOutput appendString:@"  $('#"];
+            [self.jsOutput appendString:@"  else\n"];
+            [self.jsOutput appendString:@"    // ansonsten wegen 'spacing' nach unten rücken (spacing * Anzahl vorheriger Geschwister)\n"];
+            [self.jsOutput appendString:@"    $('#"];
             [self.jsOutput appendString:id];
             // [self.jsOutput appendString:@"').css('margin-top','"];
             // [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_y]];
@@ -1734,16 +1766,16 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Stopp: Es gibt eine Ausnahme: Wenn unser Element position:absolute ist dann
             // müssen wir es doch immer noch verrücken.
 
-            // Den allerersten sippling auslassen
-            [self.jsOutput appendString:@"// Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n// und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Inklusive spacing.\n"];
-            [self.jsOutput appendString:@"if ("];
+            // Den allerersten sibling auslassen
+            [self.jsOutput appendString:@"  // Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n  // und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Inklusive spacing.\n"];
+            [self.jsOutput appendString:@"  if ("];
             // Test ob es überhaupt ein vorheriges Geschwisterelement gibt, muss drin sein, sonst Absturz
             [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
             [self.jsOutput appendString:@"$('#"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').css('position') == 'absolute')\n"];
 
-            [self.jsOutput appendString:@"  document.getElementById('"];
+            [self.jsOutput appendString:@"    document.getElementById('"];
             [self.jsOutput appendString:id];
 
             // parseInt removes the "px" at the end
@@ -1765,7 +1797,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             [self.jsOutput appendString:@") + 'px';\n"];
 
             // ...Deswegen kommt hier auch ein Else hin
-            [self.jsOutput appendString:@"else\n"];
+            [self.jsOutput appendString:@"  else\n"];
 
             // Ansonsten müssen wir halt nur entsprechend des spacing-Wertes nach rechts
             // rücken. Mit left klappt es nicht (zumindestens nicht bei mehr als 2 Elementen)
@@ -1773,8 +1805,8 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Korrektur: margin bricht position:absolute, weil es dann eventuell rechts runter in die nächste
             // Zeile fallen kann, deswegen doch mit left arbeiten. Einfach multiplizieren mit Anzahl der sipplings!
             // Dann klappt left.
-            [self.jsOutput appendString:@"  // ansonsten wegen 'spacing' nach rechts rücken (spacing * Anzahl vorheriger Geschwister)\n"];
-            [self.jsOutput appendString:@"  $('#"];
+            [self.jsOutput appendString:@"    // ansonsten wegen 'spacing' nach rechts rücken (spacing * Anzahl vorheriger Geschwister)\n"];
+            [self.jsOutput appendString:@"    $('#"];
             [self.jsOutput appendString:id];
             // [self.jsOutput appendString:@"').css('margin-left','"];
             // [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
@@ -1862,25 +1894,21 @@ void OLLog(xmlParser *self, NSString* s,...)
 {
     NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
-    [s appendString:@"// Eventuell nachfolgende Simplelayouts müssen entsprechend der Höhe des vorherigen umgebenden Divs aufrücken.\n// Deswegen wird hier explizit die Höhe gesetzt (ermittelt anhand des höchsten Kindes).\n// Eventuelle Kinder wurden vorher gesetzt.\n"];
+    [s appendString:@"\n  // Eventuell nachfolgende Simplelayouts müssen entsprechend der Höhe des vorherigen umgebenden Divs aufrücken.\n  // Deswegen wird hier explizit die Höhe gesetzt (ermittelt anhand des höchsten Kindes).\n  // Eventuelle Kinder wurden vorher gesetzt.\n"];
 
     // Schutz gegen unbekannte Elemente oder wenn simplelayout nicht das
     // erste Element mehrerer Geschwister ist, was nicht unterstützt wird
-    [s appendFormat:@"if (document.getElementById('%@').lastElementChild",self.zuletztGesetzteID];
+    [s appendFormat:@"  if (document.getElementById('%@').lastElementChild",self.zuletztGesetzteID];
 
-    // Bei positionabsolute = YES muss ich diese Zeile auskommentieren, damit es funktioniert
-    // Bei positionabsolute = NO muss diese Zeile aktiv sein, damit es funktioniert
-/*marker*/ //[s appendFormat:@" && $('#%@').css('position') == 'relative'",self.zuletztGesetzteID];
-
-    [s appendFormat:@")\n{\n  var heights = $('#%@').children().map(function () { return $(this).outerHeight(); }).get();\n",self.zuletztGesetzteID];
+    [s appendFormat:@")\n  {\n    var heights = $('#%@').children().map(function () { return $(this).outerHeight(); }).get();\n",self.zuletztGesetzteID];
 
     // [s appendString:@"  alert(heights);\n"];
     // [s appendString:@"  alert(getMaxOfArray(heights));\n"];
 
-    [s appendFormat:@"  $('#%@').css('height',getMaxOfArray(heights));\n}\n\n",self.zuletztGesetzteID];
+    [s appendFormat:@"    $('#%@').css('height',getMaxOfArray(heights));\n  }\n\n",self.zuletztGesetzteID];
 
-    // Vor den String davorsetzen!
-    [self.jsOutput insertString:s atIndex:0];
+    // An den Anfang des Strings setzen!
+    [self.jQueryOutput0 insertString:s atIndex:0];
 }
 
 
@@ -1890,25 +1918,38 @@ void OLLog(xmlParser *self, NSString* s,...)
 {
     NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
-    [s appendString:@"// Eventuell nachfolgende Simplelayouts müssen entsprechend der Breite des vorherigen umgebenden Divs aufrücken.\n// Deswegen wird hier explizit die Breite gesetzt (ermittelt anhand des breitesten Kindes).\n// Eventuelle Kinder wurden vorher gesetzt.\n"];
+    [s appendString:@"\n  // Eventuell nachfolgende Simplelayouts müssen entsprechend der Breite des vorherigen umgebenden Divs aufrücken.\n  // Deswegen wird hier explizit die Breite gesetzt (ermittelt anhand des breitesten Kindes).\n  // Eventuelle Kinder wurden vorher gesetzt.\n"];
 
     // Schutz gegen unbekannte Elemente oder wenn simplelayout nicht das
     // erste Element mehrerer Geschwister ist, was nicht unterstützt wird
-    [s appendFormat:@"if (document.getElementById('%@').lastElementChild",self.zuletztGesetzteID];
+    [s appendFormat:@"  if (document.getElementById('%@').lastElementChild",self.zuletztGesetzteID];
 
-    // Ich nehme Test auf position: relative hier mal raus
-    // Leider klappt es nur dann z.B. bei dem 'Taxango Foren'-Button
-    // [s appendFormat:@"&& $('#%@').css('position') == 'relative'",self.zuletztGesetzteID];
-
-    [s appendFormat:@")\n{\n  var widths = $('#%@').children().map(function () { return $(this).outerWidth(); }).get();\n",self.zuletztGesetzteID];
+    [s appendFormat:@")\n  {\n    var widths = $('#%@').children().map(function () { return $(this).outerWidth(); }).get();\n",self.zuletztGesetzteID];
 
     // [s appendString:@"  alert(widths);\n"];
     // [s appendString:@"  alert(getMaxOfArray(widths));\n"];
 
-    [s appendFormat:@"  $('#%@').css('width',getMaxOfArray(widths));\n}\n\n",self.zuletztGesetzteID];
+    [s appendFormat:@"    $('#%@').css('width',getMaxOfArray(widths));\n  }\n\n",self.zuletztGesetzteID];
 
-    // Vor den String davorsetzen!
-    [self.jsOutput insertString:s atIndex:0];
+    // An den Anfang des Strings setzen!
+    [self.jQueryOutput0 insertString:s atIndex:0];
+}
+
+
+
+// Bindestriche werden intern bei der css-width-Berechnung anscheinend umgebrochen.
+// Deswegen wird der Bindestrich hier durch einen non breaking hyphen ersetzt.
+// Alternative wäre per css eine '.nobr { white-space: nowrap;}'-Angabe
+// http://stackoverflow.com/questions/8753296/how-to-prevent-line-break-at-hyphens-on-all-browsers
+// Wird von BDSText beim gesammelten und bei der direkten Text-Eingabe aufgerufen
+- (NSString *) replaceHyphenWithNonBreakingHyphen:(NSString*)s
+{
+    return s;
+    // Update: Diese Methode ist seit 'white-space:nowrap' in CSS '.div_text' nicht mehr nötig!
+
+    // Verkürzt den Bindestrich dann leider um einen Pixel.
+    s = [s stringByReplacingOccurrencesOfString:@"-" withString:@"&#8209;"];
+    return s;
 }
 
 
@@ -1989,7 +2030,7 @@ didStartElement:(NSString *)elementName
                 s = [s stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"];
                 s = [s stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
 
-                
+
                 [self.collectedContentOfClass appendString:s];
                 [self.collectedContentOfClass appendString:@"\""];
             }
@@ -2165,29 +2206,34 @@ didStartElement:(NSString *)elementName
             // Jedoch darf die Höhe nicht bei RollUpDownContainern gesetzt werden, da diese immer
             // auf 'auto' gestellt sein müssen, damit es gescheit mit scrollt.
 
-            [self.jQueryOutput0 appendString:@"\n\n  // Y-Simplelayout: Deswegen die Höhe aller beinhaltenden Elemente auf erster Ebene ermitteln\n  // und dem umgebenden div die Summe als Höhe mitgeben (nur bei rudElement MUSS es auto bleiben)\n"];
-            [self.jQueryOutput0 appendString:@"  var sumH = 0;\n"];
-            [self.jQueryOutput0 appendString:@"  var zaehler = 0;\n"];
-            [self.jQueryOutput0 appendString:@"  $('#"];
-            [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
-            [self.jQueryOutput0 appendString:@"').children().each(function() {\n    sumH += $(this).outerHeight(true);\n"];
-            [self.jQueryOutput0 appendString:@"    zaehler++;\n"];
-            [self.jQueryOutput0 appendString:@"  });\n"];
+            // Erst sammeln:
+            NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
+
+            [s appendString:@"\n  // Y-Simplelayout: Deswegen die Höhe aller beinhaltenden Elemente auf erster Ebene ermitteln\n  // und dem umgebenden div die Summe als Höhe mitgeben (nur bei rudElement MUSS es auto bleiben)\n"];
+            [s appendString:@"  var sumH = 0;\n"];
+            [s appendString:@"  var zaehler = 0;\n"];
+            [s appendString:@"  $('#"];
+            [s appendString:self.zuletztGesetzteID];
+            [s appendString:@"').children().each(function() {\n    sumH += $(this).outerHeight(true);\n"];
+            [s appendString:@"    zaehler++;\n"];
+            [s appendString:@"  });\n"];
 
             // Muss natürlich auch den y-spacing-Abstand zwischen den Elementen mit berücksichtigen
             // und auf die Höhe aufaddieren.
             // Keine Ahnung, aber wenn ich es auskommentiere, stimmt es mit dem Original eher überein.
-            [self.jQueryOutput0 appendString:@"  sumH += (zaehler-1) * "];
-            [self.jQueryOutput0 appendString:[self.simplelayout_y_spacing lastObject]];
-            [self.jQueryOutput0 appendString:@";\n"];
+            [s appendString:@"  sumH += (zaehler-1) * "];
+            [s appendString:[self.simplelayout_y_spacing lastObject]];
+            [s appendString:@";\n"];
 
-            [self.jQueryOutput0 appendString:@"  if (!($('#"];
-            [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
-            [self.jQueryOutput0 appendString:@"').hasClass('rudElement')))"];
-            [self.jQueryOutput0 appendString:@"\n    $('#"];
-            [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
-            [self.jQueryOutput0 appendString:@"').height(sumH);\n"];
-            // [self.jQueryOutput appendString:@"\n  console.log('Die Simplelayout-Höhe ist: ' + sumH);"];
+            [s appendString:@"  if (!($('#"];
+            [s appendString:self.zuletztGesetzteID];
+            [s appendString:@"').hasClass('rudElement')))"];
+            [s appendString:@"\n    $('#"];
+            [s appendString:self.zuletztGesetzteID];
+            [s appendString:@"').height(sumH);\n\n"];
+
+            // An den Anfang des Strings setzen!
+            [self.jQueryOutput0 insertString:s atIndex:0];
         }
 
 
@@ -2236,30 +2282,36 @@ didStartElement:(NSString *)elementName
             // Neu: Ich richte es immer korrekt aus, selbst bei position:absolute muss ich nachhelfen!
             // Deswegen die Einschränkung auf position:relative unten auskommentiert
 
-            [self.jQueryOutput0 appendString:@"\n  // X-Simplelayout: Deswegen die Breite aller beinhaltenden Elemente erster Ebene ermitteln und dem umgebenden div die Summe als\n  // Breite mitgeben (das darf nur bei position:relative gemacht werden, position:absolute nimmt von selbst die perfekte Breite an)\n"];
-            [self.jQueryOutput0 appendString:@"  var sumW = 0;\n"];
-            [self.jQueryOutput0 appendString:@"  var zaehler = 0;\n"];
-            [self.jQueryOutput0 appendString:@"  $('#"];
-            [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
-            [self.jQueryOutput0 appendString:@"').children().each(function() {\n    sumW += $(this).outerWidth(true);\n"];
-             [self.jQueryOutput0 appendString:@"    zaehler++;\n"];
-            [self.jQueryOutput0 appendString:@"  });\n"];
+            // Erst sammeln:
+            NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
+
+            [s appendString:@"\n  // X-Simplelayout: Deswegen die Breite aller beinhaltenden Elemente erster Ebene ermitteln und dem umgebenden div die Summe als\n  // Breite mitgeben\n"];
+            [s appendString:@"  var sumW = 0;\n"];
+            [s appendString:@"  var zaehler = 0;\n"];
+            [s appendString:@"  $('#"];
+            [s appendString:self.zuletztGesetzteID];
+            [s appendString:@"').children().each(function() {\n    sumW += $(this).outerWidth(true);\n"];
+            [s appendString:@"    zaehler++;\n"];
+            [s appendString:@"  });\n"];
 
             // Muss natürlich auch den x-spacing-Abstand zwischen den Elementen mit berücksichtigen
             // und auf die Breite aufaddieren.
-            [self.jQueryOutput0 appendString:@"  sumW += (zaehler-1) * "];
-            [self.jQueryOutput0 appendString:[self.simplelayout_x_spacing lastObject]];
-            [self.jQueryOutput0 appendString:@";\n"];
+            [s appendString:@"  sumW += (zaehler-1) * "];
+            [s appendString:[self.simplelayout_x_spacing lastObject]];
+            [s appendString:@";\n"];
 
             // Keine Einschränkung mehr auf position:relative
-            // [self.jQueryOutput0 appendString:@"  if ($('#"];
-            // [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
-            // [self.jQueryOutput0 appendString:@"').css('position') == 'relative'"];
-            // [self.jQueryOutput0 appendString:@")\n"];
+            // [s appendString:@"  if ($('#"];
+            // [s appendString:self.zuletztGesetzteID];
+            // [s appendString:@"').css('position') == 'relative'"];
+            // [s appendString:@")\n"];
 
-            [self.jQueryOutput0 appendString:@"    $('#"];
-            [self.jQueryOutput0 appendString:self.zuletztGesetzteID];
-            [self.jQueryOutput0 appendString:@"').width(sumW);\n"];
+            [s appendString:@"  $('#"];
+            [s appendString:self.zuletztGesetzteID];
+            [s appendString:@"').width(sumW);\n\n"];
+
+            // An den Anfang des Strings setzen!
+            [self.jQueryOutput0 insertString:s atIndex:0];
         }
     }
 
@@ -3037,14 +3089,6 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"\">"];
 
 
-        // ToDo: Wird derzeit nicht ausgewertet
-        if ([attributeDict valueForKey:@"multiline"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'multiline' for now.");
-        }
-
-
         if ([attributeDict valueForKey:@"text"])
         {
             self.attributeCount++;
@@ -3325,7 +3369,7 @@ didStartElement:(NSString *)elementName
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
-        [self.output appendString:@"<div class=\"checkbox\" >\n"];
+        [self.output appendString:@"<div class=\"checkbox\">\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
 
@@ -3341,11 +3385,11 @@ didStartElement:(NSString *)elementName
         
         [self.output appendString:[self addCSSAttributes:attributeDict]];
         
-        [self.output appendString:@"vertical-align: middle;\">\n"];
+        [self.output appendString:@"vertical-align: middle;\" />\n"];
 
 
 
-
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
         [self.output appendString:@"<span"];
         [self.output appendString:[self addTitlewidth:attributeDict]];
         [self.output appendString:@">"];
@@ -3372,7 +3416,6 @@ didStartElement:(NSString *)elementName
             }
         }
         [self.output appendString:@"</span>\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
 
 
@@ -3952,9 +3995,11 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"</div>\n"];
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"<!-- Das aufklappende Menü -->\n"];
+        [self.output appendString:@"<!-- Das aufklappende Panel -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1]; // overflow, damit es scrollt, falls zu viel drin
         [self.output appendFormat:@"<div style=\"position:relative; overflow-y:auto; overflow-x:hidden; top:0px; left:0px; width:%dpx; ",breiteVonRollUpDown-4];
+
+
         // Bei ganz äußeren RUDs soll die Höhe fix sein, ansonsten nicht
         if (self.rollUpDownVerschachtelungstiefe-2 == 0)
             [self.output appendString:@"height:350px; "];
@@ -6357,6 +6402,7 @@ BOOL isNumeric(NSString *s)
         // Remove leading and ending Whitespaces and NewlineCharacters
         s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
+
         // Hinzufügen von gesammelten Text, falls er zwischen den tags gesetzt wurde
         [self.output appendString:s];
 
@@ -6728,6 +6774,7 @@ BOOL isNumeric(NSString *s)
 
     // Unser eigenes Skript lieber zuerst
     [pre appendString:@"<script type=\"text/javascript\" src=\"jsHelper.js\"></script>\n"];
+
     // Dann erst externe gefundene Skripte
     [pre appendString:self.externalJSFilesOutput];
 
@@ -6741,7 +6788,7 @@ BOOL isNumeric(NSString *s)
     [pre appendString:@"\n<script type=\"text/javascript\">\n"];
 
     // Wird derzeit nicht ins JS ausgegeben, da die Bilder usw. direkt im Code stehen.
-    // (Soll das so bleiben?)
+    // (Soll das so bleiben?) To Check
     // ... [pre appendString:self.jsHeadOutput]; ...
 
     // erstmal nur die mit resource gesammelten globalen vars ausgeben
@@ -6769,21 +6816,7 @@ BOOL isNumeric(NSString *s)
     [self.output appendString:@"\n<script type=\"text/javascript\">\n"];
 
 
-    // Vorgezogene jQuery-Ausgaben:
-    if (![self.jQueryOutput0 isEqualToString:@""])
-    {
-        [self.output appendString:self.jQueryOutput0];
-        [self.output appendString:@"\n\n  /****************************************************************/\n"];
-        [self.output appendString:@"  /*****************************Grenze*****************************/\n"];
-        [self.output appendString:@"  /***********Vorgezogene JQuery-Ausgaben sind hier vor ***********/\n"];
-        [self.output appendString:@"  /***Diese müssen zwingend vor folgenden JS/jQuery-Ausgaben kommen***/\n"];
-        [self.output appendString:@"  /****************************************************************/\n\n\n"];
-    }
-
-
-    [self.output appendString:self.jsOutput];
-
-    // Und die jQuery-Anweisungen:
+    // Die jQuery-Anweisungen:
 
     [self.output appendString:@"\n\n// '$(function() {' ist leider zu unverlässig. Bricht z. B. das korrekte setzen der Breite von element9, weil es die direkten Kinder-Elemente nicht richtig auslesen kann\n// Dieses Problem trat nur beim Reloaden auf, nicht beim direkten Betreten der Seite per URL. Very strange!\n// Jedenfalls lässt sich das Problem über '$(window).load(function() {});' anstatt '$(document).ready(function() {});' lösen.\n// http://stackoverflow.com/questions/6504982/jquery-behaving-strange-after-page-refresh-f5-in-chrome\n// Eventuell muss ich dadurch auch nicht mehr alle width/height-Startwerte per css auf 'auto' setzen (To Check).\n"];
     [self.output appendString:@"$(window).load(function()\n{\n"];
@@ -6798,6 +6831,33 @@ BOOL isNumeric(NSString *s)
     [self.output appendString:@"  function open()\n  {\n    alert('Willst du wirklich deine Ehefrau löschen? Usw...');\n  }\n"];
     [self.output appendString:@"  var dlgFamilienstandSingle = new dlg();\n\n"];
 
+
+
+    // Normale Javascript-Anweisungen
+    if (![self.jsOutput isEqualToString:@""])
+    {
+        [self.output appendString:self.jsOutput];
+
+        [self.output appendString:@"\n\n  /*******************************************************************/\n"];
+        [self.output appendString:@"  /******************************Grenze ******************************/\n"];
+        [self.output appendString:@"  /********* Grundlagen legende JS-Anweisungen sind hier vor *********/\n"];
+        [self.output appendString:@"  /***Diese müssen zwingend vor folgenden JS/jQuery-Ausgaben kommen***/\n"];
+        [self.output appendString:@"  /*******************************************************************/\n\n\n"];
+    }
+
+
+
+    // Vorgezogene jQuery-Ausgaben:
+    if (![self.jQueryOutput0 isEqualToString:@""])
+    {
+        [self.output appendString:self.jQueryOutput0];
+
+        [self.output appendString:@"\n\n  /*******************************************************************/\n"];
+        [self.output appendString:@"  /******************************Grenze ******************************/\n"];
+        [self.output appendString:@"  /************ Vorgezogene JQuery-Ausgaben sind hier vor ************/\n"];
+        [self.output appendString:@"  /***Diese müssen zwingend vor folgenden JS/jQuery-Ausgaben kommen***/\n"];
+        [self.output appendString:@"  /*******************************************************************/\n\n\n"];
+    }
 
 
 
@@ -6908,21 +6968,17 @@ BOOL isNumeric(NSString *s)
     "\n"
     "- simplelayout muss das erste element sein bei aufeinanderfolgenden Schwester-Elementen\n"
     "- keine Unterstützung für Sound-Resourcen\n"
-    "- Kommentare gehen verloren\n"
+    "- Kommentare gehen verloren (keep comments als Option mit anbieten)\n"
     "- offsetWidth vs clientWidth nochmal testen, aber macht wohl keinen Unterschied:\n"
     "(http://www.quirksmode.org/dom/w3c_cssom.html)\n"
     "\n"
     "\n"
     "ToDo\n"
-    "- in FF klappt der direkte Zugriff auf Elemente per id nicht (bei strictem doctype)\n"
     "- Von BDSeditdate und BDScombobox den Anfangscode zusammenfassen (ist gleich)\n"
-    "- on vertical Resize die Höhe anpassen\n"
     "- Bei views Layout-Attribut beachten: Dazu wohl Simplelayout-Test als eigene Methode;\n"
-    "- Warum bricht er e-Mail beim Bindestrich um?\n"
     "- style.height in check4somplelayout kann/muss ich wohl ersetzen mit offsetHeight\n"
     "- 1000px großes bild soll nur bis zum Bildschirmrand gehen\n"
     "- und zusätzlich sich selbst aktualisieren, wenn Bildschirmhöhe verändert wird\n"
-    "- PS: CSS einteilen in Form, Farbe, Schrift\n"
     " */\n"
     "\n"
     "body, html\n"
@@ -7088,7 +7144,7 @@ BOOL isNumeric(NSString *s)
     "    line-height:26px; /* Damit der Text vor dem Datepicker vertikal zentriert ist. */\n"
     "    text-align:left;\n"
     "    padding:4px;\n"
-    "    margin-top: 8px;\n"
+    "    margin-top:8px;\n"
     "}\n"
     "\n"
     "\n"
@@ -7100,7 +7156,7 @@ BOOL isNumeric(NSString *s)
     "    width:100%; /* Eine checkbox soll immer die ganze Zeile einnehmen. */\n"
     "    text-align:left;\n"
     "    padding:4px;\n"
-    "    margin-top: 8px;\n"
+    "    margin-top:8px;\n"
     "    \n"
     "}\n"
     "\n"
@@ -7128,9 +7184,9 @@ BOOL isNumeric(NSString *s)
     "    text-indent: 0;\n"
     "    letter-spacing: 0.01em;\n"
     "    text-decoration: none;\n"
-    "    /* wohl nur bei <text>, diese Angaben brechen <BDStext>\n"
-    "    white-space: nowrap;\n"
-    "    word-wrap: break-word; */\n"
+    "\n"
+    "    white-space:nowrap;\n"
+    "    word-wrap:break-word;\n"
     "}";
     if (positionAbsolute)
     {

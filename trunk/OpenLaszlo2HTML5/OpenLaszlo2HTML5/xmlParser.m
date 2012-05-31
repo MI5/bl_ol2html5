@@ -18,7 +18,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -1019,28 +1019,51 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
 
+    // ToDo: "position:absolute" entfernen bei x und y bei positionAbsolute == YES:
 
 
-    // ToDo To Check -> Ist dies überhaupt noch notwendig? Vermutlich korrigiere ich schon bei SimpleLayout
 
-    // Immer wenn ein Element von uns hier auf "absolute" gesetzt wurde
-    // => Sprich es wurde entweder der x- oder der y-Wert gesetzt.
-    // Dann muss ich die größe des Parents erweitern
 
-    if ([style rangeOfString:@"position:absolute"].location != NSNotFound)
+    // Bei positionAbsolute == YES:
+    // => Immer wenn entweder der x- oder der y-Wert gesetzt wurde
+    //      Derzeit daran erkennbar, dass "position:absolute" gesetzt wurde... To Do
+    //      ---> (To Change bei position:Absolute)
+    // => Dann muss ich die Größe des umgebenden Parents erweitern
+
+
+    if (positionAbsolute == YES)    
     {
-        [self.jQueryOutput appendString:@"\n  // Eine x- oder y-Angabe! Wir müssen eventuell deswegen die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n"];
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  var h = $('#%@').position().top+($('#%@').outerHeight('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
-        // Hier war früher ein >-Zeichen. Jedoch macht er es von Haus aus zu hoch.
-        // Und ich muss dann nach unten korrigieren
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  if (h > $('#%@').parent().height())\n",self.zuletztGesetzteID]];
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"    $('#%@').parent().height(h);\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID]];
+        // Aus Sicht des umgebenden Divs gelöst.
+        // Code: Nur wenn im aktuellen View keine width angegeben wurde, dann setz als width die
+        // des (breitesten Kindes + x-wert)
+
+
+        [self.jQueryOutput appendString:@"\n  // Eine x- oder y-Angabe! Wir müssen eventuell deswegen die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n  // Wir überschreiben jedoch keinen explizit vorher gesetzten Wert,\n  // deswegen test auf '' (nur mit JS möglich, nicht mit jQuery) \n"];
+
+        [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length > 0 && $('#%@').get(0).style.height == '')\n  {\n  ",self.zuletztGesetzteID,self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  var heights = $('#%@').children().map(function () { return $(this).outerHeight('true')+$(this).position().top; }).get()",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"\n    $('#%@').css('height',getMaxOfArray(heights))\n  }\n",self.zuletztGesetzteID];
+
+
+
+        [self.jQueryOutput appendString:@"  // Analog muss die Breite gesetzt werden\n"];
+        [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length > 0 && $('#%@').get(0).style.width == '')\n  {\n  ",self.zuletztGesetzteID,self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  var widths = $('#%@').children().map(function () { return $(this).outerWidth('true')+$(this).position().left; }).get()",self.zuletztGesetzteID];
+            [self.jQueryOutput appendFormat:@"\n    $('#%@').css('width',getMaxOfArray(widths))\n  }\n",self.zuletztGesetzteID];
+
+
 
 /*
+ // Aus Sicht des Kindes:
+
+    [self.jQueryOutput appendString:[NSString stringWithFormat:@"  var h = $('#%@').position().top+($('#%@').outerHeight('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
+    [self.jQueryOutput appendString:[NSString stringWithFormat:@"  if (h > $('#%@').parent().height())\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
+    [self.jQueryOutput appendString:[NSString stringWithFormat:@"    $('#%@').parent().height(h);\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID]];
+
         // Analog muss die Breite gesetzt werden
         [self.jQueryOutput appendString:@"  // Analog muss die Breite gesetzt werden\n"];
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  var w = parseInt($('#%@').css('left'))+($('#%@').outerWidth('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  if (w > $('#%@').parent().width())\n",self.zuletztGesetzteID]];
+        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  var w = parseInt($('#%@').position().left)+($('#%@').outerWidth('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
+        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  if ($('#%@').parent().get(0).style.width == '' && w > $('#%@').parent().width())\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
         [self.jQueryOutput appendString:[NSString stringWithFormat:@"    $('#%@').parent().width(w);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID]];
  */
     }
@@ -1590,7 +1613,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     // Und Simplelayout-Check von hier aus aufrufen, da alle Elemente mit gesetzter ID
     // überprüft werden sollen
-    [self check4Simplelayout];
+    [self check4Simplelayout:attributeDict];
 
     return self.zuletztGesetzteID;
 }
@@ -1598,10 +1621,12 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-// Muss immer nach addIDToElement aufgerufen werden, da wir auf die zuletzt gesetzten id zurückgreifen
-- (void) check4Simplelayout
+// Muss immer nach addIDToElement aufgerufen werden,
+// da wir auf die zuletzt gesetzte id zurückgreifen.
+// Das attributeDict brauchen wir nur, falls Y-Wert in Simplelayout Y gesetzt wurde.
+// => Dann muss ich diesen Wert überschreiben, da er keine Auswirkung haben darf.
+- (void) check4Simplelayout:(NSDictionary*) attributeDict
 {
-
     // simplelayout verlassen, alsbald das letzte Geschwisterchen erreicht ist
     BOOL wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y = NO;
     if (self.simplelayout_y-1 == self.verschachtelungstiefe)
@@ -1649,23 +1674,22 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Simplelayout Y
     if (wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y)
     {
-        [self instableXML:@"Bei tax kommen wir hier gar nicht rein, wtf. (Simplelayout Y). Für was gibt es das dann? ToDo: Test mit SimpleLayout-OL-Doku."];
+        [self instableXML:@"Bei taxango kommen wir hier gar nicht rein, wtf. (Simplelayout Y). Für was gibt es das dann? ToDo: Test mit SimpleLayout-OL-Doku."];
 
         [self.jsOutput appendString:@"if ("];
         [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
-        [self.jsOutput appendString:@"document.getElementById('"];
-        [self.jsOutput appendString:id];
-        [self.jsOutput appendString:@"').previousElementSibling.lastElementChild)\n"];
+        [self.jsOutput appendFormat:@"$('#%@').prev().get(0).lastElementChild)\n",id];
 
         [self.jsOutput appendString:@"  document.getElementById('"];
         [self.jsOutput appendString:id];
 
-        // parseInt removes the "px" at the end
-        [self.jsOutput appendString:@"').style.top = (parseInt(document.getElementById('"];
-        [self.jsOutput appendString:id];
-        [self.jsOutput appendString:@"').previousElementSibling.lastElementChild.offsetTop)+parseInt(document.getElementById('"];
-        [self.jsOutput appendString:id];
-        [self.jsOutput appendString:@"').previousElementSibling.lastElementChild.style.height)+"];
+        // parseInt() removes the "px" at the end
+        [self.jsOutput appendString:@"').style.top = ("];
+
+        [self.jsOutput appendFormat:@"parseInt($('#%@').prev().get(0).lastElementChild.offsetTop)+",id];
+
+        [self.jsOutput appendFormat:@"parseInt($('#%@').prev().get(0).lastElementChild.offsetHeight)+",id];
+
         [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_y]];
         [self.jsOutput appendString:@") + 'px';\n\n"];
 
@@ -1673,6 +1697,19 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
     else if (self.simplelayout_y == self.verschachtelungstiefe)  // > 0)
     {
+        // Da Simplelayout Y sich selbst an der Y-Achse ausrichtet, muss eine eventuelle
+        // Y-Angabe in den Attributen ignoriert werden. Deswegen nulle ich hier Y per jQuery.
+        // X-Attribut darf sich hingegen auswirken und darf nicht genullt werden!
+        if ([attributeDict valueForKey:@"y"])
+        {
+            [self.jsOutput appendFormat:@"\n  // top-css-Eigenschaft nullen, da ein y-wert gesetzt wurde,\n  // obwohl wir in einem Simplelayout Y sind, welches top automatisch ausrichtet.\n",id];
+            // Eigenschaft entfernen verwirrt JS etwas (wenn gleich auch nicht jQuery)
+            //[self.jsOutput appendFormat:@"\n$('#%@').css('top','');\n\n",id];
+            // Deswegen einfach auf 0 setzen
+            [self.jsOutput appendFormat:@"  $('#%@').css('top','0');\n\n",id];
+        }
+
+
         if (!self.firstElementOfSimpleLayout_y)
         {
             // Seit wir von absolute auf relative umgestiegen sind und zusätzlich auch noch auf
@@ -1682,29 +1719,25 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Den allerersten sibling auslassen
             [self.jsOutput appendString:@"  // Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n  // und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Inklusive spacing.\n"];
             [self.jsOutput appendString:@"  if ("];
-            // Test ob es überhaupt ein vorheriges Geschwisterelement gibt, muss drin sein, sonst Absturz
+            // Test ob es überhaupt ein vorheriges Geschwisterelement gibt, muss drin sein,
+            // sonst Absturz (wohl kein Absturz mehr seit Umstieg auf jQuery 'prev' auch IN dem
+            // if-Zweig
             [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
             [self.jsOutput appendString:@"$('#"];
             [self.jsOutput appendString:id];
             [self.jsOutput appendString:@"').css('position') == 'absolute')\n"];
 
-            [self.jsOutput appendString:@"    document.getElementById('"];
-            [self.jsOutput appendString:id];
+            [self.jsOutput appendFormat:@"    document.getElementById('%@').style.top = (",id];
 
-            // parseInt removes the "px" at the end
-            [self.jsOutput appendString:@"').style.top = (parseInt(document.getElementById('"];
-            [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').previousElementSibling.offsetTop)"];
+            [self.jsOutput appendFormat:@"$('#%@').prev().get(0).offsetTop+",id];
 
-            // Nur bei relative: Dann könnte man die eingerückten Zeilen auskommentieren
-            // Aber sie scheinen auch nichts zu schaden.
-            // Bei position:absolute sind sie definitiv erforderlich!
-               [self.jsOutput appendString:@"+parseInt(document.getElementById('"];
-               [self.jsOutput appendString:id];
-               [self.jsOutput appendString:@"').previousElementSibling.style.height)"];
+            // Nur bei relative: Dann könnte man die eingerückte Zeilen auskommentieren
+            // Aber sie scheint auch nichts zu schaden.
+            // Bei position:absolute ist sie definitiv erforderlich!
+                [self.jsOutput appendFormat:@"$('#%@').prev().outerHeight()+",id];
 
             // Spacing-Angabe auch gleich hier mitkorrigieren
-            [self.jsOutput appendFormat:@"+%d", spacing_y];
+            [self.jsOutput appendFormat:@"%d", spacing_y];
             [self.jsOutput appendString:@") + 'px';\n"];
 
             // Ansonsten müssen wir halt nur entsprechend des spacing-Wertes nach unten
@@ -1734,24 +1767,22 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Simplelayout X
     if (wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_X)
     {
-        [self instableXML:@"Bei tax kommen wir hier gar nicht rein, wtf. (Simplelayout X). Für was gibt es das dann? ToDo: Test mit SimpleLayout-OL-Doku."];
+        [self instableXML:@"Bei taxango kommen wir hier gar nicht rein, wtf. (Simplelayout X). Für was gibt es das dann? ToDo: Test mit SimpleLayout-OL-Doku."];
 
         [self.jsOutput appendString:@"if ("];
         [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
-
-        [self.jsOutput appendString:@"document.getElementById('"];
-        [self.jsOutput appendString:id];
-        [self.jsOutput appendString:@"').previousElementSibling.lastElementChild)\n"];
+        [self.jsOutput appendFormat:@"$('#%@').prev().get(0).lastElementChild)\n",id];
 
         [self.jsOutput appendString:@"  document.getElementById('"];
         [self.jsOutput appendString:id];
 
-        // parseInt removes the "px" at the end
-        [self.jsOutput appendString:@"').style.left = (parseInt(document.getElementById('"];
-        [self.jsOutput appendString:id];
-        [self.jsOutput appendString:@"').previousElementSibling.lastElementChild.offsetLeft)+parseInt(document.getElementById('"];
-        [self.jsOutput appendString:id];
-        [self.jsOutput appendString:@"').previousElementSibling.lastElementChild.offsetWidth)+"];
+        // parseInt() removes the "px" at the end
+        [self.jsOutput appendString:@"').style.left = ("];
+
+        [self.jsOutput appendFormat:@"parseInt($('#%@').prev().get(0).lastElementChild.offsetLeft)+",id];
+
+        [self.jsOutput appendFormat:@"parseInt($('#%@').prev().get(0).lastElementChild.offsetWidth)+",id];
+
         [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
         [self.jsOutput appendString:@") + 'px';\n\n"];
 
@@ -1759,6 +1790,15 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
     else if (self.simplelayout_x == self.verschachtelungstiefe) // > 0)
     {
+        // Da Simplelayout X sich selbst an der X-Achse ausrichtet, muss eine eventuelle
+        // X-Angabe in den Attributen ignoriert werden. Deswegen nulle ich hier X per jQuery.
+        // Y-Attribut darf sich hingegen auswirken und darf nicht genullt werden!
+        if ([attributeDict valueForKey:@"x"])
+        {
+            [self.jsOutput appendFormat:@"\n  // left-css-Eigenschaft nullen, da ein x-wert gesetzt wurde,\n  // obwohl wir in einem Simplelayout X sind, welches left automatisch ausrichtet.\n",id];
+            [self.jsOutput appendFormat:@"  $('#%@').css('left','0');\n\n",id];
+        }
+
         if (!self.firstElementOfSimpleLayout_x)
         {
             // Seit wir von absolute auf relative umgestiegen sind und zusätzlich auch noch auf
@@ -1769,7 +1809,9 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Den allerersten sibling auslassen
             [self.jsOutput appendString:@"  // Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n  // und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Inklusive spacing.\n"];
             [self.jsOutput appendString:@"  if ("];
-            // Test ob es überhaupt ein vorheriges Geschwisterelement gibt, muss drin sein, sonst Absturz
+            // Test ob es überhaupt ein vorheriges Geschwisterelement gibt, muss drin sein,
+            // sonst Absturz (wohl kein Absturz mehr seit Umstieg auf jQuery 'prev' auch IN dem
+            // if-Zweig
             [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
             [self.jsOutput appendString:@"$('#"];
             [self.jsOutput appendString:id];
@@ -1778,21 +1820,22 @@ void OLLog(xmlParser *self, NSString* s,...)
             [self.jsOutput appendString:@"    document.getElementById('"];
             [self.jsOutput appendString:id];
 
-            // parseInt removes the "px" at the end
+
             [self.jsOutput appendString:@"').style.left = ("];
 
-            // Nur bei relative: Dann könnte man die eingerückten Zeilen auskommentieren
-            // Aber sie scheinen auch nichts zu schaden.
-            // Bei position:absolute sind sie definitiv erforderlich!
-                [self.jsOutput appendString:@"parseInt(document.getElementById('"];
-                [self.jsOutput appendString:id];
-                [self.jsOutput appendString:@"').previousElementSibling.offsetLeft)+"];
-            [self.jsOutput appendString:@"parseInt(document.getElementById('"];
-            [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').previousElementSibling.offsetWidth)"];
+            // Nur bei relative: Dann könnte man die eingerückte Zeilen auskommentieren
+            // Aber sie scheint auch nichts zu schaden.
+            // Bei position:absolute ist sie definitiv erforderlich!
+                [self.jsOutput appendFormat:@"$('#%@').prev().get(0).offsetLeft+",id];
+
+            //[self.jsOutput appendFormat:@"$('#%@').prev()[0].offsetWidth+",id];
+            // entspricht:
+            //[self.jsOutput appendFormat:@"$('#%@').prev().get(0).offsetWidth+",id];
+            // Lieber per jQuery:
+            [self.jsOutput appendFormat:@"$('#%@').prev().outerWidth()+",id];
 
             // Spacing-Angabe auch gleich hier mitkorrigieren
-            [self.jsOutput appendFormat:@"+%d", spacing_x];
+            [self.jsOutput appendFormat:@"%d", spacing_x];
 
             [self.jsOutput appendString:@") + 'px';\n"];
 
@@ -1906,6 +1949,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // [s appendString:@"  alert(getMaxOfArray(heights));\n"];
 
     [s appendFormat:@"    $('#%@').css('height',getMaxOfArray(heights));\n  }\n\n",self.zuletztGesetzteID];
+
 
     // An den Anfang des Strings setzen!
     [self.jQueryOutput0 insertString:s atIndex:0];
@@ -6263,7 +6307,7 @@ BOOL isNumeric(NSString *s)
         s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
         [self.output appendString:s];
-        [self.output appendString:@"</div><br />\n"];
+        [self.output appendString:@"</div>\n"];
     }
 
 
@@ -6799,11 +6843,11 @@ BOOL isNumeric(NSString *s)
     // Splashscreen vorschalten
     if ([[[self.pathToFile lastPathComponent] stringByDeletingPathExtension] isEqualToString:@"Taxango"])
     {
-        [pre appendString:@"<span id=\"splashscreen_\" style=\"background-color:white;width:100%;height:100%;z-index:10000;background-image:url(resources/logo.png);font-size:100px;\">LOADING...</span>\n\n"];
+        [pre appendString:@"<span id=\"splashscreen_\" style=\"position:absolute;top:0px;left:0px;background-color:white;width:100%;height:100%;z-index:10000;background-image:url(resources/logo.png);font-size:80px;text-align:center;\">LOADING...</span>\n\n"];
     }
     else
     {
-        [pre appendString:@"<span id=\"splashscreen_\" style=\"background-color:white;width:100%;height:100%;z-index:10000;font-size:100px;\">LOADING...</span>\n\n"];
+        [pre appendString:@"<span id=\"splashscreen_\" style=\"position:absolute;top:0px;left:0px;background-color:white;width:100%;height:100%;z-index:10000;font-size:80px;text-align:center;\">LOADING...</span>\n\n"];
     }
 
     // Kurzer Tausch damit ich den Header davorschalten kann
@@ -6964,16 +7008,13 @@ BOOL isNumeric(NSString *s)
     "/*\n"
     "Known issues:\n"
     "inherit => Not supported by IE6 & IE 7; hilft ersetzen durch auto?\n"
-    "previousElementSibling => not supported by IE < 9\n"
     "\n"
     "- simplelayout muss das erste element sein bei aufeinanderfolgenden Schwester-Elementen\n"
     "- keine Unterstützung für Sound-Resourcen\n"
-    "- Kommentare gehen verloren (keep comments als Option mit anbieten)\n"
-    "- offsetWidth vs clientWidth nochmal testen, aber macht wohl keinen Unterschied:\n"
-    "(http://www.quirksmode.org/dom/w3c_cssom.html)\n"
     "\n"
     "\n"
     "ToDo\n"
+    "- Kommentare gehen verloren (keep comments als Option mit anbieten)\n"
     "- Von BDSeditdate und BDScombobox den Anfangscode zusammenfassen (ist gleich)\n"
     "- Bei views Layout-Attribut beachten: Dazu wohl Simplelayout-Test als eigene Methode;\n"
     "- style.height in check4somplelayout kann/muss ich wohl ersetzen mit offsetHeight\n"
@@ -7301,6 +7342,19 @@ BOOL isNumeric(NSString *s)
     "}\n"
     "\n"
     "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Summer aller Zahlen in einem Array\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function getSumOfArray(arr)\n"
+    "{\n"
+    "    var sum = 0;"
+    "    $.each(arr,function(){sum+=parseFloat(this) || 0;});\n"
+    "    return sum;"
+    "}\n"
+    "\n"
+    "\n"
+
+
     "/////////////////////////////////////////////////////////\n"
     "// Hindere IE 9 am seitlichen scrollen mit dem Scrollrad!\n"
     "/////////////////////////////////////////////////////////\n"

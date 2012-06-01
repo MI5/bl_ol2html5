@@ -18,7 +18,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -107,6 +107,11 @@ BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber
 @property (strong, nonatomic) NSString *lastUsedTabSheetContainerID;
 
 
+// "method" muss derzeit noch das name-attribut nach didEndElement rüberretten, damit ich
+// auch die parentKlasse setzen kann. In Zukunft aber neues Konzept für parent =>
+// siehe bei schließender "method", der Kommentar (ToDo)
+@property (strong, nonatomic) NSString *lastUsedNameAttribute;
+
 // Damit ich auch intern auf die Inhalte der Variablen zugreifen kann
 @property (strong, nonatomic) NSMutableDictionary *allJSGlobalVars;
 
@@ -190,7 +195,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize datasetItemsCounter = _datasetItemsCounter, rollupDownElementeCounter = _rollupDownElementeCounter;
 
-@synthesize animDuration = _animDuration, lastUsedTabSheetContainerID = _lastUsedTabSheetContainerID;
+@synthesize animDuration = _animDuration, lastUsedTabSheetContainerID = _lastUsedTabSheetContainerID, lastUsedNameAttribute = _lastUsedNameAttribute;
 
 @synthesize allJSGlobalVars = _allJSGlobalVars;
 
@@ -342,6 +347,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.animDuration = @"slow";
         self.lastUsedTabSheetContainerID = @"";
         self.lastUsedDataset = @"";
+        self.lastUsedNameAttribute = @"";
+
         self.datasetItemsCounter = 0;
         self.rollupDownElementeCounter = [[NSMutableArray alloc] init];
 
@@ -2435,11 +2442,23 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
+        
+        if (![attributeDict valueForKey:@"id"])
+        {
+            self.zuletztGesetzteID = @"canvas";
 
+            [self.output appendFormat:@"<div id=\"%@\"",self.zuletztGesetzteID];
+        }
+        else
+        {
+            [self.output appendString:@"<div"];
 
-        [self.output appendString:@"<div"];
+            [self addIdToElement:attributeDict];
 
-        [self addIdToElement:attributeDict];
+            // Falls er selber für canvas eine id setzt, muss trotzdem die Referenz auf canvas
+            // erhalten bleiben (ungetestet)
+            [self.jQueryOutput0 appendFormat:@"  var canvas = document.getElementById('%@');\n",self.zuletztGesetzteID];
+        }
 
         [self.output appendString:@" class=\"canvas_standard\" style=\""];
 
@@ -2476,6 +2495,13 @@ didStartElement:(NSString *)elementName
                 [self.cssOutput appendString:@"  background-color: "];
                 [self.cssOutput appendString:[attributeDict valueForKey:@"bgcolor"]];
                 [self.cssOutput appendString:@";\n"];
+            }
+
+            // Wenn wir Taxango sind, dann das Hintergrundbild aus dem HTML-File direkt setzen
+            if ([[[self.pathToFile lastPathComponent] stringByDeletingPathExtension] isEqualToString:@"Taxango"])
+            {
+                [self.cssOutput appendString:@"  /* Hintergrundbild von Taxango-HTML-File */\n"];
+                [self.cssOutput appendString:@"  background-image:url(images/bg1.jpg);\n"];
             }
 
             [self.cssOutput appendString:@"}\n\n"];
@@ -4330,7 +4356,7 @@ didStartElement:(NSString *)elementName
 
             [self.jsOLClassesOutput appendFormat:@"//\n"];
             [self.jsOLClassesOutput appendString:@"///////////////////////////////////////////////////////////////\n"];
-            [self.jsOLClassesOutput appendFormat:@"var %@ = function() {\n",name];
+            [self.jsOLClassesOutput appendFormat:@"var %@ = function(textBetweenTags) {\n",name];
 
 
             [self.jsOLClassesOutput appendFormat:@"  this.name = '%@';\n",name];
@@ -4346,11 +4372,11 @@ didStartElement:(NSString *)elementName
             if (parent == nil || parent.length == 0)
               [self.jsOLClassesOutput appendString:@"  this.parent = new view();\n\n"];
             else
-              [self.jsOLClassesOutput appendFormat:@"  this.parent = new %@;\n\n",parent];
+              [self.jsOLClassesOutput appendFormat:@"  this.parent = new %@(textBetweenTags);\n\n",parent];
             [keys removeObject:@"extends"];
 
-            // Dass klappt so nicht, weil es auch CSS-Eigenschaften gibt, die sich erst auswerten lassen,
-            // wenn ein Objekt instanziert wurde. (z.B. Breite, Höhe des Parents)
+            // Dass klappt so nicht, weil es auch CSS-Eigenschaften gibt, die sich erst auswerten
+            // lassen, wenn ein Objekt instanziert wurde. (z.B. Breite, Höhe des Parents)
             // Deswegen werden dort die CSS-Eigenschaften ausgewertet
             // Dazu gebe ich die CSS-Eigenschaften einzeln (!) der Klasse mit (s.u.)
             // CSS-Eigenschaften auswerten...
@@ -5297,7 +5323,7 @@ didStartElement:(NSString *)elementName
     }
 
 
-
+    // ToDo: Dann diesen Text hier abändern, inwzischen füge ich es in die echten JS-Objekte ein
     // Ich füge erstmal alle gefundenen Methoden in ein Objekt ein, dass ich 'parent' nenne,
     // da OpenLaszlo oft mit 'parent.*' arbeitet. Evtl. ist dieser Trick etwas zu dirty und
     // muss überdacht werden. Die Klasse 'parent' habe ich vorher angelegt. (To Do To Check)
@@ -5311,8 +5337,10 @@ didStartElement:(NSString *)elementName
         }
         else
         {
+            NSLog([[NSString alloc] initWithFormat:@"Using the attribute 'name' as method-name for a JS-Function, that is added to the class %@",self.zuletztGesetzteID]);
             self.attributeCount++;
-            NSLog(@"Using the attribute 'name' as method-name for a JS-Function, that is prototyped to the class 'parentKlasse'");
+            self.lastUsedNameAttribute = [attributeDict valueForKey:@"name"];
+            NSLog(@"AND using the attribute 'name' as method-name for a JS-Function, that is prototyped to the class 'parentKlasse'");
         }
 
         // Es gibt nicht immer args
@@ -5373,21 +5401,26 @@ didStartElement:(NSString *)elementName
             }
         }
 
-        [self.jsHead2Output appendString:@"\nparentKlasse.prototype."];
-        [self.jsHead2Output appendString:[attributeDict valueForKey:@"name"]];
-        [self.jsHead2Output appendString:@" = function("];
-        [self.jsHead2Output appendString:args];
-        [self.jsHead2Output appendString:@")\n{\n"];
+
+        if ([self.zuletztGesetzteID isEqualToString:@"canvas"])
+            [self.jQueryOutput0 appendString:@"\n  "];
+        else
+            [self.jQueryOutput0 appendFormat:@"\n  %@.",self.zuletztGesetzteID];
+        
+        [self.jQueryOutput0 appendString:[attributeDict valueForKey:@"name"]];
+        [self.jQueryOutput0 appendString:@" = function("];
+        [self.jQueryOutput0 appendString:args];
+        [self.jQueryOutput0 appendString:@")\n  {\n"];
 
         // Falls es default values für die Argumente gibt, muss ich diese hier setzen
         if (![defaultValues isEqualToString:@""])
         {
-            [self.jsHead2Output appendString:defaultValues];
-            [self.jsHead2Output appendString:@"\n"];
+            [self.jQueryOutput0 appendString:defaultValues];
+            [self.jQueryOutput0 appendString:@"\n"];
         }
 
         // Um es auszurichten mit dem Rest
-        [self.jsHead2Output appendString:@" "];
+        [self.jQueryOutput0 appendString:@" "];
 
         // Okay, jetzt Text der Methode sammeln und beim schließen einfügen
     }
@@ -5863,14 +5896,8 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@" class=\"div_standard\"></div>\n"];
 
 
-        // Und dann kann ich es per jQuery flexibel einfügen.
-        // Grrr
-        // ToDo: Okay, hier muss ich jetzt per jQuery die Objekte auslesen aus der JS-Datei collectedClasses.js
-        [self.jQueryOutput appendFormat:@"\n  // Klasse '%@' wurde instanziert in '%@'",elementName,self.zuletztGesetzteID];
-        [self.jQueryOutput appendFormat:@"\n  // Instanz erzeugen, id holen, Objekt auswerten"];
-        [self.jQueryOutput appendFormat:@"\n  var obj = new %@();",elementName];
-        [self.jQueryOutput appendFormat:@"\n  var id = document.getElementById('%@');",self.zuletztGesetzteID];
-        [self.jQueryOutput appendFormat:@"\n  interpretObject(obj,id);\n",elementName, self.zuletztGesetzteID];
+        // Okay, jQuery-Code mache ich beim schließen, weil ich erst den eventuellen Text der
+        // zwischen den Tags steht aufsammeln muss, und dann als Parameter übergebe
     }
 
 
@@ -5901,6 +5928,7 @@ didStartElement:(NSString *)elementName
 
 
     // 'attribute' muss wissen in welchem umschließenen Tag wir uns befinden
+    // method auch! => FALSCH! Es benötigt self.zuletztgesetzteID. => 'attribute' dann auch?
     if (self.tempVerschachtelungstiefe == self.verschachtelungstiefe)
     {
         // ToDo // ToDo // ToDo
@@ -6689,8 +6717,14 @@ BOOL isNumeric(NSString *s)
 
 
         //s = @"alert('test')";
-        [self.jsHead2Output appendString:s];
-        [self.jsHead2Output appendString:@"\n}\n"];
+        [self.jQueryOutput0 appendString:s];
+        [self.jQueryOutput0 appendString:@"\n  }\n"];
+
+        // ToDo => Lösungsvorschlag: In allen Methoden parent() durch jQuerys-parent-Methode
+        // ersetzen und dann noch get(0) dahinter, um auf das JS-Objekt zu kommmen.
+        // Alles was ich als Funktion in das Objekt gepackt habe auch erstmal in 'parent' packen
+        [self.jQueryOutput0 appendString:@"  // Hier nochmal etwas schummeln und ebenfalls zu parent hinzufügen, die eben definierte Funktion.\n"]; // ToDo
+        [self.jQueryOutput0 appendFormat:@"  parentKlasse.prototype.%@ = %@.%@;\n",self.lastUsedNameAttribute,self.zuletztGesetzteID,self.lastUsedNameAttribute];
     }
 
 
@@ -6702,22 +6736,27 @@ BOOL isNumeric(NSString *s)
     if (!element_geschlossen && ([self.allFoundClasses objectForKey:elementName] != nil))
     {
         element_geschlossen = YES;
+
+        // Immer auf nil testen, sonst kann es abstürzen hier
+        NSString *s = @"";
+        if (self.textInProgress != nil)
+            s = self.textInProgress;
+
+
+        // Und dann kann ich es per jQuery flexibel einfügen.
+        // Grrr
+        // ToDo: Okay, hier muss ich jetzt per jQuery die Objekte auslesen aus der JS-Datei collectedClasses.js
+        [self.jQueryOutput appendFormat:@"\n  // Klasse '%@' wurde instanziert in '%@'",elementName,self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"\n  // Instanz erzeugen, id holen, Objekt auswerten"];
+        [self.jQueryOutput appendFormat:@"\n  var obj = new %@('%@');",elementName,s];
+        [self.jQueryOutput appendFormat:@"\n  var id = document.getElementById('%@');",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"\n  interpretObject(obj,id);\n",elementName, self.zuletztGesetzteID];
     }
 
 
 
 
 
-    /*
-    if ([elementName isEqual:@"Item"])
-    {
-        [self.items addObject:self.bookInProgress];
-
-        // Clear the current item
-        self.bookInProgress = nil;
-        return;
-    }
-     */
 
 
     // bei den HTML-Tags innerhalb von BDStext darf ich self.textInProgress nicht auf nil setzen,
@@ -6780,8 +6819,10 @@ BOOL isNumeric(NSString *s)
     // Viewport für mobile Devices anpassen...
     // ...width=device-width funktioniert nicht im Portrait-Modus.
     // initial-scale baut links und rechts einen kleinen Abstand ein. Wollen wir das? ToDo
-    // [pre appendString:@"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n"];
-    [pre appendString:@"<meta name=\"viewport\" content=\"\" />\n"];
+    // Er springt dann etwas immer wegen addjustOffsetOnBrowserResize - To Check
+     [pre appendString:@"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n"];
+    //      [pre appendString:@"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.024\" />\n"]; // => Dann perfekte Breite, aber Grafiken wirken etwas verwaschen.ToDo@End
+    //[pre appendString:@"<meta name=\"viewport\" content=\"\" />\n"];
 
 
     // Als <title> nutzen wir den Dateinamen der Datei
@@ -7033,8 +7074,7 @@ BOOL isNumeric(NSString *s)
     "\n"
     "    /* Prevents scrolling */\n"
     "    overflow: hidden;\n"
-    // "\n"
-    // "    text-align: center;\n"
+    "\n"
     "}\n"
     "\n"
     "/* Damit der Hintergrund weiß wird, entgegen der Angabe in Humanity.css */\n"
@@ -7085,6 +7125,7 @@ BOOL isNumeric(NSString *s)
 	"    left:0px;\n"
     "    text-align:left;\n"
 	"    padding:0px;\n"
+    "    overflow:hidden; /* Damit es am iPad in der Queransicht unten richtig abschließt */\n"
     "}\n"
     "\n"
     "select\n"
@@ -7136,6 +7177,8 @@ BOOL isNumeric(NSString *s)
 	"    position:relative;\n"
 	"    top:0px;\n"
 	"    left:0px;\n"
+    "\n"
+    "    cursor:pointer;\n"
     "}\n"
     "\n"
     "/* TabSheetContainer (Der Rand darf nicht gesetzt werden, bzw. doch. hmmm) */\n"
@@ -7319,6 +7362,16 @@ BOOL isNumeric(NSString *s)
     "    w.addEventListener('devicemotion', checkTilt, false );\n"
     "\n"
     "})( this ); */\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Beginnt ein String mit einer bestimmten Zeichenfolge?\n"
+    "/////////////////////////////////////////////////////////\n"
+    "if (typeof String.prototype.startsWith != 'function') {\n"
+    "    String.prototype.startsWith = function (str) {\n"
+    "        return this.lastIndexOf(str,0) === 0;\n"
+    "    };\n"
+    "}\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -7690,9 +7743,19 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
-    "//  PLatzhalter-ID, die in allen Objekten ersetzt wird       //\n"
+    "//  Placeholder-ID, that ist replaced in all objects         //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "var platzhalterID = '@@@P-L,A#TZHALTER@@@';\n"
+    "var placeholderID = '@@@P-L,A#TZHALTER@@@';\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  replace placeholder-id with real id                      //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "function replaceID(s,id,supplement)\n"
+    "{\n"
+    "  var from = new RegExp(placeholderID, 'g');\n"
+    "  var to = '' + $(id).attr('id')+'_'+supplement;\n"
+    "\n"
+    "  return s.replace(from, to);\n"
+    "}\n"
     "\n"
     "\n"
     "\n"
@@ -7703,10 +7766,11 @@ BOOL isNumeric(NSString *s)
     "{\n"
     "  // Alle Attribute von Vorfahren werden geerbt. Dazu solange nach Vorfahren suchen, bis 'view' kommt\n"
     "  // und die Attribute übernehmen (bei gleichen gelten die hierachiemäßig allernächsten).\n"
+    "  // Außerdem den HTML-Content von Vorfahren einfügen und individuelle ID vergeben.\n"
     "  var currentObj = obj; // Zwischenspeichern\n"
     "  while (obj.parent.name !== 'view')\n"
     "  {\n"
-    "    // Doppelte Einträge entfernen\n"
+    "    // Doppelte Einträge von Attributen entfernen\n"
     "    obj.parent = deleteAttributesPreviousDeclared(currentObj.attributeNames,obj.parent);\n"
     "\n"
     "    // attributeNames übernehmen\n"
@@ -7717,14 +7781,17 @@ BOOL isNumeric(NSString *s)
     "    if (obj.parent.attributeValues.length > 0)\n"
     "      currentObj.attributeValues = currentObj.attributeValues.concat(obj.parent.attributeValues);\n"
     "\n"
-    "    // Dann den HTML-Content hinzufügen\n"
+    "\n"
+    "    // Dann den HTML-Content des Vorfahren einfügen\n"
     "    // Prepend! Da es der OpenLaszlo-Logik entspricht, tiefer verschachtelte Vorfahren immer davor zu setzen\n"
+    "    // Vorher aber die ID ersetzen\n"
+    "    obj.parent.contentHTML = replaceID(obj.parent.contentHTML,id,obj.parent.name);\n"
     "    $(id).prepend(obj.parent.contentHTML);\n"
     "\n"
-    "    // Objekt der nächsten Vererbung-Stufe holen\n"
+    "    // Objekt der nächsten Vererbungs-Stufe holen\n"
     "    obj = obj.parent;\n"
     "  }\n"
-    "  obj = currentObj;\n"
+    "  obj = currentObj; // Wieder unser Original-Objekt setzen\n"
     "\n"
     "\n"
     "  // 'view' (HTML-Element und/oder CSS-class) wird standardmäßig benutzt. Ansonsten muss ich hier austauschen."
@@ -7732,6 +7799,7 @@ BOOL isNumeric(NSString *s)
     "  {\n"
     "    //alert(obj.parent);\n"
     "  }\n"
+    "\n"
     "\n"
     "  // Erst die Attribute auswerten\n"
     "  var an = obj.attributeNames;\n"
@@ -7750,32 +7818,32 @@ BOOL isNumeric(NSString *s)
     "    }\n"
     "    else if (jQuery.inArray(an[i],jsAttributes) != -1)\n"
     "    {\n"
-    "      $(id).bind('click', function()\n"
+    "      if (an[i].startsWith('on'))\n"
     "      {\n"
-    "        alert('User clicked on \"foo.\"');\n"
-    "      });\n"
+    "        // 'on' entfernen\n"
+    "        an[i] = an[i].substr(2);\n"
+    "\n"
+    "        $(id).on(an[i],av[i]);\n"
+    "        //$(id).bind(an[i], function()\n"
+    "        //{\n"
+    "        //  alert('User clicked on \"foo.\"');\n"
+    "        //});\n"
+    "      }\n"
+    "      else { alert('Hoppala, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() als jsAttribute ausgewertet werden.'); }\n"
     "    }\n"
     "    else { alert('Whoops, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() ausgewertet werden.'); }\n"
     "  }\n"
     // "  $(id).css('background-color','black').css('width','200').css('height','5');\n"
     // "  $(id).attr('style',obj.style);\n"
     "\n"
-    "  // Allgemeine Replacement-Vorbereitungen des Platzhalters\n"
-    "  var from = new RegExp(platzhalterID, 'g');\n"
-    "  var to = '' + $(id).attr('id')+'_objekt';\n"
-    "\n"
     "  // Replace-IDs von contentHTML ersetzen\n"
-    "  var s = obj.contentHTML;\n"
-    "  s = s.replace(from, to);\n"
-    "\n"
+    "  var s = replaceID(obj.contentHTML,id,'objekt');\n"
     "  // Dann den HTML-Content hinzufügen\n"
     //"  // $(id).html(s);\n"
     "  $(id).append(s);\n"
     "\n"
     "  // Replace-IDs von contentJQuery ersetzen\n"
-    "  var s = obj.contentJQuery;\n"
-    "  s = s.replace(from, to);\n"
-    "\n"
+    "  var s = replaceID(obj.contentJQuery,id,'objekt');\n"
     "  // Dann den jQuery-Content hinzufügen\n"
     "  evalCode(s);\n"
     "\n"
@@ -7803,7 +7871,7 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
-    "//  Löscht doppelte Attribute (ältere bleiben erhalten)      //\n"
+    "//  Löscht doppelte Attribute (ältere werden überschrieben)  //\n"
     "///////////////////////////////////////////////////////////////\n"
     "function deleteAttributesPreviousDeclared(bestand,neu)\n"
     "{\n"
@@ -7840,14 +7908,17 @@ BOOL isNumeric(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "//  class = button (native class)                            //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "var button = function() {\n" //"var button = function(name) {\n"
+    "var button = function(textBetweenTags) {\n"
+    "  if(typeof(textBetweenTags) === 'undefined')\n"
+    "    textBetweenTags = '';\n"
+    "\n"
     "  this.name = 'button';\n"
     "  this.parent = new view();\n"
     "\n"
     "  this.attributeNames = [];\n"
     "  this.attributeValues = [];\n"
     "\n"
-    "  this.contentHTML = '<input type=\"button\" id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_standard\">';\n"
+    "  this.contentHTML = '<input type=\"button\" id=\"@@@P-L,A#TZHALTER@@@\" class=\"input_standard\" value=\"'+textBetweenTags+'\" />';\n"
     "\n"
     "  this.test1 = function () { // Intern definierte Methode\n"
     "    return 'I am ' + this.name;\n"
@@ -7855,6 +7926,8 @@ BOOL isNumeric(NSString *s)
     "};\n"
     "button.prototype.test2 = function() {}; // extern definierte Methode\n"
     "button.prototype.test3 = 2; // extern definierte Variable\n"
+    "button.test4 = function() {}; // extern definierte Methode - Geht wohl auch\n"
+    "button.test5 = 2; // extern definierte Variable - Geht wohl auch\n"
     "\n";
     js = [js stringByReplacingOccurrencesOfString:@"@@@P-L,A#TZHALTER@@@" withString:ID_REPLACE_STRING];
 

@@ -18,7 +18,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -48,8 +48,10 @@ BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber 
 @property (strong, nonatomic) NSString *keyInProgress;
 @property (strong, nonatomic) NSMutableString *textInProgress;
 
-@property (strong, nonatomic) NSString *enclosingElement;
-@property (nonatomic) NSInteger tempVerschachtelungstiefe;
+@property (strong, nonatomic) NSMutableArray *enclosingElements;
+@property (strong, nonatomic) NSMutableArray *enclosingElementsIds;
+// Diese Var wird wohl nicht mehr gebraucht: To Do To Check:
+@property (nonatomic) NSInteger verschachtelungstiefeDesUmgebendenElements;
 
 @property (strong, nonatomic) NSMutableString *output;
 @property (strong, nonatomic) NSMutableString *jsOutput;
@@ -70,7 +72,8 @@ BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber 
 @property (nonatomic) NSInteger idZaehler;
 @property (nonatomic) NSInteger elementeZaehler;
 @property (strong, nonatomic) NSString* element_merker; // Für <class>, um erkennen zu können, ob sich das Tag sich direkt wieder schließt: <tag />
-@property (nonatomic) NSInteger verschachtelungstiefe;
+// NSUInteger, damit ich es mit [NSArray count]; verrechnen kann, was ebenfalls NSUInteger zurückgibt
+@property (nonatomic) NSUInteger verschachtelungstiefe;
 
 // je tiefer die Ebene, desto mehr muss ich einrücken
 @property (nonatomic) NSInteger rollUpDownVerschachtelungstiefe;
@@ -175,7 +178,7 @@ BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber 
 @synthesize items = _items,
 bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress = _textInProgress;
 
-@synthesize enclosingElement = _enclosingElement, tempVerschachtelungstiefe = _tempVerschachtelungstiefe;
+@synthesize enclosingElements = _enclosingElements, enclosingElementsIds = _enclosingElementsIds, verschachtelungstiefeDesUmgebendenElements = _verschachtelungstiefeDesUmgebendenElements;
 
 @synthesize output = _output, jsOutput = _jsOutput, jsOLClassesOutput = _jsOLClassesOutput, jQueryOutput0 = _jQueryOutput0, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput, collectedContentOfClass = _collectedContentOfClass;
 
@@ -286,8 +289,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.items = [[NSMutableArray alloc] init];
         self.textInProgress = [[NSMutableString alloc] initWithString:@""];
 
-        self.enclosingElement = @"";
-        self.tempVerschachtelungstiefe = 1;
+        self.enclosingElements = [[NSMutableArray alloc] init];
+        self.enclosingElementsIds = [[NSMutableArray alloc] init];
+        self.verschachtelungstiefeDesUmgebendenElements = -1;
 
         self.output = [[NSMutableString alloc] initWithString:@""];
         self.jsOutput = [[NSMutableString alloc] initWithString:@""];
@@ -435,6 +439,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 - (void) rueckeMitLeerzeichenEin:(NSInteger)n
 {
+    n--;
     for (int i = 0; i<n; i++)
     {
         [self.output appendString:@"  "];
@@ -1681,13 +1686,14 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Simplelayout Y
     if (wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y)
     {
-        [self instableXML:@"Bei taxango kommen wir hier gar nicht rein, wtf. (Simplelayout Y). Für was gibt es das dann? ToDo: Test mit SimpleLayout-OL-Doku."];
+        NSLog(@"'top' korrigieren, weil 2 ineinander verschachtelte Y-Simplelayouts.");
 
-        [self.jsOutput appendString:@"if ("];
+        [self.jsOutput appendString:@"  // Korrektur wegen zweier ineinander verschachteltet Simplelayout Y:\n"];
+        [self.jsOutput appendString:@"  if ("];
         [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
         [self.jsOutput appendFormat:@"$('#%@').prev().get(0).lastElementChild)\n",id];
 
-        [self.jsOutput appendString:@"  document.getElementById('"];
+        [self.jsOutput appendString:@"    document.getElementById('"];
         [self.jsOutput appendString:id];
 
         // parseInt() removes the "px" at the end
@@ -1774,13 +1780,14 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Simplelayout X
     if (wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_X)
     {
-        [self instableXML:@"Bei taxango kommen wir hier gar nicht rein, wtf. (Simplelayout X). Für was gibt es das dann? ToDo: Test mit SimpleLayout-OL-Doku."];
+        NSLog(@"'left' korrigieren, weil 2 ineinander verschachtelte X-Simplelayouts.");
 
-        [self.jsOutput appendString:@"if ("];
+        [self.jsOutput appendString:@"  // Korrektur wegen zweier ineinander verschachteltet Simplelayout X:\n"];
+        [self.jsOutput appendString:@"  if ("];
         [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
         [self.jsOutput appendFormat:@"$('#%@').prev().get(0).lastElementChild)\n",id];
 
-        [self.jsOutput appendString:@"  document.getElementById('"];
+        [self.jsOutput appendString:@"    document.getElementById('"];
         [self.jsOutput appendString:id];
 
         // parseInt() removes the "px" at the end
@@ -2005,6 +2012,45 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+-(void) erhoeheVerschachtelungstiefe:(NSString *)elementName merkeDirID:(NSString *)id
+{
+    self.verschachtelungstiefe++;
+
+    // 'method' und 'attribute' müssen wissen in welchem umschließenen Tag mit welcher ID wir uns befinden
+    // Ich muss dazu die ganze Hierachie-Stufe speichern, weil wenn ich aus tiefer verschachtelten
+    // Ebenen zurückkehre, ist sonst das umgebende Element + die ID davon nicht mehr bekannt.
+    // NSLog([NSString stringWithFormat:@"\n\n\n\n\n XXX Hierachiestufe umgebender Elemente: %@",self.enclosingElements]);
+    [self.enclosingElements addObject:elementName];
+    if (id != nil)
+    {
+        [self.enclosingElementsIds addObject:id];
+    }
+    else
+    {
+        // Es gibt auch Methoden, die sind in einem Element definiert, die haben gar keine ID...
+        // Wie soll man die dann ansprechen? Wohl nur über this oder parent dann.
+        // Jedenfalls müssen wir die Methode trotzdem irgendwie koppeln.
+        // Wir erraten dazu die gleich gesetzte ID...
+        // Etwas tricky, aber es funktioniert...
+        if (self.ignoreAddingIDsBecauseWeAreInClass)
+            [self.enclosingElementsIds addObject:[NSString stringWithFormat:@"%@",ID_REPLACE_STRING]];
+        else
+            [self.enclosingElementsIds addObject:[NSString stringWithFormat:@"element%d",self.idZaehler+1]];
+    }
+}
+
+
+
+-(void) reduziereVerschachtelungstiefe
+{
+    self.verschachtelungstiefe--;
+
+    [self.enclosingElements removeLastObject];
+    [self.enclosingElementsIds removeLastObject];
+}
+
+
+
 #pragma mark Delegate calls
 
 - (void) parser:(NSXMLParser *)parser
@@ -2093,7 +2139,7 @@ didStartElement:(NSString *)elementName
         self.element_merker = elementName;
 
 
-        NSLog([NSString stringWithFormat:@"\nSkipping the Element %@", elementName]);
+        NSLog([NSString stringWithFormat:@"\nSkipping the Element %@!", elementName]);
         return;
     }
     // skipping All Elements in BDSreplicator (ToDo)
@@ -2113,9 +2159,20 @@ didStartElement:(NSString *)elementName
     // Skipping the elements in all when-truncs, except the first one
     if (self.weAreInTheTagSwitchAndNotInTheFirstWhen)
     {
-        NSLog([NSString stringWithFormat:@"\nSkipping the Element %@", elementName]);
+        NSLog([NSString stringWithFormat:@"\nSkipping the opening Element %@, (Because we are in <switch>, but not in the first <when>)", elementName]);
         return;
     }
+
+
+
+
+    // Da dieser Zähler schließend bei den HTML-Elementen erfasst wird, muss er auch öffnend hier erhöht werden
+    // Deswegen steht er hier.
+    [self erhoeheVerschachtelungstiefe:elementName merkeDirID:[attributeDict valueForKey:@"id"]];
+
+
+
+
 
     // Alle einzeln durchgehen, damit wir besser fehlende überprüfen können, deswegen ist dies kein redundanter Code
     if (self.weAreInBDStextAndThereMayBeHTMLTags)
@@ -2160,12 +2217,9 @@ didStartElement:(NSString *)elementName
 
 
 
-    self.verschachtelungstiefe++;
 
 
-
-
-    NSLog([NSString stringWithFormat:@"\nOpening Element: %@", elementName]);
+    NSLog([NSString stringWithFormat:@"\nOpening Element: %@ (Neue Verschachtelungstiefe: %d)", elementName,self.verschachtelungstiefe]);
     NSLog([NSString stringWithFormat:@"with these attributes: %@\n", attributeDict]);
 
     // This is a string we will append to as the text arrives
@@ -2442,8 +2496,9 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
-        
-        if (![attributeDict valueForKey:@"id"])
+
+        //if (![attributeDict valueForKey:@"id"])
+        if (NO)
         {
             self.zuletztGesetzteID = @"canvas";
 
@@ -2457,7 +2512,10 @@ didStartElement:(NSString *)elementName
 
             // Falls er selber für canvas eine id setzt, muss trotzdem die Referenz auf canvas
             // erhalten bleiben (ungetestet)
-            [self.jQueryOutput0 appendFormat:@"  var canvas = document.getElementById('%@');\n",self.zuletztGesetzteID];
+            // Keine Ahnung ob das so stimmt, ansonsten diesen If-Else-Zweig einfach entfernen
+            // Und nur das was im if steht behalten!?
+            //[self.jQueryOutput0 appendFormat:@"  var canvas = document.getElementById('%@');\n",self.zuletztGesetzteID];
+            // Puh, ich kann dich 'canvas' nicht einfach überschreiben...
         }
 
         [self.output appendString:@" class=\"canvas_standard\" style=\""];
@@ -3012,7 +3070,7 @@ didStartElement:(NSString *)elementName
         NSString *id = [self addIdToElement:attributeDict];
 
 
-        [self.output appendString:@" class=\"div_standard\" style=\""];
+        [self.output appendString:@" class=\"input_standard\" style=\""];
         [self.output appendString:[self addCSSAttributes:attributeDict]];
         [self.output appendString:@"\" "];
 
@@ -5337,7 +5395,7 @@ didStartElement:(NSString *)elementName
         }
         else
         {
-            NSLog([[NSString alloc] initWithFormat:@"Using the attribute 'name' as method-name for a JS-Function, that is added to the class %@",self.zuletztGesetzteID]);
+            NSLog([[NSString alloc] initWithFormat:@"Using the attribute 'name' as method-name for a JS-Function, that is added to the class %@",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2]]);
             self.attributeCount++;
             self.lastUsedNameAttribute = [attributeDict valueForKey:@"name"];
             NSLog(@"AND using the attribute 'name' as method-name for a JS-Function, that is prototyped to the class 'parentKlasse'");
@@ -5401,12 +5459,26 @@ didStartElement:(NSString *)elementName
             }
         }
 
-
-        if ([self.zuletztGesetzteID isEqualToString:@"canvas"])
-            [self.jQueryOutput0 appendString:@"\n  "];
+        // http://www.openlaszlo.org/lps4.9/docs/reference/ <method> => S. Attribut 'name'
+        // Deswegen bei canvas und library 'method' als Funktionen global verfügbar machen
+        // Ansonsten 'method' als Methode an das umgebende Objekt koppeln.
+        if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-2] isEqualToString:@"canvas"] ||
+            [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-2] isEqualToString:@"library"])
+        {
+            [self.jQueryOutput0 appendFormat:@"\n  if (window.%@ == undefined)\n  ",[attributeDict valueForKey:@"name"]];
+        }
         else
-            [self.jQueryOutput0 appendFormat:@"\n  %@.",self.zuletztGesetzteID];
-        
+        {
+            NSString *elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+            // Folgendes Szenario: Wenn eine selbst definierte Klasse eine Methode definiert, aber gleichzeitig
+            // eine erbt, dann gitl die selbst definierte. Deswegen überschreibe ich mit der Methode
+            // innerhalb der Klasse nicht! Dazu teste ich einfach vorher ob sie auch wirklich undefined ist!
+            [self.jQueryOutput0 appendFormat:@"\n  if (%@.%@ == undefined)",elem,[attributeDict valueForKey:@"name"]];
+
+            [self.jQueryOutput0 appendFormat:@"\n  %@.",elem];
+        }
+
         [self.jQueryOutput0 appendString:[attributeDict valueForKey:@"name"]];
         [self.jQueryOutput0 appendString:@" = function("];
         [self.jQueryOutput0 appendString:args];
@@ -5428,6 +5500,8 @@ didStartElement:(NSString *)elementName
 
     // Handler wird immer in anderen <tags> aufgerufen, wir nehmen von diesem umgebenden Tag
     // einfach die ID um den Handler zuordnen zu können
+    // ToDo -> Ich nutze hier ja self.zuletztgesetzteID anstatt dem umgebenden Tag?!?!?! -> Das kann abweichen!
+    // z. B. wenn der handler erst später kommt und dazwischen noch andere Tags liegen!
     if ([elementName isEqualToString:@"handler"])
     {
         element_bearbeitet = YES;
@@ -5888,6 +5962,15 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
 
 
+        if ([attributeDict valueForKey:@"text"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'text' as 'textBetweenTags'-Parameter of the object.");
+
+            // Wird dann beim schließen ausgelesen
+            self.textInProgress = [attributeDict valueForKey:@"text"];
+        }
+
         // Ich muss die Stelle einmal markieren...
         // standardmäßig wird immer von 'view' geerbt, deswegen hier als class 'div_standard'.
         // Wird falls nötig auf Javascript-Ebene von der Funktion interpretObject() ausgetauscht.
@@ -5922,19 +6005,6 @@ didStartElement:(NSString *)elementName
     /////////////////////////////////////////////////
     // Abfragen ob wir alles erfasst haben (Debug) //
     /////////////////////////////////////////////////
-
-
-
-
-
-    // 'attribute' muss wissen in welchem umschließenen Tag wir uns befinden
-    // method auch! => FALSCH! Es benötigt self.zuletztgesetzteID. => 'attribute' dann auch?
-    if (self.tempVerschachtelungstiefe == self.verschachtelungstiefe)
-    {
-        // ToDo // ToDo // ToDo
-        self.enclosingElement = elementName;
-        self.tempVerschachtelungstiefe = self.verschachtelungstiefe;
-    }
 }
 
 
@@ -6008,8 +6078,11 @@ BOOL isNumeric(NSString *s)
 
         // Es muss ein gesamtumfassendes Tag geben, sonst ist es kein valides XML.
         // <library>, weil dies einerseits bereits in OL vorkommt und andererseits neutral ist.
-        self.collectedContentOfClass = [[NSMutableString alloc] initWithFormat:@"<library>%@",self.collectedContentOfClass];
-        [self.collectedContentOfClass appendString:@"</library>"];
+        // Falsch!! <library> ist nicht neutral! Es beeinflusst ob methods global sind oder nicht!
+        // Das war ein ziemlich fieser Bug.
+        // Deswegen lieber mit 'passthrough' arbeiten, das ist wirklich neutral.
+        self.collectedContentOfClass = [[NSMutableString alloc] initWithFormat:@"<passthrough>%@",self.collectedContentOfClass];
+        [self.collectedContentOfClass appendString:@"</passthrough>"];
 
 
         NSLog(self.collectedContentOfClass);
@@ -6092,19 +6165,21 @@ BOOL isNumeric(NSString *s)
 
         // In manchen JS/jQuery tauchen " auf, die müssen escaped werden
         rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+        rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+
 
         // Ich muss im Quellcode bereits vorab geschriebene Escape-Sequenzen berücksichtigen:
-        // In JSHead2Output taucht folgendes auf: "\"", aber auch "\\" 
+        // In JQueryOutput0 taucht folgendes auf: "\"", aber auch "\\" 
         // Ich muss erst \\” suchen und ersetzen mit temporären string
-        rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"\\\\\"" withString:@"ugly%$§§$%ugly1"];
+        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\\\\\"" withString:@"ugly%$§§$%ugly1"];
         // Jetzt muss ich \” suchen und ersetzen mit temporären string
-        rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"\\\"" withString:@"ugly%$§§$%ugly2"];
+        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\\\"" withString:@"ugly%$§§$%ugly2"];
         // Jetzt normales ersetzen von \"
-        rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         // Jetzt kann ich nach \" bzw den ersetzten String suchen und ersetzen
-        rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly2" withString:@"\\\\\\\""];
+        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly2" withString:@"\\\\\\\""];
         // Jetzt kann ich nach \\" bzw den ersetzten String suchen und ersetzen
-        rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly1" withString:@"\\\\\\\\\\\""];
+        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly1" withString:@"\\\\\\\\\\\""];
 
 
 
@@ -6281,17 +6356,25 @@ BOOL isNumeric(NSString *s)
         //    [self.collectedContentOfClass appendString:@"</when>"];
         // Ne, klappt so nicht. Muss ich über oben direkt in "class" lösen.
 
+
         self.weAreInTheTagSwitchAndNotInTheFirstWhen = YES;
     }
     if ([elementName isEqualToString:@"switch"])
     {
         element_geschlossen = YES;
         self.weAreInTheTagSwitchAndNotInTheFirstWhen = NO;
+
+        // Einmal extra Verschachtelungstiefe reduzieren, für das erste schließende when
+        // Für das korrespondierende öffnende tag wurde die Verschachtelungstiefe nämlich vorher erhöht!
+        [self reduziereVerschachtelungstiefe];
     }
     // wenn wir aber trotzdem immer noch drin sind, dann raus hier, sonst würde er Elemente
     // schließend bearbeiten, die im 'when'-Zweig drin liegen
     if (self.weAreInTheTagSwitchAndNotInTheFirstWhen)
+    {
+        NSLog([NSString stringWithFormat:@"\nSkipping the closing Element %@, (Because we are in <switch>, but not in the first <when>)", elementName]);
         return;
+    }
 
 
 
@@ -6310,9 +6393,15 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"buttonnext"])
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
-    self.verschachtelungstiefe--;
 
-    NSLog([NSString stringWithFormat:@"Closing Element: %@\n", elementName]);
+
+
+    [self reduziereVerschachtelungstiefe];
+
+
+
+
+    NSLog([NSString stringWithFormat:@"Closing Element: %@ (Neue Verschachtelungstiefe: %d)\n", elementName,self.verschachtelungstiefe]);
 
     // Schließen von canvas oder windows
     if ([elementName isEqualToString:@"canvas"] || [elementName isEqualToString:@"window"])
@@ -6724,7 +6813,16 @@ BOOL isNumeric(NSString *s)
         // ersetzen und dann noch get(0) dahinter, um auf das JS-Objekt zu kommmen.
         // Alles was ich als Funktion in das Objekt gepackt habe auch erstmal in 'parent' packen
         [self.jQueryOutput0 appendString:@"  // Hier nochmal etwas schummeln und ebenfalls zu parent hinzufügen, die eben definierte Funktion.\n"]; // ToDo
-        [self.jQueryOutput0 appendFormat:@"  parentKlasse.prototype.%@ = %@.%@;\n",self.lastUsedNameAttribute,self.zuletztGesetzteID,self.lastUsedNameAttribute];
+        // Analoge Abfrage wie beim betreten des Tags:
+        if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"canvas"] ||
+            [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"library"])
+        {
+            [self.jQueryOutput0 appendFormat:@"  parentKlasse.prototype.%@ = %@.%@;\n",self.lastUsedNameAttribute,@"canvas",self.lastUsedNameAttribute];
+        }
+        else
+        {
+            [self.jQueryOutput0 appendFormat:@"  parentKlasse.prototype.%@ = %@.%@;\n",self.lastUsedNameAttribute,[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],self.lastUsedNameAttribute];
+        }
     }
 
 
@@ -6737,10 +6835,15 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
+        NSLog(@"Schließendes Tag einer selbst definierten Klasse gefunden!");
+
         // Immer auf nil testen, sonst kann es abstürzen hier
         NSString *s = @"";
         if (self.textInProgress != nil)
             s = self.textInProgress;
+
+        // Remove leading and ending Whitespaces and NewlineCharacters, sonst Absturz, falls ein Newline auftaucht
+        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
 
         // Und dann kann ich es per jQuery flexibel einfügen.
@@ -6900,6 +7003,12 @@ BOOL isNumeric(NSString *s)
     // Füge noch die nötigen JS ein:
     [self.output appendString:@"\n<script type=\"text/javascript\">\n"];
 
+    // Firefox braucht eine Extra-Sonderbehandlung OBWOHL ich die ids bereits alle einzeln global mache
+    // Jedoch in '$(window).load(function()'. Und das reicht anscheinend nicht.......... Warum???
+    [self.output appendString:@"// Make all id's from div's global (Firefox)\n"];
+    [self.output appendString:@"makeElementsGlobal(document.getElementsByTagName('div'));\n"];
+    [self.output appendString:@"// Make all id's from inout's global (Firefox)\n"];
+    [self.output appendString:@"makeElementsGlobal(document.getElementsByTagName('input'));\n"];
 
     // Die jQuery-Anweisungen:
 
@@ -6981,6 +7090,7 @@ BOOL isNumeric(NSString *s)
     NSString *pathToCSSFile = [NSString stringWithFormat:@"%@/styles.css",path];
     NSString *pathToJSFile = [NSString stringWithFormat:@"%@/jsHelper.js",path];
     NSString *pathToCollectedClassesFile = [NSString stringWithFormat:@"%@/collectedClasses.js",path];
+    NSString *pathToLogile = [NSString stringWithFormat:@"%@/log_OL2HTML5.txt",path];
 
 
     path = [path stringByAppendingString: @"/output_ol2x.html"];
@@ -7032,6 +7142,11 @@ BOOL isNumeric(NSString *s)
         NSLog(@"I'm sorry I coudn't fix this problem. Your OpenLaszlo-code may be malformed.\n");
         NSLog(@"I continued the parsing anyway, but there may be problems with the Output.");
     }
+
+
+    // Writing Log-File to File-System
+    // ToDo - Schalter hierfür in Oberfläche
+    [[globalAccessToTextView string] writeToFile:pathToLogile atomically:NO encoding:NSUTF8StringEncoding error:NULL];
 
 
 
@@ -7375,19 +7490,30 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Wandelt eine float in einen korrekt gerundeten Integer\n"
+    "// Macht alle übergebenen Objekte global per id verfügbar\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function makeElementsGlobal(all) {\n"
+    "    for (var i=0, max=all.length; i < max; i++) {\n"
+    "        var idName = $(all[i]).attr('id');\n"
+    "        window[idName] = document.getElementById(idName);\n"
+    "    }\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "//Wandelt einen float in einen korrekt gerundeten Integer\n"
     "/////////////////////////////////////////////////////////\n"
     "function toInt(n){ return Math.round(Number(n)); };\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Wandelt eine float in einen korrekt gerundeten Integer\n"
+    "// Wandelt einen float in einen abgerundeten Integer     \n"
     "/////////////////////////////////////////////////////////\n"
     "function toIntFloor(n){ return Math.floor(Number(n)); };\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Höchte Zahl in Array\n"
+    "// Höchste Zahl in Array\n"
     "/////////////////////////////////////////////////////////\n"
     "function getMaxOfArray(numArray)\n"
     "{\n"
@@ -7524,20 +7650,20 @@ BOOL isNumeric(NSString *s)
     "}\n"
     "\n"
     "\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// globale canvas-Methoden\n"
-    "/////////////////////////////////////////////////////////\n"
-    "function loadurlchecksave(url)\n"
-    "{\n"
-    "    window.location.href = url;\n"
-    "}\n"
-    "\n"
-    "function setglobalhelp(s)\n"
-    "{\n"
-    "    $('#___globalhelp').text(s);\n"
-    "}\n"
-    "\n"
-    "\n"
+    //"/////////////////////////////////////////////////////////\n"
+    //"// globale canvas-Methoden\n"
+    //"/////////////////////////////////////////////////////////\n"
+    //"function loadurlchecksave(url)\n"
+    //"{\n"
+    //"    window.location.href = url;\n"
+    //"}\n"
+    //"\n"
+    //"function setglobalhelp(s)\n"
+    //"{\n"
+    //"    $('#___globalhelp').text(s);\n"
+    //"}\n"
+    //"\n"
+    //"\n"
     "/////////////////////////////////////////////////////////\n"
     "// globales lz-Objekt, um Aufrufe darauf abzufangen\n"
     "/////////////////////////////////////////////////////////\n"
@@ -7666,7 +7792,14 @@ BOOL isNumeric(NSString *s)
     "      me = this;\n"
     "\n"
     "    if (attributeName == 'text')\n"
-    "        $(me).html(value);\n"
+    "    {\n"
+    "      if ($(me).children().length > 0 && $(me).children().get(0).nodeName == 'INPUT')\n"
+    "          $(me).children().attr('value',value);\n"
+    "      else if ($(me).get(0).nodeName == 'INPUT')\n"
+    "          $(me).attr('value',value);\n"
+    "      else\n"
+    "          $(me).html(value);\n"
+    "    }\n"
     "    else if (attributeName == 'bgcolor')\n"
     "        $(me).css('background-color',value);\n"
     "    else\n"
@@ -7749,12 +7882,11 @@ BOOL isNumeric(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "//  replace placeholder-id with real id                      //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "function replaceID(s,id,supplement)\n"
+    "function replaceID(inString,to)\n"
     "{\n"
     "  var from = new RegExp(placeholderID, 'g');\n"
-    "  var to = '' + $(id).attr('id')+'_'+supplement;\n"
     "\n"
-    "  return s.replace(from, to);\n"
+    "  return inString.replace(from, to);\n"
     "}\n"
     "\n"
     "\n"
@@ -7785,7 +7917,7 @@ BOOL isNumeric(NSString *s)
     "    // Dann den HTML-Content des Vorfahren einfügen\n"
     "    // Prepend! Da es der OpenLaszlo-Logik entspricht, tiefer verschachtelte Vorfahren immer davor zu setzen\n"
     "    // Vorher aber die ID ersetzen\n"
-    "    obj.parent.contentHTML = replaceID(obj.parent.contentHTML,id,obj.parent.name);\n"
+    "    obj.parent.contentHTML = replaceID(obj.parent.contentHTML,''+$(id).attr('id')+'_'+obj.parent.name);\n"
     "    $(id).prepend(obj.parent.contentHTML);\n"
     "\n"
     "    // Objekt der nächsten Vererbungs-Stufe holen\n"
@@ -7823,11 +7955,16 @@ BOOL isNumeric(NSString *s)
     "        // 'on' entfernen\n"
     "        an[i] = an[i].substr(2);\n"
     "\n"
-    "        $(id).on(an[i],av[i]);\n"
-    "        //$(id).bind(an[i], function()\n"
-    "        //{\n"
-    "        //  alert('User clicked on \"foo.\"');\n"
-    "        //});\n"
+    "        // Array-Variable in diesen Scope holen, damit ich sie in die Funktion einfügen kann\n"
+    "        var executeInOnFunction = av[i];\n"
+    "\n"
+    "        $(id).on(an[i], function()\n"
+    "        {\n"
+    "          with (this) // Leider nötig\n"
+    "          {\n"
+    "            eval(executeInOnFunction);\n"
+    "          }\n"
+    "        });\n"
     "      }\n"
     "      else { alert('Hoppala, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() als jsAttribute ausgewertet werden.'); }\n"
     "    }\n"
@@ -7837,13 +7974,19 @@ BOOL isNumeric(NSString *s)
     // "  $(id).attr('style',obj.style);\n"
     "\n"
     "  // Replace-IDs von contentHTML ersetzen\n"
-    "  var s = replaceID(obj.contentHTML,id,'objekt');\n"
+    "  var s = replaceID(obj.contentHTML,''+$(id).attr('id')+'_objekt');\n"
     "  // Dann den HTML-Content hinzufügen\n"
     //"  // $(id).html(s);\n"
     "  $(id).append(s);\n"
     "\n"
+    "  // Replace-IDs von contentLeadingJQuery ersetzen\n"
+    "  var s = replaceID(obj.contentLeadingJQuery,'element');\n"
+    "  // Dann den LeadingJQuery-Content hinzufügen\n"
+    "  // evalCode benötigt Referenz auf id, damit es Methoden direkt adden kann\n"
+    "  evalCode(s,id);\n"
+    "\n"
     "  // Replace-IDs von contentJQuery ersetzen\n"
-    "  var s = replaceID(obj.contentJQuery,id,'objekt');\n"
+    "  var s = replaceID(obj.contentJQuery,''+$(id).attr('id')+'_objekt');\n"
     "  // Dann den jQuery-Content hinzufügen\n"
     "  evalCode(s);\n"
     "\n"
@@ -7854,18 +7997,19 @@ BOOL isNumeric(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "//  executes code from string                                //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "function evalCode(code)\n"
+    "function evalCode(code,element)\n"
     "{\n"
     "    // Möglichkeit 1: als eval, aber eval is evil (angeblich)\n"
-    "    // eval(code);\n"
+    "    // Nur so klappt derzeit das Auswerten von Methoden, weil nur so der Scope erhalten bleibt\n"
+    "    eval(code);\n"
     "\n"
     "    // Möglichkeit 2: Als Funktion\n"
     "    // var F=new Function (code);\n"
     "    // F();\n"
     "\n"
     "    // Möglichkeit 3: per jQuery den Code an das Ende von body anfügen\n"
-    "    var script = '<script type=\"text/javascript\"> ' + code + ' </script>';\n"
-    "    $('body').append(script);\n"
+    "    // var script = '<script type=\"text/javascript\"> $(window).load(function() { ' + code + ' }); </script>';\n"
+    "    // $('body').append(script);\n"
     "}\n"
     "\n"
     "\n"

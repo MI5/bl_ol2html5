@@ -3,14 +3,17 @@
 //  OpenLaszlo2Canvas
 //
 //
-//
-//
 // Bekannte Einschränkungen: simplelayout muss als erstes bei mehreren Geschwister-
 // Elementen gesetzt werden, damit es sich auf alle Geschwister-Elemente beziehen kann
 //
 //
-// Nach verdammt viel hin und her, ist die derzeitige Lösung: Standard ist position:relative;
-// Aber sobald x oder y gesetzt wird gilt position:absolute; (somit auch bei Bildern)
+//
+//
+//
+//
+// 'name' Attribute werden global gemacht, aber zumindestens bei input-Feldern
+// überschreiben Sie sich dann gegenseitig. z. B. 'Gewerbesteuerpflicht', 'cbType' oder
+// 'regelmaessig', 'begruendet', 'complete'
 //
 //
 //  Created by Matthias Blanquett on 13.04.12.
@@ -18,7 +21,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -50,8 +53,6 @@ BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber
 
 @property (strong, nonatomic) NSMutableArray *enclosingElements;
 @property (strong, nonatomic) NSMutableArray *enclosingElementsIds;
-// Diese Var wird wohl nicht mehr gebraucht: To Do To Check:
-@property (nonatomic) NSInteger verschachtelungstiefeDesUmgebendenElements;
 
 @property (strong, nonatomic) NSMutableString *output;
 @property (strong, nonatomic) NSMutableString *jsOutput;
@@ -112,7 +113,7 @@ BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber
 
 // "method" muss derzeit noch das name-attribut nach didEndElement rüberretten, damit ich
 // auch die parentKlasse setzen kann. In Zukunft aber neues Konzept für parent =>
-// siehe bei schließender "method", der Kommentar (ToDo)
+// siehe bei schließender "method", der Kommentar (To Check)
 @property (strong, nonatomic) NSString *lastUsedNameAttribute;
 
 // Damit ich auch intern auf die Inhalte der Variablen zugreifen kann
@@ -142,15 +143,15 @@ BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber
 @property (nonatomic) BOOL weAreInRollUpDownWithoutSurroundingRUDContainer;
 
 // Derzeit überspringen wir alles im Element class, später ToDo
-// auch in anderen Fällen überspringen wir alle Inhalte, z.B. bei 'splash', das sollten wir so lassen
-// im Fall von 'fileUpload' müssen wir eine komplett neue Lösung finden,
-// weil es am iPad keine Files gibt
+// auch in anderen Fällen überspringen wir alle Inhalte, z.B. bei 'splash',
+// das sollten wir so lassen.
+// Im Fall von 'fileUpload' müssen wir eine komplett neue Lösung finden,
+// weil es am iPad keine Files gibt.
 // ToDo: Umbenennen in: weAreCollectingTheCompleteContentInClass
-// ToDo: Da fehlt 3 mal ein T bei 'weAreSkippingTheCompleteConten'
-@property (nonatomic) BOOL weAreSkippingTheCompleteContenInThisElement;
+@property (nonatomic) BOOL weAreSkippingTheCompleteContentInThisElement;
 //auch ein 2. und 3., sonst gibt es Interferenzen wenn ein zu skippendes Element in einem anderen zuu skippenden liegt
-@property (nonatomic) BOOL weAreSkippingTheCompleteContenInThisElement2;
-@property (nonatomic) BOOL weAreSkippingTheCompleteContenInThisElement3;
+@property (nonatomic) BOOL weAreSkippingTheCompleteContentInThisElement2;
+@property (nonatomic) BOOL weAreSkippingTheCompleteContentInThisElement3;
 
 // Wenn wir <class> auswerten dann haben wir generelle Klassen und dürfen keine
 // festen IDs vergeben!
@@ -178,7 +179,7 @@ BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber
 @synthesize items = _items,
 bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress = _textInProgress;
 
-@synthesize enclosingElements = _enclosingElements, enclosingElementsIds = _enclosingElementsIds, verschachtelungstiefeDesUmgebendenElements = _verschachtelungstiefeDesUmgebendenElements;
+@synthesize enclosingElements = _enclosingElements, enclosingElementsIds = _enclosingElementsIds;
 
 @synthesize output = _output, jsOutput = _jsOutput, jsOLClassesOutput = _jsOLClassesOutput, jQueryOutput0 = _jQueryOutput0, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput, collectedContentOfClass = _collectedContentOfClass;
 
@@ -212,9 +213,9 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize weAreInBDStextAndThereMayBeHTMLTags = _weAreInBDStextAndThereMayBeHTMLTags;
 @synthesize weAreInDatasetAndNeedToCollectTheFollowingTags = _weAreInDatasetAndNeedToCollectTheFollowingTags;
 @synthesize weAreInRollUpDownWithoutSurroundingRUDContainer = _weAreInRollUpDownWithoutSurroundingRUDContainer;
-@synthesize weAreSkippingTheCompleteContenInThisElement = _weAreSkippingTheCompleteContenInThisElement;
-@synthesize weAreSkippingTheCompleteContenInThisElement2 = _weAreSkippingTheCompleteContenInThisElement2;
-@synthesize weAreSkippingTheCompleteContenInThisElement3 = _weAreSkippingTheCompleteContenInThisElement3;
+@synthesize weAreSkippingTheCompleteContentInThisElement = _weAreSkippingTheCompleteContentInThisElement;
+@synthesize weAreSkippingTheCompleteContentInThisElement2 = _weAreSkippingTheCompleteContentInThisElement2;
+@synthesize weAreSkippingTheCompleteContentInThisElement3 = _weAreSkippingTheCompleteContentInThisElement3;
 
 @synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass;
 
@@ -291,7 +292,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         self.enclosingElements = [[NSMutableArray alloc] init];
         self.enclosingElementsIds = [[NSMutableArray alloc] init];
-        self.verschachtelungstiefeDesUmgebendenElements = -1;
 
         self.output = [[NSMutableString alloc] initWithString:@""];
         self.jsOutput = [[NSMutableString alloc] initWithString:@""];
@@ -362,9 +362,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.weAreInBDStextAndThereMayBeHTMLTags = NO;
         self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
         self.weAreInRollUpDownWithoutSurroundingRUDContainer = NO;
-        self.weAreSkippingTheCompleteContenInThisElement = NO;
-        self.weAreSkippingTheCompleteContenInThisElement2 = NO;
-        self.weAreSkippingTheCompleteContenInThisElement3 = NO;
+        self.weAreSkippingTheCompleteContentInThisElement = NO;
+        self.weAreSkippingTheCompleteContentInThisElement2 = NO;
+        self.weAreSkippingTheCompleteContentInThisElement3 = NO;
         self.ignoreAddingIDsBecauseWeAreInClass = NO;
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
@@ -769,8 +769,8 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [style appendString:@"px"];
             [style appendString:@";"];
         }
-
-        [style appendString:@"float:none;position:absolute;"];
+        if (positionAbsolute == NO)
+            [style appendString:@"float:none;position:absolute;"];
     }
 
     if ([attributeDict valueForKey:@"y"])
@@ -800,8 +800,8 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [style appendString:@"px"];
             [style appendString:@";"];
         }
-
-        [style appendString:@"float:none;position:absolute;"];
+        if (positionAbsolute == NO)
+            [style appendString:@"float:none;position:absolute;"];
     }
 
 
@@ -1031,42 +1031,42 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
 
-    // ToDo: "position:absolute" entfernen bei x und y bei positionAbsolute == YES:
 
-
-
-
-    // Bei positionAbsolute == YES:
-    // => Immer wenn entweder der x- oder der y-Wert gesetzt wurde
-    //      Derzeit daran erkennbar, dass "position:absolute" gesetzt wurde... To Do
-    //      ---> (To Change bei position:Absolute)
-    // => Dann muss ich die Größe des umgebenden Parents erweitern
-
-
-    if (positionAbsolute == YES)    
+    if (positionAbsolute == YES)
     {
         // Aus Sicht des umgebenden Divs gelöst.
-        // Code: Nur wenn im aktuellen View keine width angegeben wurde, dann setz als width die
-        // des (breitesten Kindes + x-wert)
+
+        // Code-Logik:
+        // Bei (positionAbsolute == YES),
+        // wenn entweder der x- oder der y-Wert (eines Kindes) gesetzt wurde,
+        // dann muss ich die Größe des umgebenden Elements erweitern,
+        // aber nur wenn im aktuellen View keine height angegeben wurde,
+        // dann setz als height die des (höchsten Kindes + top-wert).
 
 
-        [self.jQueryOutput appendString:@"\n  // Eine x- oder y-Angabe! Wir müssen eventuell deswegen die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n  // Wir überschreiben jedoch keinen explizit vorher gesetzten Wert,\n  // deswegen test auf '' (nur mit JS möglich, nicht mit jQuery) \n"];
+        [self.jQueryOutput appendString:@"\n  // Falls ein Kind eine x- oder y-Angabe hat: Wir müssen dann die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n  // Wir überschreiben jedoch keinen explizit vorher gesetzten Wert,\n  // deswegen test auf '' (nur mit JS möglich, nicht mit jQuery) \n"];
+        // position().top klappt nicht, weil das Elemente versteckt sein kann,
+        // aber mit css('top') klappt es (gleiches gilt für position().left).
+        // '0'+ als Schutz gegen 'auto', so, dass parseInt() auf jeden Fall ne Nummer findet.
+        [self.jQueryOutput appendFormat:@"  var sumXY = 0;\n  $('#%@').children().map(function () { sumXY+=parseInt('0'+$(this).css('top')); sumXY+=parseInt('0'+$(this).css('left')); });\n",self.zuletztGesetzteID];
 
-        [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length > 0 && $('#%@').get(0).style.height == '')\n  {\n  ",self.zuletztGesetzteID,self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  if (sumXY > 0 && $('#%@').children().length > 0 && $('#%@').get(0).style.height == '')\n  {\n  ",self.zuletztGesetzteID,self.zuletztGesetzteID];
         [self.jQueryOutput appendFormat:@"  var heights = $('#%@').children().map(function () { return $(this).outerHeight('true')+$(this).position().top; }).get()",self.zuletztGesetzteID];
         [self.jQueryOutput appendFormat:@"\n    $('#%@').css('height',getMaxOfArray(heights))\n  }\n",self.zuletztGesetzteID];
 
 
 
         [self.jQueryOutput appendString:@"  // Analog muss die Breite gesetzt werden\n"];
-        [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length > 0 && $('#%@').get(0).style.width == '')\n  {\n  ",self.zuletztGesetzteID,self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  if (sumXY > 0 && $('#%@').children().length > 0 && $('#%@').get(0).style.width == '')\n  {\n  ",self.zuletztGesetzteID,self.zuletztGesetzteID];
         [self.jQueryOutput appendFormat:@"  var widths = $('#%@').children().map(function () { return $(this).outerWidth('true')+$(this).position().left; }).get()",self.zuletztGesetzteID];
             [self.jQueryOutput appendFormat:@"\n    $('#%@').css('width',getMaxOfArray(widths))\n  }\n",self.zuletztGesetzteID];
 
 
 
 /*
- // Aus Sicht des Kindes:
+ // Aus Sicht des Kindes (Dieser Code hatte zu viel Schwächen):
+
+    [self.jQueryOutput appendString:@"\n  // Eine x- oder y-Angabe! Wir müssen eventuell deswegen die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n  // Wir überschreiben jedoch keinen explizit vorher gesetzten Wert,\n  // deswegen test auf '' (nur mit JS möglich, nicht mit jQuery) \n"];
 
     [self.jQueryOutput appendString:[NSString stringWithFormat:@"  var h = $('#%@').position().top+($('#%@').outerHeight('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
     [self.jQueryOutput appendString:[NSString stringWithFormat:@"  if (h > $('#%@').parent().height())\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
@@ -1158,9 +1158,15 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSLog(@"Setting the attribute 'name' as global JS variable.");
 
         [self.jQueryOutput0 appendString:@"\n  // All 'name'-attributes, set by OpenLaszlo, need to be global JS-Variables.\n"];
-        // Das ist Unsinn, weil ich das name-tag ja gerade nicht setze!
+        // Das ist Unsinn, weil ich das name-tag ja gerade nicht setze:
         // [self.jQueryOutput0 appendFormat:@"  var %@ = document.getElementsByName('%@');\n",name, name];
-        [self.jQueryOutput0 appendFormat:@"  var %@ = document.getElementById('%@');\n",name, self.zuletztGesetzteID];
+
+        // Ich verzichte hier bewust auf das var, weil ich es in der Funktion
+        // $(window).load(function() { ... }); deklariere!
+        // Mit var davor wird es nur lokal. Ohne var wird es global.
+        // Alternative um es global zu machen:
+        // "window.Gewerbesteuerpflicht = ...;" bzw. "window['Gewerbesteuerpflicht'] = ...;"
+        [self.jQueryOutput0 appendFormat:@"  %@ = document.getElementById('%@');\n",name, self.zuletztGesetzteID];
     }
 }
 
@@ -1601,8 +1607,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein!
         // insbesondere auch wegen Firefox
-        [self.jQueryOutput0 appendString:@"\n  // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein.\n"];
-        [self.jQueryOutput0 appendFormat:@"  var %@ = document.getElementById('%@');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+        // [self.jQueryOutput0 appendString:@"\n  // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein.\n"];
+        // [self.jQueryOutput0 appendFormat:@"  var %@ = document.getElementById('%@');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+        // => Anders gelöst, Schleife durch alle IDs direkt Am Anfang des <script>-Quellcodes.
     }
     else
     {
@@ -2098,7 +2105,7 @@ didStartElement:(NSString *)elementName
     // skipping All Elements in Class-elements (ToDo)
     // skipping all Elements in splash (ToDo)
     // skipping all Elements in fileUpload (ToDo)
-    if (self.weAreSkippingTheCompleteContenInThisElement)
+    if (self.weAreSkippingTheCompleteContentInThisElement)
     {
         // Wenn wir in <class> sind, sammeln wir alles (wird erst später rekursiv ausgewertet)
         // Erst den Elementnamen hinzufügen
@@ -2144,13 +2151,13 @@ didStartElement:(NSString *)elementName
     }
     // skipping All Elements in BDSreplicator (ToDo)
     // skipping all Elements in BDSinputgrid (ToDo)
-    if (self.weAreSkippingTheCompleteContenInThisElement2)
+    if (self.weAreSkippingTheCompleteContentInThisElement2)
     {
         NSLog([NSString stringWithFormat:@"\nSkipping the Element %@", elementName]);
         return;
     }
     // skipping All Elements in nicebox (ToDo)
-    if (self.weAreSkippingTheCompleteContenInThisElement3)
+    if (self.weAreSkippingTheCompleteContentInThisElement3)
     {
         NSLog([NSString stringWithFormat:@"\nSkipping the Element %@", elementName]);
         return;
@@ -2332,7 +2339,7 @@ didStartElement:(NSString *)elementName
 
             [s appendString:@"  if (!($('#"];
             [s appendString:self.zuletztGesetzteID];
-            [s appendString:@"').hasClass('rudElement')))"];
+            [s appendString:@"').hasClass('div_rudElement')))"];
             [s appendString:@"\n    $('#"];
             [s appendString:self.zuletztGesetzteID];
             [s appendString:@"').height(sumH);\n\n"];
@@ -3340,7 +3347,7 @@ didStartElement:(NSString *)elementName
         // WOW, dieses vorangehende <br /> als Lösung zu setzen, hat mich 3 Stunden Zeit gekostet...
         // ToDo: Eigentlich muss ich per jQuery immer entsprechend der Höhe und der X-Koordinate
         // des vorherigen Elements hier aufrücken <--- Alles Quatsch jetzt, nach der neuen Lösung.
-        [self.output appendString:@"<div class=\"combobox\">\n"];
+        [self.output appendString:@"<div class=\"div_combobox\">\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
 
@@ -3497,7 +3504,7 @@ didStartElement:(NSString *)elementName
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
-        [self.output appendString:@"<div class=\"checkbox\">\n"];
+        [self.output appendString:@"<div class=\"div_checkbox\">\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
 
@@ -3607,7 +3614,7 @@ didStartElement:(NSString *)elementName
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
-        [self.output appendString:@"<div class=\"textfield\" >\n"];
+        [self.output appendString:@"<div class=\"div_textfield\" >\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
 
@@ -3759,7 +3766,7 @@ didStartElement:(NSString *)elementName
         element_bearbeitet = YES;
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"<div class=\"datepicker\" >\n"];
+        [self.output appendString:@"<div class=\"div_datepicker\" >\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
 
@@ -3890,7 +3897,7 @@ didStartElement:(NSString *)elementName
 
 
 
-        [self.output appendString:@"<div class=\"rudContainer\""];
+        [self.output appendString:@"<div class=\"div_rudContainer\""];
 
         [self addIdToElement:attributeDict];
 
@@ -3987,7 +3994,7 @@ didStartElement:(NSString *)elementName
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
-        [self.output appendString:@"<div class=\"rudElement\""];
+        [self.output appendString:@"<div class=\"div_rudElement\""];
 
 
         // Das umgebende Div bekommt die Haupt-ID, Panel und Leiste 2 Unter-IDs
@@ -4599,17 +4606,17 @@ didStartElement:(NSString *)elementName
 
 
         // Alles was in class definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten
-        self.weAreSkippingTheCompleteContenInThisElement = YES;
+        self.weAreSkippingTheCompleteContentInThisElement = YES;
     }
     if ([elementName isEqualToString:@"splash"]) // ToDo (ist das vielleicht selbst definierte Klasse?)
     {
         element_bearbeitet = YES;
-        self.weAreSkippingTheCompleteContenInThisElement = YES;
+        self.weAreSkippingTheCompleteContentInThisElement = YES;
     }
     if ([elementName isEqualToString:@"fileUpload"]) // ToDo (ist selbst defnierte Klasse)
     {
         element_bearbeitet = YES;
-        self.weAreSkippingTheCompleteContenInThisElement = YES;
+        self.weAreSkippingTheCompleteContentInThisElement = YES;
 
         if ([attributeDict valueForKey:@"name"])
             self.attributeCount++;
@@ -4636,7 +4643,7 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was in nicemodaldialog definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContenInThisElement = YES;
+        self.weAreSkippingTheCompleteContentInThisElement = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"dlginfo"] || [elementName isEqualToString:@"dlgwarning"] || [elementName isEqualToString:@"dlgyesno"] || [elementName isEqualToString:@"nicepopup"] || [elementName isEqualToString:@"nicedialog"])
@@ -4669,7 +4676,7 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was in nicemodaldialog definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContenInThisElement = YES;
+        self.weAreSkippingTheCompleteContentInThisElement = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"rollUpDownContainerReplicator"])
@@ -4695,7 +4702,7 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContenInThisElement = YES;
+        self.weAreSkippingTheCompleteContentInThisElement = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"calculator_anim"])
@@ -4714,7 +4721,7 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContenInThisElement = YES;
+        self.weAreSkippingTheCompleteContentInThisElement = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"certdatepicker"])
@@ -4739,7 +4746,7 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContenInThisElement = YES;
+        self.weAreSkippingTheCompleteContentInThisElement = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"BDSinputgrid"])
@@ -4776,7 +4783,7 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContenInThisElement2 = YES;
+        self.weAreSkippingTheCompleteContentInThisElement2 = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"BDSreplicator"])
@@ -4795,7 +4802,7 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContenInThisElement2 = YES;
+        self.weAreSkippingTheCompleteContentInThisElement2 = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"nicebox"])
@@ -4825,7 +4832,7 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContenInThisElement3 = YES;
+        self.weAreSkippingTheCompleteContentInThisElement3 = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"infobox_notsupported"] ||
@@ -5381,10 +5388,10 @@ didStartElement:(NSString *)elementName
     }
 
 
-    // ToDo: Dann diesen Text hier abändern, inwzischen füge ich es in die echten JS-Objekte ein
-    // Ich füge erstmal alle gefundenen Methoden in ein Objekt ein, dass ich 'parent' nenne,
+    // Ich füge alle gefundenen Methoden in das richtige Objekt ein.
+    // Zusätzlich in eines, dass ich 'parent' nenne,
     // da OpenLaszlo oft mit 'parent.*' arbeitet. Evtl. ist dieser Trick etwas zu dirty und
-    // muss überdacht werden. Die Klasse 'parent' habe ich vorher angelegt. (To Do To Check)
+    // muss überdacht werden. Die Klasse 'parent' habe ich vorher angelegt. (ToDo)
     if ([elementName isEqualToString:@"method"])
     {
         element_bearbeitet = YES;
@@ -5976,7 +5983,15 @@ didStartElement:(NSString *)elementName
         // Wird falls nötig auf Javascript-Ebene von der Funktion interpretObject() ausgetauscht.
         [self.output appendString:@"<div"];
         [self addIdToElement:attributeDict];
-        [self.output appendString:@" class=\"div_standard\"></div>\n"];
+        [self.output appendString:@" class=\"div_standard\" style=\""];
+
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+        [self.output appendString:@"\"></div>\n"];
+
+
+        // To Do To Check -> Wird es nötig, das hier auszukommentieren?
+        //[self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]]];
 
 
         // Okay, jQuery-Code mache ich beim schließen, weil ich erst den eventuellen Text der
@@ -6008,7 +6023,6 @@ didStartElement:(NSString *)elementName
 }
 
 
-// ToDo: Später als Kategorie in NSObject packen oder in MyToolBox
 static inline BOOL isEmpty(id thing)
 {
     return thing == nil
@@ -6018,7 +6032,7 @@ static inline BOOL isEmpty(id thing)
         && [(NSArray *)thing count] == 0);
 }
 
-// ToDo: Später in MyToolBox packen
+
 BOOL isNumeric(NSString *s)
 {
     NSScanner *sc = [NSScanner scannerWithString: s];
@@ -6242,10 +6256,10 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-        self.weAreSkippingTheCompleteContenInThisElement = NO;
+        self.weAreSkippingTheCompleteContentInThisElement = NO;
     }
     // If we are still skipping All Elements, let's return here
-    if (self.weAreSkippingTheCompleteContenInThisElement)
+    if (self.weAreSkippingTheCompleteContentInThisElement)
     {
         // Wenn wir in <class> sind, sammeln wir alles (wird erst später rekursiv ausgewertet)
 
@@ -6292,24 +6306,25 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-        self.weAreSkippingTheCompleteContenInThisElement2 = NO;
+        self.weAreSkippingTheCompleteContentInThisElement2 = NO;
     }
     // If we are still skipping All Elements, let's return here
-    if (self.weAreSkippingTheCompleteContenInThisElement2)
+    if (self.weAreSkippingTheCompleteContentInThisElement2)
         return;
 
     if ([elementName isEqualToString:@"nicebox"])
     {
         element_geschlossen = YES;
 
-        self.weAreSkippingTheCompleteContenInThisElement3 = NO;
+        self.weAreSkippingTheCompleteContentInThisElement3 = NO;
     }
     // If we are still skipping All Elements, let's return here
-    if (self.weAreSkippingTheCompleteContenInThisElement3)
+    if (self.weAreSkippingTheCompleteContentInThisElement3)
         return;
 
 
-    // Alle einzeln durchgehen, damit wir besser fehlende überprüfen können, deswegen ist hierin kein redundanter Code
+    // Alle einzeln durchgehen, damit wir besser fehlende überprüfen können,
+    // deswegen ist hier drin kein redundanter Code
     if (self.weAreInBDStextAndThereMayBeHTMLTags)
     {
         if ([elementName isEqualToString:@"br"])
@@ -6743,13 +6758,12 @@ BOOL isNumeric(NSString *s)
         // setAttribute ersetzen = jQuery-Methode
         s = [s stringByReplacingOccurrencesOfString:@"setAttribute" withString:@"attr"];
 
-        // ToDo ToCheck
         // Ich muss zumindestens für Buttons das Attribut 'text' von OpenLaszlo durch das
         // HTML-Attribut 'value' ersetzen (muss ich eventuell ändern, falls es Sideeffects gibt)
         // Habe es länger gemacht, um nicht z. B. die Phrase 'text' in einem String zu erwischen.
         s = [s stringByReplacingOccurrencesOfString:@".attr('text'" withString:@".attr('value'"];
         */
-        // Statt dessen: (ToCheck)
+        // Statt dessen:
         s = [self modifySetAttributeInJSCode:s];
 
 
@@ -6794,7 +6808,8 @@ BOOL isNumeric(NSString *s)
 
         s = [self modifySetAttributeInJSCode:s];
 
-        // super ist nicht erlaubt in JS und gibt es auch nicht. Ich ersetze es erstmal durch this. ToDo
+        // super ist nicht erlaubt in JS und gibt es auch nicht.
+        // Ich ersetze es erstmal durch this. ToDo
         // Evtl. klappt das schon, weil ja eh alle Funktionen in parentKlasse stecken (To Check)
         s = [s stringByReplacingOccurrencesOfString:@"super" withString:@"this"];
 
@@ -6805,12 +6820,15 @@ BOOL isNumeric(NSString *s)
 
 
 
-        //s = @"alert('test')";
+        // s = @"alert('test')";
         [self.jQueryOutput0 appendString:s];
         [self.jQueryOutput0 appendString:@"\n  }\n"];
 
         // ToDo => Lösungsvorschlag: In allen Methoden parent() durch jQuerys-parent-Methode
         // ersetzen und dann noch get(0) dahinter, um auf das JS-Objekt zu kommmen.
+        // Ungefähr so: alert($(this).parent().get(0).setVeranlagung);
+        // Dazu muss aber erst <class> komplett ausgewertet werden!!!! Sonst gibt es die Methode
+        // setVeranlagung gar nicht im parent()....
         // Alles was ich als Funktion in das Objekt gepackt habe auch erstmal in 'parent' packen
         [self.jQueryOutput0 appendString:@"  // Hier nochmal etwas schummeln und ebenfalls zu parent hinzufügen, die eben definierte Funktion.\n"]; // ToDo
         // Analoge Abfrage wie beim betreten des Tags:
@@ -6829,7 +6847,8 @@ BOOL isNumeric(NSString *s)
 
 
 
-    // Okay, letzte Chance: Wenn es vorher nicht gematcht hat. Dann war es eventuell eine selbst definierte Klasse?
+    // Okay, letzte Chance: Wenn es vorher nicht gematcht hat. Dann war es eventuell eine
+    // selbst definierte Klasse?
     // Haben wir die Klasse auch vorher aufgesammelt? Nur dann geht es hier weiter.
     if (!element_geschlossen && ([self.allFoundClasses objectForKey:elementName] != nil))
     {
@@ -6848,7 +6867,8 @@ BOOL isNumeric(NSString *s)
 
         // Und dann kann ich es per jQuery flexibel einfügen.
         // Grrr
-        // ToDo: Okay, hier muss ich jetzt per jQuery die Objekte auslesen aus der JS-Datei collectedClasses.js
+        // ToDo: Okay, hier muss ich jetzt per jQuery die Objekte
+        // auslesen aus der JS-Datei collectedClasses.js
         [self.jQueryOutput appendFormat:@"\n  // Klasse '%@' wurde instanziert in '%@'",elementName,self.zuletztGesetzteID];
         [self.jQueryOutput appendFormat:@"\n  // Instanz erzeugen, id holen, Objekt auswerten"];
         [self.jQueryOutput appendFormat:@"\n  var obj = new %@('%@');",elementName,s];
@@ -6940,7 +6960,7 @@ BOOL isNumeric(NSString *s)
     // überschreibe
     [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"styles.css\">\n"];
 
-    // IE-Fallback für canvas (falls ich es benutze) - ToDo
+    // IE-Fallback für canvas (falls ich es benutze)
     // [pre appendString:@"<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n"];
 
 
@@ -7007,8 +7027,10 @@ BOOL isNumeric(NSString *s)
     // Jedoch in '$(window).load(function()'. Und das reicht anscheinend nicht.......... Warum???
     [self.output appendString:@"// Make all id's from div's global (Firefox)\n"];
     [self.output appendString:@"makeElementsGlobal(document.getElementsByTagName('div'));\n"];
-    [self.output appendString:@"// Make all id's from inout's global (Firefox)\n"];
+    [self.output appendString:@"// Make all id's from input's global (Firefox)\n"];
     [self.output appendString:@"makeElementsGlobal(document.getElementsByTagName('input'));\n"];
+    [self.output appendString:@"// Make all id's from select's global (Firefox)\n"];
+    [self.output appendString:@"makeElementsGlobal(document.getElementsByTagName('select'));\n"];
 
     // Die jQuery-Anweisungen:
 
@@ -7284,7 +7306,7 @@ BOOL isNumeric(NSString *s)
     "    */\n"
     "}\n"
     "\n"
-    "/* Das Standard-input-Feld (Der Rand soll nicht überschrieben werden)*/\n"
+    "/* Das Standard-input-Feld (Der Rand darf nicht überschrieben werden)*/\n"
     ".input_standard\n"
     "{\n"
 	"    height:auto;\n"
@@ -7310,7 +7332,7 @@ BOOL isNumeric(NSString *s)
     "}\n"
     "\n"
     "/* Standard-combobox (das umgebende Div) */\n"
-    "div.combobox\n"
+    ".div_combobox\n"
     "{\n"
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
@@ -7321,20 +7343,21 @@ BOOL isNumeric(NSString *s)
     "}\n"
     "\n"
     "/* CSS-Angaben für den RollUpDownContainer */\n"
-    "div.rudContainer\n"
+    ".div_rudContainer\n"
     "{\n"
     "    margin-left:14px;\n"
     "}\n"
     "\n"
     "/* CSS-Angaben für ein RollUpDownElement */\n"
-    "div.rudElement\n"
+    ".div_rudElement\n"
     "{\n"
+    "    position: relative;\n"
     "    height:auto;\n" // War mal 'inherit', aber 'auto' erscheint mir logischer, ob was bricht?
     "    margin-bottom:6px;\n" // ToCheck (Die Zeile eins drüber)
     "}\n"
     "\n"
     "/* Standard-datepicker (das umgebende Div) */\n"
-    "div.datepicker\n"
+    ".div_datepicker\n"
     "{\n"
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
@@ -7348,7 +7371,7 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "/* Standard-checkbox (das umgebende Div) */\n"
-    "div.checkbox\n"
+    ".div_checkbox\n"
     "{\n"
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
@@ -7360,7 +7383,7 @@ BOOL isNumeric(NSString *s)
     "}\n"
     "\n"
     "/* Standard-textfield (das umgebende Div) */\n"
-    "div.textfield\n"
+    ".div_textfield\n"
     "{\n"
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
@@ -7603,17 +7626,7 @@ BOOL isNumeric(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "function toggleVisibility(id, idAbhaengig, bedingungAlsString)\n"
     "{\n"
-    "  // To Do ToDo To Do - Solange ich noch nicht alles auswerte, muss ich hier\n"
-    "  // bestimmte objekte selber setzen, damit eval() sich nicht beschwert\n"
-    "  var replicator = typeof replicator !== 'undefined' ? replicator : new Object();\n"
-    "  var checked = typeof checked !== 'undefined' ? checked : new Object();\n"
-    "  var cbType = typeof cbType !== 'undefined' ? cbType : new Object();\n"
-    "  var Gewerbesteuerpflicht = typeof Gewerbesteuerpflicht !== 'undefined' ? Gewerbesteuerpflicht : new Object();\n"
-    "  var regelmaessig = typeof regelmaessig !== 'undefined' ? regelmaessig : new Object();\n"
-    "  var begruendet = typeof begruendet !== 'undefined' ? begruendet : new Object();\n"
-    "  var complete = typeof complete !== 'undefined' ? complete : new Object();\n"
-    "  var keinestnr = typeof keinestnr !== 'undefined' ? keinestnr : new Object();\n"
-    "  var isvalid = typeof isvalid !== 'undefined' ? isvalid : new Object();\n"
+    "  var isvalid = typeof isvalid !== 'undefined' ? isvalid : new Object(); // (ToDo - hat was mit DataPointern zu tun)\n"
     "\n"
     "\n"
     "\n"
@@ -7635,10 +7648,14 @@ BOOL isNumeric(NSString *s)
     "      parent.value = $(idAbhaengig).parent().val();\n"
     "  }\n"
     "\n"
-    " parent.cbType = cbType; // Schummelvariable (ToDo)\n"
+    "  parent.cbType = cbType; // Schummelvariable (ToDo)\n"
     "\n"
-    "  console.log(bedingungAlsString)\n"
-    "  var bedingung = eval(bedingungAlsString);\n"
+    "  console.log('Bedingung: '+bedingungAlsString)\n"
+    "\n"
+    "  if (bedingungAlsString === 'checked')\n"
+    "    var bedingung = $(idAbhaengig).is(':checked');\n"
+    "  else\n"
+    "    var bedingung = eval(bedingungAlsString);\n"
     "\n"
     "  // Wenn wir ein input sind, vor uns ist ein span und um uns herum ist ein div\n"
     "  // dann müssen wir das umgebende div togglen, weil dies das komplette input-Feld umfasst\n"
@@ -7650,20 +7667,20 @@ BOOL isNumeric(NSString *s)
     "}\n"
     "\n"
     "\n"
-    //"/////////////////////////////////////////////////////////\n"
-    //"// globale canvas-Methoden\n"
-    //"/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// globale canvas-Methoden\n"
+    "/////////////////////////////////////////////////////////\n"
     //"function loadurlchecksave(url)\n"
     //"{\n"
     //"    window.location.href = url;\n"
     //"}\n"
     //"\n"
-    //"function setglobalhelp(s)\n"
-    //"{\n"
-    //"    $('#___globalhelp').text(s);\n"
-    //"}\n"
-    //"\n"
-    //"\n"
+    "function setglobalhelp(s)\n"
+    "{\n"
+    "    $('#___globalhelp').text(s);\n"
+    "}\n"
+    "\n"
+    "\n"
     "/////////////////////////////////////////////////////////\n"
     "// globales lz-Objekt, um Aufrufe darauf abzufangen\n"
     "/////////////////////////////////////////////////////////\n"
@@ -7933,6 +7950,25 @@ BOOL isNumeric(NSString *s)
     "  }\n"
     "\n"
     "\n"
+    "  // Alle per style gegebenen Attribute muss ich ermitteln und später damit vergleichen\n"
+    "  // Denn die per style direkt im Element übergebenen Attribute haben Vorrang vor denen\n"
+    "  // der Klasse. Ich kann noch nicht hier, sondern erst später vergleichen, weil z.B.\n"
+    "  // bgcolor erst noch durch background-color ersetzt werden muss usw.\n"
+    "  css = $(id).attr('style');\n"
+    "  if(css !== undefined)\n"
+    "  {\n"
+    "    var attrArr = [];\n"
+    "    css = css.split(';');\n"
+    "    for (var i in css)\n"
+    "    {\n"
+    "      var l = css[i].split(':');\n"
+    "      var attr = $.trim(l[0]);\n"
+    "      if (attr != '')\n"
+    "        attrArr.push(attr);\n"
+    "    }\n"
+    "  }\n"
+    "\n"
+    "\n"
     "  // Erst die Attribute auswerten\n"
     "  var an = obj.attributeNames;\n"
     "  var av = obj.attributeValues;\n"
@@ -7946,7 +7982,9 @@ BOOL isNumeric(NSString *s)
     "    {\n"
     "      if (an[i] === 'bgcolor')\n"
     "        an[i] = 'background-color';\n"
-    "      $(id).css(an[i],av[i]);\n"
+    "\n"
+    "      if (jQuery.inArray(an[i],attrArr) == -1)\n"
+    "        $(id).css(an[i],av[i]);\n"
     "    }\n"
     "    else if (jQuery.inArray(an[i],jsAttributes) != -1)\n"
     "    {\n"

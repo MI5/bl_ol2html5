@@ -1919,6 +1919,9 @@ void OLLog(xmlParser *self, NSString* s,...)
     // x.allJSGlobalVars = self.allJSGlobalVars;
     [x.allJSGlobalVars addEntriesFromDictionary:self.allJSGlobalVars];
 
+    // Die soweit erkannten Klassen müssen auch später rekursiv aufgerufenen Dateien bekannt sein!
+    [x.allFoundClasses addEntriesFromDictionary:self.allFoundClasses];
+
     NSArray* result = [x start];
 
     if ([[result objectAtIndex:0] isEqual:@"XML-File not found"])
@@ -1941,11 +1944,13 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jsHead2Output appendString:[result objectAtIndex:6]];
         [self.cssOutput appendString:[result objectAtIndex:7]];
         [self.externalJSFilesOutput appendString:[result objectAtIndex:8]];
+
         // [self.allJSGlobalVars addEntriesFromDictionary:[result objectAtIndex:9]];
+        // [self.allFoundClasses addEntriesFromDictionary:[result objectAtIndex:10]];
         // Ich kann nicht adden, sonst verdoppeln und verdreifachen sich die Einträge immer weiter
-        // Ich habe ja vorher schon die nicht-rekursiven an das rekursive geaddet.
+        // Ich habe ja vorher schon die Einträge geaddet beim übergeben an die Rekursion.
         [self.allJSGlobalVars setDictionary:[result objectAtIndex:9]];
-        [self.allFoundClasses addEntriesFromDictionary:[result objectAtIndex:10]];
+        [self.allFoundClasses setDictionary:[result objectAtIndex:10]];
     }
 
     NSLog(@"Leaving recursion");
@@ -2946,7 +2951,7 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
-        [self.output appendString:@"<div class=\"ol_standard_window\""];
+        [self.output appendString:@"<div class=\"div_window\""];
 
         // id hinzufügen und gleichzeitg speichern
         NSString *id = [self addIdToElement:attributeDict];
@@ -4642,7 +4647,7 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
 
         // ToDo
-        // Alles was in nicemodaldialog definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
+        // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
         self.weAreSkippingTheCompleteContentInThisElement = YES;
     }
     // ToDo
@@ -4675,7 +4680,7 @@ didStartElement:(NSString *)elementName
 
 
         // ToDo
-        // Alles was in nicemodaldialog definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
+        // Alles was in diesen Dialogen definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
         self.weAreSkippingTheCompleteContentInThisElement = YES;
     }
     // ToDo
@@ -7045,7 +7050,7 @@ BOOL isNumeric(NSString *s)
     [self.output appendString:@"  function dlg()\n  {\n    // Extern definiert\n    this.open = open;\n    // Intern definiert (beides möglich)\n"];
     [self.output appendString:@"    this.completeInstantiation = function completeInstantiation() { };\n  }\n"];
     [self.output appendString:@"  function open()\n  {\n    alert('Willst du wirklich deine Ehefrau löschen? Usw...');\n  }\n"];
-    [self.output appendString:@"  var dlgFamilienstandSingle = new dlg();\n\n"];
+    //[self.output appendString:@"  var dlgFamilienstandSingle = new dlg();\n\n"];
 
 
 
@@ -7218,28 +7223,10 @@ BOOL isNumeric(NSString *s)
     ".ui-widget-content { border: 1px solid #e0cfc2; background: #ffffff; color: #1e1b1d; }\n"
     "\n"
     "img { border: 0 none; }\n"
-    //"* { float:left; } //ALLE Elemente sollen nur so viel Platz einnehmen, wie sie auch brauchen\n" <-- Bricht zu viel, lieber einzeln durchgehen, wo nötig
     "\n"
-    "div, span\n"
+    "div, span, input\n"
     "{\n"
-	//"    position:relative;\n"
     "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
-    //"\n"
-    //"    /* Damit auf jedenfall ein Startwert gesetzt ist,\n"
-    //"    sonst gibt es massive Probleme beim auslesen der Variable durch JS */\n"
-	//"    height:auto;\n"
-	//"    width:auto;\n"
-    "}\n"
-    "\n"
-    "input\n"
-    "{\n"
-	//"    position:relative;\n"
-    "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
-    //"\n"
-    //"    /* Damit auf jedenfall ein Startwert gesetzt ist,\n"
-    //"    sonst gibt es massive Probleme beim auslesen der Variable durch JS */\n"
-	//"    height:auto;\n"
-	//"    width:auto;\n"
     "}\n"
     "\n"
     "/* Ziemlich dirty Trick um '<inputs>' und 'Text' innerhalb der TabSheets besser */\n"
@@ -7271,7 +7258,7 @@ BOOL isNumeric(NSString *s)
     "}\n"
     "\n"
     "/* Das Standard-Window, wie es ungefaehr in OpenLaszlo aussieht */\n"
-    "div.ol_standard_window\n"
+    ".div_window\n"
     "{\n"
     "    background-color:lightgrey;\n"
 	"    height:40px;\n"
@@ -7283,17 +7270,15 @@ BOOL isNumeric(NSString *s)
 	"    padding:4px;\n"
     "}\n"
     "\n"
-    "/* Alle Divs müssen position:absolute sein, damit die Positionierung stimmt */\n"
-    "/* Korrektur: Seit Benutzung jQuery UI müssen alle Divs position: relative sein */\n" // ToDo: Delete?
-    "/* sonst bricht jQuery UI */\n"
-    "\n"
     "/* Das Standard-View, wie es ungefaehr in OpenLaszlo aussieht */\n"
     ".div_standard\n"
     "{\n"
     "    /* background-color:red; /* Standard ist hier keine (=transparent), zum testen red */\n"
     "\n"
-	"    height:auto; /* Wirklich wichtig. Damit es einen Startwert gibt. */\n"
-	"    width:auto; /* Sonst kann JS die Variable nicht richtig auslesen.  */\n"
+	"    height:auto; /* Wirklich wichtig. Damit es einen Startwert gibt.   */\n"
+	"    width:auto;  /* Sonst kann JS die Variable nicht richtig auslesen. */\n"
+    "\n"
+    "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
 	"    position:relative;\n"
 	"    top:0px;\n"
 	"    left:0px;\n"
@@ -7311,6 +7296,8 @@ BOOL isNumeric(NSString *s)
     "{\n"
 	"    height:auto;\n"
 	"    width:auto;\n"
+    "\n"
+    "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
 	"    position:relative;\n"
 	"    top:0px;\n"
 	"    left:0px;\n"
@@ -7385,6 +7372,7 @@ BOOL isNumeric(NSString *s)
     "/* Standard-textfield (das umgebende Div) */\n"
     ".div_textfield\n"
     "{\n"
+    "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
     "    text-align:left;\n"
@@ -7394,6 +7382,7 @@ BOOL isNumeric(NSString *s)
     "/* Standard-Text (Text/BDStext) */\n"
     ".div_text\n"
     "{\n"
+    "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
     "    position:relative;\n"
     "    text-align:left;\n"
     "    padding:2px;\n"
@@ -7430,6 +7419,32 @@ BOOL isNumeric(NSString *s)
 - (void) createJSFile:(NSString*)path
 {
     NSString *js = @"/* FILE: jsHelper.js */\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// jQuery UI Datepicker auf Deutsch setzen               \n"
+    "/////////////////////////////////////////////////////////\n"
+    "jQuery(function($) {\n"
+    "    $.datepicker.regional['de'] = {\n"
+	"        closeText: 'schließen',\n"
+	"        prevText: '&#x3c;zurück',\n"
+	"        nextText: 'Vor&#x3e;',\n"
+	"        currentText: 'heute',\n"
+	"        monthNames: ['Januar','Februar','März','April','Mai','Juni',\n"
+    "                     'Juli','August','September','Oktober','November','Dezember'],\n"
+	"        monthNamesShort: ['Jan','Feb','Mär','Apr','Mai','Jun',\n"
+    "                          'Jul','Aug','Sep','Okt','Nov','Dez'],\n"
+	"        dayNames: ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'],\n"
+	"        dayNamesShort: ['So','Mo','Di','Mi','Do','Fr','Sa'],\n"
+	"        dayNamesMin: ['So','Mo','Di','Mi','Do','Fr','Sa'],\n"
+	"        weekHeader: 'Wo',\n"
+	"        dateFormat: 'dd.mm.yy',\n"
+	"        firstDay: 1,\n"
+	"        isRTL: false,\n"
+	"        showMonthAfterYear: false,\n"
+    "        yearSuffix: ''};\n"
+    "    $.datepicker.setDefaults($.datepicker.regional['de']);\n"
+    "});\n"
+    "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Falls sich die Höhe ändert am iPad (orientationchange)\n"

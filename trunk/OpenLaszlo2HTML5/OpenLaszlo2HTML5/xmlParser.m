@@ -157,6 +157,9 @@ BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber 
 // festen IDs vergeben!
 @property (nonatomic) BOOL ignoreAddingIDsBecauseWeAreInClass;
 
+// oninit-Code in einem Handler wird direkt ausgeführt (load-Handler ist unpassend)
+@property (nonatomic) BOOL onInitInHandler;
+
 @end
 
 
@@ -217,7 +220,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize weAreSkippingTheCompleteContentInThisElement2 = _weAreSkippingTheCompleteContentInThisElement2;
 @synthesize weAreSkippingTheCompleteContentInThisElement3 = _weAreSkippingTheCompleteContentInThisElement3;
 
-@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass;
+@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler;
 
 
 
@@ -313,11 +316,13 @@ void OLLog(xmlParser *self, NSString* s,...)
                 //"var canvas = new Object();\n\n"
                 // statt dessen besser:
                 "function canvasKlasse() {\n}\nvar canvas = new canvasKlasse();\n"
+                "canvas.setDefaultContextMenu = function(a) {}; // ToDo\n\n"
                 // "canvasKlasse.prototype.setAttribute = function(varname,value)\n{\n  eval('this.'+varname+' = '+value+';');\n}\n"
                 "canvas.height = $(window).height(); // <-- Var, auf die zugegriffen wird\n\n"
                 // ToDo: 1000 muss natürlich aus dem canvas-element ausgelesen werden
                 // und fixer wert nur wenn keine Prozentangabe dabei
                 "canvas.width = 1000; // $(window).width(); // <-- Var, auf die zugegriffen wird\n\n"
+                "canvas.lpsversion = '1.0';\n\n"
                 "// Globale Klasse für in verschiedenen Methoden (lokal?) deklarierte Methoden\n"
                 "function parentKlasse() {\n}\n"
                 "var parent = new parentKlasse(); // <-- Unbedingt nötg, damit es auch ein Objekt gibt\n\n"];
@@ -366,6 +371,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.weAreSkippingTheCompleteContentInThisElement2 = NO;
         self.weAreSkippingTheCompleteContentInThisElement3 = NO;
         self.ignoreAddingIDsBecauseWeAreInClass = NO;
+        self.onInitInHandler = NO;
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
         self.allFoundClasses = [[NSMutableDictionary alloc] initWithCapacity:200];
@@ -2586,9 +2592,49 @@ didStartElement:(NSString *)elementName
             [self.cssOutput appendString:@", Verdana, Helvetica, sans-serif, Arial;\n"];
             [self.cssOutput appendString:@"}\n\n"];
         }
+
+        // Debug-Konsole aktivieren, falls gewünscht
+        if ([attributeDict valueForKey:@"debug"])
+        {
+            self.attributeCount++;
+            if ([[attributeDict valueForKey:@"debug"] isEqualToString:@"true"])
+            {
+                [self.jQueryOutput appendString:@"\n  // Debug-Konsole aktivieren\n"];
+                [self.jQueryOutput appendString:@"  $('div:first').append('<div id=\"debugWindow\"><div style=\"background-color:black;color:white;width:100%;\">DEBUG WINDOW</div><div id=\"debugInnerWindow\"></div></div>');\n"];
+                [self.jQueryOutput appendString:@"  $('#debugWindow').draggable();\n\n"];
+            }
+        }
     }
 
+    if ([elementName isEqualToString:@"debug"])
+    {
+        element_bearbeitet = YES;
 
+        if ([attributeDict valueForKey:@"x"])
+        {
+            self.attributeCount++;
+
+            [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere x-Position haben\n"];
+            [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('left','%@px');\n\n",[attributeDict valueForKey:@"x"]];
+        }
+
+        if ([attributeDict valueForKey:@"y"])
+        {
+            self.attributeCount++;
+
+            [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere y-Position haben\n"];
+            [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('top','%@px');\n\n",[attributeDict valueForKey:@"y"]];
+        }
+
+        if ([attributeDict valueForKey:@"height"])
+        {
+            self.attributeCount++;
+            
+            [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere Höhe haben\n"];
+            [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('height','%@px');\n",[attributeDict valueForKey:@"height"]];
+            [self.jQueryOutput appendFormat:@"  $('#debugInnerWindow').css('height','%dpx');\n\n",[[attributeDict valueForKey:@"height"] intValue]-30];
+        }
+    }
 
 
 
@@ -3502,6 +3548,8 @@ didStartElement:(NSString *)elementName
 
 
 
+    // ToDo: Puh, title ist ein selbst erfundenes Attribut von BDScheckbox!
+    // Das gibt es nälich gar nicht laut Doku und Test mit OL-Editor!
     if ([elementName isEqualToString:@"BDScheckbox"] ||
         [elementName isEqualToString:@"checkbox"])
     {
@@ -3515,7 +3563,7 @@ didStartElement:(NSString *)elementName
 
 
 
-        [self.output appendString:@"<input type=\"checkbox\""];
+        [self.output appendString:@"<input class=\"input_checkbox\" type=\"checkbox\""];
 
         NSString *id =[self addIdToElement:attributeDict];
 
@@ -3554,6 +3602,14 @@ didStartElement:(NSString *)elementName
             {
                 [self.output appendString:[attributeDict valueForKey:@"title"]];
             }
+        }
+
+        if ([attributeDict valueForKey:@"text"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'text' in <span>-tags after the checkbox.");
+
+            [self.output appendString:[attributeDict valueForKey:@"text"]];
         }
         [self.output appendString:@"</span>\n"];
 
@@ -5582,13 +5638,22 @@ didStartElement:(NSString *)elementName
             if ([[attributeDict valueForKey:@"name"] isEqualToString:@"oninit"])
             {
                 self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-load-event.");
+                // NSLog(@"Binding the method in this handler to a jQuery-load-event.");
+                // Nein, load-event gibt es nur bei window (also body und frameset)
+                // alles was in init ist einfach direkt ausführen
+                // Falls es doch mal das init eines windows (canvas) sein sollte, nicht schlimm,
+                // denn wir führen schon von vorne herein den gesamten Code in
+                // $(window).load(function() aus!
+                NSLog(@"NOT Binding the method in this handler. Direct execution of code.");
 
-                [self.jQueryOutput appendString:@"\n  // load-Handler für "];
+                [self.jQueryOutput appendString:@"\n  // oninit-Handler für "];
                 [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@"\n"];
+                [self.jQueryOutput appendString:@" (wir führen den Code direkt aus)\n"];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').load(function()\n  {\n    ",self.zuletztGesetzteID]];
+                // [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').load(function()\n  {\n    ",self.zuletztGesetzteID]];
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  {\n    ",self.zuletztGesetzteID]];
+
+                self.onInitInHandler = YES;
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -6545,6 +6610,7 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"ftdynamicgrid"] ||
         [elementName isEqualToString:@"calcDisplay"] ||
         [elementName isEqualToString:@"calcButton"] ||
+        [elementName isEqualToString:@"debug"] ||
         [elementName isEqualToString:@"passthrough"])
     {
         element_geschlossen = YES;
@@ -6776,7 +6842,14 @@ BOOL isNumeric(NSString *s)
 
 
         [self.jQueryOutput appendString:s];
-        [self.jQueryOutput appendString:@"\n  });\n"];
+
+        if (self.onInitInHandler)
+            [self.jQueryOutput appendString:@"\n  }\n"];
+        else
+            [self.jQueryOutput appendString:@"\n  });\n"];
+
+        // Erkennungszeichen für oninit in jedem Fall zurücksetzen
+        self.onInitInHandler = NO;
     }
     // ToDo - Analog <handler>? siehe auch bei öffnendem Element von <event>
     if ([elementName isEqualToString:@"event"])
@@ -7302,7 +7375,7 @@ BOOL isNumeric(NSString *s)
 	"    top:0px;\n"
 	"    left:0px;\n"
     "\n"
-    "    cursor:pointer;\n"
+    "    /* cursor:pointer; bricht Text-input-Felder. Da muss natürlich der Caret bleiben */\n"
     "}\n"
     "\n"
     "/* TabSheetContainer (Der Rand darf nicht gesetzt werden, bzw. doch. hmmm) */\n"
@@ -7356,7 +7429,6 @@ BOOL isNumeric(NSString *s)
     "    margin-top:8px;\n"
     "}\n"
     "\n"
-    "\n"
     "/* Standard-checkbox (das umgebende Div) */\n"
     ".div_checkbox\n"
     "{\n"
@@ -7366,7 +7438,12 @@ BOOL isNumeric(NSString *s)
     "    text-align:left;\n"
     "    padding:4px;\n"
     "    margin-top:8px;\n"
-    "    \n"
+    "}\n"
+    "\n"
+    "/* Standard-checkbox (die checkbox selber) */\n"
+    ".input_checkbox\n"
+    "{\n"
+    "    cursor:pointer;\n"
     "}\n"
     "\n"
     "/* Standard-textfield (das umgebende Div) */\n"
@@ -7398,7 +7475,31 @@ BOOL isNumeric(NSString *s)
     "\n"
     "    white-space:nowrap;\n"
     "    word-wrap:break-word;\n"
-    "}";
+    "}\n"
+    "\n"
+    "#debugWindow\n"
+    "{\n"
+    "    width: 300px;\n"
+    "    height: 150px;\n"
+    "    padding: 10px;\n"
+    "    position: absolute;\n"
+    "    right: 50px;\n"
+    "    top:50px;\n"
+    "    background-color:white;"
+    "    z-index:100000;"
+    "    border-color:black;"
+    "    border-style:solid;\n"
+    "    border-width:5px;\n"
+    "}\n"
+    "\n"
+    "#debugInnerWindow\n"
+    "{\n"
+    "    position:absolute;\n"
+    "    top:30px;\n"
+    "    height: 120px;\n"
+    "    width: 300px;\n"
+    "    overflow:scroll;\n"
+    "}\n";
     if (positionAbsolute)
     {
       css = [css stringByReplacingOccurrencesOfString:@"float:left;" withString:@""];
@@ -7566,12 +7667,32 @@ BOOL isNumeric(NSString *s)
     "{\n"
     "    var sum = 0;"
     "    $.each(arr,function(){sum+=parseFloat(this) || 0;});\n"
-    "    return sum;"
+    "    return sum;\n"
     "}\n"
     "\n"
     "\n"
-
-
+    "/////////////////////////////////////////////////////////\n"
+    "// Debug-Objekt, welches unter Umständen angesprochen wird\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Debug = {};\n"
+    "Debug.debug = function(s,v) {\n"
+    "    s = s.replace('%s',v);\n"
+    "    s = s.replace('%w',v);\n"
+    "    s = s + '<br />'\n"
+    "    if ($('#debugInnerWindow').length)\n"
+    "        $('#debugInnerWindow').append(s)\n"
+    "    //alert(s)\n"
+    "};\n"
+    "Debug.write = function(s1,v) {\n"
+    "    var s = s1 + ' ' + v\n"
+    "    if ($('#debugInnerWindow').length)\n"
+    "        $('#debugInnerWindow').append(s + '<br />')\n"
+    "    else\n"
+    "        console.log(s)\n"
+    "    //alert(s)\n"
+    "};\n"
+    "\n"
+    "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Hindere IE 9 am seitlichen scrollen mit dem Scrollrad!\n"
     "/////////////////////////////////////////////////////////\n"
@@ -7645,9 +7766,19 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "\n"
+    "\n"
+    "  // Bei checkboxen bezieht sich die Abfrage nach 'value' darauf, ob es 'checked' ist oder nicht\n"
+    "  // Und nicht auf das value-Attribut als solches... warum auch immer.\n"
+    "  // http://www.openlaszlo.org/lps4.9/docs/reference/lz.checkbox.html (Dortiges Beispiel)\n"
+    "  if ($(idAbhaengig).is('input') && $(idAbhaengig).attr('type') === 'checkbox' && bedingungAlsString === 'value')\n"
+    "      bedingungAlsString = 'checked';\n"
+    "\n"
+    "\n"
+    "\n"
     "  // 'value' wird intern von OpenLaszlo benutzt! Indem ich auch in JS 'value' in der Zeile\n"
     "  // vorher setze und danach den string auswerte, der 'value' in der Bedingung enthält,\n"
     "  // muss ich das von OpenLaszlo benutzte 'value' nicht intern parsen (nice Trick, I Think)\n"
+    "  // => eval(bedingungAlsString) kennt dann die Var value und kann korrekt auswerten\n"
     "  if (idAbhaengig == \"__PARENT__\")\n"
     "  {\n"
     "      var value = $(idAbhaengig).parent().val();\n"
@@ -7663,7 +7794,7 @@ BOOL isNumeric(NSString *s)
     "      parent.value = $(idAbhaengig).parent().val();\n"
     "  }\n"
     "\n"
-    "  parent.cbType = cbType; // Schummelvariable (ToDo)\n"
+    "  // if (this.cbtype === undefined) parent.cbType = cbType; // Schummelvariable (ToDo)\n"
     "\n"
     "  console.log('Bedingung: '+bedingungAlsString)\n"
     "\n"
@@ -7697,11 +7828,36 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// globales lz-Objekt, um Aufrufe darauf abzufangen\n"
+    "// Liest per ?arg=value&arg2=value2 übergebene URL-Parameter aus\n"
+    "/////////////////////////////////////////////////////////\n"
+    "getInitArg = function getURLParameter(name) {\n"
+    "    return decodeURIComponent((new RegExp('[?|&]' + name + '=' + '([^&;]+?)(&|#|;|$)').exec(location.search)||[,\"\"])[1].replace(/\\+/g, '%20'))||null;\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// globales lz-Objekt (ToDo)\n"
     "/////////////////////////////////////////////////////////\n"
     "var lz = new Object();\n"
-    "lz.Cursor = new Object();\n"
-    "lz.Cursor.restoreCursor = function() {};\n"
+    "lz.Cursor = new Object(); // ToDo\n"
+    "lz.Cursor.restoreCursor = function() {}; // ToDo\n"
+    "lz.Browser = new Object();\n"
+    "lz.Browser.getInitArg = getInitArg;\n"
+    "setid = function() {}; // <-- Wird in lz.Browser.callJS aufgerufen\n"
+    "lz.Browser.callJS = function(method,callback,args) { window[method](args); };\n"
+    "\n"
+    "function LzContextMenu() { }\n"
+    "\n"
+    "var swfso = new Object();\n"
+    "swfso.getObject = function() { return swfso }; // ToDo\n"
+    "swfso.data = new Object(); // ToDo\n"
+    "swfso.data.savedstate = 'ToDo'; // ToDo\n"
+    // "swfso.data.internalid = ''; // ToDo\n"
+    "swfso.flush = function() { }; // ToDo\n"
+    "\n"
+    "var dpEingaben = new Object();\n"
+    "dpEingaben.setXPath = function() {}; // ToDo\n"
+    "dpEingaben.deleteNode = function() {}; // ToDo\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -7834,6 +7990,15 @@ BOOL isNumeric(NSString *s)
     "    }\n"
     "    else if (attributeName == 'bgcolor')\n"
     "        $(me).css('background-color',value);\n"
+    "    else if (attributeName == 'enabled' && $(me).is('input'))\n"
+    "    {\n"
+    "        $(me).get(0).disabled = !value;\n"
+    "\n"
+    "    if ($(me).attr('type') === 'checkbox' && $(me).next().is('span') && $(me).next().css('color') == 'rgb(0, 0, 0)' && value == false)\n"
+    "        $(me).next().css('color','darkgrey');\n"
+    "    if ($(me).attr('type') === 'checkbox' && $(me).next().is('span') && $(me).next().css('color') == 'rgb(169, 169, 169)' && value == true)\n"
+    "        $(me).next().css('color','black');\n"
+    "    }\n"
     "    else\n"
     "      alert('ToDo. Aufruf von setAttribute, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
     "}\n"

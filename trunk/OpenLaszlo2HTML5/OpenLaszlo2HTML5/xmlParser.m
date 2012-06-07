@@ -70,6 +70,8 @@ BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber 
 @property (strong, nonatomic) NSMutableString *collectedContentOfClass;
 
 @property (nonatomic) BOOL errorParsing;
+
+@property (nonatomic) NSInteger baselistitemCounter;
 @property (nonatomic) NSInteger idZaehler;
 @property (nonatomic) NSInteger elementeZaehler;
 @property (strong, nonatomic) NSString* element_merker; // Für <class>, um erkennen zu können, ob sich das Tag sich direkt wieder schließt: <tag />
@@ -188,7 +190,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize errorParsing = _errorParsing, verschachtelungstiefe = _verschachtelungstiefe, rollUpDownVerschachtelungstiefe = _rollUpDownVerschachtelungstiefe;
 
-@synthesize idZaehler = _idZaehler, elementeZaehler = _elementeZaehler, element_merker = _element_merker;
+@synthesize baselistitemCounter = _baselistitemCounter, idZaehler = _idZaehler, elementeZaehler = _elementeZaehler, element_merker = _element_merker;
 
 @synthesize simplelayout_y = _simplelayout_y, simplelayout_y_spacing = _simplelayout_y_spacing;
 @synthesize firstElementOfSimpleLayout_y = _firstElementOfSimpleLayout_y, simplelayout_y_tiefe = _simplelayout_y_tiefe;
@@ -334,6 +336,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.errorParsing = NO;
         self.verschachtelungstiefe = 0;
         self.rollUpDownVerschachtelungstiefe = 0;
+        self.baselistitemCounter = 0;
         self.idZaehler = 0;
         self.elementeZaehler = 0;
         self.element_merker = @"";
@@ -430,7 +433,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Zur Sicherheit mache ich von allem ne Copy.
         // Nicht, dass es beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy], nil];
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInt:self.idZaehler] copy], nil];
         return r;
     }
 }
@@ -1092,6 +1095,30 @@ void OLLog(xmlParser *self, NSString* s,...)
 }
 
 
+// Vor jede gesetzte class muss ein Leerzeichen, damit es aufgeht
+- (NSMutableString*) addCSSClasses:(NSDictionary*) attributeDict
+{
+    // Alle CSSClasses in einem eigenen String sammeln, könnte nochmal nützlich werden
+    NSMutableString *css = [[NSMutableString alloc] initWithString:@""];
+
+    if ([attributeDict valueForKey:@"selectable"])
+    {
+        self.attributeCount++;
+
+        if ([[attributeDict valueForKey:@"selectable"] isEqualToString:@"false"])
+        {
+            NSLog(@"Setting the attribute 'selectable=false' as CSS-class 'noTextSelection'.");
+            [css appendString:@" noTextSelection"];
+        }
+        else
+        {
+            NSLog(@"Skipping the attribute 'selectable' (true is standard).");
+        }
+    }
+
+    return css;
+}
+
 
 
 // titlewidth hier extra setzen, außerhalb addCSS, titlewidth bezieht sich  immer auf den Text VOR
@@ -1123,6 +1150,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // Remove all occurrences of $,{,}
 - (NSString *) removeOccurrencesofDollarAndCurlyBracketsIn:(NSString*)s
 {
+    s = [s stringByReplacingOccurrencesOfString:@"$path" withString:@""];
     s = [s stringByReplacingOccurrencesOfString:@"$" withString:@""];
     s = [s stringByReplacingOccurrencesOfString:@"{" withString:@""];
     s = [s stringByReplacingOccurrencesOfString:@"}" withString:@""];
@@ -1314,9 +1342,13 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [self.jQueryOutput appendString:@"    return newval;\n  });\n"];
 
 
-                // Wenn !='' oder ==0 auftaucht, dieses rausschmeißen, weil wir nur die Variable brauchen zum setzen.
+                // Wenn !='',=='' oder ==0 auftaucht, dieses rausschmeißen,
+                // weil wir nur die Variable brauchen zum setzen.
                 s = [s stringByReplacingOccurrencesOfString:@"!=''" withString:@""];
+                s = [s stringByReplacingOccurrencesOfString:@"==''" withString:@""];
                 s = [s stringByReplacingOccurrencesOfString:@"==0" withString:@""];
+                // Puh, ich denke das ist totaler quatrsch; dies sind boolesche ausdrücke, die können
+                // direkt ausgewertet werden und gehören nach oben zu der abfrage nach true oder false ToDo
 
 
                 // Negationszeichen aus 's' entfernen, falls wir hier drin sind weil ein '!canvas' vorliegt
@@ -1429,6 +1461,28 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
 
+    if ([attributeDict valueForKey:@"focusable"])
+    {
+        self.attributeCount++;
+
+        if ([[attributeDict valueForKey:@"focusable"] isEqualToString:@"false"])
+        {
+            NSLog(@"Setting the attribute 'focusable=false' as jQuery.");
+
+            [self.jQueryOutput appendString:@"\n  // focusable=false\n"];
+            [self.jQueryOutput appendFormat:@"  $('#%@').on('focus.blurnamespace', function() { this.blur(); });\n",idName];
+        }
+
+        if ([[attributeDict valueForKey:@"focusable"] isEqualToString:@"true"])
+        {
+            NSLog(@"Setting the attribute 'focusable=true' as jQuery.");
+
+            // Eventuell falls die vorher auf false gesetzte Eigenschaft überschrieben werden soll
+            // Deswegen auch hier Code ausführen. Aber im Prinzip wohl unnötig, da true = Standardwert.
+            [self.jQueryOutput appendString:@"\n  // focusable=true (einen eventuell vorher gesetzten focus-Handler, der blur() ausführt, entfernen\n"];
+            [self.jQueryOutput appendFormat:@"  $('#%@').off('focus.blurnamespace');\n",idName];
+        }
+    }
 
 
     if ([attributeDict valueForKey:@"onclick"])
@@ -1585,6 +1639,8 @@ void OLLog(xmlParser *self, NSString* s,...)
     NSMutableString *rueckgabe = [[NSMutableString alloc] initWithString:@""];
     if ([code length] > 0)
     {
+        [self instableXML:@"Ich denke hier komme ich gar nicht mehr rein."];
+
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
         [rueckgabe appendString:@"<script type=\"text/javascript\">"];
@@ -1604,7 +1660,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 {
     // Erstmal auch dann setzen, wenn wir eine gegebene ID von OpenLaszlo haben, evtl. zu ändern
     self.idZaehler++;
-    NSLog(@"Setting the (attribute 'id' as) HTML-attribute 'id'.");
 
     if ([attributeDict valueForKey:@"id"])
     {
@@ -1634,6 +1689,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     [self.output appendString:@"\""];
 
 
+    NSLog([NSString stringWithFormat:@"Setting the (attribute 'id' as) HTML-attribute 'id'. Id = '%@'.",self.zuletztGesetzteID]);
 
 
     // Und Simplelayout-Check von hier aus aufrufen, da alle Elemente mit gesetzter ID
@@ -1913,7 +1969,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     xmlParser *x = [[xmlParser alloc] initWith:pathToFile recursiveCall:YES];
     // Wenn es eine Datei ist, die Items für ein Dataset enthält, dann muss das rekursiv
-    // auferufene Objekt das letzte DataSet wissen, damit es die Items richtig zuordnen kann
+    // aufgerufene Objekt das letzte DataSet wissen, damit es die Items richtig zuordnen kann
     x.lastUsedDataset = self.lastUsedDataset;
     // Zur Zeit ignorieren wir Datasets mit eigenen bennannten Tags, deswegen müssen wir
     // falls diese in einer eigenen Datei definiert sind, dies mitteilen
@@ -1927,6 +1983,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     // Die soweit erkannten Klassen müssen auch später rekursiv aufgerufenen Dateien bekannt sein!
     [x.allFoundClasses addEntriesFromDictionary:self.allFoundClasses];
+
+    // id-Zähler übergeben, sonst werden IDs doppelt vergeben!
+    x.idZaehler = self.idZaehler;
 
     NSArray* result = [x start];
 
@@ -1957,6 +2016,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         // Ich habe ja vorher schon die Einträge geaddet beim übergeben an die Rekursion.
         [self.allJSGlobalVars setDictionary:[result objectAtIndex:9]];
         [self.allFoundClasses setDictionary:[result objectAtIndex:10]];
+
+        // id-Zähler wieder übernehmen, sonst werden IDs doppelt vergeben!
+        self.idZaehler = [[result objectAtIndex:11] integerValue];
     }
 
     NSLog(@"Leaving recursion");
@@ -2260,6 +2322,8 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
+        [elementName isEqualToString:@"baselist"] ||
+        [elementName isEqualToString:@"baselistitem"] ||
         [elementName isEqualToString:@"rollUpDown"])
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
@@ -2303,7 +2367,13 @@ didStartElement:(NSString *)elementName
             // spacing müssen wir auch sichern und später berücksichtigen
             if ([attributeDict valueForKey:@"spacing"])
             {
-                [self.simplelayout_y_spacing addObject:[attributeDict valueForKey:@"spacing"]];
+                NSString *s = [attributeDict valueForKey:@"spacing"];
+                if ([s rangeOfString:@"${"].location != NSNotFound)
+                {
+                    s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
+                    s = [NSString stringWithFormat:@"(%@)",s];
+                }
+                [self.simplelayout_y_spacing addObject:s];
             }
             else
             {
@@ -2374,7 +2444,13 @@ didStartElement:(NSString *)elementName
             // spacing müssen wir auch sichern und später berücksichtigen
             if ([attributeDict valueForKey:@"spacing"])
             {
-                [self.simplelayout_x_spacing addObject:[attributeDict valueForKey:@"spacing"]];
+                NSString *s = [attributeDict valueForKey:@"spacing"];
+                if ([s rangeOfString:@"${"].location != NSNotFound)
+                {
+                    s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
+                    s = [NSString stringWithFormat:@"(%@)",s];
+                }
+                [self.simplelayout_x_spacing addObject:s];
             }
             else
             {
@@ -2931,46 +3007,72 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
         }
 
-
-        // ToDo: 'attrbute' kann bis jetzt nur globale Variable verarbeiten, die direkt in canvas liegen
-        if ([attributeDict valueForKey:@"name"])
-        {
-            NSLog([NSString stringWithFormat:@"Setting '%@' as class-member in JavaScript-class 'canvas'.",[attributeDict valueForKey:@"name"]]);
-
-            BOOL weNeedQuotes = YES;
-            if ([type_ isEqualTo:@"boolean"] ||
-                [type_ isEqualTo:@"number"])
-                weNeedQuotes = NO;
-
-            // Kann auch ein berechneter Werte sein ($ davor). Wenn ja dann $ usw. entfernen
-            // und wir arbeiten dann natürlich ohne Quotes.
-            if ([value hasPrefix:@"$"])
-            {
-                value = [self removeOccurrencesofDollarAndCurlyBracketsIn:value];
-                weNeedQuotes = NO;
-            }
-
-            [self.jsHead2Output appendString:@"canvas."];
-            [self.jsHead2Output appendString:[attributeDict valueForKey:@"name"]];
-            [self.jsHead2Output appendString:@" = "];
-            if (weNeedQuotes)
-                [self.jsHead2Output appendString:@"\""];
-            [self.jsHead2Output appendString:value];
-            if (weNeedQuotes)
-                [self.jsHead2Output appendString:@"\""];
-            [self.jsHead2Output appendString:@";\n"];
-
-            // Auch intern die Var speichern? Erstmal nein. Wir wollen bewusst per JS/jQuery immer
-            // drauf zugreifen! Weil die Variablen nach dem Export noch benutzbar sein sollen.
-            // [self.allJSGlobalVars setObject:[attributeDict valueForKey:@"src"] forKey:[attributeDict valueForKey:@"name"]];
-        }
-
         // Das Attribut 'when' taucht in Doku nicht auf, wird ignoriert
         if ([attributeDict valueForKey:@"when"])
         {
             NSLog(@"Skipping the attribute 'when'.");
             self.attributeCount++;
         }
+
+
+
+        NSLog([NSString stringWithFormat:@"Setting '%@' as object-attribute in JavaScript-object 'canvas'.",[attributeDict valueForKey:@"name"]]);
+
+        BOOL weNeedQuotes = YES;
+        if ([type_ isEqualTo:@"boolean"] || [type_ isEqualTo:@"number"])
+            weNeedQuotes = NO;
+
+        // Kann auch ein berechneter Werte sein ($ davor). Wenn ja dann $ usw. entfernen
+        // und wir arbeiten dann natürlich ohne Quotes.
+        if ([value hasPrefix:@"$"])
+        {
+            value = [self removeOccurrencesofDollarAndCurlyBracketsIn:value];
+            weNeedQuotes = NO;
+        }
+
+
+
+
+
+        // War früher mal jsHeadOutput, aber die Elemente sind ja erst nach Instanzierung bekannt,
+        // deswegen jQueryOutput0.
+
+        if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-2] isEqualToString:@"canvas"] ||
+            [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-2] isEqualToString:@"library"])
+        {
+            [self.jQueryOutput0 appendFormat:@"\n  // Ein Attribut des Elements %@:\n", @"canvas"];
+
+            [self.jQueryOutput0 appendFormat:@"  if (canvas.%@ == undefined)\n    canvas.",[attributeDict valueForKey:@"name"]];
+        }
+        else
+        {
+            NSString *elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+            [self.jQueryOutput0 appendFormat:@"\n  // Ein Attribut des Elements %@:\n", elem];
+
+            // Folgendes Szenario: Wenn eine selbst definierte Klasse ein Attribut definiert, aber gleichzeitig
+            // dieses erbt, dann hat das selbst definierte Vorrang. Deswegen überschreibe ich das Attribut
+            // innerhalb der Klasse nicht! Dazu teste ich einfach vorher, ob es auch wirklich undefined ist!
+            [self.jQueryOutput0 appendFormat:@"  if (%@.%@ == undefined)",elem,[attributeDict valueForKey:@"name"]];
+
+            [self.jQueryOutput0 appendFormat:@"\n    %@.",elem];
+        }
+        [self.jQueryOutput0 appendString:[attributeDict valueForKey:@"name"]];
+        [self.jQueryOutput0 appendString:@" = "];
+        if (weNeedQuotes)
+            [self.jQueryOutput0 appendString:@"\""];
+        [self.jQueryOutput0 appendString:value];
+        if (weNeedQuotes)
+            [self.jQueryOutput0 appendString:@"\""];
+        [self.jQueryOutput0 appendString:@";\n"];
+
+
+
+
+
+
+        // Auch intern die Var speichern? Erstmal nein. Wir wollen bewusst per JS/jQuery immer
+        // drauf zugreifen! Weil die Variablen nach dem Export noch benutzbar sein sollen.
+        // [self.allJSGlobalVars setObject:[attributeDict valueForKey:@"src"] forKey:[attributeDict valueForKey:@"name"]];
     }
 
 
@@ -3156,12 +3258,6 @@ didStartElement:(NSString *)elementName
             NSLog(@"Skipping the attribute 'placement' for now.");
         }
         // ToDo: Wird derzeit nicht ausgewertet
-        if ([attributeDict valueForKey:@"focusable"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'focusable' for now.");
-        }
-        // ToDo: Wird derzeit nicht ausgewertet
         if ([attributeDict valueForKey:@"doesenter"])
         {
             self.attributeCount++;
@@ -3231,13 +3327,6 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"\">\n"];
 
 
-        // ToDo: Wird derzeit nicht ausgewertet - gemäß Doku ist hier 'false' der Standardwert, aber puh
-        if ([attributeDict valueForKey:@"focusable"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'focusable' for now.");
-        }
-
         // ToDo: Wird derzeit nicht ausgewertet - ist zum ersten mal bei einem imgbutton aufgetaicht (nur da?)
         if ([attributeDict valueForKey:@"text"])
         {
@@ -3257,7 +3346,8 @@ didStartElement:(NSString *)elementName
 
 
 
-    // ToDo: Eigentlich sollte das hier selbständig hinzugefügt werden und anhand der definierten Klasse erkannt werden
+    // ToDo: Eigentlich sollte das hier selbständig hinzugefügt werden und anhand der definierten Klasse
+    // erkannt werden.
     if ([elementName isEqualToString:@"BDStext"])
     {
         element_bearbeitet = YES;
@@ -3268,7 +3358,11 @@ didStartElement:(NSString *)elementName
         [self addIdToElement:attributeDict];
 
 
-        [self.output appendString:@" class=\"div_text\" style=\""];
+        [self.output appendString:@" class=\"div_text"];
+
+        [self.output appendString:[self addCSSClasses:attributeDict]];
+
+        [self.output appendString:@"\" style=\""];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
@@ -3383,6 +3477,52 @@ didStartElement:(NSString *)elementName
     }
 
 
+    // Original von OpenLaszlo eingebautes HTML-<select>-Element
+    if ([elementName isEqualToString:@"baselist"])
+    {
+        element_bearbeitet = YES;
+
+        // erstmal size="1" setzen, damit ein Wert existiert, wird beim schließen von </baselist> anhand der
+        // gezählten <baselistitem>'s korrigiert.
+        self.baselistitemCounter = 0;
+        [self.output appendString:@"<select size=\"1\""];
+
+        [self addIdToElement:attributeDict];
+
+        [self.output appendString:@" style=\""];
+
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+        [self.output appendString:@"\">\n"];
+
+
+        // Wird derzeit noch übersprungen (ToDo)
+        if ([attributeDict valueForKey:@"layout"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'layout' on baselist (ToDo).");
+        }
+    }
+
+
+
+    // Original von OpenLaszlo eingebautes HTML-<option>-Element
+    if ([elementName isEqualToString:@"baselistitem"])
+    {
+        element_bearbeitet = YES;
+
+        [self.output appendString:@"<option"];
+
+        [self addIdToElement:attributeDict];
+
+        [self.output appendString:@" style=\""];
+
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+        [self.output appendString:@"\">"];
+
+        self.baselistitemCounter++;
+    }
 
 
 
@@ -3648,7 +3788,11 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'value'.");
         }
-
+        if ([attributeDict valueForKey:@"checked"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'checked'.");
+        }
 
 
 
@@ -4441,8 +4585,20 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
     }
 
+    // ToDo
+    if ([elementName isEqualToString:@"radiogroup"]) // Ist das eine selbst defineirte Klasse? ToDo
+    {
+        element_bearbeitet = YES;
 
-    // MEGA MEGA ToDo ToDo ToDo class
+        if ([attributeDict valueForKey:@"id"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"width"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"x"])
+            self.attributeCount++;
+    }
+
+
     if ([elementName isEqualToString:@"class"])
     {
         element_bearbeitet = YES;
@@ -5058,7 +5214,10 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
         // ToDo
         if ([attributeDict valueForKey:@"value"])
+        {
             self.attributeCount++;
+            NSLog(@"Skipping the attribute 'value' in 'textlistitem' for now.");
+        }
         // ToDo
         if ([attributeDict valueForKey:@"name"])
             self.attributeCount++;
@@ -5476,73 +5635,84 @@ didStartElement:(NSString *)elementName
         if ([attributeDict valueForKey:@"args"])
         {
             self.attributeCount++;
-            NSLog(@"Using the attribute 'args' as arguments for this prototyped JS-Function");
 
-            args = [attributeDict valueForKey:@"args"];
-
-            // Überprüfen ob es default values gibt im Handler direkt (mit RegExp)...
-            NSError *error = NULL;
-            NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:@"([\\w]+)=([\\w]+)" options:NSRegularExpressionCaseInsensitive error:&error];
-
-            NSUInteger numberOfMatches = [regexp numberOfMatchesInString:args options:0 range:NSMakeRange(0, [args length])];
-
-            if (numberOfMatches > 0)
+            if (![[attributeDict valueForKey:@"args"] isEqualToString:@"...ignore"])
             {
-                NSLog([NSString stringWithFormat:@"There is/are %d argument(s) with a default argument. I will regexp them.",numberOfMatches]);
+                NSLog(@"Using the attribute 'args' as arguments for this prototyped JS-Function.");
 
-                NSArray *matches = [regexp matchesInString:args options:0 range:NSMakeRange(0, [args length])];
+                args = [attributeDict valueForKey:@"args"];
 
-                NSMutableString *neueArgs = [[NSMutableString alloc] initWithString:@""];
+                // Überprüfen ob es default values gibt im Handler direkt (mit RegExp)...
+                NSError *error = NULL;
+                NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:@"([\\w]+)=([\\w]+)" options:NSRegularExpressionCaseInsensitive error:&error];
 
-                for (NSTextCheckingResult *match in matches)
+                NSUInteger numberOfMatches = [regexp numberOfMatchesInString:args options:0 range:NSMakeRange(0, [args length])];
+
+                if (numberOfMatches > 0)
                 {
-                    // NSRange matchRange = [match range];
-                    NSRange varNameRange = [match rangeAtIndex:1];
-                    NSRange defaultValueRange = [match rangeAtIndex:2];
+                    NSLog([NSString stringWithFormat:@"There is/are %d argument(s) with a default argument. I will regexp them.",numberOfMatches]);
 
-                    NSString *varName = [args substringWithRange:varNameRange];
-                    NSLog([NSString stringWithFormat:@"%Resulting variable name: %@",varName]);
-                    NSString *defaultValue = [args substringWithRange:defaultValueRange];
-                    NSLog([NSString stringWithFormat:@"%Resulting default value: %@",defaultValue]);
+                    NSArray *matches = [regexp matchesInString:args options:0 range:NSMakeRange(0, [args length])];
 
-                    // ... dann die Variablennamen der args neu sammeln...
-                    if (![neueArgs isEqualToString:@""])
-                      [neueArgs appendString:@", "];
-                    [neueArgs appendString:varName];
+                    NSMutableString *neueArgs = [[NSMutableString alloc] initWithString:@""];
+
+                    for (NSTextCheckingResult *match in matches)
+                    {
+                        // NSRange matchRange = [match range];
+                        NSRange varNameRange = [match rangeAtIndex:1];
+                        NSRange defaultValueRange = [match rangeAtIndex:2];
+
+                        NSString *varName = [args substringWithRange:varNameRange];
+                        NSLog([NSString stringWithFormat:@"%Resulting variable name: %@",varName]);
+                        NSString *defaultValue = [args substringWithRange:defaultValueRange];
+                        NSLog([NSString stringWithFormat:@"%Resulting default value: %@",defaultValue]);
+
+                        // ... dann die Variablennamen der args neu sammeln...
+                        if (![neueArgs isEqualToString:@""])
+                            [neueArgs appendString:@", "];
+                        [neueArgs appendString:varName];
 
 
 
-                    ///////////////////// Default- Variablen für JS setzen - Anfang /////////////////////
-                    [defaultValues appendString:@"  if(typeof("];
-                    [defaultValues appendString:varName];
-                    [defaultValues appendString:@")==='undefined') "];
-                    [defaultValues appendString:varName];
-                    [defaultValues appendString:@" = "];
-                    [defaultValues appendString:defaultValue];
-                    [defaultValues appendString:@";\n"];
-                    ///////////////////// Default- Variablen für JS setzen - Ende /////////////////////
+                        ///////////////////// Default- Variablen für JS setzen - Anfang /////////////////////
+                        [defaultValues appendString:@"  if(typeof("];
+                        [defaultValues appendString:varName];
+                        [defaultValues appendString:@")==='undefined') "];
+                        [defaultValues appendString:varName];
+                        [defaultValues appendString:@" = "];
+                        [defaultValues appendString:defaultValue];
+                        [defaultValues appendString:@";\n"];
+                        ///////////////////// Default- Variablen für JS setzen - Ende /////////////////////
+                    }
+                    // ... und hier setzen
+                    args = neueArgs;
                 }
-                // ... und hier setzen
-                args = neueArgs;
+            }
+            else
+            {
+                NSLog(@"Ignoring the attribute 'args' as arguments because I was told so.");
             }
         }
 
         // http://www.openlaszlo.org/lps4.9/docs/reference/ <method> => S. Attribut 'name'
         // Deswegen bei canvas und library 'method' als Funktionen global verfügbar machen
         // Ansonsten 'method' als Methode an das umgebende Objekt koppeln.
+
+        [self.jQueryOutput0 appendString:@"\n  // Ich binde eine Methode an das genannte Objekt\n"];
+
         if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-2] isEqualToString:@"canvas"] ||
             [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-2] isEqualToString:@"library"])
         {
-            [self.jQueryOutput0 appendFormat:@"\n  if (window.%@ == undefined)\n  ",[attributeDict valueForKey:@"name"]];
+            [self.jQueryOutput0 appendFormat:@"  if (window.%@ == undefined)\n  ",[attributeDict valueForKey:@"name"]];
         }
         else
         {
             NSString *elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
 
             // Folgendes Szenario: Wenn eine selbst definierte Klasse eine Methode definiert, aber gleichzeitig
-            // eine erbt, dann gitl die selbst definierte. Deswegen überschreibe ich mit der Methode
+            // diese erbt, dann hat die selbst definierte Vorrang! Deswegen überschreibe ich mit der Methode
             // innerhalb der Klasse nicht! Dazu teste ich einfach vorher ob sie auch wirklich undefined ist!
-            [self.jQueryOutput0 appendFormat:@"\n  if (%@.%@ == undefined)",elem,[attributeDict valueForKey:@"name"]];
+            [self.jQueryOutput0 appendFormat:@"  if (%@.%@ == undefined)",elem,[attributeDict valueForKey:@"name"]];
 
             [self.jQueryOutput0 appendFormat:@"\n  %@.",elem];
         }
@@ -5767,7 +5937,8 @@ didStartElement:(NSString *)elementName
                 [self.jQueryOutput appendString:self.zuletztGesetzteID];
                 [self.jQueryOutput appendString:@"\n"];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').keyup(function()\n  {\n    ",self.zuletztGesetzteID]];
+                // die Variable k wird von OpenLaszlo einfach so benutzt. Das muss der keycode sein.
+                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').keyup(function(event)\n  {\n    var k = event.keyCode;\n\n    ",self.zuletztGesetzteID]];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -5812,6 +5983,7 @@ didStartElement:(NSString *)elementName
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"ondomain"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"onyes"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"onno"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"onclose"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"onlistwidth"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"onmousewheeldelta"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"onisopen"] ||
@@ -6038,14 +6210,25 @@ didStartElement:(NSString *)elementName
         if ([attributeDict valueForKey:@"name"])
             self.attributeCount++;
 
-
+        if ([attributeDict valueForKey:@"text"] && [attributeDict valueForKey:@"title"])
+        {
+            [self instableXML:@"Dann haben wir ein Problem..."];
+        }
         if ([attributeDict valueForKey:@"text"])
         {
             self.attributeCount++;
             NSLog(@"Setting the attribute 'text' as 'textBetweenTags'-Parameter of the object.");
 
             // Wird dann beim schließen ausgelesen
-            self.textInProgress = [attributeDict valueForKey:@"text"];
+            self.textInProgress = [[NSMutableString alloc] initWithString:[attributeDict valueForKey:@"text"]];
+        }
+        if ([attributeDict valueForKey:@"title"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'title' as 'textBetweenTags'-Parameter of the object.");
+
+            // Wird dann beim schließen ausgelesen
+            self.textInProgress = [[NSMutableString alloc] initWithString:[attributeDict valueForKey:@"title"]];
         }
 
         // Ich muss die Stelle einmal markieren...
@@ -6060,8 +6243,21 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"\"></div>\n"];
 
 
-        // To Do To Check -> Wird es nötig, das hier auszukommentieren?
-        //[self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]]];
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]]];
+
+        // Ich denke alle Attribute die bis hierhin nicht gematcht haben, muss ich dann analog <attribute> auswerten
+        // aber MIT überschreiben wohl.
+        // To Do To Check, ob das auch so ist.
+        if ([attributeDict valueForKey:@"showbackground"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'showbackground'.");
+        }
+         if ([attributeDict valueForKey:@"setfocus"])
+         {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'setfocus'.");
+         }
 
 
         // Okay, jQuery-Code mache ich beim schließen, weil ich erst den eventuellen Text der
@@ -6474,11 +6670,35 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
         [elementName isEqualToString:@"basebutton"] ||
+        [elementName isEqualToString:@"baselist"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"buttonnext"])
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
+    // Schließen von baselist
+    // Noch schnell BEVOR ich reduziereVerschachtelungstiefe aufrufe, weil ich auf die ID des Elements zurückgreife!
+    if ([elementName isEqualToString:@"baselist"])
+    {
+        element_geschlossen = YES;
+
+        [self.output appendString:@"</select>\n"];
+
+        [self.jQueryOutput appendString:@"\n  // Das Attribut 'size' der <select>-Box wird entsprechend der Anzahl der options gesetzt\n"];
+        [self.jQueryOutput appendFormat:@"  $('#%@').attr('size', '%d');",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],self.baselistitemCounter];
+        if (self.baselistitemCounter == 2 || self.baselistitemCounter == 3)
+        {
+            [self.jQueryOutput appendString:@"\n  // Bei dem Wert 2 oder 3 braucht Webkit etwas Nachhilfe\n"];
+            //[self.jQueryOutput appendFormat:@"  $('#%@').height(%d*15);\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],self.baselistitemCounter];
+
+            [self.jQueryOutput appendFormat:@"  var sumH = 0;\n  $('#%@').children().each(function() { sumH += $(this).outerHeight(true); });\n  $('#%@').height(sumH);\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],self.baselistitemCounter];
+
+        }
+        else
+        {
+            [self.jQueryOutput appendString:@"\n\n"];
+        }
+    }
 
 
     [self reduziereVerschachtelungstiefe];
@@ -6610,6 +6830,7 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"ftdynamicgrid"] ||
         [elementName isEqualToString:@"calcDisplay"] ||
         [elementName isEqualToString:@"calcButton"] ||
+        [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"debug"] ||
         [elementName isEqualToString:@"passthrough"])
     {
@@ -6632,6 +6853,18 @@ BOOL isNumeric(NSString *s)
         element_geschlossen = YES;
 
         [self.output appendString:@"</div>\n"];
+    }
+
+
+
+    // Schließen von baselistitem
+    if ([elementName isEqualToString:@"baselistitem"])
+    {
+        element_geschlossen = YES;
+
+        [self.output appendString:@"</option>\n"];
+
+
     }
 
 
@@ -7032,7 +7265,7 @@ BOOL isNumeric(NSString *s)
     // CSS-Stylesheet-Datei für das Layout der TabSheets (wohl leider nicht CSS-konform, aber
     // die CSS-Konformität herzustellen ist wohl leider zu viel Aufwand, von daher greifen wir
     // auf diese fertige Lösung zurück)
-    [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.19/themes/humanity/jquery-ui.css\">\n"];
+    [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.21/themes/humanity/jquery-ui.css\">\n"];
 
     // CSS-Stylesheet-Datei // Diese MUSS nach der Humanity-css kommen, da ich bestimmte Sachen
     // überschreibe
@@ -7050,7 +7283,7 @@ BOOL isNumeric(NSString *s)
     // einbauen, aber dann kein Caching!
 
     // jQuery UI laden (wegen TabSheet)
-    [pre appendString:@"<script type=\"text/javascript\" src=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.19/jquery-ui.min.js\"></script>\n"];
+    [pre appendString:@"<script type=\"text/javascript\" src=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.21/jquery-ui.min.js\"></script>\n"];
 
     if (![self.jsOLClassesOutput isEqualToString:@""])
     {
@@ -7477,6 +7710,17 @@ BOOL isNumeric(NSString *s)
     "    word-wrap:break-word;\n"
     "}\n"
     "\n"
+    ".noTextSelection\n"
+    "{\n"
+    "    -webkit-touch-callout: none;\n"
+    "    -webkit-user-select: none;\n"
+    "    -khtml-user-select: none;\n"
+    "    -moz-user-select: none;\n"
+    "    -ms-user-select: none;\n"
+    "    -o-user-select: none;\n"
+    "    user-select: none;\n"
+    "}\n"
+    "\n"
     "#debugWindow\n"
     "{\n"
     "    width: 300px;\n"
@@ -7499,7 +7743,7 @@ BOOL isNumeric(NSString *s)
     "    height: 120px;\n"
     "    width: 300px;\n"
     "    overflow:scroll;\n"
-    "}\n";
+    "}";
     if (positionAbsolute)
     {
       css = [css stringByReplacingOccurrencesOfString:@"float:left;" withString:@""];
@@ -7779,12 +8023,17 @@ BOOL isNumeric(NSString *s)
     "  // vorher setze und danach den string auswerte, der 'value' in der Bedingung enthält,\n"
     "  // muss ich das von OpenLaszlo benutzte 'value' nicht intern parsen (nice Trick, I Think)\n"
     "  // => eval(bedingungAlsString) kennt dann die Var value und kann korrekt auswerten\n"
-    "  if (idAbhaengig == \"__PARENT__\")\n"
+    "  // Das gleiche gilt für 'text', was wohl jQueryhtml() entspricht, da 'text' auch dynamisch mit html() gesetzt wird.\n"
+    "  // Das gleiche gilt für 'visible'.\n"
+    "  if (idAbhaengig == \"__PARENT__\") //ToDo -> Das kann ja nicht stimmen, dass dann $(idAbhaengig) was findet\n"
     "  {\n"
     "      var value = $(idAbhaengig).parent().val();\n"
     "      // Die nachfolgenden beiden Zeilen helfen mir jetzt bei parent().parent(), oder können sie weg? ToDo\n"
     "      var parent = $(idAbhaengig).parent().parent();\n"
     "      parent.value = $(idAbhaengig).parent().parent().val();\n"
+    "\n"
+    "      var text = $(idAbhaengig).parent().html();\n"
+    "      var visible = $(idAbhaengig).parent().is(':visible')\n"
     "  }\n"
     "  else\n"
     "  {\n"
@@ -7792,6 +8041,9 @@ BOOL isNumeric(NSString *s)
     "      // Die nachfolgenden beiden Zeilen helfen mir jetzt bei parent().parent(), oder können sie weg? ToDo\n"
     "      var parent = $(idAbhaengig).parent();\n"
     "      parent.value = $(idAbhaengig).parent().val();\n"
+    "\n"
+    "      var text = $(idAbhaengig).html();\n"
+    "      var visible = $(idAbhaengig).is(':visible')\n"
     "  }\n"
     "\n"
     "  // if (this.cbtype === undefined) parent.cbType = cbType; // Schummelvariable (ToDo)\n"
@@ -7858,6 +8110,9 @@ BOOL isNumeric(NSString *s)
     "var dpEingaben = new Object();\n"
     "dpEingaben.setXPath = function() {}; // ToDo\n"
     "dpEingaben.deleteNode = function() {}; // ToDo\n"
+    "\n"
+    "\n"
+    "var CheckBerufstatus = function() {}; //ToDo\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -8290,6 +8545,24 @@ BOOL isNumeric(NSString *s)
     "button.prototype.test3 = 2; // extern definierte Variable\n"
     "button.test4 = function() {}; // extern definierte Methode - Geht wohl auch\n"
     "button.test5 = 2; // extern definierte Variable - Geht wohl auch\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = baselistitem (native class)                      //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "var baselistitem = function(textBetweenTags) {\n"
+    "  if(typeof(textBetweenTags) === 'undefined')\n"
+    "    textBetweenTags = '';\n"
+    "\n"
+    "  this.name = 'baselistitem';\n"
+    "  this.parent = new view();\n"
+    "\n"
+    "  this.attributeNames = [];\n"
+    "  this.attributeValues = [];\n"
+    "\n"
+    "  this.contentHTML = '<option id=\"@@@P-L,A#TZHALTER@@@\">'+textBetweenTags+'</option>';\n"
+    "};\n"
     "\n";
     js = [js stringByReplacingOccurrencesOfString:@"@@@P-L,A#TZHALTER@@@" withString:ID_REPLACE_STRING];
 

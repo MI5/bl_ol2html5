@@ -4,7 +4,8 @@
 //
 //
 //
-//
+// im direkten onClick (nicht handler), da kann ich wohl setGlobalMe(this); durch with (this {}
+// ersetzen (Im Handler ist es schon ersetzt....)
 //
 //
 //
@@ -979,7 +980,26 @@ void OLLog(xmlParser *self, NSString* s,...)
             NSLog(@"Skipping the attribute 'align=${classroot.textalign}' for now.");
         }
     }
+    if ([attributeDict valueForKey:@"clip"])
+    {
+        if ([[attributeDict valueForKey:@"clip"] isEqual:@"false"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'clip' CSS 'overflow'.");
 
+            [self.jQueryOutput appendString:@"\n  // clip='false', just in case, set overflow back to default."];
+            [self.jQueryOutput appendFormat:@"\n  $('#%@').css('overflow','visible');\n",self.zuletztGesetzteID];
+        }
+
+        if ([[attributeDict valueForKey:@"clip"] isEqual:@"true"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'clip' as CSS 'clip' and CSS 'overflow'.");
+            [self.jQueryOutput appendString:@"\n  // clip='true', so clipping to width and height."];
+            [self.jQueryOutput appendFormat:@"\n  $('#%@').css('clip','rect(0px, '+$('#%@').width()+'px, '+$('#%@').height()+'px, 0px)');",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
+            [self.jQueryOutput appendFormat:@"\n  $('#%@').css('overflow','hidden');\n",self.zuletztGesetzteID];
+        }
+    }
 
 
 
@@ -3416,12 +3436,6 @@ didStartElement:(NSString *)elementName
             NSLog(@"Skipping the attribute 'layout' on view (ToDo).");
         }
         // Wird derzeit noch übersprungen (ToDo)
-        if ([attributeDict valueForKey:@"clip"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'clip' on view (ToDo).");
-        }
-        // Wird derzeit noch übersprungen (ToDo)
         if ([attributeDict valueForKey:@"ignoreplacement"])
         {
             self.attributeCount++;
@@ -3522,12 +3536,6 @@ didStartElement:(NSString *)elementName
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'doesenter' for now.");
-        }
-        // ToDo: Wird derzeit nicht ausgewertet
-        if ([attributeDict valueForKey:@"clip"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'clip' for now.");
         }
         // ToDo: Wird derzeit nicht ausgewertet
         if ([attributeDict valueForKey:@"text_padding_x"])
@@ -6545,7 +6553,7 @@ didStartElement:(NSString *)elementName
 
         // Ich denke alle Attribute die bis hierhin nicht gematcht haben, muss ich dann analog <attribute> auswerten
         // aber MIT überschreiben wohl.
-        // To Do To Check, ob das auch so ist.
+        // ToDo To Check, ob das auch so ist.
         if ([attributeDict valueForKey:@"showbackground"])
         {
             self.attributeCount++;
@@ -7686,7 +7694,7 @@ BOOL isNumeric(NSString *s)
     [self.output appendString:@"  function dlg()\n  {\n    // Extern definiert\n    this.open = open;\n    // Intern definiert (beides möglich)\n"];
     [self.output appendString:@"    this.completeInstantiation = function completeInstantiation() { };\n  }\n"];
     [self.output appendString:@"  function open()\n  {\n    alert('Willst du wirklich deine Ehefrau löschen? Usw...');\n  }\n"];
-    [self.output appendString:@"  var dlgFamilienstandSingle = new dlg();\n\n"];
+    //[self.output appendString:@"  var dlgFamilienstandSingle = new dlg();\n\n"];
     [self.output appendString:@"  var dlgsave = new dlg();\n\n"];
 
 
@@ -7851,6 +7859,19 @@ BOOL isNumeric(NSString *s)
     "\n"
     "}\n"
     "\n"
+    "/* Der button, wie er ungefähr in OpenLaszlo aussieht */\n"
+    "input[type=\"button\"]\n"
+    "{\n"
+    "    border: 1px solid #333; /* fixes a 'can't set height-bug' on webkit */\n"
+    "    margin: 0; /* Only for webkit... */\n"
+    "    padding: 12px;\n"
+    "    background: #dedede;\n"
+    "    background: -moz-linear-gradient(top, #ffffff, #afafaf);\n"
+    "    background: -webkit-linear-gradient(top, #ffffff, #afafaf);\n"
+    "    background: -ms-linear-gradient(top, #ffffff, #afafaf);\n"
+    "    background: -o-linear-gradient(top, #ffffff, #afafaf);\n"
+    "}\n"
+    "\n"
     "/* Damit der Hintergrund weiß wird, entgegen der Angabe in Humanity.css */\n"
     ".ui-widget-content { border: 1px solid #e0cfc2; background: #ffffff; color: #1e1b1d; }\n"
     "\n"
@@ -7889,7 +7910,7 @@ BOOL isNumeric(NSString *s)
     "    margin-left:5px;\n"
     "}\n"
     "\n"
-    "/* Das Standard-Window, wie es ungefaehr in OpenLaszlo aussieht */\n"
+    "/* Das Standard-Window, wie es ungefähr in OpenLaszlo aussieht */\n"
     ".div_window\n"
     "{\n"
     "    background-color:lightgrey;\n"
@@ -7902,7 +7923,7 @@ BOOL isNumeric(NSString *s)
 	"    padding:4px;\n"
     "}\n"
     "\n"
-    "/* Das Standard-View, wie es ungefaehr in OpenLaszlo aussieht */\n"
+    "/* Das Standard-View, wie es ungefähr in OpenLaszlo aussieht */\n"
     ".div_standard\n"
     "{\n"
     "    /* background-color:red; /* Standard ist hier keine (=transparent), zum testen red */\n"
@@ -8051,8 +8072,9 @@ BOOL isNumeric(NSString *s)
     "    word-wrap:break-word;\n"
     "}\n"
     "\n"
-    ".noTextSelection\n"
+    ".noTextSelection, .div_text\n"
     "{\n"
+    "    cursor: default;\n"
     "    -webkit-touch-callout: none;\n"
     "    -webkit-user-select: none;\n"
     "    -khtml-user-select: none;\n"
@@ -8070,9 +8092,9 @@ BOOL isNumeric(NSString *s)
     "    position: absolute;\n"
     "    right: 50px;\n"
     "    top:50px;\n"
-    "    background-color:white;"
-    "    z-index:100000;"
-    "    border-color:black;"
+    "    background-color:white;\n"
+    "    z-index:100000;\n"
+    "    border-color:black;\n"
     "    border-style:solid;\n"
     "    border-width:5px;\n"
     "}\n"
@@ -8787,7 +8809,8 @@ BOOL isNumeric(NSString *s)
     "// bringToFront() - nachimplementiert                    //\n"
     "/////////////////////////////////////////////////////////\n"
     "var bringToFrontFunction = function (oThis) {\n"
-    "    $(this).css('z-index','auto');\n"
+    "    $(this).css('zIndex',\n"
+    "        Math.max.apply(null, $.map($('div:first').find('*'), function(e,i) { return e.style.zIndex; }))+1);\n"
     "}\n"
     "\n"
     "HTMLDivElement.prototype.bringToFront = bringToFrontFunction;\n"
@@ -8815,7 +8838,7 @@ BOOL isNumeric(NSString *s)
     "////////////////////////////////////////////////////////////////////////////////////////////////////\n"
     "// Beinhaltet alle von OpenLaszlo mittels <class> definierte Klassen. Es werden korrespondierende //\n"
     "// 'Constructor Functions' angelegt, welche später von jQuery verarbeitet werden. Sobald          //\n"
-    "// der Converter auf die Klasse dann stößt, legt er ein hier definiertes Objekt per new an.       //\n"
+    "// der Converter auf die Klasse dann stößt, legt er ein hier definiertes Objekt per new() an.     //\n"
     "////////////////////////////////////////////////////////////////////////////////////////////////////\n"
     "\n"
     "\n"
@@ -9070,7 +9093,7 @@ BOOL isNumeric(NSString *s)
     "  this.attributeNames = [];\n"
     "  this.attributeValues = [];\n"
     "\n"
-    "  this.contentHTML = '<input type=\"button\" id=\"@@@P-L,A#TZHALTER@@@\" class=\"input_standard\" value=\"'+textBetweenTags+'\" />';\n"
+    "  this.contentHTML = '<input type=\"button\" id=\"@@@P-L,A#TZHALTER@@@\" class=\"input_standard\" value=\"'+textBetweenTags+'\" style=\"height:inherit;\" />';\n"
     "\n"
     "  this.test1 = function () { // Intern definierte Methode\n"
     "    return 'I am ' + this.name;\n"

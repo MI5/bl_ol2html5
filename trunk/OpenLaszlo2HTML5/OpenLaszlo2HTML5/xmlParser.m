@@ -25,7 +25,7 @@ BOOL alternativeFuerSimplelayout = YES; // Bei YES kann <simplelayout> an belieb
                                         // Es scheint sehr zuverlässig zu funktionieren inzwischen.
                                         // Kann wohl dauerhaft auf YES bleiben!
 
-BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -7592,7 +7592,7 @@ BOOL isNumeric(NSString *s)
     // Viewport für mobile Devices anpassen...
     // ...width=device-width funktioniert nicht im Portrait-Modus.
     // initial-scale baut links und rechts einen kleinen Abstand ein. Wollen wir das? ToDo
-    // Er springt dann etwas immer wegen addjustOffsetOnBrowserResize - To Check
+    // Er springt dann etwas immer wegen adjustOffsetOnBrowserResize - To Check
      [pre appendString:@"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n"];
     //      [pre appendString:@"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.024\" />\n"]; // => Dann perfekte Breite, aber Grafiken wirken etwas verwaschen.ToDo@End
     //[pre appendString:@"<meta name=\"viewport\" content=\"\" />\n"];
@@ -8553,14 +8553,17 @@ BOOL isNumeric(NSString *s)
     "\n"
     "function adjustOffsetOnBrowserResize()\n"
     "{\n"
-    "    // var widthDesErstenKindes = parseInt($('div:first').children(':first').css('width'));\n"
-    "    var unsereWidth = parseInt($('div:first').css('width'));\n"
-    "    var left;\n"
-    "    if ((($(window).width())-unsereWidth)/2 > 0)\n"
-    "        left = (($(window).width())-unsereWidth)/2;\n"
-    "    else\n"
-    "        left = 0;\n"
-    "    $('div:first').css('left', left +'px');\n"
+    "    if ($('#element481').width() == '798')\n" // ToDo - Als Option anbieten
+    "    {\n"
+    "        // var widthDesErstenKindes = parseInt($('div:first').children(':first').css('width'));\n"
+    "        var unsereWidth = parseInt($('div:first').css('width'));\n"
+    "        var left;\n"
+    "        if ((($(window).width())-unsereWidth)/2 > 0)\n"
+    "            left = (($(window).width())-unsereWidth)/2;\n"
+    "        else\n"
+    "            left = 0;\n"
+    "        $('div:first').css('left', left +'px');\n"
+    "    }\n"
     "}\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"

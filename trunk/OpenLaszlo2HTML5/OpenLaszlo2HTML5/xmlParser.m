@@ -3,9 +3,6 @@
 //  OpenLaszlo2Canvas
 //
 //
-// Bekannte Einschränkungen: simplelayout muss als erstes bei mehreren Geschwister-
-// Elementen gesetzt werden, damit es sich auf alle Geschwister-Elemente beziehen kann
-//
 //
 //
 //
@@ -16,11 +13,17 @@
 // 'regelmaessig', 'begruendet', 'complete'
 //
 //
+//
+//
 //  Created by Matthias Blanquett on 13.04.12.
 //  Copyright (c) 2012 Buhl. All rights reserved.
 //
 
 BOOL debugmode = YES;
+BOOL alternativeFuerSimplelayout = YES; // Bei YES kann <simplelayout> an beliebiger stelle stehen,
+                                        // Es scheint sehr zuverlässig zu funktionieren inzwischen.
+                                        // Kann wohl dauerhaft auf YES bleiben!
+
 BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
@@ -239,7 +242,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ((value = va_arg(arguments, NSObject *)))
     {
-        [[self log] appendString:[NSString stringWithFormat:s,@""]];
+        [[self log] appendFormat:s,@""];
     }
 
     va_end(arguments);
@@ -323,7 +326,7 @@ void OLLog(xmlParser *self, NSString* s,...)
                 "canvas.height = $(window).height(); // <-- Var, auf die zugegriffen wird\n\n"
                 // ToDo: 1000 muss natürlich aus dem canvas-element ausgelesen werden
                 // und fixer wert nur wenn keine Prozentangabe dabei
-                "canvas.width = 1000; // $(window).width(); // <-- Var, auf die zugegriffen wird\n\n"
+                "canvas.width = 1000; // $(window).width(); // <-- Var, auf die zugegriffen wird // canvas.width ist die Höhe des windows\n\n"
                 "canvas.lpsversion = '1.0';\n\n"
                 "// Globale Klasse für in verschiedenen Methoden (lokal?) deklarierte Methoden\n"
                 "function parentKlasse() {\n}\n"
@@ -483,12 +486,50 @@ void OLLog(xmlParser *self, NSString* s,...)
 // der berechnet werden muss, dann wird diese Methode aufgerufen.
 - (void) setTheHeightWithJQuery:(NSString*)s
 {
-    [self.jQueryOutput appendString:[NSString stringWithFormat:@"\n  // Setting the height of '#%@' by jQuery, because it is a computed value (%@)\n",self.zuletztGesetzteID,s]];
+    [self.jQueryOutput appendFormat:@"\n  // Setting the height of '#%@' by jQuery, because it is a computed value (%@)\n",self.zuletztGesetzteID,s];
 
     // this.y von OpenLaszlo muss durch die entsprechende CSS-Angabe ersetzt werden
     s = [s stringByReplacingOccurrencesOfString:@"this.y" withString:[NSString stringWithFormat:@"parseInt($('#%@').css('top'))",self.zuletztGesetzteID]];
 
-    [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').height(%@);\n",self.zuletztGesetzteID,s]];
+    [self.jQueryOutput appendFormat:@"  $('#%@').height(%@);\n",self.zuletztGesetzteID,s];
+}
+
+
+
+- (void) handleClassrootInString:(NSString *)s withAttribute:(NSString*)attr
+{
+    // Kann es definitiv nur in <class> geben, deswegen falls nicht, einen Error werfen
+    if (![[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+        [self instableXML:@"The var 'classroot' was used outside the context of a class. That's not possible."];
+
+
+    NSLog(@"'classroot', so we are setting the attribute with jQuery");
+
+    [self.jQueryOutput appendFormat:@"\n  // Setting the Attribute '%@' with jQuery, because it depends on 'classroot'\n",attr];
+
+    s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
+
+    s = [s stringByReplacingOccurrencesOfString:@"classroot" withString:ID_REPLACE_STRING];
+
+    if ([attr isEqualToString:@"value"])
+    {
+        // text ist in Wirklichkeit value. Oder Gilt das sogar allgemein? Also vor die If-Abfrage ziehen?
+        s = [s stringByReplacingOccurrencesOfString:@"text" withString:@"value"];
+
+        [self.jQueryOutput appendFormat:@"  $('#%@').attr('%@',%@);\n",self.zuletztGesetzteID,attr,s];
+    }
+
+    if ([attr isEqualToString:@"background-image"])
+        [self.jQueryOutput appendFormat:@"  $('#%@').css('%@','url('+%@+')');\n",self.zuletztGesetzteID,attr,s];
+
+    if ([attr isEqualToString:@"height"] ||
+        [attr isEqualToString:@"width"] ||
+        [attr isEqualToString:@"left"] ||
+        [attr isEqualToString:@"top"])
+        [self.jQueryOutput appendFormat:@"  $('#%@').css('%@',''+%@+'px');\n",self.zuletztGesetzteID,attr,s];
+
+    if ([attr isEqualToString:@"color"])
+        [self.jQueryOutput appendFormat:@"  $('#%@').css('%@',%@);\n",self.zuletztGesetzteID,attr,s];
 }
 
 
@@ -536,9 +577,17 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         self.attributeCount++;
         NSLog(@"Setting the attribute 'fgcolor' as CSS 'color'.");
-        [style appendString:@"color:"];
-        [style appendString:[attributeDict valueForKey:@"fgcolor"]];
-        [style appendString:@";"];
+
+        if ([[attributeDict valueForKey:@"fgcolor"] rangeOfString:@"classroot"].location != NSNotFound)
+        {
+            [self handleClassrootInString:[attributeDict valueForKey:@"fgcolor"] withAttribute:@"color"];
+        }
+        else
+        {
+            [style appendString:@"color:"];
+            [style appendString:[attributeDict valueForKey:@"fgcolor"]];
+            [style appendString:@";"];
+        }
     }
 
     if ([attributeDict valueForKey:@"topmargin"])
@@ -603,6 +652,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     if ([attributeDict valueForKey:@"height"])
     {
         self.attributeCount++;
+
         NSLog(@"Setting the attribute 'height' as CSS 'height'.");
 
         NSString *s = [attributeDict valueForKey:@"height"];
@@ -638,6 +688,10 @@ void OLLog(xmlParser *self, NSString* s,...)
             s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
 
             [self setTheHeightWithJQuery:s];
+        }
+        else if ([s rangeOfString:@"classroot"].location != NSNotFound)
+        {
+            [self handleClassrootInString:s withAttribute:@"height"];
         }
         else
         {
@@ -717,8 +771,12 @@ void OLLog(xmlParser *self, NSString* s,...)
             s = [s stringByReplacingOccurrencesOfString:@"parent.width" withString:breiteElternElement];
 
             // per jQuery die Höhe setzen.
-            [self.jQueryOutput appendString:[NSString stringWithFormat:@"\n  // Setting the width of '#%@' by jQuery, because it is a computed value (%@)\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"width"]]];
-            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').width(%@);\n",self.zuletztGesetzteID,s]];
+            [self.jQueryOutput appendFormat:@"\n  // Setting the width of '#%@' by jQuery, because it is a computed value (%@)\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"width"]];
+            [self.jQueryOutput appendFormat:@"  $('#%@').width(%@);\n",self.zuletztGesetzteID,s];
+        }
+        else if ([[attributeDict valueForKey:@"width"] rangeOfString:@"classroot"].location != NSNotFound)
+        {
+            [self handleClassrootInString:[attributeDict valueForKey:@"width"] withAttribute:@"width"];
         }
         else
         {
@@ -758,17 +816,18 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"x"];
 
-        if ([s rangeOfString:@"${canvas.width"].location != NSNotFound)
+        if ([s rangeOfString:@"classroot"].location != NSNotFound)
         {
-            // canvas.width ist die Höhe des windows
-            // Die entsprechende globale Variable dafür wurde vorher gesetzt
-
+            [self handleClassrootInString:s withAttribute:@"left"];
+        }
+        else if ([s rangeOfString:@"${"].location != NSNotFound)
+        {
             // $, {} strippen
             s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
 
-            [self.jQueryOutput appendString:[NSString stringWithFormat:@"\n  // Setting the left-value of '#%@' by jQuery, because it is a computed value (%@)\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"x"]]];
+            [self.jQueryOutput appendFormat:@"\n  // Setting the 'left'-value of '#%@' by jQuery, because it is a computed value (%@)\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"x"]];
 
-            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('left',%@+'px');\n",self.zuletztGesetzteID,s]];
+            [self.jQueryOutput appendFormat:@"  $('#%@').css('left',%@+'px');\n",self.zuletztGesetzteID,s];
         }
         else
         {
@@ -778,6 +837,7 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [style appendString:@"px"];
             [style appendString:@";"];
         }
+
         if (positionAbsolute == NO)
             [style appendString:@"float:none;position:absolute;"];
     }
@@ -789,17 +849,18 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"y"];
 
-        if ([s rangeOfString:@"${canvas.height"].location != NSNotFound)
+        if ([s rangeOfString:@"classroot"].location != NSNotFound)
         {
-            // canvas.height ist die Höhe des windows
-            // Die entsprechende globale Variable dafür wurde vorher gesetzt
-
+            [self handleClassrootInString:s withAttribute:@"top"];
+        }
+        else if ([s rangeOfString:@"${"].location != NSNotFound)
+        {
             // $, {} strippen
             s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
 
-            [self.jQueryOutput appendString:[NSString stringWithFormat:@"\n  // Setting the top-value of '#%@' by jQuery, because it is a computed value (%@)\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"y"]]];
+            [self.jQueryOutput appendFormat:@"\n  // Setting the 'top'-value of '#%@' by jQuery, because it is a computed value (%@)\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"y"]];
 
-            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('top',%@+'px');\n",self.zuletztGesetzteID,s]];
+            [self.jQueryOutput appendFormat:@"  $('#%@').css('top',%@+'px');\n",self.zuletztGesetzteID,s];
         }
         else
         {
@@ -809,6 +870,7 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [style appendString:@"px"];
             [style appendString:@";"];
         }
+
         if (positionAbsolute == NO)
             [style appendString:@"float:none;position:absolute;"];
     }
@@ -981,62 +1043,103 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.attributeCount++;
         NSString *s = @"";
 
-        // Wenn ein Punkt enthalten ist, ist es wohl eine Datei
-        if ([src rangeOfString:@"."].location != NSNotFound ||
-             /* ... Keine Ahnung wo diese Res herkommen soll. Super nervig sowas. ToDo? */
-            [src isEqualToString:@"lzgridsortarrow_rsrc"])
-        {
-            // Möglichkeit 1: Resource wird direkt als String angegeben!
-            s = src;
-        }
-        else
-        {
-            // Möglichkeit 2: Resource wurde vorher extern gesetzt
 
-            // Namen des Bildes aus eigener vorher angelegter Res-DB ermitteln
-            if ([[self.allJSGlobalVars valueForKey:src] isKindOfClass:[NSArray class]])
+        if ([src rangeOfString:@"classroot"].location != NSNotFound)
+        {
+            // Dann wurde es per <attribute> gesetzt - Nur dafür speichere ich alle <attribute>'s intern mit...
+            src = [self removeOccurrencesofDollarAndCurlyBracketsIn:src];
+            src = [src stringByReplacingOccurrencesOfString:@"classroot" withString:@""];
+            src = [src stringByReplacingOccurrencesOfString:@"." withString:@""];
+            if ([src isEqualToString:@"resource"])
             {
-                s = [[self.allJSGlobalVars valueForKey:src] objectAtIndex:0];
+                // ToDo.. Don't know what this means
             }
             else
             {
-                s = [self.allJSGlobalVars valueForKey:src];
+                // Hier greife ich das erste mal auf die intern gespeicherten Vars zu, und gleich nochmal
+                // (Doppelt referenzierte Variable)
+                src = [self.allJSGlobalVars valueForKey:src];
             }
         }
-        if (s == nil || [s isEqualToString:@""])
-            [self instableXML:[NSString stringWithFormat:@"ERROR: The image-path '%@' isn't valid.",src]];
+        // Wenn die Variable keinen Wert enthält, dann kann auch keine korrekte Res gesetzt werden...
+        // In dem Fall ist die Variable wohl nur ein Platzhalter für eine spätere Res?
+        // Im 2. Fall (resource) erfolgt ein zugriff auf die interne resource-Var, aber puh... to think about. ToDo
+        if ([src isEqualToString:@""] || [src isEqualToString:@"resource"])
+        {
+            NSLog(@"The var is empty. I can't set the resource now.'");
+        }
+        else
+        {
+            // Die gefunde Res muss auch in JS verfügbar sein in der Variable resource!
+            [self.jQueryOutput appendString:@"\n  // Setting the var 'resource' for internal JS-access"];
+            // ----->
+
+
+            // Wenn ein Punkt enthalten ist, ist es wohl eine Datei
+            if ([src rangeOfString:@"."].location != NSNotFound ||
+                /* ... Keine Ahnung wo diese Res herkommenen sollen. Super nervig sowas. ToDo? */
+                [src isEqualToString:@"lzgridsortarrow_rsrc"])
+            {
+                // Möglichkeit 1: Resource wird direkt als String angegeben!
+
+                // <----- (hier mit '' setzen, da ja ein String!
+                [self.jQueryOutput appendFormat:@"\n  $('#%@').get(0).resource = '%@';\n",self.zuletztGesetzteID,src];
+
+                s = src;
+            }
+            else
+            {
+                // Möglichkeit 2: Resource wurde vorher extern gesetzt+
+
+                // <-----
+                [self.jQueryOutput appendFormat:@"\n  $('#%@').get(0).resource = %@;\n",self.zuletztGesetzteID,src];
+
+                // Namen des Bildes aus eigener vorher angelegter Res-DB ermitteln
+                if ([[self.allJSGlobalVars valueForKey:src] isKindOfClass:[NSArray class]])
+                {
+                    s = [[self.allJSGlobalVars valueForKey:src] objectAtIndex:0];
+                }
+                else
+                {
+                    s = [self.allJSGlobalVars valueForKey:src];
+                }
+            }
+            if (s == nil || [s isEqualToString:@""])
+                [self instableXML:[NSString stringWithFormat:@"ERROR: The image-path '%@' isn't valid.",src]];
 
 
 
-        NSLog(@"Checking the image-size directly on file-system:");
-        // Dann erstmal width und height von dem Image auf Dateiebene ermitteln
-        NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
 
-        NSURL *pathToImg = [NSURL URLWithString:s relativeToURL:path];
+            NSLog(@"Checking the image-size directly on file-system:");
+            // Dann erstmal width und height von dem Image auf Dateiebene ermitteln
+            NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
 
-        // [NSString stringWithFormat:@"%@%@",path,s];
-        NSLog([NSString stringWithFormat:@"Path to Image: %@",pathToImg]);
-        NSImage *image = [[NSImage alloc] initByReferencingURL:pathToImg];
-        NSSize dimensions = [image size];
-        NSInteger w = (int) dimensions.width;
-        NSInteger h = (int) dimensions.height;
-        NSLog([NSString stringWithFormat:@"Resolving width of image from original file: %d (setting as CSS-width)",w]);
-        NSLog([NSString stringWithFormat:@"Resolving height of Image from original file: %d (setting as CSS-height)",h]);
-        if (!widthGesetzt)
-            [style appendString:[NSString stringWithFormat:@"width:%dpx;",w]];
-        // Height setzen wir erstmal immer, später ändern? (ToDo)
-        [style appendString:[NSString stringWithFormat:@"height:%dpx;",h]];
+            NSURL *pathToImg = [NSURL URLWithString:s relativeToURL:path];
 
-        [style appendString:@"background-image:url("];
-        [style appendString:s];
-        [style appendString:@");"];
-        // Aus irgendeinem Grund müssen nach meiner großen Änderung von absolute auf relative
-        // die Bilder trotzdem weiterhin absolute sein... aber nur die... hmmm.
-        // Das ist Unsinn...
-        // Bilder dürfen nicht absolute sein, weil ich in bestimmten Situationen auf
-        // position:absolute teste (Simplelayout) und nur bei absolute-Elementen aufrücke
-        // Wenn Bilder IMMER absolute wären, würde diese Abfrage brechen
-        // [style appendString:@"position:absolute;"];
+            // [NSString stringWithFormat:@"%@%@",path,s];
+            NSLog([NSString stringWithFormat:@"Path to Image: %@",pathToImg]);
+            NSImage *image = [[NSImage alloc] initByReferencingURL:pathToImg];
+            NSSize dimensions = [image size];
+            NSInteger w = (int) dimensions.width;
+            NSInteger h = (int) dimensions.height;
+            NSLog([NSString stringWithFormat:@"Resolving width of image from original file: %d (setting as CSS-width)",w]);
+            NSLog([NSString stringWithFormat:@"Resolving height of Image from original file: %d (setting as CSS-height)",h]);
+            if (!widthGesetzt)
+                [style appendFormat:@"width:%dpx;",w];
+            // Height setzen wir erstmal immer, später ändern? (ToDo)
+            [style appendFormat:@"height:%dpx;",h];
+
+            [style appendString:@"background-image:url("];
+            [style appendString:s];
+            [style appendString:@");"];
+            // Aus irgendeinem Grund müssen nach meiner großen Änderung von absolute auf relative
+            // die Bilder trotzdem weiterhin absolute sein... aber nur die... hmmm.
+            // Das ist Unsinn...
+            // Bilder dürfen nicht absolute sein, weil ich in bestimmten Situationen auf
+            // position:absolute teste (Simplelayout) und nur bei absolute-Elementen aufrücke
+            // Wenn Bilder IMMER absolute wären, würde diese Abfrage brechen
+            // [style appendString:@"position:absolute;"];
+        }
     }
 
 
@@ -1053,22 +1156,23 @@ void OLLog(xmlParser *self, NSString* s,...)
         // dann setz als height die des (höchsten Kindes + top-wert).
 
 
-        [self.jQueryOutput appendString:@"\n  // Falls ein Kind eine x- oder y-Angabe hat: Wir müssen dann die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n  // Wir überschreiben jedoch keinen explizit vorher gesetzten Wert,\n  // deswegen test auf '' (nur mit JS möglich, nicht mit jQuery) \n"];
+        [self.jQueryOutput appendString:@"\n  // Falls ein Kind eine x, y, width oder height-Angabe hat: Wir müssen dann die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n  // Wir überschreiben jedoch keinen explizit vorher gesetzten Wert,\n  // deswegen test auf '' (nur mit JS möglich, nicht mit jQuery) \n"];
         // position().top klappt nicht, weil das Elemente versteckt sein kann,
         // aber mit css('top') klappt es (gleiches gilt für position().left).
         // '0'+ als Schutz gegen 'auto', so, dass parseInt() auf jeden Fall ne Nummer findet.
-        [self.jQueryOutput appendFormat:@"  var sumXY = 0;\n  $('#%@').children().map(function () { sumXY+=parseInt('0'+$(this).css('top')); sumXY+=parseInt('0'+$(this).css('left')); });\n",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  var sumXYHW = 0;\n  $('#%@').children().map(function ()\n  {\n    sumXYHW += parseInt('0'+$(this).css('top'));\n    sumXYHW += parseInt('0'+$(this).css('left'));\n    sumXYHW += $(this).height();\n    sumXYHW += $(this).width();\n  });\n",self.zuletztGesetzteID];
 
-        [self.jQueryOutput appendFormat:@"  if (sumXY > 0 && $('#%@').children().length > 0 && $('#%@').get(0).style.height == '')\n  {\n  ",self.zuletztGesetzteID,self.zuletztGesetzteID];
-        [self.jQueryOutput appendFormat:@"  var heights = $('#%@').children().map(function () { return $(this).outerHeight('true')+$(this).position().top; }).get()",self.zuletztGesetzteID];
-        [self.jQueryOutput appendFormat:@"\n    $('#%@').css('height',getMaxOfArray(heights))\n  }\n",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  if (sumXYHW > 0 && $('#%@').children().length > 0 && $('#%@').get(0).style.height == '')\n  {\n  ",self.zuletztGesetzteID,self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  var heights = $('#%@').children().map(function () { return $(this).outerHeight('true')+$(this).position().top; }).get()\n",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"    if (!($('#%@').hasClass('div_rudElement')))\n",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"      $('#%@').css('height',getMaxOfArray(heights))\n  }\n",self.zuletztGesetzteID];
 
 
 
         [self.jQueryOutput appendString:@"  // Analog muss die Breite gesetzt werden\n"];
-        [self.jQueryOutput appendFormat:@"  if (sumXY > 0 && $('#%@').children().length > 0 && $('#%@').get(0).style.width == '')\n  {\n  ",self.zuletztGesetzteID,self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  if (sumXYHW > 0 && $('#%@').children().length > 0 && $('#%@').get(0).style.width == '')\n  {\n  ",self.zuletztGesetzteID,self.zuletztGesetzteID];
         [self.jQueryOutput appendFormat:@"  var widths = $('#%@').children().map(function () { return $(this).outerWidth('true')+$(this).position().left; }).get()",self.zuletztGesetzteID];
-            [self.jQueryOutput appendFormat:@"\n    $('#%@').css('width',getMaxOfArray(widths))\n  }\n",self.zuletztGesetzteID];
+            [self.jQueryOutput appendFormat:@"\n    $('#%@').css('width',getMaxOfArray(widths))\n  }\n\n",self.zuletztGesetzteID];
 
 
 
@@ -1077,15 +1181,14 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     [self.jQueryOutput appendString:@"\n  // Eine x- oder y-Angabe! Wir müssen eventuell deswegen die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n  // Wir überschreiben jedoch keinen explizit vorher gesetzten Wert,\n  // deswegen test auf '' (nur mit JS möglich, nicht mit jQuery) \n"];
 
-    [self.jQueryOutput appendString:[NSString stringWithFormat:@"  var h = $('#%@').position().top+($('#%@').outerHeight('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
-    [self.jQueryOutput appendString:[NSString stringWithFormat:@"  if (h > $('#%@').parent().height())\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
-    [self.jQueryOutput appendString:[NSString stringWithFormat:@"    $('#%@').parent().height(h);\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID]];
+    [self.jQueryOutput appendFormat:@"  var h = $('#%@').position().top+($('#%@').outerHeight('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+    [self.jQueryOutput appendFormat:@"  if (h > $('#%@').parent().height())\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+    [self.jQueryOutput appendFormat:@"    $('#%@').parent().height(h);\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
 
-        // Analog muss die Breite gesetzt werden
         [self.jQueryOutput appendString:@"  // Analog muss die Breite gesetzt werden\n"];
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  var w = parseInt($('#%@').position().left)+($('#%@').outerWidth('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  if ($('#%@').parent().get(0).style.width == '' && w > $('#%@').parent().width())\n",self.zuletztGesetzteID,self.zuletztGesetzteID]];
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"    $('#%@').parent().width(w);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID]];
+        [self.jQueryOutput appendFormat:@"  var w = parseInt($('#%@').position().left)+($('#%@').outerWidth('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  if ($('#%@').parent().get(0).style.width == '' && w > $('#%@').parent().width())\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"    $('#%@').parent().width(w);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
  */
     }
 
@@ -1174,7 +1277,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 - (void) changeMouseCursorOnHoverOverElement:(NSString*)idName
 {
     [self.jQueryOutput appendString:@"\n  // onClick-Funktionalität, deswegen anderer Mauscursor\n"];
-    [self.jQueryOutput appendFormat:@"  $('#%@').hover(function() {  $(this).css('cursor','pointer');}, function() {$(this).css('cursor','auto');});\n",idName];
+    [self.jQueryOutput appendFormat:@"  $('#%@').hover(function(e) { if (this == e.target) $(this).css('cursor','pointer'); }, function(e) { if (this == e.target) $(this).css('cursor','auto');});\n",idName];
 }
 
 
@@ -1201,6 +1304,10 @@ void OLLog(xmlParser *self, NSString* s,...)
         // Alternative um es global zu machen:
         // "window.Gewerbesteuerpflicht = ...;" bzw. "window['Gewerbesteuerpflicht'] = ...;"
         [self.jQueryOutput0 appendFormat:@"  %@ = document.getElementById('%@');\n",name, self.zuletztGesetzteID];
+
+
+        [self.jQueryOutput0 appendString:@"  // All 'name'-attributes, can be referenced by its parent Element\n"];
+        [self.jQueryOutput0 appendFormat:@"  $('#%@').parent().get(0).%@ = %@;\n",self.zuletztGesetzteID,name, name];
     }
 }
 
@@ -1240,18 +1347,19 @@ void OLLog(xmlParser *self, NSString* s,...)
 // setAttribute ohne vorangehende Variable aufgerufen wird.
 - (NSString*) modifySomeMethodsInJSCode:(NSString*)s
 {
-    s = [self inString:s searchFor:@"setAttribute(" andReplaceWith:@"setAttribute_(" ignoringTextInQuotes:YES];
+    // Hatte ich mal als 'setAttribute(', aber die Klamemr bricht natürlich den RegExp
+    s = [self inString:s searchFor:@"setAttribute" andReplaceWith:@"setAttribute_" ignoringTextInQuotes:YES];
 
     // 'parent' muss ersetzt werden mit 'getTheParent(this)'
     // Wir ersetzen es immer mit Parameter, aber wirklich nötig ist der Parameter,
     // nur beim ersten Objekt in einer Kette: parent2(this).parent2().parent2()
-    s = [self inString:s searchFor:@"parent" andReplaceWith:@"getTheParent(this)" ignoringTextInQuotes:YES];
+    //s = [self inString:s searchFor:@"parent" andReplaceWith:@"getTheParent(this)" ignoringTextInQuotes:YES];
+    // Neu: Ich habe in allen Handlern auf with (this) {} umgestellt, deswegen ist das this als Parameter wohl
+    // gar nicht mehr nötig? => Mal schauen ob es irgendwo bricht in nächster Zeit.
+    s = [self inString:s searchFor:@"parent" andReplaceWith:@"getTheParent()" ignoringTextInQuotes:YES];
 
-
-
-
-
-
+    // Remove leading and ending Whitespaces and NewlineCharacters
+    s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
 
     return s;
@@ -1672,6 +1780,14 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+    // Wird derzeit noch übersprungen (ToDo)
+    if ([attributeDict valueForKey:@"frame"])
+    {
+        self.attributeCount++;
+        NSLog(@"Skipping the attribute 'frame' on view (ToDo).");
+    }
+
+
 
 
 
@@ -1705,17 +1821,6 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         self.attributeCount++;
         self.zuletztGesetzteID = [attributeDict valueForKey:@"id"];
-
-        // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein!
-        // insbesondere auch wegen Firefox
-        // bewusst ohne var davor! Damit es global verfügbar ist.
-        // => Anders gelöst, Schleife durch alle IDs direkt Am Anfang des <script>-Quellcodes.
-        // Nur bei nachträglich hinzugefügten Klassen ist es nachwievor nötig!
-        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-        {
-            [self.jQueryOutput0 appendString:@"\n  // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein.\n"];
-            [self.jQueryOutput0 appendFormat:@"  %@ = document.getElementById('%@');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-        }
     }
     else
     {
@@ -1738,8 +1843,24 @@ void OLLog(xmlParser *self, NSString* s,...)
     NSLog([NSString stringWithFormat:@"Setting the (attribute 'id' as) HTML-attribute 'id'. Id = '%@'.",self.zuletztGesetzteID]);
 
 
+
+
+    // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein!
+    // Insbesondere auch wegen Firefox
+    // Bewusst ohne var davor! Damit es global verfügbar ist.
+    // => Anders gelöst, Schleife durch alle IDs direkt Am Anfang des <script>-Quellcodes.
+    // Nur bei nachträglich hinzugefügten Klassen ist es nachwievor nötig!
+    if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+    {
+        [self.jQueryOutput0 appendString:@"\n  // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein.\n"];
+        [self.jQueryOutput0 appendFormat:@"  %@ = document.getElementById('%@');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+    }
+
+
+
+
     // Und Simplelayout-Check von hier aus aufrufen, da alle Elemente mit gesetzter ID
-    // überprüft werden sollen
+    // überprüft werden sollen // ToDo - Kann wohl raus dieser Aufruf
     [self check4Simplelayout:attributeDict];
 
     return self.zuletztGesetzteID;
@@ -1754,6 +1875,10 @@ void OLLog(xmlParser *self, NSString* s,...)
 // => Dann muss ich diesen Wert überschreiben, da er keine Auswirkung haben darf.
 - (void) check4Simplelayout:(NSDictionary*) attributeDict
 {
+    if (alternativeFuerSimplelayout)
+        return;
+
+
     // simplelayout verlassen, alsbald das letzte Geschwisterchen erreicht ist
     BOOL wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y = NO;
     if (self.simplelayout_y-1 == self.verschachtelungstiefe)
@@ -1803,7 +1928,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         NSLog(@"'top' korrigieren, weil 2 ineinander verschachtelte Y-Simplelayouts.");
 
-        [self.jsOutput appendString:@"  // Korrektur wegen zweier ineinander verschachteltet Simplelayout Y:\n"];
+        [self.jsOutput appendString:@"  // Korrektur von 'top' wegen zweier ineinander verschachtelteter Simplelayout Y:\n"];
         [self.jsOutput appendString:@"  if ("];
         [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
         [self.jsOutput appendFormat:@"$('#%@').prev().get(0).lastElementChild)\n",id];
@@ -1818,7 +1943,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         [self.jsOutput appendFormat:@"parseInt($('#%@').prev().get(0).lastElementChild.offsetHeight)+",id];
 
-        [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_y]];
+        [self.jsOutput appendFormat:@"%d", spacing_y];
         [self.jsOutput appendString:@") + 'px';\n\n"];
 
         wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y = NO;
@@ -1879,12 +2004,12 @@ void OLLog(xmlParser *self, NSString* s,...)
             [self.jsOutput appendString:@"    $('#"];
             [self.jsOutput appendString:id];
             // [self.jsOutput appendString:@"').css('margin-top','"];
-            // [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_y]];
+            // [self.jsOutput appendFormat:@"%d", spacing_y];
             // [self.jsOutput appendString:@"px');\n\n"];
             [self.jsOutput appendString:@"').css('top',"];
-            // += klappt nicht wegen der Startvorgabe 'auto'. Da kann man nicht draufaddieren. Aber klappt auch ohne +=
+            // += funzt nicht wegen der Startvorgabe 'auto'. Da kann man nicht draufaddieren. Aber klappt auch ohne +=
             // [self.jsOutput appendString:@"'+=' + "];
-            [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_y]];
+            [self.jsOutput appendFormat:@"%d", spacing_y];
             [self.jsOutput appendFormat:@" * $('#%@').prevAll().length);\n\n",id];
         }
         self.firstElementOfSimpleLayout_y = NO;
@@ -1897,7 +2022,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         NSLog(@"'left' korrigieren, weil 2 ineinander verschachtelte X-Simplelayouts.");
 
-        [self.jsOutput appendString:@"  // Korrektur wegen zweier ineinander verschachteltet Simplelayout X:\n"];
+        [self.jsOutput appendString:@"  // Korrektur von 'left' wegen zweier ineinander verschachtelteter Simplelayout X:\n"];
         [self.jsOutput appendString:@"  if ("];
         [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
         [self.jsOutput appendFormat:@"$('#%@').prev().get(0).lastElementChild)\n",id];
@@ -1912,7 +2037,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         [self.jsOutput appendFormat:@"parseInt($('#%@').prev().get(0).lastElementChild.offsetWidth)+",id];
 
-        [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
+        [self.jsOutput appendFormat:@"%d", spacing_x];
         [self.jsOutput appendString:@") + 'px';\n\n"];
 
         wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_X = NO;
@@ -1981,19 +2106,19 @@ void OLLog(xmlParser *self, NSString* s,...)
             [self.jsOutput appendString:@"    $('#"];
             [self.jsOutput appendString:id];
             // [self.jsOutput appendString:@"').css('margin-left','"];
-            // [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
+            // [self.jsOutput appendFormat:@"%d", spacing_x];
             // [self.jsOutput appendString:@"px');\n\n"];
             [self.jsOutput appendString:@"').css('left',"];
             // += klappt nicht wegen der Startvorgabe 'auto'. Da kann man nicht draufaddieren. Aber klappt auch ohne +=
             // [self.jsOutput appendString:@"'+=' + "];
-            [self.jsOutput appendString:[NSString stringWithFormat:@"%d", spacing_x]];
+            [self.jsOutput appendFormat:@"%d", spacing_x];
             [self.jsOutput appendFormat:@" * $('#%@').prevAll().length);\n\n",id];
         }
         self.firstElementOfSimpleLayout_x = NO;
     }
 }
 
-// ToDo: Im Release kommt hier das "exit(0);" dann raus.
+
 - (void) instableXML:(NSString*)s
 {
     NSLog([NSString stringWithFormat:@"%@",s]);
@@ -2001,8 +2126,6 @@ void OLLog(xmlParser *self, NSString* s,...)
     // NSLog([NSString stringWithFormat:@"Collected Frame Resources: %@",self.allJSGlobalVars]);
 
     @throw [NSException exceptionWithName:NSInternalInconsistencyException reason:@"Exception geworfen" userInfo:nil];
-    
-    // exit(0);
 }
 
 
@@ -2138,7 +2261,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
--(void) erhoeheVerschachtelungstiefe:(NSString *)elementName merkeDirID:(NSString *)id
+-(void) erhoeheVerschachtelungstiefe:(NSString *)elementName merkeDirID:(NSString *)theId
 {
     self.verschachtelungstiefe++;
 
@@ -2147,9 +2270,9 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Ebenen zurückkehre, ist sonst das umgebende Element + die ID davon nicht mehr bekannt.
     // NSLog([NSString stringWithFormat:@"\n\n\n\n\n XXX Hierachiestufe umgebender Elemente: %@",self.enclosingElements]);
     [self.enclosingElements addObject:elementName];
-    if (id != nil)
+    if (theId != nil)
     {
-        [self.enclosingElementsIds addObject:id];
+        [self.enclosingElementsIds addObject:theId];
     }
     else
     {
@@ -2159,9 +2282,21 @@ void OLLog(xmlParser *self, NSString* s,...)
         // Wir erraten dazu die gleich gesetzte ID...
         // Etwas tricky, aber es funktioniert...
         if (self.ignoreAddingIDsBecauseWeAreInClass)
-            [self.enclosingElementsIds addObject:[NSString stringWithFormat:@"%@",ID_REPLACE_STRING]];
+        {
+            // Wenn wir ganz außen sind, dann gilt die originäre ID der Klasse, ansonsten die einer Subview.
+            if ([elementName isEqualToString:@"evaluateclass"])
+            {
+                [self.enclosingElementsIds addObject:[NSString stringWithFormat:@"%@",ID_REPLACE_STRING]];
+            }
+            else
+            {
+                [self.enclosingElementsIds addObject:[NSString stringWithFormat:@"%@_%d",ID_REPLACE_STRING,self.idZaehler+1]];
+            }
+        }
         else
+        {
             [self.enclosingElementsIds addObject:[NSString stringWithFormat:@"element%d",self.idZaehler+1]];
+        }
     }
 }
 
@@ -2345,8 +2480,8 @@ didStartElement:(NSString *)elementName
             for (id e in attributeDict)
             {
                 // Alle Elemente in font (color usw...) einfach ausgeben
-                [self.textInProgress appendString:[NSString stringWithFormat:@" %@",e]];
-                [self.textInProgress appendString:[NSString stringWithFormat:@"=\"%@\"",[attributeDict valueForKey:e]]];
+                [self.textInProgress appendFormat:@" %@",e];
+                [self.textInProgress appendFormat:@"=\"%@\"",[attributeDict valueForKey:e]];
             }
             [self.textInProgress appendString:@">"];
             return;
@@ -2374,6 +2509,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"buttonnext"] ||
         [elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDStext"] ||
+        [elementName isEqualToString:@"statictext"] ||
         [elementName isEqualToString:@"text"] ||
         [elementName isEqualToString:@"button"] ||
         [elementName isEqualToString:@"rollUpDownContainer"] ||
@@ -2392,22 +2528,26 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
+        NSString* spacing = @"0";
         if ([attributeDict valueForKey:@"spacing"])
-            self.attributeCount++;
-
-
-
-        // ToDo - Eine Abstandsangabe für das erste Element.
-        if ([attributeDict valueForKey:@"inset"])
         {
             self.attributeCount++;
-            NSLog(@"Skipping the attribute 'inset' for now.");
+
+            spacing = [attributeDict valueForKey:@"spacing"];
+
+            if ([spacing rangeOfString:@"${"].location != NSNotFound)
+            {
+                spacing = [self removeOccurrencesofDollarAndCurlyBracketsIn:spacing];
+                spacing = [NSString stringWithFormat:@"(%@)",spacing];
+            }
         }
-        // ToDo - Name... puh... dabei hat SimpleLayout gar kein eigenes div, oder?
+
+
+        // Name... puh... dabei hat SimpleLayout gar kein eigenes div..
         if ([attributeDict valueForKey:@"name"])
         {
             self.attributeCount++;
-            NSLog(@"Skipping the attribute 'name' for now.");
+            NSLog(@"Skipping the attribute 'name'.");
         }
 
 
@@ -2421,21 +2561,10 @@ didStartElement:(NSString *)elementName
             // somit wird simplelayout nur in der richtigen Element-Ebene angewandt
             self.simplelayout_y = self.verschachtelungstiefe;
 
+
             // spacing müssen wir auch sichern und später berücksichtigen
-            if ([attributeDict valueForKey:@"spacing"])
-            {
-                NSString *s = [attributeDict valueForKey:@"spacing"];
-                if ([s rangeOfString:@"${"].location != NSNotFound)
-                {
-                    s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
-                    s = [NSString stringWithFormat:@"(%@)",s];
-                }
-                [self.simplelayout_y_spacing addObject:s];
-            }
-            else
-            {
-                [self.simplelayout_y_spacing addObject:@"0"];
-            }
+            [self.simplelayout_y_spacing addObject:spacing];
+
 
             // SimpleLayout-Tiefenzähler (y) um 1 erhöhen
             self.simplelayout_y_tiefe++;
@@ -2459,7 +2588,7 @@ didStartElement:(NSString *)elementName
             // Erst sammeln:
             NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
-            [s appendString:@"\n  // Y-Simplelayout: Deswegen die Höhe aller beinhaltenden Elemente auf erster Ebene ermitteln\n  // und dem umgebenden div die Summe als Höhe mitgeben (nur bei rudElement MUSS es auto bleiben)\n"];
+            [s appendString:@"\n  // Y-Simplelayout: Deswegen die Höhe aller beinhaltenden Elemente erster Ebene ermitteln und dem umgebenden div die Summe als\n  // Höhe mitgeben (aber nur wenn es NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery)\n  // (Jedoch bei rudElement MUSS es auto bleiben)\n"];
             [s appendString:@"  var sumH = 0;\n"];
             [s appendString:@"  var zaehler = 0;\n"];
             [s appendString:@"  $('#"];
@@ -2475,15 +2604,59 @@ didStartElement:(NSString *)elementName
             [s appendString:[self.simplelayout_y_spacing lastObject]];
             [s appendString:@";\n"];
 
-            [s appendString:@"  if (!($('#"];
-            [s appendString:self.zuletztGesetzteID];
-            [s appendString:@"').hasClass('div_rudElement')))"];
-            [s appendString:@"\n    $('#"];
-            [s appendString:self.zuletztGesetzteID];
-            [s appendString:@"').height(sumH);\n\n"];
+            [s appendFormat:@"  if (!($('#%@').hasClass('div_rudElement')))\n",self.zuletztGesetzteID];
+            [s appendFormat:@"    if ($('#%@').get(0).style.height == '')\n      $('#%@').height(sumH);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
 
             // An den Anfang des Strings setzen!
             [self.jQueryOutput0 insertString:s atIndex:0];
+
+
+
+            if ([attributeDict valueForKey:@"inset"])
+            {
+                self.attributeCount++;
+                NSLog(@"Using the attribute 'inset' as spacing for the first element.");
+
+                NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+                [self.jsOutput appendString:@"\n  // 'inset' for the first element of this 'simplelayout' (axis:y)\n"];
+                [self.jsOutput appendFormat:@"  $('#%@').children().first().css('top','%@px');\n",idUmgebendesElement,[attributeDict valueForKey:@"inset"]];
+            }
+
+
+
+
+            // Das MUSS in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
+            if (alternativeFuerSimplelayout)
+            {
+                NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+                [self.jsOutput appendFormat:@"\n  // Setting a 'simplelayout' (axis:y) without need 4 check4Simplelayout in '%@':\n",idUmgebendesElement];
+
+                [self.jsOutput appendString:@"  // Es soll wirklich erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"];
+                [self.jsOutput appendFormat:@"  for (var i = 1; i < $('#%@').children().length; i++)\n  {\n",idUmgebendesElement];
+                [self.jsOutput appendFormat:@"    var kind = $('#%@').children().eq(i);\n",idUmgebendesElement];
+                if (positionAbsolute == YES)
+                {
+                    [self.jsOutput appendFormat:@"    var topValue = kind.prev().get(0).offsetTop + kind.prev().outerHeight() + %@;\n",spacing];
+                }
+                else
+                {
+                    [self.jsOutput appendFormat:@"    if (kind.css('position') == 'TODO oder auch nicht')\n",idUmgebendesElement];
+                    [self.jsOutput appendString:@"    {\n"];
+                    [self.jsOutput appendFormat:@"      var topValue = %@  + kind.prev().height() + parseInt(kind.prev().css('top'));\n",spacing];
+                    [self.jsOutput appendString:@"      var leftValue = parseInt(kind.prev().css('left'))-kind.prev().width();\n"];
+                    [self.jsOutput appendString:@"      kind.css('left',leftValue+'px');\n"];
+                    [self.jsOutput appendString:@"    }\n"];
+                    [self.jsOutput appendString:@"    else\n"];
+                    [self.jsOutput appendString:@"    {\n"];
+                    [self.jsOutput appendFormat:@"      var topValue = i * %@;\n",spacing];
+                    [self.jsOutput appendString:@"    }\n"];
+                }
+                [self.jsOutput appendString:@"    kind.css('top',topValue+'px');\n"];
+
+                [self.jsOutput appendString:@"  }\n\n"];
+            }
         }
 
 
@@ -2499,20 +2672,8 @@ didStartElement:(NSString *)elementName
             self.simplelayout_x = self.verschachtelungstiefe;
 
             // spacing müssen wir auch sichern und später berücksichtigen
-            if ([attributeDict valueForKey:@"spacing"])
-            {
-                NSString *s = [attributeDict valueForKey:@"spacing"];
-                if ([s rangeOfString:@"${"].location != NSNotFound)
-                {
-                    s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
-                    s = [NSString stringWithFormat:@"(%@)",s];
-                }
-                [self.simplelayout_x_spacing addObject:s];
-            }
-            else
-            {
-                [self.simplelayout_x_spacing addObject:@"0"];
-            }
+            [self.simplelayout_x_spacing addObject:spacing];
+
 
             // SimpleLayout-Tiefenzähler (x) um 1 erhöhen
             self.simplelayout_x_tiefe++;
@@ -2541,7 +2702,7 @@ didStartElement:(NSString *)elementName
             // Erst sammeln:
             NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
-            [s appendString:@"\n  // X-Simplelayout: Deswegen die Breite aller beinhaltenden Elemente erster Ebene ermitteln und dem umgebenden div die Summe als\n  // Breite mitgeben\n"];
+            [s appendString:@"\n  // X-Simplelayout: Deswegen die Breite aller beinhaltenden Elemente erster Ebene ermitteln und dem umgebenden div die Summe als\n  // Breite mitgeben (aber nur wenn es NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery)\n"];
             [s appendString:@"  var sumW = 0;\n"];
             [s appendString:@"  var zaehler = 0;\n"];
             [s appendString:@"  $('#"];
@@ -2562,12 +2723,47 @@ didStartElement:(NSString *)elementName
             // [s appendString:@"').css('position') == 'relative'"];
             // [s appendString:@")\n"];
 
-            [s appendString:@"  $('#"];
-            [s appendString:self.zuletztGesetzteID];
-            [s appendString:@"').width(sumW);\n\n"];
+            [s appendFormat:@"  if ($('#%@').get(0).style.width == '')\n    $('#%@').width(sumW);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
 
             // An den Anfang des Strings setzen!
             [self.jQueryOutput0 insertString:s atIndex:0];
+
+
+
+            if ([attributeDict valueForKey:@"inset"])
+            {
+                self.attributeCount++;
+                NSLog(@"Using the attribute 'inset' as spacing for the first element.");
+
+                NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+                [self.jsOutput appendString:@"\n  // 'inset' for the first element of this 'simplelayout' (axis:x)\n"];
+                [self.jsOutput appendFormat:@"  $('#%@').children().first().css('left','%@px');\n",idUmgebendesElement,[attributeDict valueForKey:@"inset"]];
+            }
+
+
+            // Das MUSS in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
+            if (alternativeFuerSimplelayout)
+            {
+                NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+                [self.jsOutput appendFormat:@"\n  // Setting a 'simplelayout' (axis:x) without need 4 check4Simplelayout in '%@':\n",idUmgebendesElement];
+
+                [self.jsOutput appendString:@"  // Es soll wirklich erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"];
+                [self.jsOutput appendFormat:@"  for (var i = 1; i < $('#%@').children().length; i++)\n  {\n",idUmgebendesElement];
+                [self.jsOutput appendFormat:@"    var kind = $('#%@').children().eq(i);\n",idUmgebendesElement];
+                if (positionAbsolute == YES)
+                {
+                    [self.jsOutput appendFormat:@"    var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + %@;\n",spacing];
+                }
+                else
+                {
+                    [self.jsOutput appendFormat:@"    var leftValue = %@ * i;\n",spacing];
+                }
+                [self.jsOutput appendString:@"    kind.css('left',leftValue+'px');\n"];
+
+                [self.jsOutput appendString:@"  }\n\n"];
+            }
         }
     }
 
@@ -2920,7 +3116,7 @@ didStartElement:(NSString *)elementName
             }
             else
             {
-                [self.jsHead2Output appendString:[NSString stringWithFormat:@"%d",self.datasetItemsCounter]];
+                [self.jsHead2Output appendFormat:@"%d",self.datasetItemsCounter];
                 self.datasetItemsCounter++;
             }
         }
@@ -3104,12 +3300,14 @@ didStartElement:(NSString *)elementName
         else
         {
             NSString *elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
-            [self.jQueryOutput0 appendFormat:@"\n  // Ein Attribut des Elements %@:\n", elem];
+            [self.jQueryOutput0 appendFormat:@"\n  // Ein Attribut des Elements %@:", elem];
 
             // Folgendes Szenario: Wenn eine selbst definierte Klasse ein Attribut definiert, aber gleichzeitig
             // dieses erbt, dann hat das selbst definierte Vorrang. Deswegen überschreibe ich das Attribut
             // innerhalb der Klasse nicht! Dazu teste ich einfach vorher, ob es auch wirklich undefined ist!
-            [self.jQueryOutput0 appendFormat:@"  if (%@.%@ == undefined)",elem,[attributeDict valueForKey:@"name"]];
+            // Puh, ka, ob das so zu halten ist, zumindest schon mal bei 'title' bricht es, weil von JS vordefiniert
+            if (![[attributeDict valueForKey:@"name"] isEqualToString:@"title"])
+                [self.jQueryOutput0 appendFormat:@"\n  if (%@.%@ == undefined)",elem,[attributeDict valueForKey:@"name"]];
 
             [self.jQueryOutput0 appendFormat:@"\n    %@.",elem];
         }
@@ -3129,7 +3327,10 @@ didStartElement:(NSString *)elementName
 
         // Auch intern die Var speichern? Erstmal nein. Wir wollen bewusst per JS/jQuery immer
         // drauf zugreifen! Weil die Variablen nach dem Export noch benutzbar sein sollen.
-        // [self.allJSGlobalVars setObject:[attributeDict valueForKey:@"src"] forKey:[attributeDict valueForKey:@"name"]];
+        // Wenn in einer Klasse mittels Variable auf eine resource zugegriffen wird, dann muss
+        // ich doch auf diese Variable später zugreifen können! Deswegen alle Vars intern mitspeichern
+        // Vermutlich etwas overhead, da bisher nur für diesen einen Anwendungsfall. Aber es funktioniert.
+        [self.allJSGlobalVars setObject:value forKey:[attributeDict valueForKey:@"name"]];
     }
 
 
@@ -3159,7 +3360,7 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"<div class=\"div_window\""];
 
         // id hinzufügen und gleichzeitg speichern
-        NSString *id = [self addIdToElement:attributeDict];
+        NSString *theId = [self addIdToElement:attributeDict];
         [self.output appendString:@" style=\""];
 
 
@@ -3182,7 +3383,7 @@ didStartElement:(NSString *)elementName
         }
 
 
-        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]]];
     }
 
 
@@ -3205,7 +3406,7 @@ didStartElement:(NSString *)elementName
 
 
         // id hinzufügen und gleichzeitg speichern
-        NSString *id = [self addIdToElement:attributeDict];
+        NSString *theId = [self addIdToElement:attributeDict];
 
 
         // Wird derzeit noch übersprungen (ToDo)
@@ -3213,12 +3414,6 @@ didStartElement:(NSString *)elementName
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'layout' on view (ToDo).");
-        }
-        // Wird derzeit noch übersprungen (ToDo)
-        if ([attributeDict valueForKey:@"frame"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'frame' on view (ToDo).");
         }
         // Wird derzeit noch übersprungen (ToDo)
         if ([attributeDict valueForKey:@"clip"])
@@ -3248,13 +3443,13 @@ didStartElement:(NSString *)elementName
 
 
                 [self.jQueryOutput appendString:@"\n  // Anstatt 'placement' auszuwerten...\n"];
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('background-color','#D3964D');\n",id]];
-                // [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('border-right','#D29860 1px solid');\n",id]];
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('left','2px');\n",id]];
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('top','39px');\n",id]]; // 39 anstatt 40, damit der Strich am iPad verschwindet
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('width','inherit');\n",id]];
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').css('height','50px');\n",id]];
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').children().filter(':last').css('top','8px');\n",id]];
+                [self.jQueryOutput appendFormat:@"  $('#%@').css('background-color','#D3964D');\n",theId];
+                // [self.jQueryOutput appendFormat:@"  $('#%@').css('border-right','#D29860 1px solid');\n",id];
+                [self.jQueryOutput appendFormat:@"  $('#%@').css('left','2px');\n",theId];
+                [self.jQueryOutput appendFormat:@"  $('#%@').css('top','39px');\n",theId]; // 39 anstatt 40, damit der Strich am iPad verschwindet
+                [self.jQueryOutput appendFormat:@"  $('#%@').css('width','inherit');\n",theId];
+                [self.jQueryOutput appendFormat:@"  $('#%@').css('height','50px');\n",theId];
+                [self.jQueryOutput appendFormat:@"  $('#%@').children().filter(':last').css('top','8px');\n",theId];
             }
         }
 
@@ -3267,7 +3462,7 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"\">\n"];
 
-        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]]];
     }
 
 
@@ -3284,20 +3479,28 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"<input type=\"button\""];
 
         // id hinzufügen und gleichzeitg speichern
-        NSString *id = [self addIdToElement:attributeDict];
+        NSString *theId = [self addIdToElement:attributeDict];
 
 
         [self.output appendString:@" class=\"input_standard\" style=\""];
         [self.output appendString:[self addCSSAttributes:attributeDict]];
-        [self.output appendString:@"\" "];
+        [self.output appendString:@"\""];
 
         // Den Text als Beschriftung für den Button setzen
         if ([attributeDict valueForKey:@"text"])
         {
             self.attributeCount++;
-            [self.output appendString:@"value=\""];
-            [self.output appendString:[attributeDict valueForKey:@"text"]];
-            [self.output appendString:@"\""];
+
+            if ([[attributeDict valueForKey:@"text"] rangeOfString:@"${classroot"].location != NSNotFound)
+            {
+                [self handleClassrootInString:[attributeDict valueForKey:@"text"] withAttribute:@"value"];
+            }
+            else
+            {
+                [self.output appendString:@" value=\""];
+                [self.output appendString:[attributeDict valueForKey:@"text"]];
+                [self.output appendString:@"\""];
+            }
         }
 
 
@@ -3342,9 +3545,9 @@ didStartElement:(NSString *)elementName
 
 
 
-        [self.output appendString:@" />\n"];
+        [self.output appendString:@"/>\n"];
 
-        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]]];
     }
 
 
@@ -3372,7 +3575,7 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"<div"];
 
         // id hinzufügen und gleichzeitg speichern
-        NSString *id = [self addIdToElement:attributeDict];
+        NSString *theId = [self addIdToElement:attributeDict];
 
 
         [self.output appendString:@" class=\"div_standard\" style=\""];
@@ -3397,7 +3600,7 @@ didStartElement:(NSString *)elementName
             NSLog(@"Skipping the attribute 'isdefault' for now.");
         }
 
-        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]]];
     }
 
 
@@ -3405,9 +3608,15 @@ didStartElement:(NSString *)elementName
 
     // ToDo: Eigentlich sollte das hier selbständig hinzugefügt werden und anhand der definierten Klasse
     // erkannt werden.
-    if ([elementName isEqualToString:@"BDStext"])
+    if ([elementName isEqualToString:@"BDStext"] || [elementName isEqualToString:@"statictext"])
     {
         element_bearbeitet = YES;
+
+        // Aus der OpenLaszlo-Doku:
+        // If true, the width of the text field will be recomputed each time text is changed,
+        // so that the text view is exactly as wide as the width of the widest line. Defaults to true.
+        if ([attributeDict valueForKey:@"resize"] && [[attributeDict valueForKey:@"resize"] isEqualToString:@"true"])
+            self.attributeCount++;
 
 
         [self.output appendString:@"<div"];
@@ -3440,12 +3649,14 @@ didStartElement:(NSString *)elementName
                 // Remove all occurrences of $,{,}
                 code = [self removeOccurrencesofDollarAndCurlyBracketsIn:code];
 
+                code = [code stringByReplacingOccurrencesOfString:@"classroot" withString:ID_REPLACE_STRING];
+
 
                 // ToDo, mit ShowEUR gibt es noch Probs
                 if ([code rangeOfString:@"ShowEUR"].location == NSNotFound)
                 {
                     [self.jQueryOutput appendString:@"\n  // Der Text von BDSText wird hier dynamisch gesetzt\n"];
-                    [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').html(%@);\n",self.zuletztGesetzteID,code]];
+                    [self.jQueryOutput appendFormat:@"  $('#%@').html(%@);\n",self.zuletztGesetzteID,code];
                 }
             }
             else
@@ -3644,8 +3855,8 @@ didStartElement:(NSString *)elementName
             code = [self removeOccurrencesofDollarAndCurlyBracketsIn:code];
 
             [self.jQueryOutput appendString:@"\n  // combobox-Text wird hier dynamisch gesetzt\n"];
-            // [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').before(%@);",id,code]];
-            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').prev().text(%@);\n",id,code]];
+            // [self.jQueryOutput appendFormat:@"  $('#%@').before(%@);",id,code];
+            [self.jQueryOutput appendFormat:@"  $('#%@').prev().text(%@);\n",id,code];
         }
 
 
@@ -3822,7 +4033,7 @@ didStartElement:(NSString *)elementName
             code = [self removeOccurrencesofDollarAndCurlyBracketsIn:code];
 
             [self.jQueryOutput appendString:@"\n  // checkbox-Text wird hier dynamisch gesetzt\n"];
-            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').next().text(%@);\n",id,code]];
+            [self.jQueryOutput appendFormat:@"  $('#%@').next().text(%@);\n",id,code];
         }
 
 
@@ -3925,7 +4136,7 @@ didStartElement:(NSString *)elementName
             code = [self removeOccurrencesofDollarAndCurlyBracketsIn:code];
 
             [self.jQueryOutput appendString:@"\n  // textfield-Text wird hier dynamisch gesetzt\n"];
-            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').prev().text(%@);\n",id,code]];
+            [self.jQueryOutput appendFormat:@"  $('#%@').prev().text(%@);\n",id,code];
         }
 
 
@@ -4063,7 +4274,7 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"<input type=\"text\""];
 
-        NSString *id =[self addIdToElement:attributeDict];
+        NSString *theId =[self addIdToElement:attributeDict];
 
 
 
@@ -4075,8 +4286,7 @@ didStartElement:(NSString *)elementName
             code = [self removeOccurrencesofDollarAndCurlyBracketsIn:code];
 
             [self.jQueryOutput appendString:@"\n  // Datepicker-Text wird hier dynamisch gesetzt\n"];
-            // [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').before(%@);",id,code]];
-            [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').prev().text(%@);\n",id,code]];
+            [self.jQueryOutput appendFormat:@"  $('#%@').prev().text(%@);\n",theId,code];
         }
 
 
@@ -4094,7 +4304,7 @@ didStartElement:(NSString *)elementName
         // Jetzt noch den jQuery-Code für den Datepicker
         [self.jQueryOutput appendString:@"\n  // Für das mit dieser id verbundene input-Field setzen wir einen jQUery UI Datepicker\n"];
         [self.jQueryOutput appendString:@"  // Aber bei iOS-Devices nutzen wir den eingebauten Datepicker\n"];
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  if (isiOS())\n    document.getElementById('%@').setAttribute('type', 'date');\n  else\n    $('#%@').datepicker();\n",id,id]];
+        [self.jQueryOutput appendFormat:@"  if (isiOS())\n    document.getElementById('%@').setAttribute('type', 'date');\n  else\n    $('#%@').datepicker();\n",theId,theId];
 
 
 
@@ -4128,7 +4338,7 @@ didStartElement:(NSString *)elementName
 
 
         // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw.
-        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]]];
+        [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]]];
     }
 
 
@@ -4273,7 +4483,7 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@" style=\""];
         [self.output appendString:@"top:"];
 
-        // [self.output appendString:[NSString stringWithFormat:@"%d",counter*111]];
+        // [self.output appendFormat:@"%d",counter*111];
         // wtf...
         [self.output appendString:@"6"];
 
@@ -4282,7 +4492,7 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"px;"];
         [self.output appendString:@"width:"];
-        [self.output appendString:[NSString stringWithFormat:@"%d",breiteVonRollUpDown]];
+        [self.output appendFormat:@"%d",breiteVonRollUpDown];
         [self.output appendString:@"px;"];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
@@ -4333,7 +4543,7 @@ didStartElement:(NSString *)elementName
                 code = [self removeOccurrencesofDollarAndCurlyBracketsIn:code];
 
                 [self.jQueryOutput appendString:@"\n  // Der Titel (header) von rollUpDown wird hier dynamisch gesetzt\n"];
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').html('<span style=\"margin-left:8px;\">'+%@+'</span>');\n",id4flipleiste,code]];
+                [self.jQueryOutput appendFormat:@"  $('#%@').html('<span style=\"margin-left:8px;\">'+%@+'</span>');\n",id4flipleiste,code];
             }
         }
 
@@ -4381,7 +4591,7 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"<!-- Die Flipleiste -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<div style=\"position:relative; top:0px; left:0px; width:"];
-        [self.output appendString:[NSString stringWithFormat:@"%dpx; height:%dpx; background-color:lightblue; line-height: %dpx; vertical-align:middle;\" class=\"ui-corner-top\" id=\"",breiteVonRollUpDown,heightOfFlipBar]];
+        [self.output appendFormat:@"%dpx; height:%dpx; background-color:lightblue; line-height: %dpx; vertical-align:middle;\" class=\"ui-corner-top\" id=\"",breiteVonRollUpDown,heightOfFlipBar];
         [self.output appendString:id4flipleiste];
         [self.output appendString:@"\">\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
@@ -4394,15 +4604,14 @@ didStartElement:(NSString *)elementName
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<!-- Das aufklappende Panel -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1]; // overflow, damit es scrollt, falls zu viel drin
-        [self.output appendFormat:@"<div style=\"position:relative; overflow-y:auto; overflow-x:hidden; top:0px; left:0px; width:%dpx; ",breiteVonRollUpDown-4];
-
+        [self.output appendFormat:@"<div style=\"width:%dpx; ",breiteVonRollUpDown-4];
 
         // Bei ganz äußeren RUDs soll die Höhe fix sein, ansonsten nicht
         if (self.rollUpDownVerschachtelungstiefe-2 == 0)
             [self.output appendString:@"height:350px; "];
         else
             [self.output appendString:@"height:auto; "];
-        [self.output appendString:@"border-width:2px; border-color:lightgrey; border-style:solid; margin-bottom:6px; background-color:white;\" class=\"ui-corner-bottom\" id=\""];
+        [self.output appendString:@"\" class=\"div_rudPanel ui-corner-bottom\" id=\""];
         [self.output appendString:id4panel];
         [self.output appendString:@"\">\n"];
 
@@ -4413,7 +4622,7 @@ didStartElement:(NSString *)elementName
         else
             [self.jQueryOutput appendString:@"\n  // Animation bei Klick auf die Leiste (ohne callback)\n"];
 
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').click(function(){$('#%@').slideToggle(",id4flipleiste,id4panel]];
+        [self.jQueryOutput appendFormat:@"  $('#%@').click(function(){$('#%@').slideToggle(",id4flipleiste,id4panel];
         [self.jQueryOutput appendString:self.animDuration];
         if (callback)
         {
@@ -4516,9 +4725,9 @@ didStartElement:(NSString *)elementName
         // Hier legen wir den TabSheetContainer per jQuery an
         [self.jQueryOutput appendString:@"\n  // Ein TabSheetContainer. Jetzt wird's kompliziert. Wird legen ihn hier an.\n  // Die einzelnen Tabs werden, sobald sie im Code auftauchen, per add hinzugefügt\n  // Mit der Option 'tabTemplate' legen wir die width fest\n  // Mit der Option 'fx' legen wir eine Animation für das Wechseln fest\n"];
 
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').tabs({ tabTemplate: '<li style=\"width:%dpx;\"><a href=\"#{href}\" style=\"width:%dpx;\"><span>#{label}</span></a></li>' });\n",self.lastUsedTabSheetContainerID,tabwidth,tabwidthForLink]];
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').tabs({ fx: { opacity: 'toggle' } });\n",self.lastUsedTabSheetContainerID]];
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').tabs();\n",self.lastUsedTabSheetContainerID]];
+        [self.jQueryOutput appendFormat:@"  $('#%@').tabs({ tabTemplate: '<li style=\"width:%dpx;\"><a href=\"#{href}\" style=\"width:%dpx;\"><span>#{label}</span></a></li>' });\n",self.lastUsedTabSheetContainerID,tabwidth,tabwidthForLink];
+        [self.jQueryOutput appendFormat:@"  $('#%@').tabs({ fx: { opacity: 'toggle' } });\n",self.lastUsedTabSheetContainerID];
+        [self.jQueryOutput appendFormat:@"  $('#%@').tabs();\n",self.lastUsedTabSheetContainerID];
 
 
         // ToDo: Wird derzeit nicht ausgewertet
@@ -4583,7 +4792,7 @@ didStartElement:(NSString *)elementName
 
         // jQuery-Output
         [self.jQueryOutput appendString:@"\n  // Hinzufügen eines tabsheets in den tabsheetContainer\n"];
-        [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').tabs('add', '#%@', '%@');\n",self.lastUsedTabSheetContainerID,geradeVergebeneID,[attributeDict valueForKey:@"title"]]];
+        [self.jQueryOutput appendFormat:@"  $('#%@').tabs('add', '#%@', '%@');\n",self.lastUsedTabSheetContainerID,geradeVergebeneID,[attributeDict valueForKey:@"title"]];
     }
 
 
@@ -4599,6 +4808,7 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
     }
+
 
 
     // Wohl nichts zu tun (ist eine eigens definierte class - ToDo, falls wir class-Tags auslesen wollen)
@@ -5214,17 +5424,83 @@ didStartElement:(NSString *)elementName
         if ([attributeDict valueForKey:@"visible"])
             self.attributeCount++;
     }
+
+
+
+    // Erfordert 3 Kind-Elemente. Das erste Element kommt links an die Wand, das 3. Element kommt rechts an die Wand,
+    // das mittlere nimmt den Platz in er Mitte ein, der übrig bleibt.
+    // Wenn nur 1 Kind-Element vorhanden, kommt dieses einfach links an die Wand
+    // Wenn nur 2 Kind-Elemente vorhanden, bekommt das 2. Element eine Breite von 0.
+    // Alles eben gesagt gilt für axis=x. Bei axis=y entsprechend analog, nur vertikal.
     if ([elementName isEqualToString:@"stableborderlayout"])
     {
         element_bearbeitet = YES;
 
-        // ToDo
-        if ([attributeDict valueForKey:@"axis"])
+        NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+        NSLog([NSString stringWithFormat:@"Setting a 'stableborderlayout' in '%@' with jQuery",idUmgebendesElement]);
+
+        if ([attributeDict valueForKey:@"axis"] && ([[attributeDict valueForKey:@"axis"] isEqualToString:@"x"] || [[attributeDict valueForKey:@"axis"] isEqualToString:@"y"]))
+        {
             self.attributeCount++;
-        // ToDo
+            NSLog(@"Using the attribute 'axis' of 'stableborderlayout' to determine the axis.");
+        }
+
+
         if ([attributeDict valueForKey:@"name"])
+        {
             self.attributeCount++;
+            NSLog(@"Ignoring the attribute 'name' of 'stableborderlayout'.");
+        }
+
+
+        if ([[attributeDict valueForKey:@"axis"] isEqualToString:@"x"])
+        {
+            [self.jQueryOutput appendFormat:@"\n  // Setting a 'stableborderlayout' (axis:x) in '%@' with jQuery:\n",idUmgebendesElement];
+
+            [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length == 1)\n    jQuery.noop(); /* no operation */\n",idUmgebendesElement];
+
+            [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length == 2) {\n",idUmgebendesElement];
+            [self.jQueryOutput appendFormat:@"    $('#%@').children().last().css('left',$('#%@').children().first().css('width'));\n",idUmgebendesElement,idUmgebendesElement];
+            [self.jQueryOutput appendFormat:@"    $('#%@').children().last().css('width','0');\n",idUmgebendesElement];
+            [self.jQueryOutput appendString:@"  }\n"];
+
+
+            [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length > 2) {\n",idUmgebendesElement];
+            //[self.jQueryOutput appendFormat:@"    alert($('#%@').children().length);\n",idUmgebendesElement];
+
+            //[self.jQueryOutput appendFormat:@"    $('#%@').children().eq(2).css('left','auto'); // sonst nimmt er 'right' nicht an.\n",idUmgebendesElement];
+            //[self.jQueryOutput appendFormat:@"    $('#%@').children().eq(2).css('right','0');\n",idUmgebendesElement];
+            // Habe Angst, dass er mir so irgendwas zerhaut, weil ich left auf 'auto' setze, aber andere Stellen sich
+            // darauf verlassen, dass in 'left' ein numerischer Wert ist. Deswegen lieber so:
+            [self.jQueryOutput appendFormat:@"    $('#%@').children().eq(2).css('left',$('#%@').width()-$('#%@').children().eq(2).width()+'px');\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
+
+            [self.jQueryOutput appendFormat:@"    $('#%@').children().eq(1).css('left',$('#%@').children().first().css('width'));\n",idUmgebendesElement,idUmgebendesElement];
+            [self.jQueryOutput appendFormat:@"    $('#%@').children().eq(1).width($('#%@').width()-$('#%@').children().first().width()-$('#%@').children().eq(2).width());\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
+            [self.jQueryOutput appendString:@"  }\n\n"];
+        }
+        else
+        {
+            [self.jQueryOutput appendFormat:@"\n  // Setting a 'stableborderlayout' (axis:y) in '%@' with jQuery:\n",idUmgebendesElement];
+
+            [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length == 1)\n    jQuery.noop(); /* no operation */\n",idUmgebendesElement];
+
+            [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length == 2) {\n",idUmgebendesElement];
+            [self.jQueryOutput appendFormat:@"    $('#%@').children().last().css('top',$('#%@').children().first().css('height'));\n",idUmgebendesElement,idUmgebendesElement];
+            [self.jQueryOutput appendFormat:@"    $('#%@').children().last().css('height','0');\n",idUmgebendesElement];
+            [self.jQueryOutput appendString:@"  }\n"];
+
+
+            [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length > 2) {\n",idUmgebendesElement];
+            [self.jQueryOutput appendFormat:@"    $('#%@').children().eq(2).css('top',$('#%@').height()-$('#%@').children().eq(2).height()+'px');\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
+            [self.jQueryOutput appendFormat:@"    $('#%@').children().eq(1).css('top',$('#%@').children().first().css('height'));\n",idUmgebendesElement,idUmgebendesElement];
+            [self.jQueryOutput appendFormat:@"    $('#%@').children().eq(1).height($('#%@').height()-$('#%@').children().first().height()-$('#%@').children().eq(2).height());\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
+            [self.jQueryOutput appendString:@"  }\n\n"];
+        }
     }
+
+
+
     if ([elementName isEqualToString:@"combobox"])
     {
         element_bearbeitet = YES;
@@ -5313,29 +5589,6 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
         // ToDo
         if ([attributeDict valueForKey:@"width"])
-            self.attributeCount++;
-    }
-    if ([elementName isEqualToString:@"statictext"])
-    {
-        element_bearbeitet = YES;
-
-        // ToDo
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"align"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"resize"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"text"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"fgcolor"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"y"])
             self.attributeCount++;
     }
     if ([elementName isEqualToString:@"multistatebutton"])
@@ -5683,7 +5936,6 @@ didStartElement:(NSString *)elementName
             NSLog([[NSString alloc] initWithFormat:@"Using the attribute 'name' as method-name for a JS-Function, that is added to the class %@",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2]]);
             self.attributeCount++;
             self.lastUsedNameAttribute = [attributeDict valueForKey:@"name"];
-            NSLog(@"AND using the attribute 'name' as method-name for a JS-Function, that is prototyped to the class 'parentKlasse'");
         }
 
         // Es gibt nicht immer args
@@ -5787,6 +6039,11 @@ didStartElement:(NSString *)elementName
             [self.jQueryOutput0 appendString:@"\n"];
         }
 
+        // OL benutzt 'classroot' als Variable für den Zugriff auf das erste in einer Klasse
+        // definierte Elemente. Deswegen, falls wir eine Klasse auswerten, einfach die Var setzen
+        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+            [self.jQueryOutput0 appendFormat:@"    var classroot = %@;\n\n",ID_REPLACE_STRING];
+
         // Um es auszurichten mit dem Rest
         [self.jQueryOutput0 appendString:@" "];
 
@@ -5802,19 +6059,22 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
+        NSString *enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
         if ([attributeDict valueForKey:@"name"])
         {
             if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onclick"])
             {
+                // Muss ganz am Anfang stehen, damit sich die Codezeilen nicht gegenseitig beeinflussen
+                [self changeMouseCursorOnHoverOverElement:enclosingElem];
+
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a jQuery-click-event.");
 
-                [self.jQueryOutput appendString:@"\n  // onclick-Handler für "];
-                [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@"\n"];
+                [self.jQueryOutput appendFormat:@"\n  // onclick-Handler für %@\n",enclosingElem];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').click(function()\n  {\n    ",self.zuletztGesetzteID]];
-
+                // 'e', weil 'event' würde wohl das event-Objekt zugreifen. Auf dieses kann man so und so zugreifen.
+                [self.jQueryOutput appendFormat:@"  $('#%@').click(function(e)\n  {\n    ",enclosingElem];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -5828,11 +6088,9 @@ didStartElement:(NSString *)elementName
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a jQuery-change-event.");
 
-                [self.jQueryOutput appendString:@"\n  // change-Handler für "];
-                [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@"\n"];
+                [self.jQueryOutput appendFormat:@"\n  // change-Handler für %@\n",enclosingElem];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').change(function()\n  {\n    ",self.zuletztGesetzteID]];
+                [self.jQueryOutput appendFormat:@"  $('#%@').change(function(e)\n  {\n    ",enclosingElem];
 
 
                 // Extra Code, um den alten Value speichern zu können (s. als Erklärung auch
@@ -5845,7 +6103,6 @@ didStartElement:(NSString *)elementName
                 }
 
 
-
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
 
@@ -5855,11 +6112,9 @@ didStartElement:(NSString *)elementName
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a jQuery-error-event.");
 
-                [self.jQueryOutput appendString:@"\n  // error-Handler für "];
-                [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@"\n"];
+                [self.jQueryOutput appendFormat:@"\n  // error-Handler für %@\n",enclosingElem];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').error(function()\n  {\n    ",self.zuletztGesetzteID]];
+                [self.jQueryOutput appendFormat:@"  $('#%@').error(function(e)\n  {\n    ",enclosingElem];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -5875,12 +6130,10 @@ didStartElement:(NSString *)elementName
                 // $(window).load(function() aus!
                 NSLog(@"NOT Binding the method in this handler. Direct execution of code.");
 
-                [self.jQueryOutput appendString:@"\n  // oninit-Handler für "];
-                [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@" (wir führen den Code direkt aus)\n"];
+                [self.jQueryOutput appendFormat:@"\n  // oninit-Handler für %@ (wir führen den Code direkt aus)\n  // Aber korrekten Scope berücksichtigen! Deswegen in einer Funktion mit bind() ausführen\n  // Zusätzlich ist auch noch with (this) {} erforderlich, puh...\n",enclosingElem];
 
-                // [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').load(function()\n  {\n    ",self.zuletztGesetzteID]];
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  {\n    ",self.zuletztGesetzteID]];
+                // [self.jQueryOutput appendFormat:@"  $('#%@').load(function()\n  {\n    ",self.zuletztGesetzteID];
+                [self.jQueryOutput appendFormat:@"  var bindMeToCorrectScope = function () {\n    with (this) {\n      "];
 
                 self.onInitInHandler = YES;
 
@@ -5893,11 +6146,9 @@ didStartElement:(NSString *)elementName
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a jQuery-focus-event.");
 
-                [self.jQueryOutput appendString:@"\n  // focus-Handler für "];
-                [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@"\n"];
+                [self.jQueryOutput appendFormat:@"\n  // focus-Handler für %@\n",enclosingElem];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').focus(function()\n  {\n    ",self.zuletztGesetzteID]];
+                [self.jQueryOutput appendFormat:@"  $('#%@').focus(function(e)\n  {\n    ",enclosingElem];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -5908,11 +6159,9 @@ didStartElement:(NSString *)elementName
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a jQuery-select-event.");
     
-                [self.jQueryOutput appendString:@"\n  // select-Handler für "];
-                [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@"\n"];
+                [self.jQueryOutput appendFormat:@"\n  // select-Handler für %@\n",enclosingElem];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').select(function()\n  {\n    ",self.zuletztGesetzteID]];
+                [self.jQueryOutput appendFormat:@"  $('#%@').select(function(e)\n  {\n    ",enclosingElem];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -5922,39 +6171,37 @@ didStartElement:(NSString *)elementName
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a jQuery-blur-event.");
 
-                [self.jQueryOutput appendString:@"\n  // blur-Handler für "];
-                [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@"\n"];
+                [self.jQueryOutput appendFormat:@"\n  // blur-Handler für %@\n",enclosingElem];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').blur(function()\n  {\n    ",self.zuletztGesetzteID]];
+                [self.jQueryOutput appendFormat:@"  $('#%@').blur(function(e)\n  {\n    ",enclosingElem];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
 
             if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onmousedown"])
             {
+                [self changeMouseCursorOnHoverOverElement:enclosingElem];
+
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a jQuery-mousedown-event.");
 
-                [self.jQueryOutput appendString:@"\n  // mousedown-Handler für "];
-                [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@"\n"];
+                [self.jQueryOutput appendFormat:@"\n  // mousedown-Handler für %@\n",enclosingElem];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').mousedown(function()\n  {\n    ",self.zuletztGesetzteID]];
+                [self.jQueryOutput appendFormat:@"  $('#%@').mousedown(function(e)\n  {\n    ",enclosingElem];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
 
             if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onmouseup"])
             {
+                [self changeMouseCursorOnHoverOverElement:enclosingElem];
+
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a jQuery-mouseup-event.");
 
-                [self.jQueryOutput appendString:@"\n  // mouseup-Handler für "];
-                [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@"\n"];
+                [self.jQueryOutput appendFormat:@"\n  // mouseup-Handler für %@\n",enclosingElem];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').mouseup(function()\n  {\n    ",self.zuletztGesetzteID]];
+                [self.jQueryOutput appendFormat:@"  $('#%@').mouseup(function(e)\n  {\n    ",enclosingElem];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -5964,25 +6211,23 @@ didStartElement:(NSString *)elementName
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a jQuery-mouseover-event.");
 
-                [self.jQueryOutput appendString:@"\n  // mouseover-Handler für "];
-                [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@"\n"];
+                [self.jQueryOutput appendFormat:@"\n  // mouseover-Handler für %@\n",enclosingElem];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').mouseover(function()\n  {\n    ",self.zuletztGesetzteID]];
+                [self.jQueryOutput appendFormat:@"  $('#%@').mouseover(function(e)\n  {\n    ",enclosingElem];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
 
             if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onmouseout"])
             {
+                [self changeMouseCursorOnHoverOverElement:enclosingElem];
+
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a jQuery-mouseout-event.");
 
-                [self.jQueryOutput appendString:@"\n  // mouseout-Handler für "];
-                [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@"\n"];
+                [self.jQueryOutput appendFormat:@"\n  // mouseout-Handler für %@\n",enclosingElem];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').mouseout(function()\n  {\n    ",self.zuletztGesetzteID]];
+                [self.jQueryOutput appendFormat:@"  $('#%@').mouseout(function(e)\n  {\n    ",enclosingElem];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -5992,12 +6237,10 @@ didStartElement:(NSString *)elementName
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a jQuery-keyup-event.");
 
-                [self.jQueryOutput appendString:@"\n  // keyup-Handler für "];
-                [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@"\n"];
+                [self.jQueryOutput appendFormat:@"\n  // keyup-Handler für %@\n",enclosingElem];
 
                 // die Variable k wird von OpenLaszlo einfach so benutzt. Das muss der keycode sein.
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').keyup(function(event)\n  {\n    var k = event.keyCode;\n\n    ",self.zuletztGesetzteID]];
+                [self.jQueryOutput appendFormat:@"  $('#%@').keyup(function(e)\n  {\n    var k = e.keyCode;\n\n    ",enclosingElem];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -6007,11 +6250,9 @@ didStartElement:(NSString *)elementName
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a jQuery-keydown-event.");
 
-                [self.jQueryOutput appendString:@"\n  // keydown-Handler für "];
-                [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@"\n"];
+                [self.jQueryOutput appendFormat:@"\n  // keydown-Handler für %@\n",enclosingElem];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').keydown(function()\n  {\n    ",self.zuletztGesetzteID]];
+                [self.jQueryOutput appendFormat:@"  $('#%@').keydown(function(e)\n  {\n    ",enclosingElem];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -6062,11 +6303,9 @@ didStartElement:(NSString *)elementName
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a custom jQuery-event (has to be triggered).");
 
-                [self.jQueryOutput appendString:@"\n  // 'custom'-Handler für "];
-                [self.jQueryOutput appendString:self.zuletztGesetzteID];
-                [self.jQueryOutput appendString:@"\n"];
+                [self.jQueryOutput appendFormat:@"\n  // 'custom'-Handler für %@\n",enclosingElem];
 
-                [self.jQueryOutput appendString:[NSString stringWithFormat:@"  $('#%@').bind('%@',function()\n  {\n    ",self.zuletztGesetzteID,[attributeDict valueForKey:@"name"]]];
+                [self.jQueryOutput appendFormat:@"  $('#%@').bind('%@',function(e)\n  {\n    ",enclosingElem,[attributeDict valueForKey:@"name"]];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -6468,7 +6707,7 @@ BOOL isNumeric(NSString *s)
 
         NSString *rekursiveRueckgabeJsHeadOutput = [result objectAtIndex:5];
         if (![rekursiveRueckgabeJsHeadOutput isEqualToString:@""])
-            [self instableXML:@"<class> liefert was in 5 zurück. Da muss ich mir was überlegen!"];
+            NSLog(@"String 5 aus der Rekursion wird unser Leading-JS-Head-content für JS-Objekt");
 
         NSString *rekursiveRueckgabeJsHead2Output = [result objectAtIndex:6];
         if (![rekursiveRueckgabeJsHead2Output isEqualToString:@""])
@@ -6500,6 +6739,9 @@ BOOL isNumeric(NSString *s)
         if ([rekursiveRueckgabeAllFoundClasses count] > 0)
             [self instableXML:@"<class> liefert was in 10 zurück. Da muss ich mir was überlegen!"];
 
+
+        // Falls im HTML-Code Text mit ' auftaucht, müssen wir das escapen.
+        rekursiveRueckgabeOutput = [rekursiveRueckgabeOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
 
 
         // In manchen JS/jQuery tauchen " auf, die müssen escaped werden
@@ -6539,6 +6781,7 @@ BOOL isNumeric(NSString *s)
         rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
+        rekursiveRueckgabeJsHeadOutput = [rekursiveRueckgabeJsHeadOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
 
 
 
@@ -6551,8 +6794,11 @@ BOOL isNumeric(NSString *s)
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeOutput];
         [self.jsOLClassesOutput appendString:@"';\n\n"];
 
+        [self.jsOLClassesOutput appendString:@"  this.contentLeadingJSHead = \""];
+        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsHeadOutput];
+        [self.jsOLClassesOutput appendString:@"\";\n\n"];
 
-        [self.jsOLClassesOutput appendString:@"  this.contentJsHead2 = \""];
+        [self.jsOLClassesOutput appendString:@"  this.contentJSHead = \""];
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsHead2Output];
         [self.jsOLClassesOutput appendString:@"\";\n\n"];
 
@@ -6816,10 +7062,13 @@ BOOL isNumeric(NSString *s)
         if ([self.collectedFrameResources count] == 0)
             return;
 
+        [self.jsHeadOutput appendString:@"// 'resourcen' -> Diese werden später an das korrekte Objekt gebunden.\n"];
+        [self.jsHeadOutput appendString:@"// Bewusst ohne 'var', damit beim auswerten einer <class> verfügbar.\n"];
+
         // Erst nachdem die Resource beendet wurde wissen wir ob wir ein Array anlegen müssen oder nicht
         if ([self.collectedFrameResources count] == 1)
         {
-            [self.jsHeadOutput appendString:@"var "];
+            // [self.jsHeadOutput appendString:@"var "];
             [self.jsHeadOutput appendString:self.last_resource_name_for_frametag];
             [self.jsHeadOutput appendString:@" = \""];
             [self.jsHeadOutput appendString:[self.collectedFrameResources objectAtIndex:0]];
@@ -6827,17 +7076,17 @@ BOOL isNumeric(NSString *s)
         }
         else // Okay, mehrere Einträge vorhanden, also müssen wir ein Array anlegen
         {
-            [self.jsHeadOutput appendString:@"var "];
+            // [self.jsHeadOutput appendString:@"var "];
             [self.jsHeadOutput appendString:self.last_resource_name_for_frametag];
             [self.jsHeadOutput appendString:@" = new Array();\n"];
             for (int i=0; i<[self.collectedFrameResources count]; i++)
             {
                 [self.jsHeadOutput appendString:self.last_resource_name_for_frametag];
                 [self.jsHeadOutput appendString:@"["];
-                [self.jsHeadOutput appendString:[NSString stringWithFormat:@"%d" ,i]];
-                [self.jsHeadOutput appendString:@"] = \""];
+                [self.jsHeadOutput appendFormat:@"%d" ,i];
+                [self.jsHeadOutput appendString:@"] = '"];
                 [self.jsHeadOutput appendString:[self.collectedFrameResources objectAtIndex:i]];
-                [self.jsHeadOutput appendString:@"\"\n"];
+                [self.jsHeadOutput appendString:@"';\n"];
             }
             [self.jsHeadOutput appendString:@"\n"];
         }
@@ -6887,7 +7136,6 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"combobox"] ||
         [elementName isEqualToString:@"datacombobox"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
-        [elementName isEqualToString:@"statictext"] ||
         [elementName isEqualToString:@"stableborderlayout"] ||
         [elementName isEqualToString:@"textlistitem"] ||
         [elementName isEqualToString:@"scrollview"] ||
@@ -6936,14 +7184,19 @@ BOOL isNumeric(NSString *s)
 
 
     // Schließen von BDStext
-    if ([elementName isEqualToString:@"BDStext"])
+    if ([elementName isEqualToString:@"BDStext"] || [elementName isEqualToString:@"statictext"])
     {
         element_geschlossen = YES;
 
         // Immer auf nil testen, sonst kann es abstürzen hier
         NSString *s = @"";
         if (self.textInProgress != nil)
+        {
             s = self.textInProgress;
+
+            self.textInProgress = nil;
+            self.keyInProgress = nil;
+        }
 
         // Remove leading and ending Whitespaces and NewlineCharacters
         s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -6954,7 +7207,7 @@ BOOL isNumeric(NSString *s)
 
         // Ab jetzt dürfen wieder Tags gesetzt werden.
         self.weAreInBDStextAndThereMayBeHTMLTags = NO;
-        NSLog(@"BDStext was closed. I will not any longer skip tags.");
+        NSLog(@"BDStext/statictext was closed. I will not any longer skip tags.");
 
         [self.output appendString:@"</div>\n"];
     }
@@ -7116,11 +7369,12 @@ BOOL isNumeric(NSString *s)
         // Immer auf nil testen, sonst kann es abstürzen hier
         NSString *s = @"";
         if (self.textInProgress != nil)
+        {
             s = self.textInProgress;
+            self.textInProgress = [NSMutableString stringWithString:@""];
+        }
         NSLog([NSString stringWithFormat:@"Original code defined in handler: \n**********\n%@\n**********",s]);
 
-        // Remove leading and ending Whitespaces and NewlineCharacters
-        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
         /*
         // This ersetzen - JQuery-Zugriff herstellen
@@ -7141,14 +7395,23 @@ BOOL isNumeric(NSString *s)
         // OL benutzt 'classroot' als Variable für den Zugriff auf das erste in einer Klasse
         // definierte Elemente. Deswegen, falls wir eine Klasse auswerten, einfach die Var setzen
         if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-            [self.jQueryOutput appendFormat:@"var classroot = %@;\n\n    ",ID_REPLACE_STRING];
+            [self.jQueryOutput appendFormat:@"var classroot = %@;\n    ",ID_REPLACE_STRING];
 
-        [self.jQueryOutput appendString:s];
 
         if (self.onInitInHandler)
-            [self.jQueryOutput appendString:@"\n  }\n"];
+        {
+            [self.jQueryOutput appendString:s];
+            [self.jQueryOutput appendFormat:@"\n    }\n  }\n  bindMeToCorrectScope.bind(%@)();\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1]];
+        }
         else
-            [self.jQueryOutput appendString:@"\n  });\n"];
+        {
+            // Gemäß OpenLaszlo reagieren, entgegen JS, eventuelle Kinder nicht auf das Ereignis!
+            // Deswegen diese Zeile davorschalten. Variable 'e' wurde vorher als Argument gesetzt
+            [self.jQueryOutput appendString:@"if (this == e.target) {\n      with (this) {\n"];
+
+            [self.jQueryOutput appendString:s];
+            [self.jQueryOutput appendString:@"\n      }\n    }\n  });\n"];
+        }
 
         // Erkennungszeichen für oninit in jedem Fall zurücksetzen
         self.onInitInHandler = NO;
@@ -7172,8 +7435,8 @@ BOOL isNumeric(NSString *s)
         if (self.textInProgress != nil)
             s = self.textInProgress;
 
-        // Remove leading and ending Whitespaces and NewlineCharacters
-        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        NSLog([NSString stringWithFormat:@"Original code defined in method: \n**********\n%@\n**********",s]);
+
 
         // tabs eliminieren
         while ([s rangeOfString:@"\t"].location != NSNotFound)
@@ -7198,19 +7461,17 @@ BOOL isNumeric(NSString *s)
         // s = [s stringByReplacingOccurrencesOfString:@"this" withString:@"$(this)"];
 
 
+        NSLog([NSString stringWithFormat:@"Modified code changed to in method: \n**********\n%@\n**********",s]);
 
 
-        // s = @"alert('test')";
         [self.jQueryOutput0 appendString:s];
         [self.jQueryOutput0 appendString:@"\n  }\n"];
 
-        // ToDo => Lösungsvorschlag: In allen Methoden parent() durch jQuerys-parent-Methode
-        // ersetzen und dann noch get(0) dahinter, um auf das JS-Objekt zu kommmen.
-        // Ungefähr so: alert($(this).parent().get(0).setVeranlagung);
-        // Dazu muss aber erst <class> komplett ausgewertet werden!!!! Sonst gibt es die Methode
-        // setVeranlagung gar nicht im parent()....
+
+        // Neu gelöst über die Methode getTheParent(), die an alle Objekte prototyped wird
+        /************************* Die Schummelei hier hat ein Ende *************************
         // Alles was ich als Funktion in das Objekt gepackt habe auch erstmal in 'parent' packen
-        [self.jQueryOutput0 appendString:@"  // Hier nochmal etwas schummeln und ebenfalls zu parent hinzufügen, die eben definierte Funktion.\n"]; // ToDo
+        [self.jQueryOutput0 appendString:@"  // Hier nochmal etwas schummeln und ebenfalls zu parent hinzufügen, die eben definierte Funktion.\n"];
         // Analoge Abfrage wie beim betreten des Tags:
         if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"canvas"] ||
             [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"library"])
@@ -7221,6 +7482,7 @@ BOOL isNumeric(NSString *s)
         {
             [self.jQueryOutput0 appendFormat:@"  parentKlasse.prototype.%@ = %@.%@;\n",self.lastUsedNameAttribute,[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],self.lastUsedNameAttribute];
         }
+        ************************* Die Schummelei hier hat ein Ende *************************/
     }
 
 
@@ -7263,7 +7525,7 @@ BOOL isNumeric(NSString *s)
 
 
     // bei den HTML-Tags innerhalb von BDStext darf ich self.textInProgress nicht auf nil setzen,
-    // da ich den Text ja weiter ergänze.
+    // da ich den Text ja weiter ergänze. Erst ganz am Ende beim Schließen von BDSText mache ich das.
     if (!self.weAreInBDStextAndThereMayBeHTMLTags)
     {
         // Clear the text and key
@@ -7375,9 +7637,8 @@ BOOL isNumeric(NSString *s)
 
     [pre appendString:@"\n<script type=\"text/javascript\">\n"];
 
-    // Wird derzeit nicht ins JS ausgegeben, da die Bilder usw. direkt im Code stehen.
-    // (Soll das so bleiben?) To Check
-    // ... [pre appendString:self.jsHeadOutput]; ...
+    // Muss auch ausgegeben werde! Auf die resourcen wird per JS unter Umständen zugegriffen
+    [pre appendString:self.jsHeadOutput];
 
     // erstmal nur die mit resource gesammelten globalen vars ausgeben
     // (+ globale Funktionen + globales JS)
@@ -7566,16 +7827,12 @@ BOOL isNumeric(NSString *s)
     "/*\n"
     "Known issues:\n"
     "inherit => Not supported by IE6 & IE 7; hilft ersetzen durch auto?\n"
-    "\n"
-    "- simplelayout muss das erste element sein bei aufeinanderfolgenden Schwester-Elementen\n"
     "- keine Unterstützung für Sound-Resourcen\n"
     "\n"
     "\n"
     "ToDo\n"
     "- Kommentare gehen verloren (keep comments als Option mit anbieten)\n"
     "- Von BDSeditdate und BDScombobox den Anfangscode zusammenfassen (ist gleich)\n"
-    "- Bei views Layout-Attribut beachten: Dazu wohl Simplelayout-Test als eigene Methode;\n"
-    "- style.height in check4somplelayout kann/muss ich wohl ersetzen mit offsetHeight\n"
     "- 1000px großes bild soll nur bis zum Bildschirmrand gehen\n"
     "- und zusätzlich sich selbst aktualisieren, wenn Bildschirmhöhe verändert wird\n"
     " */\n"
@@ -7718,6 +7975,21 @@ BOOL isNumeric(NSString *s)
     "    margin-bottom:6px;\n" // ToCheck (Die Zeile eins drüber)
     "}\n"
     "\n"
+    "/* CSS-Angaben für ein RollUpDownPanel (gleichzeit Erkennungszeichen für getTheParent() */\n"
+    ".div_rudPanel\n"
+    "{\n"
+    "    position: relative;\n"
+    "    overflow-y:auto;\n"
+    "    overflow-x:hidden;\n"
+    "    top:0px;\n"
+    "    left:0px;\n"
+    "    margin-bottom:6px;\n"
+    "    border-width:2px;\n"
+    "    border-color:lightgrey;\n"
+    "    border-style:solid;\n"
+    "    background-color:white;\n"
+    "}\n"
+    "\n"
     "/* Standard-datepicker (das umgebende Div) */\n"
     ".div_datepicker\n"
     "{\n"
@@ -7858,6 +8130,35 @@ BOOL isNumeric(NSString *s)
     "        yearSuffix: ''};\n"
     "    $.datepicker.setDefaults($.datepicker.regional['de']);\n"
     "});\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// bind() für ältere Browser nachrüsten                  \n"
+    "// https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Function/bind\n"
+    "/////////////////////////////////////////////////////////\n"
+    "if (!Function.prototype.bind) {\n"
+    "    Function.prototype.bind = function (oThis) {\n"
+    "        if (typeof this !== 'function') {\n"
+    "            // closest thing possible to the ECMAScript 5 internal IsCallable function\n"
+    "            throw new TypeError('Function.prototype.bind - what is trying to be bound is not callable');\n"
+    "        }\n"
+    "\n"
+    "        var aArgs = Array.prototype.slice.call(arguments, 1),\n"
+    "        fToBind = this,\n"
+    "        fNOP = function () {},\n"
+    "        fBound = function () {\n"
+    "            return fToBind.apply(this instanceof fNOP\n"
+    "                                 ? this\n"
+    "                                 : oThis,\n"
+    "                                 aArgs.concat(Array.prototype.slice.call(arguments)));\n"
+    "        };\n"
+    "\n"
+    "        fNOP.prototype = this.prototype;\n"
+    "        fBound.prototype = new fNOP();\n"
+    "\n"
+    "        return fBound;\n"
+    "    };\n"
+    "}\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -8115,7 +8416,6 @@ BOOL isNumeric(NSString *s)
     "      var visible = $(idAbhaengig).is(':visible')\n"
     "  }\n"
     "\n"
-    "  // if (this.cbtype === undefined) parent.cbType = cbType; // Schummelvariable (ToDo)\n"
     "\n"
     "  console.log('Bedingung: '+bedingungAlsString)\n"
     "\n"
@@ -8157,15 +8457,46 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// globales lz-Objekt (ToDo)\n"
+    "// DIE lz-Klasse mit allen Services als Klassen.       //\n"
+    "//  Die Services definieren darin ihre Methoden.       //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var lz = new Object();\n"
-    "lz.Cursor = new Object(); // ToDo\n"
-    "lz.Cursor.restoreCursor = function() {}; // ToDo\n"
-    "lz.Browser = new Object();\n"
-    "lz.Browser.getInitArg = getInitArg;\n"
-    "setid = function() {}; // <-- Wird in lz.Browser.callJS aufgerufen\n"
-    "lz.Browser.callJS = function(method,callback,args) { window[method](args); };\n"
+    "function lz_MetaClass() {\n"
+    "    this.FocusService = function() {\n"
+    "        this.setFocus = function(a) {\n"
+    "            $(a).focus();\n"
+    "        }\n"
+    "        this.getFocus = function() {\n"
+    "            alert('ToDo! (getFocus');\n"
+    "        }\n"
+    "        this.clearFocus = function() {\n"
+    "            alert('ToDo! (clearFocus)');\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "    this.CursorService = function() {\n"
+    "        this.restoreCursor = function() {\n"
+    "            alert('ToDo! (restoreCursor)');\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "    this.BrowserService = function() {\n"
+    "        this.getInitArg = getInitArg;\n"
+    "        this.callJS = function(method,callback,args) {\n"
+    "            window[method](args); };\n"
+    "    }\n"
+    "}\n"
+    "var lz = new lz_MetaClass();\n"
+    "// lz.Focus is the single instance of the class lz.FocusService\n"
+    "lz.Focus = new lz.FocusService();\n"
+    "// lz.Cursor is the single instance of the class lz.CursorService\n"
+    "lz.Cursor = new lz.CursorService();\n"
+    "// lz.Browser is the single instance of the class lz.BrowserService.\n"
+    "lz.Browser = new lz.BrowserService();\n"
+    "\n"
+    "\n"
+    "setid = function() {}; // <-- Wird in lz.Browser.callJS aufgerufen ??\n"
     "\n"
     "function LzContextMenu() { }\n"
     "\n"
@@ -8290,10 +8621,37 @@ BOOL isNumeric(NSString *s)
     "value: function(reference) {\n"
     "    if ($(this).get(0).nodeName === undefined && (typeof reference === 'undefined'))\n"
     "        throw \"getTheParent() von 'DOMWindow' aus aufgerufen und kein Argument übergeben. Dies ist Unsinn: DOMWindow hat keinen parent + Argument, von dem einer ermittelt werden könnte, ist nicht vorhanden.\";\n"
+    "\n"
     "    if ($(this).get(0).nodeName === undefined) /*sprich: this=DOMWindow*/\n"
-    "        return $(reference).parent().get(0);\n"
+    "    {\n"
+    "        var p = $(reference).parent();\n"
+    "        if ($(reference).is('input') || $(reference).is('select'))\n"
+    "        {\n"
+    "            // input's und select's haben ein umgebendes id-loses div. Das müssen wir überspringen.\n"
+    "            p = p.parent();\n"
+    "        }\n"
+    "        if ($(p).hasClass('div_rudPanel'))\n"
+    "        {\n"
+    "            // Das Rud-Element besteht aus mehreren Elementen, da muss ich gegebenenfalls eine Ebene höher springen.\n"
+    "            p = p.parent();\n"
+    "        }\n"
+    "        return p.get(0);\n"
+    "    }\n"
     "    else\n"
-    "        return $(this).parent().get(0);\n"
+    "    {\n"
+    "        var p = $(this).parent();\n"
+    "        if ($(this).is('input') || $(this).is('select'))\n"
+    "        {\n"
+    "            // input's und select's haben ein umgebendes id-loses div. Das müssen wir überspringen.\n"
+    "            p = p.parent();\n"
+    "        }\n"
+    "        if ($(p).hasClass('div_rudPanel'))\n"
+    "        {\n"
+    "            // Das Rud-Element besteht aus mehreren Elementen, da muss ich gegebenenfalls eine Ebene höher springen.\n"
+    "            p = p.parent();\n"
+    "        }\n"
+    "        return p.get(0);\n"
+    "    }\n"
     "}\n"
     "});\n"
     "\n"
@@ -8326,8 +8684,8 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "    var me = globalMe;\n"
-    "    if (this.nodeName == 'DIV' || this.nodeName == 'INPUT')\n"
-    "      me = this;\n"
+    "    if (this.nodeName == 'DIV' || this.nodeName == 'INPUT' || this.nodeName == 'SELECT')\n"
+    "      me = this; // Wir wurden aus einem Kontext heraus aufgerufen x.setAttribute() - Und nicht aus DOMWindow\n"
     "\n"
     "    if (attributeName == 'text')\n"
     "    {\n"
@@ -8339,15 +8697,30 @@ BOOL isNumeric(NSString *s)
     "          $(me).html(value);\n"
     "    }\n"
     "    else if (attributeName == 'bgcolor')\n"
+    "    {\n"
     "        $(me).css('background-color',value);\n"
+    "    }\n"
+    "    else if (attributeName == 'x')\n"
+    "    {\n"
+    "        $(me).css('left',value);\n"
+    "    }\n"
+    "    else if (attributeName == 'y')\n"
+    "    {\n"
+    "        $(me).css('top',value);\n"
+    "    }\n"
+    "    else if (attributeName == 'frame')\n"
+    "    {\n"// ToDo: Wenn typeof NICHT Array ist, dann kann ich nicht per [i] zugreifen+es gibt gar keine frames!
+    "        $(me).css('background-image','url('+this.resource[i]+')');\n"
+    "    }\n"
     "    else if (attributeName == 'enabled' && $(me).is('input'))\n"
     "    {\n"
     "        $(me).get(0).disabled = !value;\n"
     "\n"
-    "    if ($(me).attr('type') === 'checkbox' && $(me).next().is('span') && $(me).next().css('color') == 'rgb(0, 0, 0)' && value == false)\n"
-    "        $(me).next().css('color','darkgrey');\n"
-    "    if ($(me).attr('type') === 'checkbox' && $(me).next().is('span') && $(me).next().css('color') == 'rgb(169, 169, 169)' && value == true)\n"
-    "        $(me).next().css('color','black');\n"
+    "      // Auch die Textfarbe des zugehörigen Textes anpassen\n"
+    "      if ($(me).attr('type') === 'checkbox' && $(me).next().is('span') && $(me).next().css('color') == 'rgb(0, 0, 0)' && value == false)\n"
+    "          $(me).next().css('color','darkgrey');\n"
+    "      if ($(me).attr('type') === 'checkbox' && $(me).next().is('span') && $(me).next().css('color') == 'rgb(169, 169, 169)' && value == true)\n"
+    "          $(me).next().css('color','black');\n"
     "    }\n"
     "    else\n"
     "      alert('ToDo. Aufruf von setAttribute, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
@@ -8395,7 +8768,32 @@ BOOL isNumeric(NSString *s)
     "/* ----wohl doch nicht nötig. ToDo (Delete)---- function unsetGlobalMe()\n"
     "{\n"
     "    globalMe = undefined;\n"
-    "} */";
+    "} */\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// sendToBack() - nachimplementiert                    //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var sendToBackFunction = function (oThis) {\n"
+    "    $(this).css('z-index','-1');\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.sendToBack = sendToBackFunction;\n"
+    "HTMLInputElement.prototype.sendToBack = sendToBackFunction;\n"
+    "HTMLSelectElement.prototype.sendToBack = sendToBackFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// bringToFront() - nachimplementiert                    //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var bringToFrontFunction = function (oThis) {\n"
+    "    $(this).css('z-index','auto');\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.bringToFront = bringToFrontFunction;\n"
+    "HTMLInputElement.prototype.bringToFront = bringToFrontFunction;\n"
+    "HTMLSelectElement.prototype.bringToFront = bringToFrontFunction;\n"
+    "\n";
 
 
 
@@ -8439,7 +8837,7 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
-    "//  Mit dieser funktion werden alle Objekte ausgewert        //\n"
+    "//  Mit dieser Funktion werden alle Objekte ausgewertet      //\n"
     "///////////////////////////////////////////////////////////////\n"
     "// Aus obj ziehen wir den ganzen Inhalt raus, wie das Objekt aussehen muss\n"
     "// und id wird dem entsprechend mit allen Attributen und Methoden erweitert.\n"
@@ -8515,6 +8913,20 @@ BOOL isNumeric(NSString *s)
     "      if (an[i] === 'bgcolor')\n"
     "        an[i] = 'background-color';\n"
     "\n"
+    "        if (av[i].startsWith('${')) // = Computed value\n"
+    "        {\n"
+    "            av[i] = av[i].substring(2,av[i].length-1);\n"
+    "\n"
+    "            av[i] = av[i].replace('parent','$(id.getTheParent())');\n"
+    "\n"
+    "            av[i] = av[i].replace('width','width()');\n"
+    "\n"
+    "            av[i] = av[i].replace('height','height()');\n"
+    "\n"
+    "            var result = eval(av[i]);\n"
+    "            av[i] = result;\n"
+    "        }\n"
+    "\n"
     "      if (jQuery.inArray(an[i],attrArr) == -1)\n"
     "        $(id).css(an[i],av[i]);\n"
     "    }\n"
@@ -8557,9 +8969,24 @@ BOOL isNumeric(NSString *s)
     //"  // $(id).html(s);\n"
     "  $(id).append(s);\n"
     "\n"
+    "  // Replace-IDs von contentLeadingJSHead ersetzen\n"
+    "  var s = replaceID(obj.contentLeadingJSHead,$(id).attr('id'));\n"
+    "  // Dann den LeadingJSHead-Content hinzufügen/auswerten\n"
+    "  evalCode(s);\n"
+    "\n"
+    "  // Replace-IDs von contentJSHead ersetzen\n"
+    "  var s = replaceID(obj.contentJSHead,$(id).attr('id'));\n"
+    "  // Dann den JSHead-Content hinzufügen/auswerten\n"
+    "  evalCode(s);\n"
+    "\n"
+    "  // Replace-IDs von contentJS ersetzen\n"
+    "  var s = replaceID(obj.contentJS,$(id).attr('id'));\n"
+    "  // Dann den JS-Content hinzufügen/auswerten\n"
+    "  evalCode(s);\n"
+    "\n"
     "  // Replace-IDs von contentLeadingJQuery ersetzen\n"
     "  var s = replaceID(obj.contentLeadingJQuery,$(id).attr('id'));\n"
-    "  // Dann den LeadingJQuery-Content hinzufügen\n"
+    "  // Dann den LeadingJQuery-Content hinzufügen/auswerten\n"
     "  // evalCode benötigt Referenz auf id, damit es Methoden direkt adden kann\n"
     "  evalCode(s,id);\n"
     "\n"
@@ -8568,7 +8995,7 @@ BOOL isNumeric(NSString *s)
     // Hmm, ne, es muss analog wie bei obj.contentHTML und obj.contenLeadingJquery sein,
     // die beiden id's greifen wechselseitig aufeinander zu
     "  var s = replaceID(obj.contentJQuery,$(id).attr('id'));\n"
-    "  // Dann den jQuery-Content hinzufügen\n"
+    "  // Dann den jQuery-Content hinzufügen/auswerten\n"
     "  evalCode(s);\n"
     "\n"
     "}\n"

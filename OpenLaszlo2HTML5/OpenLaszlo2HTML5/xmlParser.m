@@ -114,6 +114,8 @@ BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber
 // eine entsprechende Anpassung der dafür von jQueri UI benutzten Klassen vorgenommen
 @property (strong, nonatomic) NSString *lastUsedTabSheetContainerID;
 
+@property (strong, nonatomic) NSString *rememberedID4closingSelfDefinedClass;
+
 
 // "method" muss derzeit noch das name-attribut nach didEndElement rüberretten, damit ich
 // auch die parentKlasse setzen kann. In Zukunft aber neues Konzept für parent =>
@@ -206,7 +208,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize datasetItemsCounter = _datasetItemsCounter, rollupDownElementeCounter = _rollupDownElementeCounter;
 
-@synthesize animDuration = _animDuration, lastUsedTabSheetContainerID = _lastUsedTabSheetContainerID, lastUsedNameAttribute = _lastUsedNameAttribute;
+@synthesize animDuration = _animDuration, lastUsedTabSheetContainerID = _lastUsedTabSheetContainerID, rememberedID4closingSelfDefinedClass = _rememberedID4closingSelfDefinedClass, lastUsedNameAttribute = _lastUsedNameAttribute;
 
 @synthesize allJSGlobalVars = _allJSGlobalVars;
 
@@ -360,6 +362,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         self.animDuration = @"slow";
         self.lastUsedTabSheetContainerID = @"";
+        self.rememberedID4closingSelfDefinedClass = @"";
         self.lastUsedDataset = @"";
         self.lastUsedNameAttribute = @"";
 
@@ -6563,14 +6566,14 @@ didStartElement:(NSString *)elementName
 
         // Ich muss die Stelle einmal markieren...
         // standardmäßig wird immer von 'view' geerbt, deswegen hier als class 'div_standard'.
-        // Wird falls nötig auf Javascript-Ebene von der Funktion interpretObject() ausgetauscht.
+        // Wird falls nötig auf Javascript-Ebene von der Funktion interpretObject() mit Attributen erweitert.
         [self.output appendString:@"<div"];
         [self addIdToElement:attributeDict];
         [self.output appendString:@" class=\"div_standard\" style=\""];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
-        [self.output appendString:@"\"></div>\n"];
+        [self.output appendString:@"\">\n"];
 
 
         [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]]];
@@ -6588,6 +6591,9 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'setfocus'.");
          }
+
+
+        self.rememberedID4closingSelfDefinedClass = self.zuletztGesetzteID;
 
 
         // Okay, jQuery-Code mache ich beim schließen, weil ich erst den eventuellen Text der
@@ -7524,6 +7530,12 @@ BOOL isNumeric(NSString *s)
 
         NSLog(@"Schließendes Tag einer selbst definierten Klasse gefunden!");
 
+
+        // Schließen
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"</div>\n"];
+
+
         // Immer auf nil testen, sonst kann es abstürzen hier
         NSString *s = @"";
         if (self.textInProgress != nil)
@@ -7534,14 +7546,13 @@ BOOL isNumeric(NSString *s)
 
 
         // Und dann kann ich es per jQuery flexibel einfügen.
-        // Grrr
         // ToDo: Okay, hier muss ich jetzt per jQuery die Objekte
         // auslesen aus der JS-Datei collectedClasses.js
         [self.jQueryOutput appendFormat:@"\n  // Klasse '%@' wurde instanziert in '%@'",elementName,self.zuletztGesetzteID];
         [self.jQueryOutput appendFormat:@"\n  // Instanz erzeugen, id holen, Objekt auswerten"];
         [self.jQueryOutput appendFormat:@"\n  var obj = new %@('%@');",elementName,s];
-        [self.jQueryOutput appendFormat:@"\n  var id = document.getElementById('%@');",self.zuletztGesetzteID];
-        [self.jQueryOutput appendFormat:@"\n  interpretObject(obj,id);\n",elementName, self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"\n  var id = document.getElementById('%@');",self.rememberedID4closingSelfDefinedClass];
+        [self.jQueryOutput appendString:@"\n  interpretObject(obj,id);\n"];
     }
 
 
@@ -8967,7 +8978,7 @@ BOOL isNumeric(NSString *s)
     "// READ-ONLY                                           //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'subviews', {\n"
-    "    get : function(){ return $(this).find().get(); },\n"
+    "    get : function(){ return $(this).find('*').get(); },\n"
     "    /* READ-ONLY set : , */\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -9133,13 +9144,22 @@ BOOL isNumeric(NSString *s)
     "      {\n"
     "        // ToDo\n"
     "      }\n"
-    "      else if (an[i] === 'layout' && !av[i].contains('class') &&  av[i].contains('y'))\n"
+    "      else if (an[i] === 'layout' && !av[i].contains('class') &&  av[i].replace(/\\s/g,'').contains('axis:x'))\n"
     "      {\n"
-    "        var spacing = av[i].betterParseInt();\n"
+    "        var spacing = parseInt(av[i].betterParseInt());\n"
     "        for (var i = 1; i < $(id).children().length; i++) {\n"
     "          var kind = $(id).children().eq(i);\n"
     "          var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + spacing;\n"
     "          kind.css('left',leftValue+'px');\n"
+    "        }\n"
+    "      }\n"
+    "      else if (an[i] === 'layout' && !av[i].contains('class') &&  av[i].replace(/\\s/g,'').contains('axis:y'))\n"
+    "      {\n"
+    "        var spacing = parseInt(av[i].betterParseInt());\n"
+    "        for (var i = 1; i < $(id).children().length; i++) {\n"
+    "          var kind = $(id).children().eq(i);\n"
+    "          var topValue = kind.prev().get(0).offsetTop + kind.prev().outerHeight() + spacing;\n"
+    "          kind.css('top',topValue+'px');\n"
     "        }\n"
     "      }\n"
     "      else { alert('Hoppala, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() als jsAttribute ausgewertet werden.'); }\n"

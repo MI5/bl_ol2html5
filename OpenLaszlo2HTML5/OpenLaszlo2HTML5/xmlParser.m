@@ -4,8 +4,6 @@
 //
 //
 //
-// im direkten onClick (nicht handler), da kann ich wohl setGlobalMe(this); durch with (this {}
-// ersetzen (Im Handler ist es schon ersetzt....)
 //
 //
 //
@@ -931,6 +929,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         
         [style appendString:@"font-weight:"];
         [style appendString:[attributeDict valueForKey:@"fontstyle"]];
+        [style appendString:@";"];
     }
 
 
@@ -980,6 +979,8 @@ void OLLog(xmlParser *self, NSString* s,...)
             NSLog(@"Skipping the attribute 'align=${classroot.textalign}' for now.");
         }
     }
+
+
     if ([attributeDict valueForKey:@"clip"])
     {
         if ([[attributeDict valueForKey:@"clip"] isEqual:@"false"])
@@ -1001,6 +1002,22 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
     }
 
+
+    // Das eigentliche onClick wird in 'addJS' behandelt, hier nur das pointer-event korrigieren!
+    // Deswegen auch nicht attributeCount erhöhen.
+    // pointer-events: auto; setzen, weil es war vorher auf none gesetzt, damit verschachtelte
+    // divs, welche keine Kind-Eltern-Beziehung haben, nicht die Klicks wegnehmen können von
+    // da drunter liegenden Elementen. Warum auch immer das in OL so ist:
+    // Beweis samplecode:
+    // <canvas height="500" width="500"><view width="120" height="120" bgcolor="yellow">
+    // <view width="100" height="100" bgcolor="red" clip="true">
+    // <view width="80" height="80" bgcolor="purple">
+    // <view width="30" height="30" bgcolor="blue" onclick="this.mask.setAttribute('bgcolor','green');"/><view width="10" height="10" bgcolor="white" />
+    // </view></view></view></canvas>
+    if ([attributeDict valueForKey:@"onclick"])
+    {
+        [style appendString:@"pointer-events:auto;"];
+    }
 
 
 
@@ -1658,6 +1675,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.attributeCount++;
         NSLog(@"Setting the attribute 'onclick' as jQuery.");
 
+
         NSString *s = [attributeDict valueForKey:@"onclick"];
         // Remove all occurrences of $,{,}
         // Wohl doch nicht nötig (und bricht sonst auch selbst definierte Funktionen, welche { und } benutzen
@@ -1674,13 +1692,15 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
         NSMutableString *gesammelterCode = [[NSMutableString alloc] initWithString:@""];
-        [gesammelterCode appendString:@"\n  // JS-onClick-event\n  $('#"];
+        [gesammelterCode appendString:@"\n  // JS-onClick-event (anstelle des Attributs onClick)\n  $('#"];
         [gesammelterCode appendString:idName];
         [gesammelterCode appendString:@"').click(function(){"];
-        [gesammelterCode appendString:@"setGlobalMe(this); "];
+        // [gesammelterCode appendString:@"setGlobalMe(this); "];
+        [gesammelterCode appendString:@" with (this) { "];
         [gesammelterCode appendString:s];
         // if (![s hasSuffix:@";"])
         //     [gesammelterCode appendString:@";"];
+        [gesammelterCode appendString:@" } "];
         // [gesammelterCode appendString:@" unsetGlobalMe;"];
         [gesammelterCode appendString:@"});"];
 
@@ -3468,7 +3488,7 @@ didStartElement:(NSString *)elementName
         }
 
 
-        [self.output appendString:@" class=\"div_standard\" style=\""];
+        [self.output appendString:@" class=\"div_standard noPointerEvents\" style=\""];
 
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
@@ -6069,6 +6089,10 @@ didStartElement:(NSString *)elementName
 
         NSString *enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
 
+
+        [self.jQueryOutput appendString:@"\n  // pointer-events zulassen, da ein Handler an dieses Element gebunden ist."];
+        [self.jQueryOutput appendFormat:@"\n  $('#%@').css('pointer-events','auto');\n",enclosingElem];
+
         if ([attributeDict valueForKey:@"name"])
         {
             if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onclick"])
@@ -7054,13 +7078,6 @@ BOOL isNumeric(NSString *s)
 
 
 
-    if ([elementName isEqualToString:@"simplelayout"])
-    {
-        element_geschlossen = YES;
-    }
-
-
-
     if ([elementName isEqualToString:@"resource"])
     {
         element_geschlossen = YES;
@@ -7112,7 +7129,8 @@ BOOL isNumeric(NSString *s)
 
 
     // Bei diesen Elementen muss beim schließen nichts unternommen werden
-    if ([elementName isEqualToString:@"BDSedit"] ||
+    if ([elementName isEqualToString:@"simplelayout"] ||
+        [elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDSeditdate"] ||
         [elementName isEqualToString:@"BDScombobox"] ||
         [elementName isEqualToString:@"BDScheckbox"] ||
@@ -7955,6 +7973,8 @@ BOOL isNumeric(NSString *s)
 	"    top:0px;\n"
 	"    left:0px;\n"
     "\n"
+    "    pointer-events: auto;\n"
+    "\n"
     "    /* cursor:pointer; bricht Text-input-Felder. Da muss natürlich der Caret bleiben */\n"
     "}\n"
     "\n"
@@ -7969,6 +7989,8 @@ BOOL isNumeric(NSString *s)
     "\n"
     "    border-style:solid; /* Bei Bedarf auskommentieren */\n"
     "    border-width:0; /* Bei Bedarf auskommentieren */\n"
+    "\n"
+    "    pointer-events: auto;\n"
     "}\n"
     "\n"
     "/* Standard-combobox (das umgebende Div) */\n"
@@ -7980,6 +8002,8 @@ BOOL isNumeric(NSString *s)
     "    text-align:left;\n"
     "    padding:4px;\n"
     "    margin-top: 8px;\n"
+    "\n"
+    "    pointer-events: auto;\n"
     "}\n"
     "\n"
     "/* CSS-Angaben für den RollUpDownContainer */\n"
@@ -7994,6 +8018,8 @@ BOOL isNumeric(NSString *s)
     "    position: relative;\n"
     "    height:auto;\n" // War mal 'inherit', aber 'auto' erscheint mir logischer, ob was bricht?
     "    margin-bottom:6px;\n" // ToCheck (Die Zeile eins drüber)
+    "\n"
+    "    pointer-events: auto;\n"
     "}\n"
     "\n"
     "/* CSS-Angaben für ein RollUpDownPanel (gleichzeit Erkennungszeichen für getTheParent() */\n"
@@ -8009,6 +8035,8 @@ BOOL isNumeric(NSString *s)
     "    border-color:lightgrey;\n"
     "    border-style:solid;\n"
     "    background-color:white;\n"
+    "\n"
+    "    pointer-events: auto;\n"
     "}\n"
     "\n"
     "/* Standard-datepicker (das umgebende Div) */\n"
@@ -8022,6 +8050,8 @@ BOOL isNumeric(NSString *s)
     "    text-align:left;\n"
     "    padding:4px;\n"
     "    margin-top:8px;\n"
+    "\n"
+    "    pointer-events: auto;\n"
     "}\n"
     "\n"
     "/* Standard-checkbox (das umgebende Div) */\n"
@@ -8033,12 +8063,16 @@ BOOL isNumeric(NSString *s)
     "    text-align:left;\n"
     "    padding:4px;\n"
     "    margin-top:8px;\n"
+    "\n"
+    "    pointer-events: auto;\n"
     "}\n"
     "\n"
     "/* Standard-checkbox (die checkbox selber) */\n"
     ".input_checkbox\n"
     "{\n"
     "    cursor:pointer;\n"
+    "\n"
+    "    pointer-events: auto;\n"
     "}\n"
     "\n"
     "/* Standard-textfield (das umgebende Div) */\n"
@@ -8049,6 +8083,8 @@ BOOL isNumeric(NSString *s)
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
     "    text-align:left;\n"
     "    padding:2px;\n"
+    "\n"
+    "    pointer-events: auto;\n"
     "}\n"
     "\n"
     "/* Standard-Text (Text/BDStext) */\n"
@@ -8084,6 +8120,13 @@ BOOL isNumeric(NSString *s)
     "    user-select: none;\n"
     "}\n"
     "\n"
+    ".noPointerEvents\n"
+    "{\n"
+    "    pointer-events: none; /* Sonst kann ein drüber liegendes div Click-Events wegnehmen */\n"
+    "                         /* Wird auf 'auto' gesetzt, wenn wirklich ein event dort ist.*/\n"
+    "                         /* Won't work on IE */\n"
+    "}\n"
+    "\n"
     "#debugWindow\n"
     "{\n"
     "    width: 300px;\n"
@@ -8097,6 +8140,8 @@ BOOL isNumeric(NSString *s)
     "    border-color:black;\n"
     "    border-style:solid;\n"
     "    border-width:5px;\n"
+    "\n"
+    "    pointer-events: auto;\n"
     "}\n"
     "\n"
     "#debugInnerWindow\n"
@@ -8106,6 +8151,8 @@ BOOL isNumeric(NSString *s)
     "    height: 120px;\n"
     "    width: 300px;\n"
     "    overflow:scroll;\n"
+    "\n"
+    "    pointer-events: auto;\n"
     "}";
     if (positionAbsolute)
     {
@@ -8265,6 +8312,36 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Enthält ein String eine bestimmte Zeichenfolge?\n"
+    "/////////////////////////////////////////////////////////\n"
+    "if (typeof String.prototype.contains != 'function') {\n"
+    "    String.prototype.contains = function (str) {\n"
+    "        return this.indexOf(str) != -1;\n"
+    "    };\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// better parseInt()\n"
+    "/////////////////////////////////////////////////////////\n"
+    "if (typeof String.prototype.betterParseInt != 'function') {\n"
+    "    String.prototype.betterParseInt = function () {\n"
+    "        return this.replace(/[^\\d]/g, '');\n"
+    "    };\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// better parseFloat()\n"
+    "/////////////////////////////////////////////////////////\n"
+    "if (typeof String.prototype.betterParseFloat != 'function') {\n"
+    "    String.prototype.betterParseFloat = function () {\n"
+    "        return this.replace(/[^\\d.]/g, '');\n"
+    "    };\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// Macht alle übergebenen Objekte global per id verfügbar\n"
     "/////////////////////////////////////////////////////////\n"
     "function makeElementsGlobal(all) {\n"
@@ -8308,25 +8385,38 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Debug-Objekt, welches unter Umständen angesprochen wird\n"
+    "// true, wenn element2 element1 überlappt \n"
     "/////////////////////////////////////////////////////////\n"
-    "Debug = {};\n"
-    "Debug.debug = function(s,v) {\n"
-    "    s = s.replace('%s',v);\n"
-    "    s = s.replace('%w',v);\n"
-    "    s = s + '<br />'\n"
-    "    if ($('#debugInnerWindow').length)\n"
-    "        $('#debugInnerWindow').append(s)\n"
-    "    //alert(s)\n"
-    "};\n"
-    "Debug.write = function(s1,v) {\n"
-    "    var s = s1 + ' ' + v\n"
-    "    if ($('#debugInnerWindow').length)\n"
-    "        $('#debugInnerWindow').append(s + '<br />')\n"
-    "    else\n"
-    "        console.log(s)\n"
-    "    //alert(s)\n"
-    "};\n"
+    "function isOverlapping(element1, element2) {\n"
+    "    return findOverlappingElements(element1, element2).length > 0;\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Liefert aus einem Satz von Elementen, alle          //\n"
+    "// diejenigen zurück, welche das Zielobjekt überlappen.//\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function findOverlappingElements(targetSelector, elementsToScanSelector) {\n"
+    "    var overlappingElements = [];\n"
+    "\n"
+    "    var $target = $(targetSelector);\n"
+    "    var tAxis = $target.offset();\n"
+    "    var t_x = [tAxis.left, tAxis.left + $target.outerWidth()];\n"
+    "    var t_y = [tAxis.top, tAxis.top + $target.outerHeight()];\n"
+    "\n"
+    "    $(elementsToScanSelector).each(function() {\n"
+    "        var $this = $(this);\n"
+    "        var thisPos = $this.offset();\n"
+    "        var i_x = [thisPos.left, thisPos.left + $this.outerWidth()]\n"
+    "        var i_y = [thisPos.top, thisPos.top + $this.outerHeight()];\n"
+    "\n"
+    "        if ( t_x[0] < i_x[1] && t_x[1] > i_x[0] &&\n"
+    "            t_y[0] < i_y[1] && t_y[1] > i_y[0]) {\n"
+    "            overlappingElements.push($this);\n"
+    "        }\n"
+    "    });\n"
+    "    return overlappingElements;\n"
+    "}\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -8539,6 +8629,29 @@ BOOL isNumeric(NSString *s)
     "var LzDataElement = {};\n"
     "LzDataElement.stringToLzData = function() {};\n"
     "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Debug-Objekt, welches unter Umständen angesprochen wird\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Debug = {};\n"
+    "Debug.debug = function(s,v) {\n"
+    "    s = s.replace('%s',v);\n"
+    "    s = s.replace('%w',v);\n"
+    "    s = s + '<br />'\n"
+    "    if ($('#debugInnerWindow').length)\n"
+    "        $('#debugInnerWindow').append(s)\n"
+    "    //alert(s)\n"
+    "};\n"
+    "Debug.write = function(s1,v) {\n"
+    "    var s = s1 + ' ' + v\n"
+    "    if ($('#debugInnerWindow').length)\n"
+    "        $('#debugInnerWindow').append(s + '<br />')\n"
+    "    else\n"
+    "        console.log(s)\n"
+    "    //alert(s)\n"
+    "};\n"
+    "\n"
+    "\n"
     "/////////////////////////////////////////////////////////\n"
     "// jQuery\n"
     "/////////////////////////////////////////////////////////\n"
@@ -8708,9 +8821,10 @@ BOOL isNumeric(NSString *s)
     "        throw 'Error calling setAttribute, no argument value given (this = '+this+').';\n"
     "\n"
     "\n"
-    "    var me = globalMe;\n"
-    "    if (this.nodeName == 'DIV' || this.nodeName == 'INPUT' || this.nodeName == 'SELECT')\n"
-    "      me = this; // Wir wurden aus einem Kontext heraus aufgerufen x.setAttribute() - Und nicht aus DOMWindow\n"
+    //"    var me = globalMe;\n"
+    "    var me = this;\n"
+    //"    if (this.nodeName == 'DIV' || this.nodeName == 'INPUT' || this.nodeName == 'SELECT')\n"
+    //"      me = this; // Wir wurden aus einem Kontext heraus aufgerufen x.setAttribute() - Und nicht aus DOMWindow\n"
     "\n"
     "    if (attributeName == 'text')\n"
     "    {\n"
@@ -8751,15 +8865,15 @@ BOOL isNumeric(NSString *s)
     "      alert('ToDo. Aufruf von setAttribute, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
     "}\n"
     "\n"
-    "// Object.prototype ist verboten und bricht jQuery! Deswegen über defineProperty\n"
+    "// Object.prototype ist verboten und bricht jQuery und z.B. JS .split()! Deswegen über defineProperty\n"
     "// https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Object/defineProperty\n"
     "// Für alle JS-Objekte (insbesondere window => direkter Aufruf von setAttribute => Dann\n"
     "// auch Zusammenspiel mit globalMe (s.u))\n"
     "Object.defineProperty(Object.prototype, 'setAttribute_', {\n"
-    "enumerable: false, // Darf nicht auf 'true' gesetzt werden! Sonst bricht jQuery!\n"
-    "configurable: true,\n"
-    "writable: false,\n"
-    "value: setAttributeFunc\n"
+    "    enumerable: false, // Darf nicht auf 'true' gesetzt werden! Sonst bricht jQuery!\n"
+    "    configurable: true,\n"
+    "    writable: false,\n"
+    "    value: setAttributeFunc\n"
     "});\n"
     "\n"
     "// Für alle DOM-Objekte\n"
@@ -8777,23 +8891,23 @@ BOOL isNumeric(NSString *s)
     "// Aber HTMLDivElement... wtf Firefox??\n"
     "// HTMLDivElement.prototype.setAttribute = setAttributeFunc; <- Nicht mehr nötig seit setAttribute_\n"
     "// HTMLInputElement.prototype.setAttribute = setAttributeFunc; <- Nicht mehr nötig seit setAttribute_\n"
-    "\n"
-    "\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// Damit setAttribute zwischen direkten (window) und direkten Aufrufen unterscheiden kann//\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// Globaler Zugriff auf letztes this\n"
-    "var globalMe = undefined;\n"
-    "function setGlobalMe(me_)\n"
-    "{\n"
-    "    globalMe = me_;\n"
-    "}\n"
-    "// Wird nach jedem this wieder aufgerufen, damit ich unterscheiden kann ob ich in\n"
-    "// setAttribute this oder me verwenden muss\n"
-    "/* ----wohl doch nicht nötig. ToDo (Delete)---- function unsetGlobalMe()\n"
-    "{\n"
-    "    globalMe = undefined;\n"
-    "} */\n"
+    //"\n"
+    //"\n"
+    //"/////////////////////////////////////////////////////////\n"
+    //"// Damit setAttribute zwischen indirekten (window) und direkten Aufrufen unterscheiden kann//\n"
+    //"/////////////////////////////////////////////////////////\n"
+    //"// Globaler Zugriff auf letztes this\n"
+    //"var globalMe = undefined;\n"
+    //"function setGlobalMe(me_)\n"
+    //"{\n"
+    //"    globalMe = me_;\n"
+    //"}\n"
+    //"// Wird nach jedem this wieder aufgerufen, damit ich unterscheiden kann ob ich in\n"
+    //"// setAttribute this oder me verwenden muss\n"
+    //"/* ----wohl doch nicht nötig. ToDo (Delete)---- function unsetGlobalMe()\n"
+    //"{\n"
+    //"    globalMe = undefined;\n"
+    //"} */\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -8809,7 +8923,7 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// bringToFront() - nachimplementiert                    //\n"
+    "// bringToFront() - nachimplementiert                  //\n"
     "/////////////////////////////////////////////////////////\n"
     "var bringToFrontFunction = function (oThis) {\n"
     "    $(this).css('zIndex',\n"
@@ -8819,6 +8933,45 @@ BOOL isNumeric(NSString *s)
     "HTMLDivElement.prototype.bringToFront = bringToFrontFunction;\n"
     "HTMLInputElement.prototype.bringToFront = bringToFrontFunction;\n"
     "HTMLSelectElement.prototype.bringToFront = bringToFrontFunction;\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter for 'mask' (setter only to trigger an event) //\n"
+    "// mask seems to be the next clipped parent.           //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "\n"
+    "\n"
+    "var findNextMaskedElement = function(e) {\n"
+    "    return $(e).parents().filter(function() {\n"
+    "        return $(this).css('clip').startsWith('rect');\n"
+    "    });\n"
+    "}\n"
+    "// in '_mask' speichern wir einen eventuell gesetzten Wert...\n"
+    "Object.defineProperty(Object.prototype, '_mask', {\n"
+    "    enumerable: false,\n"
+    "    configurable: false,\n"
+    "    writable: true, /* setting to false would be ignored by webkit... why? */\n"
+    "    value: undefined\n"
+    "});\n"
+    "// ... aber der Getter gibt stets den korrekt berechneten Wert zurück...\n"
+    "// ... und der Setter triggert im wesentlichen nur 'onmask'. Ein übergebener Wert \n"
+    "// wird trotzdem mal gespeichert. Aber er sollte nie über 'mask' accessible sein.\n"
+    "Object.defineProperty(Object.prototype, 'mask', {\n"
+    "    get : function(){ return findNextMaskedElement(this).get(0); },\n"
+    "    set : function(newValue){ this._mask = 2; $(this).triggerHandler('onmask'); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter for 'subviews'                               //\n"
+    "// READ-ONLY                                           //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'subviews', {\n"
+    "    get : function(){ return $(this).find().get(); },\n"
+    "    /* READ-ONLY set : , */\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
     "\n";
 
 
@@ -8892,6 +9045,7 @@ BOOL isNumeric(NSString *s)
     "    // Vorher aber die ID ersetzen\n"
     "    obj.parent.contentHTML = replaceID(obj.parent.contentHTML,''+$(id).attr('id')+'_'+obj.parent.name);\n"
     "    $(id).prepend(obj.parent.contentHTML);\n"
+    "    // Warum werte ich hier nicht JS des Vorfahren aus? ToDo ???\n"
     "\n"
     "    // Objekt der nächsten Vererbungs-Stufe holen\n"
     "    obj = obj.parent;\n"
@@ -8899,11 +9053,6 @@ BOOL isNumeric(NSString *s)
     "  obj = currentObj; // Wieder unser Original-Objekt setzen\n"
     "\n"
     "\n"
-    "  // 'view' (HTML-Element und/oder CSS-class) wird standardmäßig benutzt. Ansonsten muss ich hier austauschen."
-    "  if (obj.parent !== 'view')\n"
-    "  {\n"
-    "    //alert(obj.parent);\n"
-    "  }\n"
     "\n"
     "\n"
     "  // Alle per style gegebenen Attribute muss ich ermitteln und später damit vergleichen\n"
@@ -8933,7 +9082,7 @@ BOOL isNumeric(NSString *s)
     //"    alert(an[i]);\n"
     //"    alert(av[i]);\n"
     "    var cssAttributes = ['bgcolor','width','height'];\n"
-    "    var jsAttributes = ['onclick','focusable','styleable'];\n"
+    "    var jsAttributes = ['onclick','focusable','styleable','layout'];\n"
     "    if (jQuery.inArray(an[i],cssAttributes) != -1)\n"
     "    {\n"
     "      if (an[i] === 'bgcolor')\n"
@@ -8943,6 +9092,8 @@ BOOL isNumeric(NSString *s)
     "        {\n"
     "            av[i] = av[i].substring(2,av[i].length-1);\n"
     "\n"
+    "            av[i] = av[i].replace('immediateparent','$(id.getTheParent())');\n"
+    "    // ToDo -> Das hier können doch alles getter werden, oder?\n"
     "            av[i] = av[i].replace('parent','$(id.getTheParent())');\n"
     "\n"
     "            av[i] = av[i].replace('width','width()');\n"
@@ -8981,6 +9132,15 @@ BOOL isNumeric(NSString *s)
     "      else if (an[i] === 'styleable' && av[i] === 'false')\n"
     "      {\n"
     "        // ToDo\n"
+    "      }\n"
+    "      else if (an[i] === 'layout' && !av[i].contains('class') &&  av[i].contains('y'))\n"
+    "      {\n"
+    "        var spacing = av[i].betterParseInt();\n"
+    "        for (var i = 1; i < $(id).children().length; i++) {\n"
+    "          var kind = $(id).children().eq(i);\n"
+    "          var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + spacing;\n"
+    "          kind.css('left',leftValue+'px');\n"
+    "        }\n"
     "      }\n"
     "      else { alert('Hoppala, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() als jsAttribute ausgewertet werden.'); }\n"
     "    }\n"
@@ -9125,6 +9285,7 @@ BOOL isNumeric(NSString *s)
     "  this.contentHTML = '<option id=\"@@@P-L,A#TZHALTER@@@\">'+textBetweenTags+'</option>';\n"
     "};\n"
     "\n";
+
     js = [js stringByReplacingOccurrencesOfString:@"@@@P-L,A#TZHALTER@@@" withString:ID_REPLACE_STRING];
 
 

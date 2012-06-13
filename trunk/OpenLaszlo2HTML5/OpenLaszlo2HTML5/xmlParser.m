@@ -1382,6 +1382,18 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+- (NSString*) makeTheComputedValueComputable:(NSString*)s
+{
+    s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
+    s = [self modifySomeMethodsInJSCode:s];
+
+    s = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,s];
+
+    return s;
+}
+
+
+
 // Ne, wir definieren einfach ein globales setAttribute_ mit defineProperty
 // Dazu muss ich dann nur das this immer aktualisieren, da es auch passieren kann, dass
 // setAttribute ohne vorangehende Variable aufgerufen wird.
@@ -1667,10 +1679,62 @@ void OLLog(xmlParser *self, NSString* s,...)
 
             // Eventuell falls die vorher auf false gesetzte Eigenschaft überschrieben werden soll
             // Deswegen auch hier Code ausführen. Aber im Prinzip wohl unnötig, da true = Standardwert.
-            [self.jQueryOutput appendString:@"\n  // focusable=true (einen eventuell vorher gesetzten focus-Handler, der blur() ausführt, entfernen\n"];
-            [self.jQueryOutput appendFormat:@"  $('#%@').off('focus.blurnamespace');\n",idName];
+            [self.jQueryOutput appendString:@"\n  // focusable=true (einen eventuell vorher gesetzten focus-Handler, der blur() ausführt, entfernen"];
+            [self.jQueryOutput appendFormat:@"\n  $('#%@').off('focus.blurnamespace');\n",idName];
         }
     }
+
+
+
+    if ([attributeDict valueForKey:@"layout"])
+    {
+        NSString *s = [attributeDict valueForKey:@"layout"];
+
+        // Eventuelle spaces im Attribut rausschmeißen, damit der String-Vergleich nicht scheitert
+        s = [s stringByReplacingOccurrencesOfString:@" " withString:@""];
+
+        if ([s rangeOfString:@"class:"].location != NSNotFound)
+        {
+            [self instableXML:@"Upps, ich muss dieses Layout noch korrekt auswerten."];
+        }
+
+        // "axis:y; spacing:2";
+        NSString *spacing = @"0";
+        if ([s rangeOfString:@"spacing:"].location != NSNotFound)
+        {
+            NSError *error = NULL;
+            NSString* pattern = @"\\bspacing\\b:(\\d)";
+
+            NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:pattern options:NSRegularExpressionCaseInsensitive error:&error];
+
+            NSTextCheckingResult *match = [regexp firstMatchInString:s options:0 range:NSMakeRange(0, [s length])];
+
+            if (match)
+            {
+                /* NSRange matchRange = [match range]; */
+                NSRange dollar_1 = [match rangeAtIndex:1];
+
+                spacing = [s substringWithRange:dollar_1];
+            }
+        }
+
+
+        if ([s rangeOfString:@"axis:x"].location != NSNotFound)
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'layout' as simplelayout with axis:x.");
+
+            [self becauseOfSimpleLayoutXMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:spacing andAttributes:attributeDict];
+        }
+        if ([s rangeOfString:@"axis:y"].location != NSNotFound)
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'layout' as simplelayout with axis:y.");
+
+            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:spacing andAttributes:attributeDict];
+        }
+    }
+
 
 
     if ([attributeDict valueForKey:@"onclick"])
@@ -1831,6 +1895,25 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
 
+
+    // Ansonsten setzen einer intern Variable - erstmal sammeln - später lockern dieser Abfrage
+    // ToDo
+    // 'mask' ist intern read-only, wird aber von GFlender überschrieben, ein Spezialfall.
+    //  -> Im Prinzip muss ich es wohl als eigene Var auffassen und dem entsprechend auswerten
+    // d. h. die Variable genauso wie jetzt gelöst, einfach zuweisen.
+    if ([attributeDict valueForKey:@"mask"])
+    {
+        self.attributeCount++;
+
+        NSString *s = [attributeDict valueForKey:@"mask"];
+
+        if ([s hasPrefix:@"${"])
+            s = [self makeTheComputedValueComputable:s];
+
+        NSLog([NSString stringWithFormat:@"Setting the var 'mask' with the value '%@'.",s]);
+        [self.jQueryOutput appendString:@"\n  // setting the var 'mask'"];
+        [self.jQueryOutput appendFormat:@"\n  %@.mask = %@;\n",self.zuletztGesetzteID,s];
+    }
 
 
 
@@ -2364,6 +2447,96 @@ void OLLog(xmlParser *self, NSString* s,...)
 }
 
 
+
+
+- (void) becauseOfSimpleLayoutXMoveTheChildrenOfElement:(NSString*)elem withSpacing:(NSString*)spacing andAttributes:(NSDictionary*)attributeDict
+{
+    if ([attributeDict valueForKey:@"inset"])
+    {
+        self.attributeCount++;
+        NSLog(@"Using the attribute 'inset' as spacing for the first element.");
+
+        [self.jsOutput appendString:@"\n  // 'inset' for the first element of this 'simplelayout' (axis:x)\n"];
+        [self.jsOutput appendFormat:@"  $('#%@').children().first().css('left','%@px');\n",elem,[attributeDict valueForKey:@"inset"]];
+    }
+
+
+    // Das MUSS in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
+    if (alternativeFuerSimplelayout)
+    {
+        [self.jsOutput appendFormat:@"\n  // Setting a 'simplelayout' (axis:x) without need 4 check4Simplelayout in '%@':\n",elem];
+
+        [self.jsOutput appendString:@"  // Es soll wirklich erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"];
+        [self.jsOutput appendFormat:@"  for (var i = 1; i < $('#%@').children().length; i++)\n  {\n",elem];
+        [self.jsOutput appendFormat:@"    var kind = $('#%@').children().eq(i);\n",elem];
+        if (positionAbsolute == YES)
+        {
+            [self.jsOutput appendFormat:@"    var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + %@;\n",spacing];
+        }
+        else
+        {
+            [self.jsOutput appendFormat:@"    var leftValue = %@ * i;\n",spacing];
+        }
+        [self.jsOutput appendString:@"    kind.css('left',leftValue+'px');\n"];
+
+        [self.jsOutput appendString:@"  }\n\n"];
+    }
+}
+
+
+
+
+- (void) becauseOfSimpleLayoutYMoveTheChildrenOfElement:(NSString*)elem withSpacing:(NSString*)spacing andAttributes:(NSDictionary*)attributeDict
+{
+    if ([attributeDict valueForKey:@"inset"])
+    {
+        self.attributeCount++;
+        NSLog(@"Using the attribute 'inset' as spacing for the first element.");
+
+        [self.jsOutput appendString:@"\n  // 'inset' for the first element of this 'simplelayout' (axis:y)\n"];
+        [self.jsOutput appendFormat:@"  $('#%@').children().first().css('top','%@px');\n",elem,[attributeDict valueForKey:@"inset"]];
+    }
+
+
+
+    // Das MUSS in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
+    if (alternativeFuerSimplelayout)
+    {
+        [self.jsOutput appendFormat:@"\n  // Setting a 'simplelayout' (axis:y) without need 4 check4Simplelayout in '%@':\n",elem];
+
+        [self.jsOutput appendString:@"  // Es soll wirklich erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"];
+        [self.jsOutput appendFormat:@"  for (var i = 1; i < $('#%@').children().length; i++)\n  {\n",elem];
+        [self.jsOutput appendFormat:@"    var kind = $('#%@').children().eq(i);\n",elem];
+        if (positionAbsolute == YES)
+        {
+            [self.jsOutput appendFormat:@"    var topValue = kind.prev().get(0).offsetTop + kind.prev().outerHeight() + %@;\n",spacing];
+        }
+        else
+        {
+            [self.jsOutput appendFormat:@"    if (kind.css('position') == 'TODO oder auch nicht')\n",elem];
+            [self.jsOutput appendString:@"    {\n"];
+            [self.jsOutput appendFormat:@"      var topValue = %@  + kind.prev().height() + parseInt(kind.prev().css('top'));\n",spacing];
+            [self.jsOutput appendString:@"      var leftValue = parseInt(kind.prev().css('left'))-kind.prev().width();\n"];
+            [self.jsOutput appendString:@"      kind.css('left',leftValue+'px');\n"];
+            [self.jsOutput appendString:@"    }\n"];
+            [self.jsOutput appendString:@"    else\n"];
+            [self.jsOutput appendString:@"    {\n"];
+            [self.jsOutput appendFormat:@"      var topValue = i * %@;\n",spacing];
+            [self.jsOutput appendString:@"    }\n"];
+        }
+        [self.jsOutput appendString:@"    kind.css('top',topValue+'px');\n"];
+
+        [self.jsOutput appendString:@"  }\n\n"];
+    }
+}
+
+
+
+
+
+
+
+
 #pragma mark Delegate calls
 
 - (void) parser:(NSXMLParser *)parser
@@ -2655,51 +2828,8 @@ didStartElement:(NSString *)elementName
 
 
 
-            if ([attributeDict valueForKey:@"inset"])
-            {
-                self.attributeCount++;
-                NSLog(@"Using the attribute 'inset' as spacing for the first element.");
 
-                NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
-
-                [self.jsOutput appendString:@"\n  // 'inset' for the first element of this 'simplelayout' (axis:y)\n"];
-                [self.jsOutput appendFormat:@"  $('#%@').children().first().css('top','%@px');\n",idUmgebendesElement,[attributeDict valueForKey:@"inset"]];
-            }
-
-
-
-
-            // Das MUSS in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
-            if (alternativeFuerSimplelayout)
-            {
-                NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
-
-                [self.jsOutput appendFormat:@"\n  // Setting a 'simplelayout' (axis:y) without need 4 check4Simplelayout in '%@':\n",idUmgebendesElement];
-
-                [self.jsOutput appendString:@"  // Es soll wirklich erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"];
-                [self.jsOutput appendFormat:@"  for (var i = 1; i < $('#%@').children().length; i++)\n  {\n",idUmgebendesElement];
-                [self.jsOutput appendFormat:@"    var kind = $('#%@').children().eq(i);\n",idUmgebendesElement];
-                if (positionAbsolute == YES)
-                {
-                    [self.jsOutput appendFormat:@"    var topValue = kind.prev().get(0).offsetTop + kind.prev().outerHeight() + %@;\n",spacing];
-                }
-                else
-                {
-                    [self.jsOutput appendFormat:@"    if (kind.css('position') == 'TODO oder auch nicht')\n",idUmgebendesElement];
-                    [self.jsOutput appendString:@"    {\n"];
-                    [self.jsOutput appendFormat:@"      var topValue = %@  + kind.prev().height() + parseInt(kind.prev().css('top'));\n",spacing];
-                    [self.jsOutput appendString:@"      var leftValue = parseInt(kind.prev().css('left'))-kind.prev().width();\n"];
-                    [self.jsOutput appendString:@"      kind.css('left',leftValue+'px');\n"];
-                    [self.jsOutput appendString:@"    }\n"];
-                    [self.jsOutput appendString:@"    else\n"];
-                    [self.jsOutput appendString:@"    {\n"];
-                    [self.jsOutput appendFormat:@"      var topValue = i * %@;\n",spacing];
-                    [self.jsOutput appendString:@"    }\n"];
-                }
-                [self.jsOutput appendString:@"    kind.css('top',topValue+'px');\n"];
-
-                [self.jsOutput appendString:@"  }\n\n"];
-            }
+            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2] withSpacing:spacing andAttributes:attributeDict];
         }
 
 
@@ -2773,40 +2903,8 @@ didStartElement:(NSString *)elementName
 
 
 
-            if ([attributeDict valueForKey:@"inset"])
-            {
-                self.attributeCount++;
-                NSLog(@"Using the attribute 'inset' as spacing for the first element.");
 
-                NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
-
-                [self.jsOutput appendString:@"\n  // 'inset' for the first element of this 'simplelayout' (axis:x)\n"];
-                [self.jsOutput appendFormat:@"  $('#%@').children().first().css('left','%@px');\n",idUmgebendesElement,[attributeDict valueForKey:@"inset"]];
-            }
-
-
-            // Das MUSS in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
-            if (alternativeFuerSimplelayout)
-            {
-                NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
-
-                [self.jsOutput appendFormat:@"\n  // Setting a 'simplelayout' (axis:x) without need 4 check4Simplelayout in '%@':\n",idUmgebendesElement];
-
-                [self.jsOutput appendString:@"  // Es soll wirklich erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"];
-                [self.jsOutput appendFormat:@"  for (var i = 1; i < $('#%@').children().length; i++)\n  {\n",idUmgebendesElement];
-                [self.jsOutput appendFormat:@"    var kind = $('#%@').children().eq(i);\n",idUmgebendesElement];
-                if (positionAbsolute == YES)
-                {
-                    [self.jsOutput appendFormat:@"    var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + %@;\n",spacing];
-                }
-                else
-                {
-                    [self.jsOutput appendFormat:@"    var leftValue = %@ * i;\n",spacing];
-                }
-                [self.jsOutput appendString:@"    kind.css('left',leftValue+'px');\n"];
-
-                [self.jsOutput appendString:@"  }\n\n"];
-            }
+            [self becauseOfSimpleLayoutXMoveTheChildrenOfElement:[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2] withSpacing:spacing andAttributes:attributeDict];
         }
     }
 
@@ -3453,12 +3551,6 @@ didStartElement:(NSString *)elementName
 
 
         // Wird derzeit noch übersprungen (ToDo)
-        if ([attributeDict valueForKey:@"layout"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'layout' on view (ToDo).");
-        }
-        // Wird derzeit noch übersprungen (ToDo)
         if ([attributeDict valueForKey:@"ignoreplacement"])
         {
             self.attributeCount++;
@@ -3793,14 +3885,6 @@ didStartElement:(NSString *)elementName
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
         [self.output appendString:@"\">\n"];
-
-
-        // Wird derzeit noch übersprungen (ToDo)
-        if ([attributeDict valueForKey:@"layout"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'layout' on baselist (ToDo).");
-        }
     }
 
 
@@ -4425,14 +4509,6 @@ didStartElement:(NSString *)elementName
         {
             self.animDuration = @"slow";
         }
-
-
-
-        if ([attributeDict valueForKey:@"mask"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'mask'.");
-        }
     }
 
 
@@ -4948,7 +5024,7 @@ didStartElement:(NSString *)elementName
             if (i == [keys count])
                 [self instableXML:@"Konnte Attribut 'name' in <class> nicht löschen."];
 
-            // extends auslesen und speichern, dann extends aus der Attributliste löschen
+            // extends auslesen und speichern, dann extends aus der Attribute-liste löschen
             NSString *parent = [attributeDict valueForKey:@"extends"];
             if (parent == nil || parent.length == 0)
               [self.jsOLClassesOutput appendString:@"  this.parent = new view();\n\n"];
@@ -5041,7 +5117,7 @@ didStartElement:(NSString *)elementName
         }
 
 
-        // ToDo: ALL This attributes
+        // ToDo: ALL this attributes
         if ([attributeDict valueForKey:@"bgcolor"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"width"])
@@ -5810,12 +5886,14 @@ didStartElement:(NSString *)elementName
 
     // Wohl Eine Art umgebende View für Check-Felder die eingeblendet werden, damit man für sie die
     // Visibility z.B. nur einmal als ganzes ansprechen muss
-    if ([elementName isEqualToString:@"checkview"])
+    // Neu: Gemäß BDSlib: Sie definiert 3 Methoden und eine Variable für Views, die von ihr erben.
+    // Es ist eine Art abstrakte View, die meist geerbt wird.
+    if ([elementName isEqualToString:@"checkviewToDoDeleteMe"])
     {
         element_bearbeitet = YES;
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
-        [self.output appendString:@"<!-- Checkview: -->\n"];
+        [self.output appendString:@"<!-- Check-view: -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
         [self.output appendString:@"<div"];
 
@@ -5826,20 +5904,6 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@" style=\""];
         [self.output appendString:[self addCSSAttributes:attributeDict]];
         [self.output appendString:@"\">\n"];
-
-
-
-        if ([attributeDict valueForKey:@"layout"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'layout'.");
-        }
-        if ([attributeDict valueForKey:@"mask"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'mask'.");
-        }
-
 
 
         // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw.
@@ -6540,9 +6604,6 @@ didStartElement:(NSString *)elementName
         // NSLog([NSString stringWithFormat:@"%@",[self.allFoundClasses objectForKey:elementName]]);
 
 
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-
         if ([attributeDict valueForKey:@"text"] && [attributeDict valueForKey:@"title"])
         {
             [self instableXML:@"Dann haben wir ein Problem..."];
@@ -7013,7 +7074,7 @@ BOOL isNumeric(NSString *s)
     if ([elementName isEqualToString:@"window"] ||
         [elementName isEqualToString:@"view"] ||
         [elementName isEqualToString:@"deferview"] ||
-        [elementName isEqualToString:@"checkview"] ||
+        [elementName isEqualToString:@"checkviewToDoDeleteMe"] ||
         [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
@@ -7188,7 +7249,7 @@ BOOL isNumeric(NSString *s)
     // Schließen des Div's
     if ([elementName isEqualToString:@"view"] ||
         [elementName isEqualToString:@"deferview"] ||
-        [elementName isEqualToString:@"checkview"] ||
+        [elementName isEqualToString:@"checkviewToDoDeleteMe"] ||
         [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
@@ -9056,7 +9117,10 @@ BOOL isNumeric(NSString *s)
     "    // Vorher aber die ID ersetzen\n"
     "    obj.parent.contentHTML = replaceID(obj.parent.contentHTML,''+$(id).attr('id')+'_'+obj.parent.name);\n"
     "    $(id).prepend(obj.parent.contentHTML);\n"
-    "    // Warum werte ich hier nicht JS des Vorfahren aus? ToDo ???\n"
+    "    // Warum hänge ich da den Namen parent.name dran??? ToDo ???\n"
+    "\n"
+    "    // Dann den kompletten JS-Code ausführen\n"
+    "    executeJSCodeOfThisObject(obj.parent, id);\n"
     "\n"
     "    // Objekt der nächsten Vererbungs-Stufe holen\n"
     "    obj = obj.parent;\n"
@@ -9175,6 +9239,17 @@ BOOL isNumeric(NSString *s)
     //"  // $(id).html(s);\n"
     "  $(id).append(s);\n"
     "\n"
+    "  // Dann den kompletten JS-Code ausführen\n"
+    "  executeJSCodeOfThisObject(obj, id);\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "// executes the complete JS-Code of the given Object         //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "function executeJSCodeOfThisObject(obj, id)\n"
+    "{\n"
     "  // Replace-IDs von contentLeadingJSHead ersetzen\n"
     "  var s = replaceID(obj.contentLeadingJSHead,$(id).attr('id'));\n"
     "  // Dann den LeadingJSHead-Content hinzufügen/auswerten\n"
@@ -9197,13 +9272,9 @@ BOOL isNumeric(NSString *s)
     "  evalCode(s,id);\n"
     "\n"
     "  // Replace-IDs von contentJQuery ersetzen\n"
-    //"  var s = replaceID(obj.contentJQuery,''+$(id).attr('id')+'_objekt');\n"
-    // Hmm, ne, es muss analog wie bei obj.contentHTML und obj.contenLeadingJquery sein,
-    // die beiden id's greifen wechselseitig aufeinander zu
     "  var s = replaceID(obj.contentJQuery,$(id).attr('id'));\n"
     "  // Dann den jQuery-Content hinzufügen/auswerten\n"
     "  evalCode(s);\n"
-    "\n"
     "}\n"
     "\n"
     "\n"

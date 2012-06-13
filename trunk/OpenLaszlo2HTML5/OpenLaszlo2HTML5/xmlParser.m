@@ -1145,7 +1145,10 @@ void OLLog(xmlParser *self, NSString* s,...)
                 }
             }
             if (s == nil || [s isEqualToString:@""])
+            {
+                // ToDo: Im Release rausnehmen, entspricht der OL-logik, keinen Fehler zu werfen.
                 [self instableXML:[NSString stringWithFormat:@"ERROR: The image-path '%@' isn't valid.",src]];
+            }
 
 
 
@@ -1203,15 +1206,15 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jQueryOutput appendFormat:@"  var sumXYHW = 0;\n  $('#%@').children().map(function ()\n  {\n    sumXYHW += parseInt('0'+$(this).css('top'));\n    sumXYHW += parseInt('0'+$(this).css('left'));\n    sumXYHW += $(this).height();\n    sumXYHW += $(this).width();\n  });\n",self.zuletztGesetzteID];
 
         [self.jQueryOutput appendFormat:@"  if (sumXYHW > 0 && $('#%@').children().length > 0 && $('#%@').get(0).style.height == '')\n  {\n  ",self.zuletztGesetzteID,self.zuletztGesetzteID];
-        [self.jQueryOutput appendFormat:@"  var heights = $('#%@').children().map(function () { return $(this).outerHeight('true')+$(this).position().top; }).get()\n",self.zuletztGesetzteID];
-        [self.jQueryOutput appendFormat:@"    if (!($('#%@').hasClass('div_rudElement')))\n",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  var heights = $('#%@').children().map(function () { return $(this).outerHeight('true')+$(this).position().top; }).get();",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"\n    if (!($('#%@').hasClass('div_rudElement')))\n",self.zuletztGesetzteID];
         [self.jQueryOutput appendFormat:@"      $('#%@').css('height',getMaxOfArray(heights))\n  }\n",self.zuletztGesetzteID];
 
 
 
         [self.jQueryOutput appendString:@"  // Analog muss die Breite gesetzt werden\n"];
         [self.jQueryOutput appendFormat:@"  if (sumXYHW > 0 && $('#%@').children().length > 0 && $('#%@').get(0).style.width == '')\n  {\n  ",self.zuletztGesetzteID,self.zuletztGesetzteID];
-        [self.jQueryOutput appendFormat:@"  var widths = $('#%@').children().map(function () { return $(this).outerWidth('true')+$(this).position().left; }).get()",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  var widths = $('#%@').children().map(function () { return $(this).outerWidth('true')+$(this).position().left; }).get();",self.zuletztGesetzteID];
             [self.jQueryOutput appendFormat:@"\n    $('#%@').css('width',getMaxOfArray(widths))\n  }\n\n",self.zuletztGesetzteID];
 
 
@@ -5397,7 +5400,7 @@ didStartElement:(NSString *)elementName
         self.weAreSkippingTheCompleteContentInThisElement2 = YES;
     }
     // ToDo
-    if ([elementName isEqualToString:@"nicebox"])
+    if ([elementName isEqualToString:@"niceboxToDoDeleteMe"])
     {
         element_bearbeitet = YES;
 
@@ -6988,7 +6991,7 @@ BOOL isNumeric(NSString *s)
     if (self.weAreSkippingTheCompleteContentInThisElement2)
         return;
 
-    if ([elementName isEqualToString:@"nicebox"])
+    if ([elementName isEqualToString:@"niceboxToDoDeleteMe"])
     {
         element_geschlossen = YES;
 

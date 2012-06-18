@@ -23,7 +23,7 @@ BOOL alternativeFuerSimplelayout = YES; // Bei YES kann <simplelayout> an belieb
                                         // Es scheint sehr zuverlässig zu funktionieren inzwischen.
                                         // Kann wohl dauerhaft auf YES bleiben!
 
-BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -468,11 +468,13 @@ void OLLog(xmlParser *self, NSString* s,...)
 {
     [self.jQueryOutput appendFormat:@"\n  // Setting the height of '#%@' by jQuery, because it is a computed value (%@)\n",self.zuletztGesetzteID,s];
 
+
+    s = [self makeTheComputedValueComputable:s];
+
+
     // this von OpenLaszlo muss ersetzt werden
     s = [s stringByReplacingOccurrencesOfString:@"this" withString:[NSString stringWithFormat:@"$('#%@').get(0)",self.zuletztGesetzteID]];
 
-    // this von OpenLaszlo muss ersetzt werden
-    s = [s stringByReplacingOccurrencesOfString:@"height" withString:@"myHeight"];
 
 
     [self.jQueryOutput appendFormat:@"  $('#%@').height(%@);\n",self.zuletztGesetzteID,s];
@@ -489,9 +491,10 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     NSLog(@"'classroot', so we are setting the attribute with jQuery");
 
+
     [self.jQueryOutput appendFormat:@"\n  // Setting the Attribute '%@' with jQuery, because it depends on 'classroot'\n",attr];
 
-    s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
+    s = [self makeTheComputedValueComputable:s];
 
     s = [s stringByReplacingOccurrencesOfString:@"classroot" withString:ID_REPLACE_STRING];
 
@@ -504,16 +507,19 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
     if ([attr isEqualToString:@"background-image"])
+    {
+        [self instableXML:@"Das hier muss ich nochmal überprüfen. Kann denn der Return-Wert der Function so verarbeitet werden?"];
         [self.jQueryOutput appendFormat:@"  $('#%@').css('%@','url('+%@+')');\n",self.zuletztGesetzteID,attr,s];
+    }
 
-    if ([attr isEqualToString:@"height"] ||
+    if ([attr isEqualToString:@"color"] ||
+        [attr isEqualToString:@"height"] ||
         [attr isEqualToString:@"width"] ||
         [attr isEqualToString:@"left"] ||
         [attr isEqualToString:@"top"])
-        [self.jQueryOutput appendFormat:@"  $('#%@').css('%@',''+%@+'px');\n",self.zuletztGesetzteID,attr,s];
-
-    if ([attr isEqualToString:@"color"])
+    {
         [self.jQueryOutput appendFormat:@"  $('#%@').css('%@',%@);\n",self.zuletztGesetzteID,attr,s];
+    }
 }
 
 
@@ -651,16 +657,12 @@ void OLLog(xmlParser *self, NSString* s,...)
         else if ([s rangeOfString:@"${parent.height"].location != NSNotFound ||
                  [s rangeOfString:@"${parent.height"].location != NSNotFound )
         {
-            s = [self makeTheComputedValueComputable:s];
-
             [self setTheHeightWithJQuery:s];
         }
         else if ([s rangeOfString:@"${canvas.height"].location != NSNotFound)
         {
             // canvas.height ist die Höhe des windows
             // Die entsprechende globale Variable dafür wurde vorher gesetzt
-
-            s = [self makeTheComputedValueComputable:s];
 
             [self setTheHeightWithJQuery:s];
         }
@@ -694,8 +696,6 @@ void OLLog(xmlParser *self, NSString* s,...)
             // = Die Höhe des vorherigen Elements abzüglich eines gegebenen Wertes
 
             NSString *s = [attributeDict valueForKey:@"boxheight"];
-
-            s = [self makeTheComputedValueComputable:s];
 
             // Höhe des Elternelements ermitteln
             // NSString *hoeheElternElement = [NSString stringWithFormat:@"$('#%@').parent().height()",self.zuletztGesetzteID];
@@ -1388,9 +1388,9 @@ void OLLog(xmlParser *self, NSString* s,...)
     s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
     s = [self modifySomeMethodsInJSCode:s];
 
+    // s = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,s];
+    // Nachfolgende Lösung ist besser, weil Scope erhalten bleibt, aber nicht fix ist.
     s = [NSString stringWithFormat:@"function() { with (%@) { return %@ } }",self.zuletztGesetzteID,s];
-
-    //s = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,s];
 
     return s;
 }
@@ -1402,6 +1402,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // setAttribute ohne vorangehende Variable aufgerufen wird.
 - (NSString*) modifySomeMethodsInJSCode:(NSString*)s
 {
+    // Diese Methode kann nicht überschrieben werden, da intern bentutz von jQuery
     // Hatte ich mal als 'setAttribute(', aber die Klamemr bricht natürlich den RegExp
     s = [self inString:s searchFor:@"setAttribute" andReplaceWith:@"setAttribute_" ignoringTextInQuotes:YES];
 
@@ -1415,9 +1416,19 @@ void OLLog(xmlParser *self, NSString* s,...)
     // gar nicht mehr nötig? => Mal schauen ob es irgendwo bricht in nächster Zeit.
     s = [self inString:s searchFor:@"parent" andReplaceWith:@"getTheParent()" ignoringTextInQuotes:YES];
 
+
+    // Das OpenLaszlo-'height' muss ersetzt werden (über getter klappt nicht)
+    // Der getter muss neu benannt werden, da intern von jQuery benutzt
+    // und wenn ich den getter probiere zu überschreiben, gibt es eine Rekursion.
+    s = [s stringByReplacingOccurrencesOfString:@"height" withString:@"myHeight"];
+
+    // Das OpenLaszlo-'width' muss ersetzt werden (über getter klappt nicht)
+    // Der getter muss neu benannt werden, da intern von jQuery benutzt
+    // und wenn ich den getter probiere zu überschreiben, gibt es eine Rekursion.
+    s = [s stringByReplacingOccurrencesOfString:@"width" withString:@"myWidth"];
+
     // Remove leading and ending Whitespaces and NewlineCharacters
     s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
 
     return s;
 }
@@ -2578,11 +2589,14 @@ didStartElement:(NSString *)elementName
     {
         [self.collectedContentOfClass appendString:@""]; // ToDo. Was macht diese Zeile???
 
+        // marker
+        //[self.jsHead2Output appendString:@"(var) x = ?"];
+
         NSLog([NSString stringWithFormat:@"\nSkipping the Element %@ for now.", elementName]);
         return;
     }
 
-    // skipping All Elements in Class-elements (ToDo)
+    // skipping all Elements in Class-elements (ToDo)
     // skipping all Elements in splash (ToDo)
     // skipping all Elements in fileUpload (ToDo)
     if (self.weAreSkippingTheCompleteContentInThisElement)
@@ -2724,7 +2738,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
-        [elementName isEqualToString:@"buttonnext"] ||
+        [elementName isEqualToString:@"buttonnextToDoTakeMeOut"] ||
         [elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDStext"] ||
         [elementName isEqualToString:@"statictext"] ||
@@ -3148,7 +3162,8 @@ didStartElement:(NSString *)elementName
 
         // Dringend ToDo -> ungefähre Anleitung: Alle nachfolgenden Tags in eine eigene Data-Struktur überführen
         // Und diese Tags nicht auswerten lassen vom XML-Parser
-        // Aber wieder rückgängig machen in 'items', falls wir darauf stoßen
+        // Aber wieder rückgängig machen in <items>, falls wir darauf stoßen und
+        // das dataset also damit strukturiert ist (und nicht mit eigenen Begriffen)!
         // Muss (logischerweise) vor der Rekursion stehen, deswegen steht es hier oben
         self.weAreInDatasetAndNeedToCollectTheFollowingTags = YES;
 
@@ -3698,7 +3713,7 @@ didStartElement:(NSString *)elementName
     // jQuery UI?
     if ([elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
-        [elementName isEqualToString:@"buttonnext"])
+        [elementName isEqualToString:@"buttonnextToDoTakeMeOut"])
     {
         element_bearbeitet = YES;
 
@@ -3728,13 +3743,13 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"\">\n"];
 
 
-        // ToDo: Wird derzeit nicht ausgewertet - ist zum ersten mal bei einem imgbutton aufgetaicht (nur da?)
+        // ToDo: Wird derzeit nicht ausgewertet - ist zum ersten mal bei einem imgbutton aufgetaucht (nur da?)
         if ([attributeDict valueForKey:@"text"])
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'text' for now.");
         }
-        // ToDo: Wird derzeit nicht ausgewertet - ist zum ersten mal bei einem imgbutton aufgetaicht (nur da?)
+        // ToDo: Wird derzeit nicht ausgewertet - ist zum ersten mal bei einem imgbutton aufgetaucht (nur da?)
         if ([attributeDict valueForKey:@"isdefault"])
         {
             self.attributeCount++;
@@ -4937,6 +4952,7 @@ didStartElement:(NSString *)elementName
 
 
     // Wohl nichts zu tun (ist eine eigens definierte class - ToDo, falls wir class-Tags auslesen wollen)
+    // Unsinn! Das sind Flash-Cookies
     if ([elementName isEqualToString:@"SharedObject"])
     {
         element_bearbeitet = YES;
@@ -6772,7 +6788,7 @@ BOOL isNumeric(NSString *s)
             [self.jsHead2Output appendString:@"\n"];
     }
 
-    // skipping All Elements in dataset without attribut 'src'
+    // skipping All Elements in dataset without attribut 'src' (ToDo?)
     if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
     {
         element_geschlossen = YES;
@@ -7137,7 +7153,7 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"baselist"] ||
         [elementName isEqualToString:@"imgbutton"] ||
-        [elementName isEqualToString:@"buttonnext"])
+        [elementName isEqualToString:@"buttonnextToDoTakeMeOut"])
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
@@ -7309,7 +7325,7 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
-        [elementName isEqualToString:@"buttonnext"] ||
+        [elementName isEqualToString:@"buttonnextToDoTakeMeOut"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"])
     {
@@ -8694,9 +8710,19 @@ BOOL isNumeric(NSString *s)
     //"    window.location.href = url;\n"
     //"}\n"
     //"\n"
-    "function setglobalhelp(s)\n"
+    "var lasthelpid = 'tabStart';\n"
+    "function setglobalhelp(helpid)\n"
     "{\n"
-    "    $('#___globalhelp').text(s);\n"
+    //"    $('#___globalhelp').text(s);\n"
+    "  lasthelpid = helpid;\n"
+    "  var info='';\n"
+    "  var infonode=dpGlobalhelp.xpathQuery(\"info[@id='\"+helpid+\"']\")\n"
+    "  // Debug.write(\"infonode\",infonode)\n"
+    "  if (infonode && infonode['childNodes']) {\n"
+    "      for ( var i = 0; i < infonode.childNodes.length; i++ ) \n"
+    "          info+=infonode.childNodes[i];\n"
+    "  }\n"
+    "  globalhelp.info.setAttribute('text',info)\n"
     "}\n"
     "\n"
     "\n"
@@ -9182,6 +9208,17 @@ BOOL isNumeric(NSString *s)
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter for 'myWidth'                                //\n"
+    "// ('width' is replaced internally, else recursion)    //\n"
+    "// READ                                                //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'myWidth', {\n"
+    "    get : function(){ if (this.hasOwnProperty('canvas'))  return parseInt($('#element1').css('width')); else return parseInt($(this).css('width'));  },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
     "\n";
 
 
@@ -9385,11 +9422,21 @@ BOOL isNumeric(NSString *s)
     "  var kinderVorDemAppenden = $(id).children(); // die existierenden Kinder sichern\n"
     "  $(id).prepend(s); // dann den neuen Code anfügen\n"
     "\n"
-    "  // Dann den kompletten JS-Code ausführen\n"
-    "  executeJSCodeOfThisObject(obj, id);\n"
+    "  // ********* Damit 'defaultplacement gesetzt wird *********\n"
+    "      // Replace-IDs von contentLeadingJQuery ersetzen\n"
+    "      var s = replaceID(obj.contentLeadingJQuery,$(id).attr('id'));\n"
+    "      // Dann den LeadingJQuery-Content hinzufügen/auswerten\n"
+    "      // evalCode benötigt Referenz auf id, damit es Methoden direkt adden kann\n"
+    "      evalCode(s,id);\n"
     "\n"
     "  if (obj.defaultplacement !== '') // dann die vorher existierenden Kinder korrekt positionieren\n"
     "    $(kinderVorDemAppenden).appendTo($(window[obj.defaultplacement]));\n"
+    "\n"
+    "  // JS erst jetzt ausführen, sonst stimmen bestimmte width/height's nicht, weil ja etwas verschoben wurde\n"
+    "  // Dann den kompletten JS-Code ausführen\n"
+    "  // ToDo -> Eigentlich ohne das, was eben schon ausgeführt wurde.\n"
+    "  executeJSCodeOfThisObject(obj, id);\n"
+    "\n"
     "}\n"
     "\n"
     "\n"
@@ -9496,7 +9543,19 @@ BOOL isNumeric(NSString *s)
     "  this.attributeNames = [];\n"
     "  this.attributeValues = [];\n"
     "\n"
+    "  this.defaultplacement = '';\n"
+    "\n"
     "  this.contentHTML = '<input type=\"button\" id=\"@@@P-L,A#TZHALTER@@@\" class=\"input_standard\" value=\"'+textBetweenTags+'\" style=\"height:inherit;\" />';\n"
+    "\n"
+    "  this.contentLeadingJSHead = '';\n"
+    "\n"
+    "  this.contentJSHead = '';\n"
+    "\n"
+    "  this.contentJS = '';\n"
+    "\n"
+    "  this.contentLeadingJQuery = ''\n"
+    "\n"
+    "  this.contentJQuery = '';\n"
     "\n"
     "  this.test1 = function () { // Intern definierte Methode\n"
     "    return 'I am ' + this.name;\n"
@@ -9506,6 +9565,36 @@ BOOL isNumeric(NSString *s)
     "button.prototype.test3 = 2; // extern definierte Variable\n"
     "button.test4 = function() {}; // extern definierte Methode - Geht wohl auch\n"
     "button.test5 = 2; // extern definierte Variable - Geht wohl auch\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = basebutton (native class)                        //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "var basebutton = function(textBetweenTags) {\n"
+    "  if(typeof(textBetweenTags) === 'undefined')\n"
+    "    textBetweenTags = '';\n"
+    "\n"
+    "  this.name = 'basebutton';\n"
+    "  this.parent = new button(textBetweenTags);\n"
+    "\n"
+    "  this.attributeNames = [];\n"
+    "  this.attributeValues = [];\n"
+    "\n"
+    "  this.defaultplacement = '';\n"
+    "\n"
+    "  this.contentHTML = '';\n"
+    "\n"
+    "  this.contentLeadingJSHead = '';\n"
+    "\n"
+    "  this.contentJSHead = '';\n"
+    "\n"
+    "  this.contentJS = '';\n"
+    "\n"
+    "  this.contentLeadingJQuery = ''\n"
+    "\n"
+    "  this.contentJQuery = '';\n"
+    "};\n"
     "\n"
     "\n"
     "\n"

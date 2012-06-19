@@ -139,8 +139,8 @@ BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber 
 // Bei Switch/When lese ich nur einen Zweig (den ersten) aus, um Dopplungen zu vermeiden
 @property (nonatomic) BOOL weAreInTheTagSwitchAndNotInTheFirstWhen;
 
-// Wenn wir in BDSText sind, dann dürfen auf den Text bezogene HTML-Tags nicht ausgewertet werden
-@property (nonatomic) BOOL weAreInBDStextAndThereMayBeHTMLTags;
+// Wenn wir gerade Text einsammeln, dann dürfen auf den Text bezogene HTML-Tags nicht ausgewertet werden
+@property (nonatomic) BOOL weAreCollectingTextAndThereMayBeHTMLTags;
 
 // Für dataset ohne Attribut 'src' muss ich die nachfolgenden tags einzeln aufsammeln
 @property (nonatomic) BOOL weAreInDatasetAndNeedToCollectTheFollowingTags;
@@ -149,14 +149,10 @@ BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber 
 // muss ich den Abstand leider gesondert regeln.
 @property (nonatomic) BOOL weAreInRollUpDownWithoutSurroundingRUDContainer;
 
-// Derzeit überspringen wir alles im Element class, später ToDo
-// auch in anderen Fällen überspringen wir alle Inhalte, z.B. bei 'splash',
-// das sollten wir so lassen.
-// Im Fall von 'fileUpload' müssen wir eine komplett neue Lösung finden,
-// weil es am iPad keine Files gibt.
+
 // ToDo: Umbenennen in: weAreCollectingTheCompleteContentInClass
-@property (nonatomic) BOOL weAreSkippingTheCompleteContentInThisElement;
-//auch ein 2. und 3., sonst gibt es Interferenzen wenn ein zu skippendes Element in einem anderen zuu skippenden liegt
+@property (nonatomic) BOOL weAreCollectingTheCompleteContentInClass;
+//auch ein 2. und 3., sonst gibt es Interferenzen wenn ein zu skippendes Element in einem anderen zu skippenden liegt
 @property (nonatomic) BOOL weAreSkippingTheCompleteContentInThisElement2;
 @property (nonatomic) BOOL weAreSkippingTheCompleteContentInThisElement3;
 
@@ -220,10 +216,10 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize issueWithRecursiveFileNotFound = _issueWithRecursiveFileNotFound;
 
 @synthesize weAreInTheTagSwitchAndNotInTheFirstWhen = _weAreInTheTagSwitchAndNotInTheFirstWhen;
-@synthesize weAreInBDStextAndThereMayBeHTMLTags = _weAreInBDStextAndThereMayBeHTMLTags;
+@synthesize weAreCollectingTextAndThereMayBeHTMLTags = _weAreCollectingTextAndThereMayBeHTMLTags;
 @synthesize weAreInDatasetAndNeedToCollectTheFollowingTags = _weAreInDatasetAndNeedToCollectTheFollowingTags;
 @synthesize weAreInRollUpDownWithoutSurroundingRUDContainer = _weAreInRollUpDownWithoutSurroundingRUDContainer;
-@synthesize weAreSkippingTheCompleteContentInThisElement = _weAreSkippingTheCompleteContentInThisElement;
+@synthesize weAreCollectingTheCompleteContentInClass = _weAreCollectingTheCompleteContentInClass;
 @synthesize weAreSkippingTheCompleteContentInThisElement2 = _weAreSkippingTheCompleteContentInThisElement2;
 @synthesize weAreSkippingTheCompleteContentInThisElement3 = _weAreSkippingTheCompleteContentInThisElement3;
 
@@ -350,10 +346,10 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.issueWithRecursiveFileNotFound = @"";
 
         self.weAreInTheTagSwitchAndNotInTheFirstWhen = NO;
-        self.weAreInBDStextAndThereMayBeHTMLTags = NO;
+        self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
         self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
         self.weAreInRollUpDownWithoutSurroundingRUDContainer = NO;
-        self.weAreSkippingTheCompleteContentInThisElement = NO;
+        self.weAreCollectingTheCompleteContentInClass = NO;
         self.weAreSkippingTheCompleteContentInThisElement2 = NO;
         self.weAreSkippingTheCompleteContentInThisElement3 = NO;
         self.ignoreAddingIDsBecauseWeAreInClass = NO;
@@ -2544,7 +2540,27 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+- (void) addEnclosingElementsToDatasetProperty
+{
+    if ([self.enclosingElements count] > 0)
+    {
+        int i = 0;
+        // -1, weil wir uns selber hier nicht hinzufügen
+        while (i < [self.enclosingElements count]-1)
+        {
+            if ([[self.enclosingElements objectAtIndex:i] isEqualToString:@"dataset"] ||
+                [[self.enclosingElements objectAtIndex:i] isEqualToString:@"library"] ||
+                [[self.enclosingElements objectAtIndex:i] isEqualToString:@"canvas"])
+            {
+                i++;
+                continue;
+            }
 
+            [self.jsHead2Output appendFormat:@".%@",[self.enclosingElements objectAtIndex:i]];
+            i++;
+        }
+    }
+}
 
 
 
@@ -2568,6 +2584,51 @@ didStartElement:(NSString *)elementName
     // Hat derzeit nur rein statistische Zwecke bzw. keinen Zweck (ToDo - Delete?)
     self.elementeZaehler++;
 
+    [self erhoeheVerschachtelungstiefe:elementName merkeDirID:[attributeDict valueForKey:@"id"]];
+
+    // Potentielle HTML-Elemente innerhalb von Text müssen abgefangen werden.
+    // Alle einzeln durchgehen, um besser fehlende überprüfen können,
+    // deswegen ist dies kein redundanter Code.
+    // Außerdem darf es nicht die unbekannten Elemente die von dataset eingesammelt werden, brechen
+    if (self.weAreCollectingTextAndThereMayBeHTMLTags)
+    {
+        if ([elementName isEqualToString:@"br"])
+        {
+            NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
+            [self.textInProgress appendString:@"<br />"];
+            return;
+        }
+        
+        if ([elementName isEqualToString:@"b"])
+        {
+            NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
+            [self.textInProgress appendString:@"<b>"];
+            return;
+        }
+        
+        if ([elementName isEqualToString:@"u"])
+        {
+            NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
+            [self.textInProgress appendString:@"<u>"];
+            return;
+        }
+        
+        if ([elementName isEqualToString:@"font"])
+        {
+            NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
+            [self.textInProgress appendString:@"<font"];
+            for (id e in attributeDict)
+            {
+                // Alle Elemente in font (color usw...) einfach ausgeben
+                [self.textInProgress appendFormat:@" %@",e];
+                [self.textInProgress appendFormat:@"=\"%@\"",[attributeDict valueForKey:e]];
+            }
+            [self.textInProgress appendString:@">"];
+            return;
+        }
+    }
+
+
 
     if ([elementName isEqualToString:@"items"])
     {
@@ -2578,28 +2639,116 @@ didStartElement:(NSString *)elementName
         self.datasetItemsCounter = 0;
 
 
+        // Derzeit werden <items>-Listen als Array behandelt.
+        // Eventuell sollten das ebenfalls Objekte werden (To Think - ToDo)
+        // Ein Array mit dem Namen des gefundenen datasets und den dataset-items als Elementen
+        NSLog(@"Using the datasets attribute 'name' as name for a new JS-Array().");
+        [self.jsHead2Output appendString:@"// Ein Array mit dem Namen des gefundenen datasets und den dataset-items als Elementen\n"];
+        [self.jsHead2Output appendString:@"var "];
+        [self.jsHead2Output appendString:self.lastUsedDataset];
+        [self.jsHead2Output appendString:@" = new Array();\n"];
+
+
         // Hier muss ich auch die Var auf NO setzen, denn dann sind es nur normale 'items', die
         // ich einsammeln kann und keine tags die im Tag-Namem den Variablennamen haben
         self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
     }
 
-    // skipping All Elements in dataset without attribut 'src', die nicht 'items' sind
-    // Muss ich dringend tun und wenn ich hier drin bin alle Tags einsammeln (ToDo)
+    // Alle Elemente in dataset, die nicht 'items' sind, werden in Objekt-Propertys des zugehörigen
+    // Objektes umgewandelt (Der Objektname kommt aus dem dataset-'name'-Attribut)
     if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
     {
-        [self.collectedContentOfClass appendString:@""]; // ToDo. Was macht diese Zeile???
+        if (self.textInProgress != nil)
+            self.textInProgress = [NSMutableString stringWithFormat:@""];
 
-        // marker
-        //[self.jsHead2Output appendString:@"(var) x = ?"];
 
-        NSLog([NSString stringWithFormat:@"\nSkipping the Element %@ for now.", elementName]);
+
+        // Was ist das schon wieder für eine scheiße? Jetzt können in Datasets sogar Attribute und Methoden auftauchen... WTF???? ToDo ToDo ToDo ToDo ToDo
+        // Gleiche Liste beim schließenden Tag
+        if ([self.lastUsedDataset isEqualToString:@"dsEingabenOnline"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelSingle"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittel"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaFahrtenSingle"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExtSingle"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaUnterkunftskosten"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaLohnersatz"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaLohnersatzSingle"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaFahrten"] ||
+            [self.lastUsedDataset isEqualToString:@"dsElsterSend"] ||
+            [self.lastUsedDataset isEqualToString:@"dsElsterError"] ||
+            [self.lastUsedDataset isEqualToString:@"dsPaymentPaypal"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExt"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaBelege"] ||
+            [self.lastUsedDataset isEqualToString:@"dsCalcedData"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelGWG"])
+            return;
+
+
+        // elementNamen können auch  ein Minus (-) enthalten.
+        // Aber natürlich ist ein - im Objektnamen nicht möglich
+        // Deswegen in _ umwandeln
+        elementName = [elementName stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
+
+
+        // Ganz am Anfang erstmal das Objekt an sich anlegen
+        if (self.datasetItemsCounter == 0)
+        {
+            [self.jsHead2Output appendString:@"\n// Dieses Dataset wird als Objekt angelegt und bekommt alle Elemente als neue Objekt-Propertys mit\n"];
+            [self.jsHead2Output appendString:@"var "];
+            [self.jsHead2Output appendString:self.lastUsedDataset];
+            [self.jsHead2Output appendString:@" = {};\n"];
+        }
+
+        // Und jetzt alle <tags> dem Objekt als Property, welches wieder ein Objekt ist, hinzufügen
+        // Wenn das <tag> jedoch ein Attribut 'id' hat, dann mach doch ein Array.
+        if ([attributeDict valueForKey:@"id"])
+        {
+            [self.jsHead2Output appendString:self.lastUsedDataset];
+            [self addEnclosingElementsToDatasetProperty];
+            [self.jsHead2Output appendFormat:@".%@ = ['%@'];\n",elementName,[attributeDict valueForKey:@"id"]];
+        }
+        else
+        {
+            [self.jsHead2Output appendString:self.lastUsedDataset];
+            [self addEnclosingElementsToDatasetProperty];
+            [self.jsHead2Output appendFormat:@".%@ = {};\n",elementName];
+        }
+
+        // Dann bekommen die internen Objekt-Propertys die Attribute als Propertys mit
+        NSArray *keys = [attributeDict allKeys];
+        if ([keys count] > 0)
+        {
+            for (NSString *key in keys)
+            {
+                NSString *s = [attributeDict valueForKey:key];
+                // Übernommen analog zur anderen attributeDict-Schleife. Siehe dort
+                s = [s stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"];
+                s = [s stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
+
+                // Weil wir 'id' ja weiter oben berücksichtigt haben
+                if (![key isEqualToString:@"id"])
+                {
+                    [self.jsHead2Output appendString:self.lastUsedDataset];
+                    [self addEnclosingElementsToDatasetProperty];
+                    [self.jsHead2Output appendFormat:@".%@.%@ = \"%@\";\n",elementName,key,s];
+                }
+            }
+        }
+
+        self.datasetItemsCounter++;
+
+        // In den Strings von datasets können auch <br />'s drin sein, usw.
+        self.weAreCollectingTextAndThereMayBeHTMLTags = YES;
+
+        // Nicht weiter auswerten hier! Das sind selbst definierte Tags. Die werden nicht matchen
+        // Es wurde eh alles erledigt (dataset-Eintrag wurde als property in das Objekt übernommen)
         return;
     }
 
-    // skipping all Elements in Class-elements (ToDo)
+
     // skipping all Elements in splash (ToDo)
     // skipping all Elements in fileUpload (ToDo)
-    if (self.weAreSkippingTheCompleteContentInThisElement)
+    if (self.weAreCollectingTheCompleteContentInClass)
     {
         // Wenn wir in <class> sind, sammeln wir alles (wird erst später rekursiv ausgewertet)
         // Erst den Elementnamen hinzufügen
@@ -2671,53 +2820,6 @@ didStartElement:(NSString *)elementName
 
 
 
-
-    // Da dieser Zähler schließend bei den HTML-Elementen erfasst wird, muss er auch öffnend hier erhöht werden
-    // Deswegen steht er hier.
-    [self erhoeheVerschachtelungstiefe:elementName merkeDirID:[attributeDict valueForKey:@"id"]];
-
-
-
-
-
-    // Alle einzeln durchgehen, damit wir besser fehlende überprüfen können, deswegen ist dies kein redundanter Code
-    if (self.weAreInBDStextAndThereMayBeHTMLTags)
-    {
-        if ([elementName isEqualToString:@"br"])
-        {
-            NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
-            [self.textInProgress appendString:@"<br />"];
-            return;
-        }
-
-        if ([elementName isEqualToString:@"b"])
-        {
-            NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
-            [self.textInProgress appendString:@"<b>"];
-            return;
-        }
-
-        if ([elementName isEqualToString:@"u"])
-        {
-            NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
-            [self.textInProgress appendString:@"<u>"];
-            return;
-        }
-
-        if ([elementName isEqualToString:@"font"])
-        {
-            NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
-            [self.textInProgress appendString:@"<font"];
-            for (id e in attributeDict)
-            {
-                // Alle Elemente in font (color usw...) einfach ausgeben
-                [self.textInProgress appendFormat:@" %@",e];
-                [self.textInProgress appendFormat:@"=\"%@\"",[attributeDict valueForKey:e]];
-            }
-            [self.textInProgress appendString:@">"];
-            return;
-        }
-    }
 
 
 
@@ -3153,15 +3255,14 @@ didStartElement:(NSString *)elementName
 
         NSString *name = [attributeDict valueForKey:@"name"];
         self.lastUsedDataset = name; // item braucht es später
-        NSLog(@"Using the attribute 'name' as name for a new JS-Array().");
 
 
 
 
 
 
-        // Dringend ToDo -> ungefähre Anleitung: Alle nachfolgenden Tags in eine eigene Data-Struktur überführen
-        // Und diese Tags nicht auswerten lassen vom XML-Parser
+        // Alle nachfolgenden Tags in eine eigene Data-Struktur überführen
+        // und diese Tags nicht auswerten lassen vom XML-Parser.
         // Aber wieder rückgängig machen in <items>, falls wir darauf stoßen und
         // das dataset also damit strukturiert ist (und nicht mit eigenen Begriffen)!
         // Muss (logischerweise) vor der Rekursion stehen, deswegen steht es hier oben
@@ -3170,13 +3271,6 @@ didStartElement:(NSString *)elementName
 
 
 
-
-        // Ein Array mit dem Namen des gefundenen datasets und den dataset-items als Elementen
-        [self.jsHead2Output appendString:@"// Ein Array mit dem Namen des gefundenen datasets und den dataset-items als Elementen\n"];
-
-        [self.jsHead2Output appendString:@"var "];
-        [self.jsHead2Output appendString:name];
-        [self.jsHead2Output appendString:@" = new Array();\n"];
 
 
         // Fals es per src in eigener externer Datei angegeben ist, müssen wir diese auslesen
@@ -3212,6 +3306,7 @@ didStartElement:(NSString *)elementName
             else
             {
                 NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! So I am calling myself recursive with the file %@",[attributeDict valueForKey:@"src"]]);
+
                 [self callMyselfRecursive:[attributeDict valueForKey:@"src"]];
             }
         }
@@ -3822,7 +3917,7 @@ didStartElement:(NSString *)elementName
             }
         }
 
-        self.weAreInBDStextAndThereMayBeHTMLTags = YES;
+        self.weAreCollectingTextAndThereMayBeHTMLTags = YES;
         NSLog(@"We won't include possible following HTML-Tags, because it is content of the text.");
 
         [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]]];
@@ -5231,18 +5326,18 @@ didStartElement:(NSString *)elementName
 
 
 
-        // Alles was in class definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten
-        self.weAreSkippingTheCompleteContentInThisElement = YES;
+        // Alles was in class definiert wird, wird extra gesammelt
+        self.weAreCollectingTheCompleteContentInClass = YES;
     }
     if ([elementName isEqualToString:@"splash"]) // ToDo (ist das vielleicht selbst definierte Klasse?)
     {
         element_bearbeitet = YES;
-        self.weAreSkippingTheCompleteContentInThisElement = YES;
+        self.weAreCollectingTheCompleteContentInClass = YES;
     }
     if ([elementName isEqualToString:@"fileUpload"]) // ToDo (ist selbst defnierte Klasse)
     {
         element_bearbeitet = YES;
-        self.weAreSkippingTheCompleteContentInThisElement = YES;
+        self.weAreCollectingTheCompleteContentInClass = YES;
 
         if ([attributeDict valueForKey:@"name"])
             self.attributeCount++;
@@ -5269,7 +5364,7 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContentInThisElement = YES;
+        self.weAreCollectingTheCompleteContentInClass = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"dlginfo"] || [elementName isEqualToString:@"dlgwarning"] || [elementName isEqualToString:@"dlgyesno"] || [elementName isEqualToString:@"nicepopup"] || [elementName isEqualToString:@"nicedialog"])
@@ -5302,7 +5397,7 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was in diesen Dialogen definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContentInThisElement = YES;
+        self.weAreCollectingTheCompleteContentInClass = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"rollUpDownContainerReplicator"])
@@ -5328,7 +5423,7 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContentInThisElement = YES;
+        self.weAreCollectingTheCompleteContentInClass = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"calculator_anim"])
@@ -5347,7 +5442,7 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContentInThisElement = YES;
+        self.weAreCollectingTheCompleteContentInClass = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"certdatepicker"])
@@ -5372,7 +5467,7 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContentInThisElement = YES;
+        self.weAreCollectingTheCompleteContentInClass = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"BDSinputgrid"])
@@ -6773,8 +6868,83 @@ BOOL isNumeric(NSString *s)
     // Zum internen testen, ob wir alle Elemente erfasst haben
     BOOL element_geschlossen = NO;
 
+    // Schließen von baselist
+    // Noch schnell BEVOR ich reduziereVerschachtelungstiefe aufrufe,
+    // weil ich auf die ID des Elements zurückgreife!
+    if ([elementName isEqualToString:@"baselist"])
+    {
+        element_geschlossen = YES;
+
+        [self.output appendString:@"</select>\n"];
+
+        [self.jQueryOutput appendString:@"\n  // Das Attribut 'size' der <select>-Box wird entsprechend der Anzahl der options gesetzt\n"];
+        [self.jQueryOutput appendFormat:@"  $('#%@').attr('size', '%d');",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],self.baselistitemCounter];
+        if (self.baselistitemCounter == 2 || self.baselistitemCounter == 3)
+        {
+            [self.jQueryOutput appendString:@"\n  // Bei dem Wert 2 oder 3 braucht Webkit etwas Nachhilfe\n"];
+            //[self.jQueryOutput appendFormat:@"  $('#%@').height(%d*15);\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],self.baselistitemCounter];
+
+            [self.jQueryOutput appendFormat:@"  var sumH = 0;\n  $('#%@').children().each(function() { sumH += $(this).outerHeight(true); });\n  $('#%@').height(sumH);\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],self.baselistitemCounter];
+        }
+        else
+        {
+            [self.jQueryOutput appendString:@"\n\n"];
+        }
+    }
 
 
+    [self reduziereVerschachtelungstiefe];
+
+
+    NSLog([NSString stringWithFormat:@"Closing Element: %@ (Neue Verschachtelungstiefe: %d)\n", elementName,self.verschachtelungstiefe]);
+
+
+    // Alle einzeln durchgehen, damit wir besser fehlende überprüfen können,
+    // deswegen ist hier drin kein redundanter Code
+    if (self.weAreCollectingTextAndThereMayBeHTMLTags)
+    {
+        if ([elementName isEqualToString:@"br"])
+        {
+            element_geschlossen = YES;
+
+            // Für den Fall raus! Sonst überschreibt er weAreCollectingTextAndThereMayBeHTMLTags
+            if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
+                return;
+        }
+
+        if ([elementName isEqualToString:@"b"])
+        {
+            element_geschlossen = YES;
+
+            [self.textInProgress appendString:@"</b>"];
+
+            // Für den Fall raus! Sonst überschreibt er weAreCollectingTextAndThereMayBeHTMLTags
+            if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
+                return;
+        }
+
+        if ([elementName isEqualToString:@"u"])
+        {
+            element_geschlossen = YES;
+
+            [self.textInProgress appendString:@"</u>"];
+
+            // Für den Fall raus! Sonst überschreibt er weAreCollectingTextAndThereMayBeHTMLTags
+            if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
+                return;
+        }
+
+        if ([elementName isEqualToString:@"font"])
+        {
+            element_geschlossen = YES;
+
+            [self.textInProgress appendString:@"</font>"];
+
+            // Für den Fall raus! Sonst überschreibt er weAreCollectingTextAndThereMayBeHTMLTags
+            if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
+                return;
+        }
+    }
 
 
     // Schließen von dataset
@@ -6782,18 +6952,80 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
+        self.datasetItemsCounter = 0;
+
         if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
             self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
         else
             [self.jsHead2Output appendString:@"\n"];
     }
 
-    // skipping All Elements in dataset without attribut 'src' (ToDo?)
+    // Handle unknown closing Elements in dataset
     if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
     {
         element_geschlossen = YES;
 
-        NSLog([NSString stringWithFormat:@"\nSkipping the closing Element %@ for now.", elementName]);
+
+        self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
+
+
+        // Immer auf nil testen, sonst kann es abstürzen hier
+        NSString *s = @"";
+        if (self.textInProgress != nil)
+        {
+            s = self.textInProgress;
+
+            self.textInProgress = nil;
+            self.keyInProgress = nil;
+        }
+        // Remove leading and ending Whitespaces and NewlineCharacters
+        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+
+
+
+
+        // Was ist das schon wieder für eine scheiße? Jetzt können in Datasets sogar Attribute und Methoden auftauchen... WTF???? ToDo ToDo ToDo ToDo ToDo
+        // Gleiche Liste beim öffnenden Tag
+        if ([self.lastUsedDataset isEqualToString:@"dsEingabenOnline"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelSingle"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittel"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaFahrtenSingle"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExtSingle"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaUnterkunftskosten"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaLohnersatz"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaLohnersatzSingle"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaFahrten"] ||
+            [self.lastUsedDataset isEqualToString:@"dsElsterSend"] ||
+            [self.lastUsedDataset isEqualToString:@"dsElsterError"] ||
+            [self.lastUsedDataset isEqualToString:@"dsPaymentPaypal"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExt"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaBelege"] ||
+            [self.lastUsedDataset isEqualToString:@"dsCalcedData"] ||
+            [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelGWG"])
+            return;
+
+
+
+
+
+        if ([s length] > 0)
+        {
+            // Dann ist es doch kein Objekt... sondern es wird ein Inhalt erfasst.
+            if ( [self.jsHead2Output length] > 0)
+                self.jsHead2Output = [NSMutableString stringWithFormat:[self.jsHead2Output substringToIndex:[self.jsHead2Output length] - 4]];
+
+            // Und hinzufügen von gesammelten Text, falls er zwischen den tags gesetzt wurde.
+            [self.jsHead2Output appendFormat:@"%@;\n",s];
+        }
+
+
+
+
+
+
+        // Das sind selbstdefinierte Tags. Raus hier. Die werden niemals matchen
+        // Es wurde ja alles schon beim öffnen erledigt.
         return;
     }
 
@@ -6949,7 +7181,7 @@ BOOL isNumeric(NSString *s)
         rekursiveRueckgabeJsHeadOutput = [rekursiveRueckgabeJsHeadOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
 
 
-        // defaultplacement immer mit speichern, damit es besser ausgelesen werden kann
+        // defaultplacement immer mit speichern, damit es besser ausgelesen werden kann,
         // falls gesetzt.
         [self.jsOLClassesOutput appendFormat:@"  this.defaultplacement = '%@';\n\n",self.defaultplacement];
         self.defaultplacement = @"";
@@ -7003,10 +7235,10 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-        self.weAreSkippingTheCompleteContentInThisElement = NO;
+        self.weAreCollectingTheCompleteContentInClass = NO;
     }
     // If we are still skipping All Elements, let's return here
-    if (self.weAreSkippingTheCompleteContentInThisElement)
+    if (self.weAreCollectingTheCompleteContentInClass)
     {
         // Wenn wir in <class> sind, sammeln wir alles (wird erst später rekursiv ausgewertet)
 
@@ -7070,37 +7302,6 @@ BOOL isNumeric(NSString *s)
         return;
 
 
-    // Alle einzeln durchgehen, damit wir besser fehlende überprüfen können,
-    // deswegen ist hier drin kein redundanter Code
-    if (self.weAreInBDStextAndThereMayBeHTMLTags)
-    {
-        if ([elementName isEqualToString:@"br"])
-        {
-            element_geschlossen = YES;
-        }
-
-        if ([elementName isEqualToString:@"b"])
-        {
-            element_geschlossen = YES;
-
-            [self.textInProgress appendString:@"</b>"];
-        }
-
-        if ([elementName isEqualToString:@"u"])
-        {
-            element_geschlossen = YES;
-
-            [self.textInProgress appendString:@"</u>"];
-        }
-        if ([elementName isEqualToString:@"font"])
-        {
-            element_geschlossen = YES;
-
-            [self.textInProgress appendString:@"</font>"];
-        }
-    }
-
-
 
     // Dies hier MUSS wirklich als erstes kommen... Hat mich 3 Stunden Zeit gekostet...
     // Insbesondere muss es vor '</class>' kommen!!
@@ -7128,7 +7329,8 @@ BOOL isNumeric(NSString *s)
 
         // Einmal extra Verschachtelungstiefe reduzieren, für das erste schließende when
         // Für das korrespondierende öffnende tag wurde die Verschachtelungstiefe nämlich vorher erhöht!
-        [self reduziereVerschachtelungstiefe];
+        //[self reduziereVerschachtelungstiefe];
+        // Neu: Nicht mehr nötig seid reduziereVerschachtelungstiefe ganz am Anfang steht
     }
     // wenn wir aber trotzdem immer noch drin sind, dann raus hier, sonst würde er Elemente
     // schließend bearbeiten, die im 'when'-Zweig drin liegen
@@ -7157,37 +7359,7 @@ BOOL isNumeric(NSString *s)
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
-    // Schließen von baselist
-    // Noch schnell BEVOR ich reduziereVerschachtelungstiefe aufrufe, weil ich auf die ID des Elements zurückgreife!
-    if ([elementName isEqualToString:@"baselist"])
-    {
-        element_geschlossen = YES;
 
-        [self.output appendString:@"</select>\n"];
-
-        [self.jQueryOutput appendString:@"\n  // Das Attribut 'size' der <select>-Box wird entsprechend der Anzahl der options gesetzt\n"];
-        [self.jQueryOutput appendFormat:@"  $('#%@').attr('size', '%d');",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],self.baselistitemCounter];
-        if (self.baselistitemCounter == 2 || self.baselistitemCounter == 3)
-        {
-            [self.jQueryOutput appendString:@"\n  // Bei dem Wert 2 oder 3 braucht Webkit etwas Nachhilfe\n"];
-            //[self.jQueryOutput appendFormat:@"  $('#%@').height(%d*15);\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],self.baselistitemCounter];
-
-            [self.jQueryOutput appendFormat:@"  var sumH = 0;\n  $('#%@').children().each(function() { sumH += $(this).outerHeight(true); });\n  $('#%@').height(sumH);\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],self.baselistitemCounter];
-
-        }
-        else
-        {
-            [self.jQueryOutput appendString:@"\n\n"];
-        }
-    }
-
-
-    [self reduziereVerschachtelungstiefe];
-
-
-
-
-    NSLog([NSString stringWithFormat:@"Closing Element: %@ (Neue Verschachtelungstiefe: %d)\n", elementName,self.verschachtelungstiefe]);
 
     // Schließen von canvas oder windows
     if ([elementName isEqualToString:@"canvas"] || [elementName isEqualToString:@"window"])
@@ -7372,7 +7544,7 @@ BOOL isNumeric(NSString *s)
         [self.output appendString:s];
 
         // Ab jetzt dürfen wieder Tags gesetzt werden.
-        self.weAreInBDStextAndThereMayBeHTMLTags = NO;
+        self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
         NSLog(@"BDStext/statictext was closed. I will not any longer skip tags.");
 
         [self.output appendString:@"</div>\n"];
@@ -7706,9 +7878,9 @@ BOOL isNumeric(NSString *s)
 
 
 
-    // bei den HTML-Tags innerhalb von BDStext darf ich self.textInProgress nicht auf nil setzen,
-    // da ich den Text ja weiter ergänze. Erst ganz am Ende beim Schließen von BDSText mache ich das.
-    if (!self.weAreInBDStextAndThereMayBeHTMLTags)
+    // Bei den HTML-Tags innerhalb von BDStext darf ich self.textInProgress nicht auf nil setzen,
+    // da ich den Text ja weiter ergänze. Erst ganz am Ende beim Schließen von BDSText mache ich das
+    if (!self.weAreCollectingTextAndThereMayBeHTMLTags)
     {
         // Clear the text and key
         self.textInProgress = nil;
@@ -8713,7 +8885,8 @@ BOOL isNumeric(NSString *s)
     "var lasthelpid = 'tabStart';\n"
     "function setglobalhelp(helpid)\n"
     "{\n"
-    //"    $('#___globalhelp').text(s);\n"
+    "    globalhelp.info.setAttribute_('text',helpid)\n"
+    "    return;\n"
     "  lasthelpid = helpid;\n"
     "  var info='';\n"
     "  var infonode=dpGlobalhelp.xpathQuery(\"info[@id='\"+helpid+\"']\")\n"
@@ -9332,7 +9505,7 @@ BOOL isNumeric(NSString *s)
     //"    alert(an[i]);\n"
     //"    alert(av[i]);\n"
     "    var cssAttributes = ['bgcolor','width','height'];\n"
-    "    var jsAttributes = ['onclick','focusable','styleable','layout','initstage'];\n"
+    "    var jsAttributes = ['onclick','focusable','styleable','layout','initstage','doesenter','align','resource'];\n"
     "    if (jQuery.inArray(an[i],cssAttributes) != -1)\n"
     "    {\n"
     "      if (an[i] === 'bgcolor')\n"
@@ -9377,15 +9550,51 @@ BOOL isNumeric(NSString *s)
     "      }\n"
     "      else if (an[i] === 'focusable' && av[i] === 'false')\n"
     "      {\n"
-    "        $(id).on('focus', function() { this.blur(); });\n"
+    "        $(id).on('focus.blurnamespace', function() { this.blur(); });\n"
+    "      }\n"
+    "      else if (an[i] === 'focusable' && av[i] === 'true')\n"
+    "      {\n"
+    "        // Einen eventuell vorher gesetzten focus-Handler, der blur() handlet, entfernen\n"
+    "        $(id).off('focus.blurnamespace');\n"
     "      }\n"
     "      else if (an[i] === 'styleable' && av[i] === 'false')\n"
     "      {\n"
     "        // ToDo\n"
     "      }\n"
+    "      else if (an[i] === 'doesenter')\n"
+    "      {\n"
+    "        // if set to true, the component manager will call this component with doEnterDown\n"
+    "        // and doEnterUp when the enter key goes up or down if it is focussed\n"
+    "      }\n"
     "      else if (an[i] === 'initstage' && av[i] === 'defer')\n"
     "      {\n"
     "        // wohl nix zu tun\n"
+    "      }\n"
+    "      else if (an[i] === 'resource')\n"
+    "      {\n"
+    "        var imgpath0 = window[av[i]][0];\n"
+    "        var imgpath1 = window[av[i]][1];\n"
+    "        var imgpath2 = window[av[i]][2];\n"
+    "\n"
+    "        // Get programmatically 'width' and 'height' of the image\n"
+    "        var img = new Image();\n"
+    //"        img.onload = function() {\n"
+    //"          $(id).width(this.width);\n"
+    //"          $(id).height(this.height);\n"
+    //"        }\n"
+    "        img.src = imgpath0;\n"
+    "        $(id).width(img.width);\n"
+    "        $(id).height(img.height);\n"
+    "\n"
+    "        $(id).css('background-image','url('+imgpath0+')');\n"
+    "\n"
+    "        $(id).hover(function() { $(id).css('background-image','url('+imgpath1+')') }, function() { $(id).css('background-image','url('+imgpath0+')') });\n"
+    "        $(id).on('mousedown',function() { $(id).css('background-image','url('+imgpath2+')') });\n"
+    "        $(id).on('mouseup',function() { $(id).css('background-image','url('+imgpath0+')') });\n"
+    "      }\n"
+    "      else if (an[i] === 'align' && av[i] === 'right')\n"
+    "      {\n"
+    "        $(id).css('left',$(id).parent().width()-$(id).width());\n"
     "      }\n"
     "      else if (an[i] === 'layout' && !av[i].contains('class') &&  av[i].replace(/\\s/g,'').contains('axis:x'))\n"
     "      {\n"
@@ -9576,7 +9785,7 @@ BOOL isNumeric(NSString *s)
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'basebutton';\n"
-    "  this.parent = new button(textBetweenTags);\n"
+    "  this.parent = new view();\n" // nicht new button(). verträgt sich nicht mit dem Weiter-Button
     "\n"
     "  this.attributeNames = [];\n"
     "  this.attributeValues = [];\n"

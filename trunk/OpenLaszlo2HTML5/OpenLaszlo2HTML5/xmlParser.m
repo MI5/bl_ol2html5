@@ -150,7 +150,6 @@ BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber 
 @property (nonatomic) BOOL weAreInRollUpDownWithoutSurroundingRUDContainer;
 
 
-// ToDo: Umbenennen in: weAreCollectingTheCompleteContentInClass
 @property (nonatomic) BOOL weAreCollectingTheCompleteContentInClass;
 //auch ein 2. und 3., sonst gibt es Interferenzen wenn ein zu skippendes Element in einem anderen zu skippenden liegt
 @property (nonatomic) BOOL weAreSkippingTheCompleteContentInThisElement2;
@@ -251,7 +250,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         [[self log] appendString:s];
         [[self log] appendString:@"\n"];
 
-        // ToDo: Diese Zeile nur beim debuggen drin, damit ich nicht scrollen muss (tut extrem verlangsamen den Converter-Lauf sonst)
+        // Diese Zeile nur beim debuggen drin, damit ich nicht scrollen muss
+        // (verlangsamt sonst extrem den Converter-Lauf)
         // [self jumpToEndOfTextView];
     }
 }
@@ -929,7 +929,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             [self.jQueryOutput appendFormat:@"  $('#%@').css('left',toIntFloor((parseInt($('#%@').parent().css('width'))-parseInt($('#%@').outerWidth()))/2));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
         }
 
-        // Hier mache ich erstmal nichts, align=left sollte eigentlich Ausgangswert sein, aber To Check (ToDo)
+
         if ([[attributeDict valueForKey:@"align"] isEqual:@"left"])
         {
             self.attributeCount++;

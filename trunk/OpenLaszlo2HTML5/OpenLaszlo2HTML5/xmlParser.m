@@ -492,8 +492,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     s = [self makeTheComputedValueComputable:s];
 
-    s = [s stringByReplacingOccurrencesOfString:@"classroot" withString:ID_REPLACE_STRING];
-
     if ([attr isEqualToString:@"value"])
     {
         // text ist in Wirklichkeit value. Oder Gilt das sogar allgemein? Also vor die If-Abfrage ziehen?
@@ -875,7 +873,6 @@ void OLLog(xmlParser *self, NSString* s,...)
         [style appendString:@"px;"];
 
 
-        // ToDo: Die in 'canvas' gesetzten Attribute hier her verlagern
         if (![elemName isEqualToString:@"canvas"])
         {
             NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
@@ -925,27 +922,34 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Funktioniert leider nicht:
             //[style appendString:@"margin-left:auto; margin-right:auto;"];
 
-            [self.jQueryOutput appendString:@"\n  // align wurde als Attribut gefunden: Richte das Element entsprechend mittig (horizontal) aus\n"];
-            [self.jQueryOutput appendFormat:@"  $('#%@').css('left',toIntFloor((parseInt($('#%@').parent().css('width'))-parseInt($('#%@').outerWidth()))/2));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
+            [self.jQueryOutput appendString:@"\n  // align wurde als Attribut gefunden: Richte das Element entsprechend mittig (horizontale Achse) aus"];
+            [self.jQueryOutput appendFormat:@"\n  $('#%@').css('left',toIntFloor((parseInt($('#%@').parent().css('width'))-parseInt($('#%@').outerWidth()))/2));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
         }
 
 
         if ([[attributeDict valueForKey:@"align"] isEqual:@"left"])
         {
             self.attributeCount++;
-            NSLog(@"Skipping the attribute 'align=left' for now.");
+            NSLog(@"Skipping the attribute 'align=left', because this is the default-value.");
         }
 
-        // ToDo, hierzu muss ich mir noch eine Lösung einfallen lassen
+
+
         if ([[attributeDict valueForKey:@"align"] isEqual:@"right"])
         {
             self.attributeCount++;
-            NSLog(@"Skipping the attribute 'align=right' for now.");
+            NSLog(@"Setting the attribute 'align=right' as offset for 'left'.");
+
+            [self.jQueryOutput appendString:@"\n  // align wurde als Attribut gefunden: Richte das Element entsprechend rechts (horizontale Achse) aus"];
+            [self.jQueryOutput appendFormat:@"\n  $('#%@').css('left',toIntFloor((parseInt($('#%@').parent().width())-$('#%@').outerWidth())));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
         }
 
+
         // ToDo, hierzu muss ich mir noch eine Lösung einfallen lassen
-        if ([[attributeDict valueForKey:@"align"] isEqual:@"${classroot.textalign}"])
+        if ([[attributeDict valueForKey:@"align"] hasPrefix:@"${"])
         {
+            NSString *s = [self makeTheComputedValueComputable:[attributeDict valueForKey:@"align"]];
+
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'align=${classroot.textalign}' for now.");
         }
@@ -1005,11 +1009,35 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.attributeCount++;
         NSLog(@"Skipping the attribute 'stretches'.");
     }
+
+
+
     if ([attributeDict valueForKey:@"initstage"])
     {
-        // Dieses Attribut spielt hoffentlich keine Rolle
-        self.attributeCount++;
-        NSLog(@"Skipping the attribute 'initstage'.");
+        // Damit kann der Ladezeitpunkt von Elementen beeinflusst werden
+        // Letzen Endes spielt nur initstage=defer eine Rolle, weil es dann GAR NICHT
+        // geladen wird, sondern erst später nach Aufruf von 'completeInstantiation'
+
+
+        if ([[attributeDict valueForKey:@"initstage"] isEqual:@"immediate"] ||
+            [[attributeDict valueForKey:@"initstage"] isEqual:@"early"] ||
+            [[attributeDict valueForKey:@"initstage"] isEqual:@"normal"] ||
+            [[attributeDict valueForKey:@"initstage"] isEqual:@"late"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'initstage'.");
+        }
+
+        if ([[attributeDict valueForKey:@"initstage"] isEqual:@"defer"])
+        {
+            self.attributeCount++;
+
+            NSLog(@"Attribute 'initstage=defer' so hiding the Element, because it shoudn't be loaded right now (trick).");
+
+            [self.jQueryOutput appendString:@"\n  // 'initstage=defer' so hiding the Element, because it shoudn't be loaded right now (trick)."];
+            //[self.jQueryOutput appendFormat:@"\n  $('#%@').hide();\n",self.zuletztGesetzteID];
+            // Noch auskommentiert, zeigt dann noch ganze Tabs nicht an. ToDo
+        }
     }
     if ([attributeDict valueForKey:@"listwidth"])
     {
@@ -1172,6 +1200,82 @@ void OLLog(xmlParser *self, NSString* s,...)
             // [style appendString:@"position:absolute;"];
         }
     }
+
+
+
+
+
+    // Bestimmte Attribute werden in canvas anders (oder nur dort) behandelt
+    if ([elemName isEqualToString:@"canvas"])
+    {
+        // Wir deklarieren Angaben zur Schriftart und Schriftgröße lieber nochmal als CSS für das
+        // body-Element. Aber nur wenn font-art oder wenigstens fontsize auch angegeben wurde
+        if ([attributeDict valueForKey:@"fontsize"] || [attributeDict valueForKey:@"font"])
+        {
+            NSString *fontsize;
+            if ([attributeDict valueForKey:@"fontsize"])
+                fontsize = [attributeDict valueForKey:@"fontsize"];
+            else
+                fontsize = @"12";
+
+            NSString *font;
+            if ([attributeDict valueForKey:@"font"])
+                font = [attributeDict valueForKey:@"font"];
+            else
+                font = @"";
+
+            [self.cssOutput appendString:@"body\n{\n  text-align: center;\n  font-size: "];
+            [self.cssOutput appendString:fontsize];
+            [self.cssOutput appendString:@"px;\n"];
+            [self.cssOutput appendString:@"  font-family: "];
+            [self.cssOutput appendString:font];
+            [self.cssOutput appendString:@", Verdana, Helvetica, sans-serif, Arial;\n"];
+
+            // Auch noch die Hintergrundfarbe auf Body anwenden, falls vorhanden
+            if ([attributeDict valueForKey:@"bgcolor"])
+            {
+                [self.cssOutput appendString:@"  background-color: "];
+                [self.cssOutput appendString:[attributeDict valueForKey:@"bgcolor"]];
+                [self.cssOutput appendString:@";\n"];
+            }
+
+            // Wenn wir Taxango sind, dann das Hintergrundbild aus dem HTML-File direkt setzen
+            if ([[[self.pathToFile lastPathComponent] stringByDeletingPathExtension] isEqualToString:@"Taxango"])
+            {
+                [self.cssOutput appendString:@"  /* Hintergrundbild von Taxango-HTML-File */\n"];
+                [self.cssOutput appendString:@"  background-image:url(images/bg1.jpg);\n"];
+            }
+
+            [self.cssOutput appendString:@"}\n\n"];
+
+
+            // auch für .div_text muss ich font-size und font-family übernehmen
+            [self.cssOutput appendString:@".div_text\n{\n  font-size: "];
+            [self.cssOutput appendString:fontsize];
+            [self.cssOutput appendString:@"px;\n"];
+            [self.cssOutput appendString:@"  font-family: "];
+            [self.cssOutput appendString:font];
+            [self.cssOutput appendString:@", Verdana, Helvetica, sans-serif, Arial;\n"];
+            [self.cssOutput appendString:@"}\n\n"];
+        }
+
+
+        // Debug-Konsole aktivieren, falls gewünscht
+        if ([attributeDict valueForKey:@"debug"])
+        {
+            self.attributeCount++;
+            if ([[attributeDict valueForKey:@"debug"] isEqualToString:@"true"])
+            {
+                [self.jQueryOutput appendString:@"\n  // Debug-Konsole aktivieren\n"];
+                [self.jQueryOutput appendString:@"  $('div:first').append('<div id=\"debugWindow\"><div style=\"background-color:black;color:white;width:100%;\">DEBUG WINDOW</div><div id=\"debugInnerWindow\"></div></div>');\n"];
+                [self.jQueryOutput appendString:@"  $('#debugWindow').draggable();\n\n"];
+            }
+        }
+    }
+
+
+
+
 
 
 
@@ -1382,7 +1486,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 - (NSString*) makeTheComputedValueComputable:(NSString*)s
 {
     s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
-    s = [self modifySomeMethodsInJSCode:s];
+    s = [self modifySomeExpressionsInJSCode:s];
 
     // s = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,s];
     // Nachfolgende Lösung ist besser, weil Scope erhalten bleibt, aber nicht fix ist.
@@ -1396,7 +1500,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // Ne, wir definieren einfach ein globales setAttribute_ mit defineProperty
 // Dazu muss ich dann nur das this immer aktualisieren, da es auch passieren kann, dass
 // setAttribute ohne vorangehende Variable aufgerufen wird.
-- (NSString*) modifySomeMethodsInJSCode:(NSString*)s
+- (NSString*) modifySomeExpressionsInJSCode:(NSString*)s
 {
     // Diese Methode kann nicht überschrieben werden, da intern bentutz von jQuery
     // Hatte ich mal als 'setAttribute(', aber die Klamemr bricht natürlich den RegExp
@@ -1422,6 +1526,12 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Der getter muss neu benannt werden, da intern von jQuery benutzt
     // und wenn ich den getter probiere zu überschreiben, gibt es eine Rekursion.
     s = [s stringByReplacingOccurrencesOfString:@"width" withString:@"myWidth"];
+
+
+    // classroot taucht nur in Klassen auf und bezeichnet die Wurzel der Klasse
+    if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+        s = [self inString:s searchFor:@"classroot" andReplaceWith:ID_REPLACE_STRING ignoringTextInQuotes:YES];
+
 
     // Remove leading and ending Whitespaces and NewlineCharacters
     s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -1767,7 +1877,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         s = [s stringByReplacingOccurrencesOfString:@"canvas." withString:@""];
 
 
-        s = [self modifySomeMethodsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s];
 
 
         NSMutableString *gesammelterCode = [[NSMutableString alloc] initWithString:@""];
@@ -2521,7 +2631,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
         else
         {
-            [self.jsOutput appendFormat:@"    if (kind.css('position') == 'TODO oder auch nicht')\n",elem];
+            [self.jsOutput appendFormat:@"    if (kind.css('position') == 'ToDo oder auch nicht')\n",elem];
             [self.jsOutput appendString:@"    {\n"];
             [self.jsOutput appendFormat:@"      var topValue = %@  + kind.prev().height() + parseInt(kind.prev().css('top'));\n",spacing];
             [self.jsOutput appendString:@"      var leftValue = parseInt(kind.prev().css('left'))-kind.prev().width();\n"];
@@ -3129,69 +3239,6 @@ didStartElement:(NSString *)elementName
         [self.output appendString:[self addCSSAttributes:attributeDict toElement:elementName]];
 
         [self.output appendString:@"\">\n"];
-
-        // Wir deklarieren Angaben zur Schriftart und Schriftgröße lieber nochmal als CSS für das
-        // body-Element. Aber nur wenn font-art oder wenigstens fontsize auch angegeben wurde
-        if ([attributeDict valueForKey:@"fontsize"] || [attributeDict valueForKey:@"font"])
-        {
-            NSString *fontsize;
-            if ([attributeDict valueForKey:@"fontsize"])
-                fontsize = [attributeDict valueForKey:@"fontsize"];
-            else
-                fontsize = @"12";
-
-            NSString *font;
-            if ([attributeDict valueForKey:@"font"])
-                font = [attributeDict valueForKey:@"font"];
-            else
-                font = @"";
-
-            [self.cssOutput appendString:@"body\n{\n  text-align: center;\n  font-size: "];
-            [self.cssOutput appendString:fontsize];
-            [self.cssOutput appendString:@"px;\n"];
-            [self.cssOutput appendString:@"  font-family: "];
-            [self.cssOutput appendString:font];
-            [self.cssOutput appendString:@", Verdana, Helvetica, sans-serif, Arial;\n"];
-
-            // Auch noch die Hintergrundfarbe auf Body anwenden, falls vorhanden
-            if ([attributeDict valueForKey:@"bgcolor"])
-            {
-                [self.cssOutput appendString:@"  background-color: "];
-                [self.cssOutput appendString:[attributeDict valueForKey:@"bgcolor"]];
-                [self.cssOutput appendString:@";\n"];
-            }
-
-            // Wenn wir Taxango sind, dann das Hintergrundbild aus dem HTML-File direkt setzen
-            if ([[[self.pathToFile lastPathComponent] stringByDeletingPathExtension] isEqualToString:@"Taxango"])
-            {
-                [self.cssOutput appendString:@"  /* Hintergrundbild von Taxango-HTML-File */\n"];
-                [self.cssOutput appendString:@"  background-image:url(images/bg1.jpg);\n"];
-            }
-
-            [self.cssOutput appendString:@"}\n\n"];
-
-
-            // auch für .div_text muss ich font-size und font-family übernehmen
-            [self.cssOutput appendString:@".div_text\n{\n  font-size: "];
-            [self.cssOutput appendString:fontsize];
-            [self.cssOutput appendString:@"px;\n"];
-            [self.cssOutput appendString:@"  font-family: "];
-            [self.cssOutput appendString:font];
-            [self.cssOutput appendString:@", Verdana, Helvetica, sans-serif, Arial;\n"];
-            [self.cssOutput appendString:@"}\n\n"];
-        }
-
-        // Debug-Konsole aktivieren, falls gewünscht
-        if ([attributeDict valueForKey:@"debug"])
-        {
-            self.attributeCount++;
-            if ([[attributeDict valueForKey:@"debug"] isEqualToString:@"true"])
-            {
-                [self.jQueryOutput appendString:@"\n  // Debug-Konsole aktivieren\n"];
-                [self.jQueryOutput appendString:@"  $('div:first').append('<div id=\"debugWindow\"><div style=\"background-color:black;color:white;width:100%;\">DEBUG WINDOW</div><div id=\"debugInnerWindow\"></div></div>');\n"];
-                [self.jQueryOutput appendString:@"  $('#debugWindow').draggable();\n\n"];
-            }
-        }
     }
 
     if ([elementName isEqualToString:@"debug"])
@@ -3804,8 +3851,6 @@ didStartElement:(NSString *)elementName
 
 
 
-    // ToDo: BaseButton sichtbar und schön machen per CSS und eigene class dafür (evtl. button von
-    // jQuery UI?
     if ([elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"buttonnextToDoTakeMeOut"])
@@ -4853,12 +4898,13 @@ didStartElement:(NSString *)elementName
 
         // Die jQuery-Ausgabe
         if (callback)
-            [self.jQueryOutput appendString:@"\n  // Animation bei Klick auf die Leiste (mit callback)\n"];
+            [self.jQueryOutput appendString:@"\n  // Animation bei Klick auf die Leiste (mit callback)"];
         else
-            [self.jQueryOutput appendString:@"\n  // Animation bei Klick auf die Leiste (ohne callback)\n"];
+            [self.jQueryOutput appendString:@"\n  // Animation bei Klick auf die Leiste (ohne callback)"];
 
-        [self.jQueryOutput appendFormat:@"  $('#%@').click(function(){$('#%@').slideToggle(",id4flipleiste,id4panel];
-        [self.jQueryOutput appendString:self.animDuration];
+        [self.jQueryOutput appendString:@"\n  // Vorher alle Panels gleicher Ebene schließen, aber nicht unser aktuell geklicktes"];
+
+        [self.jQueryOutput appendFormat:@"\n  $('#%@').click(function(){ $('#%@').parent().parent().children().children('.div_rudPanel:not(\"#%@\")').slideUp(%@); $('#%@').slideToggle(%@",id4flipleiste,id4flipleiste,id4panel,self.animDuration,id4panel,self.animDuration];
         if (callback)
         {
             [self.jQueryOutput appendString:@","];
@@ -4871,7 +4917,7 @@ didStartElement:(NSString *)elementName
 
         // Menüs sind standardmäßig immer zu (falls z. B. gar kein Attribut angegeben wurde)
         // Deswegen das Menü hier zumachen (ohne Animation!)
-        // Dieser COde funktioniert nicht....
+        // Dieser Code funktioniert nicht....
         //[self.jQueryOutput appendFormat:@"  $('#%@').slideToggle(0); // RUD-Element zuschieben\n",id4panel];
         // Aber dieser:
         [self.jQueryOutput appendFormat:@"  $('#%@').css('display','none'); // RUD-Element zuschieben\n",id4panel];
@@ -7617,7 +7663,7 @@ BOOL isNumeric(NSString *s)
 
 
         // Natürlich auch hier setAttribute durch setAttribute_ ersetzen
-        s = [self modifySomeMethodsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s];
 
 
         // ToDo, DIESES DUMME REGEXP --- Statt dessen einfach return bei function..asdf.sd.fas.afgwe.
@@ -7736,7 +7782,7 @@ BOOL isNumeric(NSString *s)
         s = [s stringByReplacingOccurrencesOfString:@".attr('text'" withString:@".attr('value'"];
         */
         // Statt dessen:
-        s = [self modifySomeMethodsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s];
 
 
         // OL benutzt 'classroot' als Variable für den Zugriff auf das erste in einer Klasse
@@ -7796,7 +7842,7 @@ BOOL isNumeric(NSString *s)
             s = [s stringByReplacingOccurrencesOfString:@"  " withString:@" "];
         }
 
-        s = [self modifySomeMethodsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s];
 
         // super ist nicht erlaubt in JS und gibt es auch nicht.
         // Ich ersetze es erstmal durch this. ToDo
@@ -9568,7 +9614,7 @@ BOOL isNumeric(NSString *s)
     "      }\n"
     "      else if (an[i] === 'initstage' && av[i] === 'defer')\n"
     "      {\n"
-    "        // wohl nix zu tun\n"
+    "        $(id).hide();\n"
     "      }\n"
     "      else if (an[i] === 'resource')\n"
     "      {\n"

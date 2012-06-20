@@ -951,7 +951,10 @@ void OLLog(xmlParser *self, NSString* s,...)
             NSString *s = [self makeTheComputedValueComputable:[attributeDict valueForKey:@"align"]];
 
             self.attributeCount++;
-            NSLog(@"Skipping the attribute 'align=${classroot.textalign}' for now.");
+            NSLog(@"Computed value, so accessing the setter of 'align'.");
+
+            [self.jQueryOutput appendString:@"\n  // setting align by accessing the setter"];
+            [self.jQueryOutput appendFormat:@"\n  #%@'.align = %@;\n",self.zuletztGesetzteID,s];
         }
     }
 

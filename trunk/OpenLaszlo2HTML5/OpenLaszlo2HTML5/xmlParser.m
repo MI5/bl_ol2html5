@@ -23,7 +23,7 @@ BOOL alternativeFuerSimplelayout = YES; // Bei YES kann <simplelayout> an belieb
                                         // Es scheint sehr zuverlässig zu funktionieren inzwischen.
                                         // Kann wohl dauerhaft auf YES bleiben!
 
-BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -464,7 +464,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     [self.jQueryOutput appendFormat:@"\n  // Setting the height of '#%@' by jQuery, because it is a computed value (%@)\n",self.zuletztGesetzteID,s];
 
 
-    s = [self makeTheComputedValueComputable:s asFunction:YES];
+    s = [self makeTheComputedValueComputable:s];
 
 
     // this von OpenLaszlo muss ersetzt werden
@@ -489,7 +489,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     [self.jQueryOutput appendFormat:@"\n  // Setting the Attribute '%@' with jQuery, because it depends on 'classroot'\n",attr];
 
-    s = [self makeTheComputedValueComputable:s asFunction:YES];
+    s = [self makeTheComputedValueComputable:s];
 
     if ([attr isEqualToString:@"value"])
     {
@@ -950,7 +950,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         if ([[attributeDict valueForKey:@"align"] hasPrefix:@"${"])
         {
-            NSString *s = [self makeTheComputedValueComputable:[attributeDict valueForKey:@"align"] asFunction:NO];
+            NSString *s = [self makeTheComputedValueComputable:[attributeDict valueForKey:@"align"]];
 
             self.attributeCount++;
             NSLog(@"Computed value, so accessing the setter of 'align'.");
@@ -1024,25 +1024,18 @@ void OLLog(xmlParser *self, NSString* s,...)
 
             [self.jQueryOutput appendString:@"\n  // 'initstage=defer' so hiding the Element, because it shoudn't be loaded right now (trick).\n"];
             //[self.jQueryOutput appendFormat:@"  $('#%@').hide();\n",self.zuletztGesetzteID];
-            // Noch auskommentiert, zeigt dann noch ganze Tabs nicht an. ToDo
+            // Noch auskommentiert, zeigt dann noch ganze Tabs nicht an. To Check
         }
     }
+
+    //ToDo
     if ([attributeDict valueForKey:@"listwidth"])
     {
         // Kann mit diesem Attribut derzeit nichts anfangen
         self.attributeCount++;
         NSLog(@"Skipping the attribute 'listwidth'.");
     }
-    if ([attributeDict valueForKey:@"negativecolor"]) // ToDo
-    {
-        self.attributeCount++;
-        NSLog(@"Skipping the attribute 'negativecolor'.");
-    }
-    if ([attributeDict valueForKey:@"positivecolor"]) // ToDo
-    {
-        self.attributeCount++;
-        NSLog(@"Skipping the attribute 'positivecolor'.");
-    }
+
 
 
 
@@ -1474,7 +1467,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-- (NSString*) makeTheComputedValueComputable:(NSString*)s asFunction:(BOOL)returnAFunction
+- (NSString*) makeTheComputedValueComputable:(NSString*)s
 {
     s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
     s = [self modifySomeExpressionsInJSCode:s];
@@ -1482,16 +1475,13 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     // s = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,s];
     // Nachfolgende Lösung ist besser, weil Scope erhalten bleibt, aber nicht fix ist.
-    if (returnAFunction)
-    {
-        s = [NSString stringWithFormat:@"function() { with (%@) { return %@; } }",self.zuletztGesetzteID,s];
-    }
-    else
-    {
-        // ist zwar doch auch wieder eine Function, aber eine die sich selbst ausführt
-        // und dadurch den Return-Wert zurückliefert, als sei es ein fixer Wert!
-        s = [NSString stringWithFormat:@"(function() { with (%@) { return %@; } })()",self.zuletztGesetzteID,s];
-    }
+    // s = [NSString stringWithFormat:@"function() { with (%@) { return %@; } }",self.zuletztGesetzteID,s];
+    // Nachfolgende Lösung ist NOCH besser, weil zusätzlich sie auch dort eingesetzt werden kann, wo fixe
+    // Return-Werte erwartet werden, und nicht nur Funktionen (diese sind meist nur in jQuery okay)
+    // Und zwar handelt es sich um eine sich selbst ausführende Funktion
+    // und dadurch den Return-Wert zurückliefert, als sei es ein fixer Wert!
+    s = [NSString stringWithFormat:@"(function() { with (%@) { return %@; } })()",self.zuletztGesetzteID,s];
+
 
     return s;
 }
@@ -2078,9 +2068,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    // Ansonsten setzen wir eine interne Variable - erstmal sammeln - später lockern dieser Abfrage
-    // ToDo
-
+    // Ansonsten setzen wir wohl eine interne Variable - erstmal sammeln - später lockern dieser Abfrage
+    // ToDo -> ne, wird alles gessamelt falls wir auf eine Klasse stoßen, dort.
 
     // 'mask' ist intern read-only, wird aber von GFlender überschrieben, ein Spezialfall.
     //  -> Im Prinzip muss ich es wohl als eigene Var auffassen und dem entsprechend auswerten
@@ -2092,7 +2081,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSString *s = [attributeDict valueForKey:@"mask"];
 
         if ([s hasPrefix:@"${"])
-            s = [self makeTheComputedValueComputable:s asFunction:NO];
+            s = [self makeTheComputedValueComputable:s];
 
         NSLog([NSString stringWithFormat:@"Setting the var 'mask' with the value '%@'.",s]);
         [self.jQueryOutput appendString:@"\n  // setting the var 'mask'"];
@@ -3017,7 +3006,7 @@ didStartElement:(NSString *)elementName
     if ([elementName isEqualToString:@"window"] ||
         [elementName isEqualToString:@"view"] ||
         [elementName isEqualToString:@"drawview"] ||
-        [elementName isEqualToString:@"rotateNumber"] ||
+        [elementName isEqualToString:@"rotateNumberToDoDeleteMe"] ||
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"buttonnextToDoTakeMeOut"] ||
@@ -3667,7 +3656,7 @@ didStartElement:(NSString *)elementName
         {
             [self.jQueryOutput0 appendFormat:@"\n  // Ein Attribut des Elements %@:\n", @"canvas"];
 
-            // Siehe ander if-Zweig, warum auskommentiert
+            // Siehe anderer if-Zweig, warum auskommentiert
             // [self.jQueryOutput0 appendFormat:@"  if (canvas.%@ == undefined)\n  ",[attributeDict valueForKey:@"name"]];
 
             [self.jQueryOutput0 appendString:@"  canvas."];
@@ -3783,7 +3772,7 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"view"] ||[elementName isEqualToString:@"drawview"] || [elementName isEqualToString:@"rotateNumber"])
+    if ([elementName isEqualToString:@"view"] ||[elementName isEqualToString:@"drawview"] || [elementName isEqualToString:@"rotateNumberToDoDeleteMe"])
     {
         element_bearbeitet = YES;
 
@@ -6840,9 +6829,40 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]]];
 
+
+
+        // marker
+        // Vorgehen: Vorher alle Attribute raushauen, die benutzt wurden
+        // Dann die verbleibenden Attribute alle zuweisen in einer Schleife (so wie jetzt schon bei size)
+        // NOCH VOR DIESEN BEIDEN SCHRITTEN: Alle Standard-Attribute von der Klasse zuordnen/einmal schreiben.
+
+
         // Ich denke alle Attribute die bis hierhin nicht gematcht haben, muss ich dann analog <attribute> auswerten
         // aber MIT überschreiben wohl.
         // ToDo To Check, ob das auch so ist. Oder ob das Build-In Attribute sind.
+
+        // Selbst definierte Attribute von Klassen
+        //while (self.attributeCount != [attributeDict count])
+        {
+            //self.attributeCount++;
+        }
+        if ([attributeDict valueForKey:@"negativecolor"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"positivecolor"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"size"])
+        {
+            self.attributeCount++;
+
+            NSString *s = [attributeDict valueForKey:@"size"];
+
+            if ([s hasPrefix:@"${"])
+                s = [self makeTheComputedValueComputable:s];
+
+            NSLog([NSString stringWithFormat:@"Setting the class-var 'size' with the value '%@'.",s]);
+            [self.jQueryOutput appendString:@"\n  // setting the class-var 'size'"];
+            [self.jQueryOutput appendFormat:@"\n  %@.size = %@;\n",self.zuletztGesetzteID,s];
+        }
         if ([attributeDict valueForKey:@"showbackground"])
         {
             self.attributeCount++;
@@ -7403,7 +7423,7 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"view"] ||
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"deferviewToDoDeleteMe"] ||
-        [elementName isEqualToString:@"rotateNumber"] ||
+        [elementName isEqualToString:@"rotateNumberToDoDeleteMe"] ||
         [elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
@@ -7549,7 +7569,7 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"deferviewToDoDeleteMe"] ||
         [elementName isEqualToString:@"checkviewToDoDeleteMe"] ||
-        [elementName isEqualToString:@"rotateNumber"] ||
+        [elementName isEqualToString:@"rotateNumberToDoDeleteMe"] ||
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"buttonnextToDoTakeMeOut"] ||
@@ -8011,7 +8031,14 @@ BOOL isNumeric(NSString *s)
 
 
     // Als <title> nutzen wir den Dateinamen der Datei
-    [pre appendFormat:@"<title>%@</title>\n",[[self.pathToFile lastPathComponent] stringByDeletingPathExtension]];
+    NSString *titleForDebug = @"";
+
+    if (debugmode && positionAbsolute)
+        titleForDebug = @" (PositionAbsolute = YES)";
+    if (debugmode && !positionAbsolute)
+        titleForDebug = @" (PositionAbsolute = NO)";
+
+    [pre appendFormat:@"<title>%@%@</title>\n",[[self.pathToFile lastPathComponent] stringByDeletingPathExtension],titleForDebug];
 
     // CSS-Stylesheet-Datei für das Layout der TabSheets (wohl leider nicht CSS-konform, aber
     // die CSS-Konformität herzustellen ist wohl leider zu viel Aufwand, von daher greifen wir
@@ -8411,7 +8438,7 @@ BOOL isNumeric(NSString *s)
     "{\n"
     "    position: relative;\n"
     "    height:auto;\n" // War mal 'inherit', aber 'auto' erscheint mir logischer, ob was bricht?
-    "    margin-bottom:6px;\n" // ToCheck (Die Zeile eins drüber)
+    "    margin-bottom:6px;\n"
     "\n"
     "    pointer-events: auto;\n"
     "}\n"
@@ -9626,7 +9653,8 @@ BOOL isNumeric(NSString *s)
     "\n"
     "            av[i] = av[i].replace('height','height()');\n"
     "\n"
-    "            var result = eval(av[i]);\n"
+    "            // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
+    "            var result = (function() { with (id) { return eval(av[i]); } }).bind(id)();\n"
     "            av[i] = result;\n"
     "        }\n"
     "\n"

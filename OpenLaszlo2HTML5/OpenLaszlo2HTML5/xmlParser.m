@@ -118,9 +118,8 @@ BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber 
 @property (strong, nonatomic) NSString *defaultplacement;
 
 
-// "method" muss derzeit noch das name-attribut nach didEndElement rüberretten, damit ich
-// auch die parentKlasse setzen kann. In Zukunft aber neues Konzept für parent =>
-// siehe bei schließender "method", der Kommentar (To Check)
+// "method" muss das name-attribut nach didEndElement rüberretten,
+// damit ich es auch für canvas setzen kann.
 @property (strong, nonatomic) NSString *lastUsedNameAttribute;
 
 // Damit ich auch intern auf die Inhalte der Variablen zugreifen kann
@@ -465,7 +464,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     [self.jQueryOutput appendFormat:@"\n  // Setting the height of '#%@' by jQuery, because it is a computed value (%@)\n",self.zuletztGesetzteID,s];
 
 
-    s = [self makeTheComputedValueComputable:s];
+    s = [self makeTheComputedValueComputable:s asFunction:YES];
 
 
     // this von OpenLaszlo muss ersetzt werden
@@ -490,7 +489,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     [self.jQueryOutput appendFormat:@"\n  // Setting the Attribute '%@' with jQuery, because it depends on 'classroot'\n",attr];
 
-    s = [self makeTheComputedValueComputable:s];
+    s = [self makeTheComputedValueComputable:s asFunction:YES];
 
     if ([attr isEqualToString:@"value"])
     {
@@ -633,6 +632,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
     }
 
+    // speichern, falls height schon gesetz wurde (für Attribut resource)
+    BOOL heightGesetzt = NO;
     if ([attributeDict valueForKey:@"height"])
     {
         self.attributeCount++;
@@ -672,6 +673,8 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [style appendString:@"px"];
             [style appendString:@";"];
         }
+
+        heightGesetzt = YES;
     }
 
     if ([attributeDict valueForKey:@"boxheight"])
@@ -710,7 +713,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
     }
 
-    // speichern, falls width schon gesetz wurde für Attribut resource
+    // speichern, falls width schon gesetz wurde (für Attribut resource)
     BOOL widthGesetzt = NO;
     if ([attributeDict valueForKey:@"width"])
     {
@@ -918,7 +921,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         if ([[attributeDict valueForKey:@"align"] isEqual:@"center"])
         {
             self.attributeCount++;
-            NSLog(@"Setting the attribute 'align=center' as CSS 'margin:auto;'.");
+            NSLog(@"Setting the attribute 'align=center' as offset for 'left'.");
             // Funktioniert leider nicht:
             //[style appendString:@"margin-left:auto; margin-right:auto;"];
 
@@ -945,15 +948,14 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
 
 
-        // ToDo, hierzu muss ich mir noch eine Lösung einfallen lassen
         if ([[attributeDict valueForKey:@"align"] hasPrefix:@"${"])
         {
-            NSString *s = [self makeTheComputedValueComputable:[attributeDict valueForKey:@"align"]];
+            NSString *s = [self makeTheComputedValueComputable:[attributeDict valueForKey:@"align"] asFunction:NO];
 
             self.attributeCount++;
             NSLog(@"Computed value, so accessing the setter of 'align'.");
 
-            [self.jQueryOutput appendString:@"\n  // setting align by accessing the setter"];
+            [self.jQueryOutput appendString:@"\n  // setting align by using the built-in JS-property"];
             [self.jQueryOutput appendFormat:@"\n  #%@'.align = %@;\n",self.zuletztGesetzteID,s];
         }
     }
@@ -978,23 +980,6 @@ void OLLog(xmlParser *self, NSString* s,...)
             [self.jQueryOutput appendFormat:@"\n  $('#%@').css('clip','rect(0px, '+$('#%@').width()+'px, '+$('#%@').height()+'px, 0px)');",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
             [self.jQueryOutput appendFormat:@"\n  $('#%@').css('overflow','hidden');\n",self.zuletztGesetzteID];
         }
-    }
-
-
-    // Das eigentliche onClick wird in 'addJS' behandelt, hier nur das pointer-event korrigieren!
-    // Deswegen auch nicht attributeCount erhöhen.
-    // pointer-events: auto; setzen, weil es war vorher auf none gesetzt, damit verschachtelte
-    // divs, welche keine Kind-Eltern-Beziehung haben, nicht die Klicks wegnehmen können von
-    // da drunter liegenden Elementen. Warum auch immer das in OL so ist:
-    // Beweis samplecode:
-    // <canvas height="500" width="500"><view width="120" height="120" bgcolor="yellow">
-    // <view width="100" height="100" bgcolor="red" clip="true">
-    // <view width="80" height="80" bgcolor="purple">
-    // <view width="30" height="30" bgcolor="blue" onclick="this.mask.setAttribute('bgcolor','green');"/><view width="10" height="10" bgcolor="white" />
-    // </view></view></view></canvas>
-    if ([attributeDict valueForKey:@"onclick"])
-    {
-        [style appendString:@"pointer-events:auto;"];
     }
 
 
@@ -1037,8 +1022,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
             NSLog(@"Attribute 'initstage=defer' so hiding the Element, because it shoudn't be loaded right now (trick).");
 
-            [self.jQueryOutput appendString:@"\n  // 'initstage=defer' so hiding the Element, because it shoudn't be loaded right now (trick)."];
-            //[self.jQueryOutput appendFormat:@"\n  $('#%@').hide();\n",self.zuletztGesetzteID];
+            [self.jQueryOutput appendString:@"\n  // 'initstage=defer' so hiding the Element, because it shoudn't be loaded right now (trick).\n"];
+            //[self.jQueryOutput appendFormat:@"  $('#%@').hide();\n",self.zuletztGesetzteID];
             // Noch auskommentiert, zeigt dann noch ganze Tabs nicht an. ToDo
         }
     }
@@ -1136,7 +1121,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
             // Wenn ein Punkt enthalten ist, ist es wohl eine Datei
             if ([src rangeOfString:@"."].location != NSNotFound ||
-                /* ... Keine Ahnung wo diese Res herkommenen sollen. Super nervig sowas. ToDo? */
+                /* ... Keine Ahnung wo diese Res herkommenen sollen. Super nervig sowas. */
                 [src isEqualToString:@"lzgridsortarrow_rsrc"])
             {
                 // Möglichkeit 1: Resource wird direkt als String angegeben!
@@ -1165,7 +1150,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             }
             if (s == nil || [s isEqualToString:@""])
             {
-                // ToDo: Im Release rausnehmen, entspricht der OL-Logik, keinen Fehler zu werfen.
+                // Release: Rausnehmen, es entspricht der OL-Logik, keinen Fehler zu werfen.
                 [self instableXML:[NSString stringWithFormat:@"ERROR: The image-path '%@' isn't valid.",src]];
             }
 
@@ -1188,8 +1173,8 @@ void OLLog(xmlParser *self, NSString* s,...)
             NSLog([NSString stringWithFormat:@"Resolving height of Image from original file: %d (setting as CSS-height)",h]);
             if (!widthGesetzt)
                 [style appendFormat:@"width:%dpx;",w];
-            // Height setzen wir erstmal immer, später ändern? (ToDo)
-            [style appendFormat:@"height:%dpx;",h];
+            if (!heightGesetzt)
+                [style appendFormat:@"height:%dpx;",h];
 
             [style appendString:@"background-image:url("];
             [style appendString:s];
@@ -1460,6 +1445,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 // http://stackoverflow.com/questions/2700953/a-regex-to-match-a-comma-that-isnt-surrounded-by-quotes
 - (NSString*) inString:(NSString*)s searchFor:(NSString*)f andReplaceWith:(NSString*)r ignoringTextInQuotes:(BOOL)b
 {
+    if (s == nil)
+        return s;
+
     if (!b)
     {
         s = [s stringByReplacingOccurrencesOfString:f withString:r];
@@ -1486,14 +1474,24 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-- (NSString*) makeTheComputedValueComputable:(NSString*)s
+- (NSString*) makeTheComputedValueComputable:(NSString*)s asFunction:(BOOL)returnAFunction
 {
     s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
     s = [self modifySomeExpressionsInJSCode:s];
 
+
     // s = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,s];
     // Nachfolgende Lösung ist besser, weil Scope erhalten bleibt, aber nicht fix ist.
-    s = [NSString stringWithFormat:@"function() { with (%@) { return %@ } }",self.zuletztGesetzteID,s];
+    if (returnAFunction)
+    {
+        s = [NSString stringWithFormat:@"function() { with (%@) { return %@; } }",self.zuletztGesetzteID,s];
+    }
+    else
+    {
+        // ist zwar doch auch wieder eine Function, aber eine die sich selbst ausführt
+        // und dadurch den Return-Wert zurückliefert, als sei es ein fixer Wert!
+        s = [NSString stringWithFormat:@"(function() { with (%@) { return %@; } })()",self.zuletztGesetzteID,s];
+    }
 
     return s;
 }
@@ -1505,6 +1503,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 // setAttribute ohne vorangehende Variable aufgerufen wird.
 - (NSString*) modifySomeExpressionsInJSCode:(NSString*)s
 {
+    if (s == nil)
+        [self instableXML:@"Sag mal, so kannst du mich nicht aufrufen. Brauche schon nen String!"];
+
     // Diese Methode kann nicht überschrieben werden, da intern bentutz von jQuery
     // Hatte ich mal als 'setAttribute(', aber die Klamemr bricht natürlich den RegExp
     s = [self inString:s searchFor:@"setAttribute" andReplaceWith:@"setAttribute_" ignoringTextInQuotes:YES];
@@ -1544,6 +1545,24 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+// Das eigentliche onClick wird in 'addJS' behandelt, hier nur das pointer-event korrigieren!
+// pointer-events: auto; setzen, weil es war vorher auf none gesetzt, damit verschachtelte
+// divs, welche keine Kind-Eltern-Beziehung haben, nicht die Klicks wegnehmen können von
+// da drunter liegenden Elementen. Warum auch immer das in OL so ist:
+// Beweis samplecode:
+// <canvas height="500" width="500"><view width="120" height="120" bgcolor="yellow">
+// <view width="100" height="100" bgcolor="red" clip="true">
+// <view width="80" height="80" bgcolor="purple">
+// <view width="30" height="30" bgcolor="blue" onclick="this.mask.setAttribute('bgcolor','green');"/><view width="10" height="10" bgcolor="white" />
+// </view></view></view></canvas>
+- (void) pointerEventsZulassenBeiId:(NSString*)idName
+{
+    [self.jQueryOutput appendString:@"\n  // Pointer-Events zulassen\n"];
+    [self.jQueryOutput appendFormat:@"  $('#%@').css('pointer-events','auto');",idName];
+}
+
+
+
 - (NSMutableString*) addJSCode:(NSDictionary*) attributeDict withId:(NSString*)idName
 {
     // 'name'-Attribut auswerten und als Leading jQuery Code davorschalten
@@ -1561,8 +1580,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
         NSString *s = [attributeDict valueForKey:@"visible"];
-        s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
 
+        s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
 
 
         // Verkettete Bedingungen bei Visibility werden leider noch nicht unterstützt
@@ -1672,18 +1691,15 @@ void OLLog(xmlParser *self, NSString* s,...)
                 s = [s stringByReplacingOccurrencesOfString:@"!=''" withString:@""];
                 s = [s stringByReplacingOccurrencesOfString:@"==''" withString:@""];
                 s = [s stringByReplacingOccurrencesOfString:@"==0" withString:@""];
-                // Puh, ich denke das ist totaler quatrsch; dies sind boolesche ausdrücke, die können
+                // Puh, ich denke das ist totaler quatsch; dies sind boolesche ausdrücke, die können
                 // direkt ausgewertet werden und gehören nach oben zu der abfrage nach true oder false ToDo
 
 
                 // Negationszeichen aus 's' entfernen, falls wir hier drin sind weil ein '!canvas' vorliegt
                 s = [s stringByReplacingOccurrencesOfString:@"!" withString:@""];
 
-                [self.jQueryOutput appendString:@"  // Und einmal sofort die Visibility anpassen durch setzen der Variable mit sich selber\n  "];
-                [self.jQueryOutput appendString:s];
-                [self.jQueryOutput appendString:@" = "];
-                [self.jQueryOutput appendString:s];
-                [self.jQueryOutput appendString:@";\n\n"];
+                [self.jQueryOutput appendString:@"  // Und einmal sofort die Visibility anpassen durch setzen der Variable mit sich selber\n"];
+                [self.jQueryOutput appendFormat:@"  %@ = %@;\n\n",s,s];
             }
             else
             {
@@ -1769,10 +1785,7 @@ void OLLog(xmlParser *self, NSString* s,...)
                     [self.jQueryOutput appendString:@"  });\n"];
 
                     [self.jQueryOutput appendString:@"  // Und einmal sofort die Visibility anpassen\n"];
-                    [self.jQueryOutput appendString:@"  toggleVisibility('#"];
-                    [self.jQueryOutput appendString:idName];
-                    [self.jQueryOutput appendString:@"', '#"];
-                    [self.jQueryOutput appendString:idVonDerEsAbhaengigIst];
+                    [self.jQueryOutput appendFormat:@"  toggleVisibility('#%@', '#%@",idName,idVonDerEsAbhaengigIst];
                     // Da in den Bedingungen selber oft das ' verwendet wird, hier das "
                     [self.jQueryOutput appendString:@"', \""];
                     if (wirMuessenNegieren)
@@ -1867,128 +1880,180 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.attributeCount++;
         NSLog(@"Setting the attribute 'onclick' as jQuery.");
 
-
         NSString *s = [attributeDict valueForKey:@"onclick"];
-        // Remove all occurrences of $,{,}
-        // Wohl doch nicht nötig (und bricht sonst auch selbst definierte Funktionen, welche { und } benutzen
+
         // s = [self removeOccurrencesofDollarAndCurlyBracketsIn:s];
-
-        // Wir löschen erstmal 'canvas.', weil wir direkt die Funktion in JS deklarieren
-        // Als Klassenmethode macht (noch) keinen Sinn, dann müssten wir ja erstmal mit new()
-        // ein objekt anlegen. Außerdem wäre canvas ja der Klassenname und nicht der Objektname.
-        // Objekt bringt uns also hier nicht weiter
-        s = [s stringByReplacingOccurrencesOfString:@"canvas." withString:@""];
-
+        // Nein! Der Code in event-Handlern ist nicht von ${ ... } umgeben
+        // Und deswegen kann ich removeOccurrencesofDollarAndCurlyBracketsIn und
+        // modifySomeExpressionsInJSCode auch nicht in einer Methode zusammenfassen!
 
         s = [self modifySomeExpressionsInJSCode:s];
 
+        [self pointerEventsZulassenBeiId:idName];
+        [self.jQueryOutput appendString:@"\n  // jQuery-click-event (anstelle des Attributs onclick)\n"];
+        [self.jQueryOutput appendFormat:@"  $('#%@').click(function(){ with (this) { %@ } });\n",idName,s];
 
-        NSMutableString *gesammelterCode = [[NSMutableString alloc] initWithString:@""];
-        [gesammelterCode appendString:@"\n  // JS-onClick-event (anstelle des Attributs onClick)\n  $('#"];
-        [gesammelterCode appendString:idName];
-        [gesammelterCode appendString:@"').click(function(){"];
-        // [gesammelterCode appendString:@"setGlobalMe(this); "];
-        [gesammelterCode appendString:@" with (this) { "];
-        [gesammelterCode appendString:s];
-        // if (![s hasSuffix:@";"])
-        //     [gesammelterCode appendString:@";"];
-        [gesammelterCode appendString:@" } "];
-        // [gesammelterCode appendString:@" unsetGlobalMe;"];
-        [gesammelterCode appendString:@"});"];
-
-
-
-        // Wenn es ein onClick gibt, soll sich immer der Mauszeiger ändern.
+        // Wenn es ein onclick gibt, soll sich immer der Mauszeiger ändern.
         [self changeMouseCursorOnHoverOverElement:idName];
-
-
-
-        // Hiermit kann ich es jederzeit auch direkt im Div anzeigen,
-        // damit ich es schneller finde bei Debug-Suche.
-        BOOL jQueryAusgabe = TRUE;
-
-
-        if (jQueryAusgabe)
-        {
-            [self.jQueryOutput appendString:gesammelterCode];
-            [self.jQueryOutput appendString:@"\n"];
-        }
-        else
-        {
-            [code appendString:gesammelterCode];
-        }
     }
 
 
-
-    // Skipping the attribute 'onblur'
-    // ToDo -> Implementierung wohl genau so wie eins weiter oben, nur als onblur
-    if ([attributeDict valueForKey:@"onblur"])
+    if ([attributeDict valueForKey:@"ondblclick"])
     {
         self.attributeCount++;
-        NSLog(@"ToDo: Implement later the attribute 'onblur'.");
+        NSLog(@"Setting the attribute 'ondblclick' as jQuery.");
+
+        NSString *s = [attributeDict valueForKey:@"ondblclick"];
+
+        s = [self modifySomeExpressionsInJSCode:s];
+
+        [self pointerEventsZulassenBeiId:idName];
+        [self.jQueryOutput appendString:@"\n  // jQuery-dblclick-event (anstelle des Attributs ondblclick)\n"];
+        [self.jQueryOutput appendFormat:@"  $('#%@').dblclick(function(){ with (this) { %@ } });\n",idName,s];
+
+        // Wenn es ein ondblclick gibt, soll sich immer der Mauszeiger ändern.
+        [self changeMouseCursorOnHoverOverElement:idName];
     }
 
 
-
-
-    // Skipping the attribute 'onvalue'
-    // ToDo -> Implementierung wohl genau so wie weiter oben, nur als onvalue
-    if ([attributeDict valueForKey:@"onvalue"])
-    {
-        self.attributeCount++;
-        NSLog(@"ToDo: Implement later the attribute 'onvalue'.");
-    }
-
-
-
-
-    // Skipping the attribute 'onfocus'
-    // ToDo -> Implementierung wohl genau so wie eins oben, nur als onfocus
     if ([attributeDict valueForKey:@"onfocus"])
     {
         self.attributeCount++;
-        NSLog(@"ToDo: Implement later the attribute 'onfocus'.");
+        NSLog(@"Setting the attribute 'onfocus' as jQuery-change-event.");
+
+        NSString *s = [attributeDict valueForKey:@"onfocus"];
+
+        s = [self modifySomeExpressionsInJSCode:s];
+
+        [self pointerEventsZulassenBeiId:idName];
+        [self.jQueryOutput appendString:@"\n  // jQuery-focus-event (anstelle des Attributs onfocus)\n"];
+        [self.jQueryOutput appendFormat:@"  $('#%@').focus(function(){ with (this) { %@ } });\n",idName,s];
     }
 
 
-    // Skipping the attribute 'onmousedown'
-    // ToDo -> Implementierung wohl genau so wie weiter oben, nur als onmousedown
+    if ([attributeDict valueForKey:@"onblur"])
+    {
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'onblur' as jQuery.");
+
+        NSString *s = [attributeDict valueForKey:@"onblur"];
+
+        s = [self modifySomeExpressionsInJSCode:s];
+
+        [self pointerEventsZulassenBeiId:idName];
+        [self.jQueryOutput appendString:@"\n  // jQuery-blur-event (anstelle des Attributs onblur)\n"];
+        [self.jQueryOutput appendFormat:@"  $('#%@').blur(function(){ with (this) { %@ } });\n",idName,s];
+    }
+
+
+    if ([attributeDict valueForKey:@"onvalue"])
+    {
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'onvalue' as jQuery-change-event.");
+
+        NSString *s = [attributeDict valueForKey:@"onvalue"];
+
+        s = [self modifySomeExpressionsInJSCode:s];
+
+        [self.jQueryOutput appendString:@"\n  // jQuery-change-event (anstelle des Attributs onchange)\n"];
+        [self.jQueryOutput appendFormat:@"  $('#%@').change(function(){ with (this) { %@ } });\n",idName,s];
+    }
+
+
     if ([attributeDict valueForKey:@"onmousedown"])
     {
         self.attributeCount++;
-        NSLog(@"ToDo: Implement later the attribute 'onmousedown'.");
+        NSLog(@"Setting the attribute 'onmousedown' as jQuery-change-event.");
+
+        NSString *s = [attributeDict valueForKey:@"onmousedown"];
+
+        s = [self modifySomeExpressionsInJSCode:s];
+
+        [self pointerEventsZulassenBeiId:idName];
+        [self.jQueryOutput appendString:@"\n  // jQuery-mousedown-event (anstelle des Attributs onmousedown)\n"];
+        [self.jQueryOutput appendFormat:@"  $('#%@').mousedown(function(){ with (this) { %@ } });\n",idName,s];
+
+        [self changeMouseCursorOnHoverOverElement:idName];
     }
 
 
-    // Skipping the attribute 'onmouseout'
-    // ToDo -> Implementierung wohl genau so wie weiter oben, nur als onmouseout
-    if ([attributeDict valueForKey:@"onmouseout"])
-    {
-        self.attributeCount++;
-        NSLog(@"ToDo: Implement later the attribute 'onmouseout'.");
-    }
-
-
-    // Skipping the attribute 'onmouseover'
-    // ToDo -> Implementierung wohl genau so wie weiter oben, nur als onmouseover
-    if ([attributeDict valueForKey:@"onmouseover"])
-    {
-        self.attributeCount++;
-        NSLog(@"ToDo: Implement later the attribute 'onmouseover'.");
-    }
-
-
-    // Skipping the attribute 'onmouseup'
-    // ToDo -> Implementierung wohl genau so wie weiter oben, nur als onmouseup
     if ([attributeDict valueForKey:@"onmouseup"])
     {
         self.attributeCount++;
-        NSLog(@"ToDo: Implement later the attribute 'onmouseup'.");
+        NSLog(@"Setting the attribute 'onmouseup' as jQuery-change-event.");
+
+        NSString *s = [attributeDict valueForKey:@"onmouseup"];
+
+        s = [self modifySomeExpressionsInJSCode:s];
+
+        [self pointerEventsZulassenBeiId:idName];
+        [self.jQueryOutput appendString:@"\n  // jQuery-mouseup-event (anstelle des Attributs onmouseup)\n"];
+        [self.jQueryOutput appendFormat:@"  $('#%@').mouseup(function(){ with (this) { %@ } });\n",idName,s];
+
+        [self changeMouseCursorOnHoverOverElement:idName];
     }
 
 
+    if ([attributeDict valueForKey:@"onmouseout"])
+    {
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'onmouseout' as jQuery-change-event.");
 
+        NSString *s = [attributeDict valueForKey:@"onmouseout"];
+
+        s = [self modifySomeExpressionsInJSCode:s];
+
+        [self pointerEventsZulassenBeiId:idName];
+        [self.jQueryOutput appendString:@"\n  // jQuery-mouseout-event (anstelle des Attributs onmouseout)\n"];
+        [self.jQueryOutput appendFormat:@"  $('#%@').mouseout(function(){ with (this) { %@ } });\n",idName,s];
+
+        [self changeMouseCursorOnHoverOverElement:idName];
+    }
+
+
+    if ([attributeDict valueForKey:@"onmouseover"])
+    {
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'onmouseover' as jQuery-change-event.");
+
+        NSString *s = [attributeDict valueForKey:@"onmouseover"];
+
+        s = [self modifySomeExpressionsInJSCode:s];
+
+        [self pointerEventsZulassenBeiId:idName];
+        [self.jQueryOutput appendString:@"\n  // jQuery-mouseover-event (anstelle des Attributs onmouseover)\n"];
+        [self.jQueryOutput appendFormat:@"  $('#%@').mouseover(function(){ with (this) { %@ } });\n",idName,s];
+
+        [self changeMouseCursorOnHoverOverElement:idName];
+    }
+
+
+    if ([attributeDict valueForKey:@"onkeyup"])
+    {
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'onkeyup' as jQuery-change-event.");
+
+        NSString *s = [attributeDict valueForKey:@"onkeyup"];
+
+        s = [self modifySomeExpressionsInJSCode:s];
+
+        [self.jQueryOutput appendString:@"\n  // jQuery-keyup-event (anstelle des Attributs onkeyup)\n"];
+        [self.jQueryOutput appendFormat:@"  $('#%@').keyup(function(){ with (this) { %@ } });\n",idName,s];
+    }
+
+
+    if ([attributeDict valueForKey:@"onkeydown"])
+    {
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'onkeydown' as jQuery-change-event.");
+
+        NSString *s = [attributeDict valueForKey:@"onkeydown"];
+
+        s = [self modifySomeExpressionsInJSCode:s];
+
+        [self.jQueryOutput appendString:@"\n  // jQuery-keydown-event (anstelle des Attributs onkeydown)\n"];
+        [self.jQueryOutput appendFormat:@"  $('#%@').keydown(function(){ with (this) { %@ } });\n",idName,s];
+    }
 
 
 
@@ -2013,8 +2078,10 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    // Ansonsten setzen einer intern Variable - erstmal sammeln - später lockern dieser Abfrage
+    // Ansonsten setzen wir eine interne Variable - erstmal sammeln - später lockern dieser Abfrage
     // ToDo
+
+
     // 'mask' ist intern read-only, wird aber von GFlender überschrieben, ein Spezialfall.
     //  -> Im Prinzip muss ich es wohl als eigene Var auffassen und dem entsprechend auswerten
     // d. h. die Variable genauso wie jetzt gelöst, einfach zuweisen.
@@ -2025,7 +2092,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSString *s = [attributeDict valueForKey:@"mask"];
 
         if ([s hasPrefix:@"${"])
-            s = [self makeTheComputedValueComputable:s];
+            s = [self makeTheComputedValueComputable:s asFunction:NO];
 
         NSLog([NSString stringWithFormat:@"Setting the var 'mask' with the value '%@'.",s]);
         [self.jQueryOutput appendString:@"\n  // setting the var 'mask'"];
@@ -5049,7 +5116,7 @@ didStartElement:(NSString *)elementName
         // Sonst verrutscht es alles wegen der zwischengeschobenen Leiste
         // Etwas geschummelt, aber nun gut.
         // Auch das width muss ich hier explizit übernehmen.
-        [self.output appendString:@" style=\"top:50px;width:inherit;\""];
+        [self.output appendString:@" style=\"top:50px;width:inherit;height:inherit;\""];
 
         [self.output appendString:@">\n"];
 
@@ -5157,6 +5224,15 @@ didStartElement:(NSString *)elementName
         element_bearbeitet = YES;
 
 
+        // Theoretisch könnte auch eine id gesetzt worden sein, auch wenn OL-Doku davon abrät!
+        // http://www.openlaszlo.org/lps4.9/docs/developers/tutorials/classes-tutorial.html (1.1)
+        // Dann hier aussteigen
+        if ([attributeDict valueForKey:@"id"])
+        {
+            [self instableXML:@"ID attribute on class found!!! It's important to note that you should not assign an id attribute in a class definition. Each id should be unique; ids are global and if you were to include an id assignment in the class definition, then creating several instances of a class would several views with the same id, which would cause unpredictable behavior. http://www.openlaszlo.org/lps4.9/docs/developers/tutorials/classes-tutorial.html (1.1)"];
+        }
+
+
         if ([attributeDict valueForKey:@"name"])
         {
             self.attributeCount++;
@@ -5205,9 +5281,15 @@ didStartElement:(NSString *)elementName
             // extends auslesen und speichern, dann extends aus der Attribute-liste löschen
             NSString *parent = [attributeDict valueForKey:@"extends"];
             if (parent == nil || parent.length == 0)
-              [self.jsOLClassesOutput appendString:@"  this.parent = new view();\n\n"];
+            {
+                [self.jsOLClassesOutput appendString:@"  this.parent = new view();\n\n"];
+            }
             else
-              [self.jsOLClassesOutput appendFormat:@"  this.parent = new %@(textBetweenTags);\n\n",parent];
+            {
+                self.attributeCount++;
+
+                [self.jsOLClassesOutput appendFormat:@"  this.parent = new %@(textBetweenTags);\n\n",parent];
+            }
             [keys removeObject:@"extends"];
 
             // Dass klappt so nicht, weil es auch CSS-Eigenschaften gibt, die sich erst auswerten
@@ -5243,6 +5325,10 @@ didStartElement:(NSString *)elementName
 
                     if (i < [keys count])
                         [self.jsOLClassesOutput appendString:@", "];
+
+                    // Die Attribute werden erst später ausgelesen, deswegen hier hochzählen
+                    // Sie werden aktuell ja nicht weiter bearbeitet.
+                    self.attributeCount++;
                 }
 
                 [self.jsOLClassesOutput appendString:@"];\n"];
@@ -5280,99 +5366,6 @@ didStartElement:(NSString *)elementName
         {
             [self instableXML:@"Eine class ohne 'name'-Attribut macht wohl keinen Sinn. Wie soll man sie sonst später ansprechen?"];
         }
-
-
-
-
-
-
-        // Theoretisch könnte auch eine id gesetzt worden sein, auch wenn OL-Doku davon abrät!
-        // http://www.openlaszlo.org/lps4.9/docs/developers/tutorials/classes-tutorial.html (1.1)
-        // Dann hier aussteigen
-        if ([attributeDict valueForKey:@"id"])
-        {
-            [self instableXML:@"ID attribute on class found!!! It's important to note that you should not assign an id attribute in a class definition. Each id should be unique; ids are global and if you were to include an id assignment in the class definition, then creating several instances of a class would several views with the same id, which would cause unpredictable behavior. http://www.openlaszlo.org/lps4.9/docs/developers/tutorials/classes-tutorial.html (1.1)"];
-        }
-
-
-        // ToDo: ALL this attributes
-        if ([attributeDict valueForKey:@"bgcolor"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"width"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"height"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"clickable"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"extends"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"onclick"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"oninit"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"resource"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"x"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"y"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"fontsize"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"pixellock"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"styleable"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"clip"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"fontstyle"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"bgcolor0"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"bgcolor1"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"showhlines"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"showvlines"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"style"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"layout"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"initstage"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"antiAliasType"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"gridFit"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"sharpness"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"thickness"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"focusable"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"text_x"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"stateres"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"onmouseout"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"onmouseover"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"visible"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"focustrap"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"closeable"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"resourcepic"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"animduration"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"doesenter"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"align"])
-            self.attributeCount++;
-
 
 
         // Alles was in class definiert wird, wird extra gesammelt
@@ -6209,9 +6202,6 @@ didStartElement:(NSString *)elementName
 
 
     // Ich füge alle gefundenen Methoden in das richtige Objekt ein.
-    // Zusätzlich in eines, dass ich 'parent' nenne,
-    // da OpenLaszlo oft mit 'parent.*' arbeitet. Evtl. ist dieser Trick etwas zu dirty und
-    // muss überdacht werden. Die Klasse 'parent' habe ich vorher angelegt. (ToDo)
     if ([elementName isEqualToString:@"method"])
     {
         element_bearbeitet = YES;
@@ -6293,8 +6283,9 @@ didStartElement:(NSString *)elementName
             }
         }
 
-        // http://www.openlaszlo.org/lps4.9/docs/reference/ <method> => S. Attribut 'name'
+        // http://www.openlaszlo.org/lps4.9/docs/reference/ <method> => s. Attribut 'name'
         // Deswegen bei canvas und library 'method' als Funktionen global verfügbar machen
+        // UND an canvas binden.
         // Ansonsten 'method' als Methode an das umgebende Objekt koppeln.
 
         [self.jQueryOutput0 appendString:@"\n  // Ich binde eine Methode an das genannte Objekt\n"];
@@ -6368,6 +6359,19 @@ didStartElement:(NSString *)elementName
 
                 // 'e', weil 'event' würde wohl das event-Objekt zugreifen. Auf dieses kann man so und so zugreifen.
                 [self.jQueryOutput appendFormat:@"  $('#%@').click(function(e)\n  {\n    ",enclosingElem];
+
+                // Okay, jetzt Text sammeln und beim schließen einfügen
+            }
+
+            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"ondblclick"])
+            {
+                self.attributeCount++;
+                NSLog(@"Binding the method in this handler to a jQuery-dblclick-event.");
+
+                [self.jQueryOutput appendFormat:@"\n  // ondblclick-Handler für %@\n",enclosingElem];
+
+                // 'e', weil 'event' würde wohl das event-Objekt zugreifen. Auf dieses kann man so und so zugreifen.
+                [self.jQueryOutput appendFormat:@"  $('#%@').dblclick(function(e)\n  {\n    ",enclosingElem];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -6501,6 +6505,8 @@ didStartElement:(NSString *)elementName
 
             if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onmouseover"])
             {
+                [self changeMouseCursorOnHoverOverElement:enclosingElem];
+
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a jQuery-mouseover-event.");
 
@@ -7834,7 +7840,7 @@ BOOL isNumeric(NSString *s)
         NSLog([NSString stringWithFormat:@"Original code defined in method: \n**********\n%@\n**********",s]);
 
 
-        // tabs eliminieren
+        // Tabs eliminieren
         while ([s rangeOfString:@"\t"].location != NSNotFound)
         {
             s = [s stringByReplacingOccurrencesOfString:@"\t" withString:@"  "];
@@ -7862,6 +7868,17 @@ BOOL isNumeric(NSString *s)
 
         [self.jQueryOutput0 appendString:s];
         [self.jQueryOutput0 appendString:@"\n  }\n"];
+
+
+        // Falls wir in canvas/library sind, dann muss es nicht nur global verfügbar sein
+        // sondern auch über 'canvas.' ansprechbar sein.
+        if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"canvas"] ||
+            [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"library"])
+        {
+            [self.jQueryOutput0 appendString:@"  // Diese Methode ebenfalls an canvas binden\n"];
+            [self.jQueryOutput0 appendFormat:@"  canvas.%@ = %@;\n",self.lastUsedNameAttribute,self.lastUsedNameAttribute];
+        }
+
 
 
         // Neu gelöst über die Methode getTheParent(), die an alle Objekte prototyped wird
@@ -9441,8 +9458,45 @@ BOOL isNumeric(NSString *s)
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
+    "\n"
+    // es gibt ein natives JS-align, was sich wohl korrekt zur OL-Logik verhält
+    // http://jsfiddle.net/Pv8YQ/ Deswegen nicht nötig.
+    //"/////////////////////////////////////////////////////////\n"
+    //"// Setter for 'align'                                  //\n"
+    //"// WRITE                                               //\n"
+    //"/////////////////////////////////////////////////////////\n"
+    //"Object.defineProperty(Object.prototype, 'align', {\n"
+    //"    get : function(){ /* Keine direkte CSS-Eigenschaft, wenn dann Variable _align einführen */ },\n"
+    //"    set: function(newValue){\n"
+    //"        if (newValue !== 'left' || newValue !== 'center' || newValue !== 'right')\n"
+    //"            throw new Error('Unsupported value for align.');\n"
+    //"\n"
+    //"        if (newValue === 'left')\n"
+    //"            /* Nothing */;\n"
+    //"        if (newValue === 'center')\n"
+    //"            $(this).css('left',toIntFloor((parseInt($(this).parent().css('width'))-parseInt($(this).outerWidth()))/2));\n"
+    //"        if (newValue === 'right')\n"
+    //"            $(this).css('left',toIntFloor((parseInt($(this).parent().width())-$(this).outerWidth())));\n"
+    //"    },\n"
+    //"    enumerable : false,\n"
+    //"    configurable : true\n"
+    //"});\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'textalign'                       //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'textalign', {\n"
+    "    get : function(){ return $(this).css('text-align'); },\n"
+    "    set: function(newValue){\n"
+    "        if (newValue !== 'left' || newValue !== 'center' || newValue !== 'right')\n"
+    "            throw new Error('Unsupported value for textalign.');\n"
+    "\n"
+    "        $(this).css('text-align', newValue);\n"
+    "    },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
     "\n";
-
 
 
     bool success = [js writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
@@ -9554,7 +9608,7 @@ BOOL isNumeric(NSString *s)
     //"    alert(an[i]);\n"
     //"    alert(av[i]);\n"
     "    var cssAttributes = ['bgcolor','width','height'];\n"
-    "    var jsAttributes = ['onclick','focusable','styleable','layout','initstage','doesenter','align','resource'];\n"
+    "    var jsAttributes = ['onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown','focusable','styleable','layout','initstage','doesenter','align','resource'];\n"
     "    if (jQuery.inArray(an[i],cssAttributes) != -1)\n"
     "    {\n"
     "      if (an[i] === 'bgcolor')\n"

@@ -486,7 +486,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([attr isEqualToString:@"background-image"])
     {
-        [self instableXML:@"Das hier muss ich nochmal überprüfen. Kann denn der Return-Wert der Function so verarbeitet werden? ToDo"];
         [o appendFormat:@"  $('#%@').css('%@','url('+%@+')');\n",self.zuletztGesetzteID,attr,s];
     }
 
@@ -1209,7 +1208,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         // position().top klappt nicht, weil das Elemente versteckt sein kann,
         // aber mit css('top') klappt es (gleiches gilt für position().left).
         // '0'+ als Schutz gegen 'auto', so, dass parseInt() auf jeden Fall ne Nummer findet.
-        [s appendFormat:@"  var sumXYHW = 0;\n  $('#%@').children().map(function ()\n  {\n    sumXYHW += parseInt('0'+$(this).css('top'));\n    sumXYHW += parseInt('0'+$(this).css('left'));\n    sumXYHW += $(this).height();\n    sumXYHW += $(this).width();\n  });\n",self.zuletztGesetzteID];
+        [s appendFormat:@"  var sumXYHW = 0;\n  $('#%@').children().map(function ()\n  {\n    var n = this.nodeName.toLowerCase();\n    if (n === 'b' || n === 'i' || n === 'u' || n === 'br' || n === 'font')\n        return;\n    sumXYHW += parseInt('0'+$(this).css('top'));\n    sumXYHW += parseInt('0'+$(this).css('left'));\n    sumXYHW += $(this).height();\n    sumXYHW += $(this).width();\n  });\n",self.zuletztGesetzteID];
 
         [s appendFormat:@"  if (sumXYHW > 0 && $('#%@').children().length > 0 && $('#%@').get(0).style.height == '')\n  {\n  ",self.zuletztGesetzteID,self.zuletztGesetzteID];
         [s appendFormat:@"  var heights = $('#%@').children().map(function () { return $(this).outerHeight('true')+$(this).position().top; }).get();",self.zuletztGesetzteID];
@@ -1365,8 +1364,10 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jsOutput appendFormat:@"  %@ = document.getElementById('%@');\n",name, self.zuletztGesetzteID];
 
 
-        [self.jsOutput appendString:@"  // ...and all 'name'-attributes, can be referenced by its parent Element\n"];
+        [self.jsOutput appendString:@"  // ...and all 'name'-attributes, can be referenced by its parent Element...\n"];
         [self.jsOutput appendFormat:@"  $('#%@').parent().get(0).%@ = %@;\n",self.zuletztGesetzteID,name, name];
+        [self.jsOutput appendString:@"  // ...and all 'name'-attributes, can be referenced by canvas.*\n"];
+        [self.jsOutput appendFormat:@"  canvas.%@ = %@;\n",name, name];
     }
 }
 
@@ -5292,20 +5293,22 @@ didStartElement:(NSString *)elementName
             // if ([keys count] > 0)
             {
                 // Alle Attributnamen als Array hinzufügen
-                [self.jsOLClassesOutput appendString:@"  this.attributeNames = ["];
+                [self.jsOLClassesOutput appendString:@"  this.attributeNames = ['_textBetweenTags'"];
 
                 int i = 0;
                 for (NSString *key in keys)
                 {
                     i++;
 
+                    [self.jsOLClassesOutput appendString:@", "];
+
                     // Es gibt Attribute mit ' drin, deswegen hier "
                     [self.jsOLClassesOutput appendString:@"\""];
                     [self.jsOLClassesOutput appendString:key];
                     [self.jsOLClassesOutput appendString:@"\""];
 
-                    if (i < [keys count])
-                        [self.jsOLClassesOutput appendString:@", "];
+                    //if (i < [keys count])
+                    //    [self.jsOLClassesOutput appendString:@", "];
 
                     // Die Attribute werden erst später ausgelesen, deswegen hier hochzählen
                     // Sie werden aktuell ja nicht weiter bearbeitet.
@@ -5316,20 +5319,22 @@ didStartElement:(NSString *)elementName
 
 
                 // Und alle Attributwerte als Array hinzufügen
-                [self.jsOLClassesOutput appendString:@"  this.attributeValues = ["];
+                [self.jsOLClassesOutput appendString:@"  this.attributeValues = [textBetweenTags"];
 
                 i = 0;
                 for (NSString *key in keys)
                 {
                     i++;
 
+                    [self.jsOLClassesOutput appendString:@", "];
+
                     // Es gibt Attribute mit ' drin, deswegen hier "
                     [self.jsOLClassesOutput appendString:@"\""];
                     [self.jsOLClassesOutput appendString:[attributeDict valueForKey:key]];
                     [self.jsOLClassesOutput appendString:@"\""];
 
-                    if (i < [keys count])
-                        [self.jsOLClassesOutput appendString:@", "];
+                    //if (i < [keys count])
+                    //    [self.jsOLClassesOutput appendString:@", "];
                 }
 
                 [self.jsOLClassesOutput appendString:@"];\n\n"];
@@ -7020,9 +7025,10 @@ didStartElement:(NSString *)elementName
         [self.jQueryOutput0 appendString:o];
 
 
-        // Hoffentlich ist das nicht zu lax, aber wir erlauben zwischen Klassen erstmal immer HTML-Attribute
-        // streng genommen dürften nur dann HTMl-Attribute auftauchen, wenn die Klasse von <text>
-        // (direkt oder indirekt) erbt.
+        // Hoffentlich ist das nicht zu lax, aber wir erlauben zwischen Klassen erstmal immer
+        // HTML-Attribute. Streng genommen dürften nur dann HTMl-Attribute auftauchen, wenn die
+        // Klasse von <text> (direkt oder indirekt) erbt. Oder wenn es ein 'text'- oder ein 'html'-
+        // Attribut enthält (Example 28.10. Defining new text classes)
         self.weAreCollectingTextAndThereMayBeHTMLTags = YES;
     }
 
@@ -7696,7 +7702,6 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"edittext"] ||
         [elementName isEqualToString:@"BDSeditnumber"] ||
         [elementName isEqualToString:@"BDSFinanzaemter"] ||
-        [elementName isEqualToString:@"button"] ||
         [elementName isEqualToString:@"frame"] ||
         [elementName isEqualToString:@"font"] ||
         [elementName isEqualToString:@"items"] ||
@@ -7763,6 +7768,30 @@ BOOL isNumeric(NSString *s)
         [self.output appendString:@"</option>\n"];
 
 
+    }
+
+
+
+    // Schließen von Button
+    if ([elementName isEqualToString:@"button"])
+    {
+        element_geschlossen = YES;
+
+
+        // Immer auf nil testen, sonst kann es abstürzen hier
+        NSString *s = @"";
+        if (self.textInProgress != nil)
+            s = self.textInProgress;
+
+        // Remove leading and ending Whitespaces and NewlineCharacters
+        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+
+        if (![s isEqualToString:@""])
+        {
+            s = [NSString stringWithFormat:@"'%@'",s];
+            [self setTheComputedValue:s ofAttribute:@"value"];
+        }
     }
 
 
@@ -8298,6 +8327,8 @@ BOOL isNumeric(NSString *s)
     [self.output appendString:@"makeElementsGlobal(document.getElementsByTagName('input'));\n"];
     [self.output appendString:@"// Make all id's from select's global (Firefox)\n"];
     [self.output appendString:@"makeElementsGlobal(document.getElementsByTagName('select'));\n"];
+    [self.output appendString:@"// Make canvas accessible\n"];
+    [self.output appendString:@"makeCanvasAccessible();\n"];
 
     // Die jQuery-Anweisungen:
 
@@ -9000,6 +9031,22 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Sobald DOM aufgebaut, wird das 1. Element zu canvas //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function makeCanvasAccessible() {\n"
+    "    // ohne var, damit global\n"
+    "    canvas = $('.canvas_standard').get(0);\n"
+    "\n"
+    "    canvas.lpsversion = '1.0';\n"
+    "\n"
+    "\n"
+    "    canvas.setDefaultContextMenu = function(a) {}; // ToDo\n"
+    "    canvas.SetPerson = function() {}; // ToDo\n"
+    "\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "//Wandelt einen float in einen korrekt gerundeten Integer\n"
     "/////////////////////////////////////////////////////////\n"
     "function toInt(n){ return Math.round(Number(n)); };\n"
@@ -9227,6 +9274,70 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Objekte, welche im Skript erzeugt werden            //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var objectFromScriptCounter = 1;\n"
+    "\n"
+    "function createObjectFromScript(name, scope, attributes) {\n"
+    "if (name === undefined || scope === undefined || attributes === undefined)\n"
+    "    throw new TypeError('function createObjectFromScript - no attribute is allowed to be undefined');\n"
+    "\n"
+    "    var id = 'objectFromScript'+objectFromScriptCounter;\n"
+    "\n"
+    "    if (name === 'view') {\n"
+    "        jQuery('<div/>', {\n"
+    "            id: id,\n"
+    "            class: 'div_standard',\n"
+    //"            text: 'Go to Google!'\n"
+    "        }).appendTo(scope);\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "    if (attributes.name)\n"
+    "    {\n"
+    "        window[attributes.name] = document.getElementById(id);\n"
+    "        $('#'+id).parent().get(0)[attributes.name] = document.getElementById(id);\n"
+    "        canvas[attributes.name] = document.getElementById(id);\n"
+    "    \n"
+    "        delete attributes.name;\n"
+    "    }\n"
+    "    var id = '#'+id;\n"
+    "\n"
+    "    // Seems to be not possible, when creating an Object from script\n"
+    "    if (attributes.onclick)\n"
+    "        delete attributes.onclick;\n"
+    "\n"
+    "\n"
+    "    Object.keys(attributes).forEach(function(key) {\n"
+    "        $(id).setAttribute_(key,attributes[key]);\n"
+    "    });\n"
+    "/*\n"
+    "    if (attributes.myHeight !== undefined)\n"
+    "        $(id).css('height', attributes.myHeight);\n"
+    "    if (attributes.myWidth !== undefined)\n"
+    "        $(id).css('width', attributes.myWidth);\n"
+    "    if (attributes.x !== undefined)\n"
+    "        $(id).css('left', attributes.x);\n"
+    "    if (attributes.y !== undefined)\n"
+    "        $(id).css('top', attributes.y);\n"
+    "\n"
+    "    if (attributes.bgcolor !== undefined)\n"
+    "    {\n"
+    "        $(id).setAttribute_('bgcolor',attributes.bgcolor);\n"
+    "    }\n"
+    "*/\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "    objectFromScriptCounter++;\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// DIE lz-Klasse mit allen Services als Klassen.       //\n"
     "//  Die Services definieren darin ihre Methoden.       //\n"
     "/////////////////////////////////////////////////////////\n"
@@ -9255,6 +9366,11 @@ BOOL isNumeric(NSString *s)
     "        this.getInitArg = getInitArg;\n"
     "        this.callJS = function(method,callback,args) {\n"
     "            window[method](args); };\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "    this.view = function(scope,attributes) {\n"
+    "        createObjectFromScript('view',scope,attributes);\n"
     "    }\n"
     "}\n"
     "var lz = new lz_MetaClass();\n"
@@ -9288,26 +9404,9 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "\n"
-    "// Wir sammeln hierdrin die global gesetzten Konstanten/Variablen, auf die vom Open-\n"
-    "// Laszlo-Skript per canvas.* zugegriffen wird.\n"
-    "// var canvas = new Object();\n"
-    "// statt dessen besser:\n"
-    "function canvasKlasse() {\n}\nvar canvas = new canvasKlasse();\n"
-    "canvas.canvas = 'ToDo';\n"
-    "canvas.setDefaultContextMenu = function(a) {}; // ToDo\n"
-    "canvas.height = $(window).height(); // <-- Var, auf die zugegriffen wird\n"
-    "// ToDo: 1000 muss natürlich aus dem canvas-element ausgelesen werden\n"
-    "// und fixer wert nur wenn keine Prozentangabe dabei\n"
-    "canvas.width = 1000; // $(window).width(); // <-- Var, auf die zugegriffen wird // canvas.width ist die Höhe des windows\n"
-    "canvas.lpsversion = '1.0';\n"
-    //"// Globale Klasse für in verschiedenen Methoden (lokal?) deklarierte Methoden\n"
-    //"function parentKlasse() {\n}\n"
-    //"var parent = new parentKlasse(); // <-- Unbedingt nötg, damit es auch ein Objekt gibt\n\n"];
-    "\n"
-    "\n"
-    "\n"
-    "canvas.SetPerson = function() {}; // ToDo\n"
-    "\n"
+    //"// var canvas = new Object();\n"
+    //"// statt dessen besser:\n"
+    //"function canvasKlasse() {\n}\nvar canvas = new canvasKlasse();\n"
     "var CheckBerufstatus = function() {}; //ToDo <-- Gefunden!\n"
     "\n"
     "var LzDataElement = {};\n"
@@ -9517,6 +9616,10 @@ BOOL isNumeric(NSString *s)
     "    }\n"
     "    else if (attributeName == 'bgcolor')\n"
     "    {\n"
+    "        if (typeof value === 'number')\n"
+    "            value = '#'+value.toString(16);\n"
+    "        if (value === '#0')\n"
+    "            value = '#000000'\n"
     "        $(me).css('background-color',value);\n"
     "    }\n"
     "    else if (attributeName == 'x')\n"
@@ -9526,6 +9629,14 @@ BOOL isNumeric(NSString *s)
     "    else if (attributeName == 'y')\n"
     "    {\n"
     "        $(me).css('top',value);\n"
+    "    }\n"
+    "    else if (attributeName == 'width' || attributeName == 'myWidth')\n"
+    "    {\n"
+    "        $(me).css('width',value);\n"
+    "    }\n"
+    "    else if (attributeName == 'height' || attributeName == 'myHeight')\n"
+    "    {\n"
+    "        $(me).css('height',value);\n"
     "    }\n"
     "    else if (attributeName == 'frame')\n"
     "    {\n"// ToDo: Wenn typeof NICHT Array ist, dann kann ich nicht per [i] zugreifen+es gibt gar keine frames!
@@ -9588,6 +9699,15 @@ BOOL isNumeric(NSString *s)
     //"{\n"
     //"    globalMe = undefined;\n"
     //"} */\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// nur für DOM-Elemente machen die getter/setter Sinn  //\n"
+    "// Zusätzlich verlässt sich createObjectFromScript auf diesen Test in den Gettern\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function isDOM(o) {\n"
+    "    return o.nodeName ? true : false;\n"
+    "}\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -9658,7 +9778,7 @@ BOOL isNumeric(NSString *s)
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'y', {\n"
-    "    get : function(){ return parseInt($(this).css('top')); },\n"
+    "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('top')); },\n"
     "    set: function(newValue){ $(this).css('top', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -9669,7 +9789,7 @@ BOOL isNumeric(NSString *s)
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'x', {\n"
-    "    get : function(){ return parseInt($(this).css('left')); },\n"
+    "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('left')); },\n"
     "    set: function(newValue){ $(this).css('left', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -9680,7 +9800,7 @@ BOOL isNumeric(NSString *s)
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'bgcolor', {\n"
-    "    get : function(){ return parseInt($(this).css('background-color')); },\n"
+    "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('background-color')); },\n"
     "    set: function(newValue){ $(this).css('background-color', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -9692,7 +9812,7 @@ BOOL isNumeric(NSString *s)
     "// READ                                                //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'myHeight', {\n"
-    "    get : function(){ if (this.hasOwnProperty('canvas'))  return parseInt($('#element1').css('height')); else return parseInt($(this).css('height'));  },\n"
+    "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('height'));  },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -9703,7 +9823,7 @@ BOOL isNumeric(NSString *s)
     "// READ                                                //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'myWidth', {\n"
-    "    get : function(){ if (this.hasOwnProperty('canvas'))  return parseInt($('#element1').css('width')); else return parseInt($(this).css('width'));  },\n"
+    "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('width'));  },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -9735,7 +9855,7 @@ BOOL isNumeric(NSString *s)
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'textalign', {\n"
-    "    get : function(){ return $(this).css('text-align'); },\n"
+    "    get : function(){ if (!isDOM(this)) return undefined; return $(this).css('text-align'); },\n"
     "    set: function(newValue){\n"
     "        if (newValue !== 'left' || newValue !== 'center' || newValue !== 'right')\n"
     "            throw new Error('Unsupported value for textalign.');\n"
@@ -9994,6 +10114,10 @@ BOOL isNumeric(NSString *s)
     "      }\n"
     "      else { alert('Hoppala, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() als jsAttribute ausgewertet werden.'); }\n"
     "    }\n"
+    "    else if (an[i] === '_textBetweenTags')\n"
+    "    {\n"
+    "        // Wird erst weiter unten ausgewertet\n"
+    "    }\n"
     "    else { alert('Whoops, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() ausgewertet werden.'); }\n"
     "  }\n"
     // "  $(id).css('background-color','black').css('width','200').css('height','5');\n"
@@ -10008,6 +10132,14 @@ BOOL isNumeric(NSString *s)
     "  // 2.5 Placement -> By default, instances which appear inside a class are made children of the top level instance of the class.\n"
     "  var kinderVorDemAppenden = $(id).children(); // die existierenden Kinder sichern\n"
     "  $(id).prepend(s); // dann den neuen Code anfügen\n"
+    "\n"
+    "\n"
+    "  // Wenn es Ein Text-Attribut gibt und eine Klasse mit class='div_text' vorliegt, und auch text übergeben wurde,\n"
+    "  // dann wird der textBetweenTags in das Element, welches 'div_text' als Klasse hat, eingefügt.\n"
+    "  // Example 28.10. Defining new text classes\n"
+    "  if (id.text !== undefined && $(s).hasClass('div_text') && jQuery.inArray('_textBetweenTags',an) != -1 && av[jQuery.inArray('_textBetweenTags',an)] !== '')\n"
+    "    $('#'+$(s).attr('id')).html(av[jQuery.inArray('_textBetweenTags',an)]);\n"
+    "\n"
     "\n"
     "  // ********* Damit 'defaultplacement' gesetzt werden kann *********\n"
     "  // ********* Die Variable, auf die defaultplacement verweist, wird hier bekannt gemacht *********\n"

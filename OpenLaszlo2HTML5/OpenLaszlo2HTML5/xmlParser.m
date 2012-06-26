@@ -1074,7 +1074,9 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [self instableXML:[NSString stringWithFormat:@"ERROR: The image-path '%@' isn't valid.",src]];
             }
 
-
+            // Ich setze es per setAttribute_ auf JS-Ebene. Aller nachfolgender Code überhaupt noch nötig? ToDo
+            [self.jQueryOutput appendString:@"  // Setting 'resource'\n"];
+            [self.jQueryOutput appendFormat:@"  %@.setAttribute_('resource', '%@');\n",self.zuletztGesetzteID,src];
 
 
             NSLog(@"Checking the image-size directly on file-system:");
@@ -1431,6 +1433,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // Ne, wir definieren einfach ein globales setAttribute_ mit defineProperty
 // Dazu muss ich dann nur das this immer aktualisieren, da es auch passieren kann, dass
 // setAttribute ohne vorangehende Variable aufgerufen wird.
+// Neu: Nicht mehr nötig. Wir beachten einfach den Scope von dem aus es aufgerufen wurde.
 - (NSString*) modifySomeExpressionsInJSCode:(NSString*)s
 {
     if (s == nil)
@@ -7064,9 +7067,14 @@ BOOL isNumeric(NSString *s)
 
 -(void) initTextAndKeyInProgress:(NSString*)elementName
 {
-    if (self.textInProgress != nil && [self.textInProgress length] > 0)
+    NSString *s = [self holDenGesammeltenTextUndLeereIhn];
+    if ([s length] > 0)
     {
-        [self instableXML:@"Hoppala, das sollte aber nicht passieren, dass ich hier noch nicht ausgewerteten Text habe."];
+        // Wenn wir gerade eh nur sammeln (und erst später auswerten), dann bitte nicht testen,
+        if (!self.weAreCollectingTheCompleteContentInClass)
+        {
+            [self instableXML:[NSString stringWithFormat:@"Hoppala, das sollte aber nicht passieren, dass ich hier noch nicht ausgewerteten Text habe (textInProgress: '%@' - Länge textInProgress: %d - keyInProgress: '%@')",s,[s length],self.keyInProgress]];
+        }
     }
 
 
@@ -9725,6 +9733,24 @@ BOOL isNumeric(NSString *s)
     "      if ($(me).attr('type') === 'checkbox' && $(me).next().is('span') && $(me).next().css('color') == 'rgb(169, 169, 169)' && value == true)\n"
     "          $(me).next().css('color','black');\n"
     "    }\n"
+    "    else if (attributeName == 'resource')\n"
+    "    {\n"
+    "        var imgpath0 = window[value][0];\n"
+    "        var imgpath1 = window[value][1];\n"
+    "        var imgpath2 = window[value][2];\n"
+    "\n"
+    "        // Get programmatically 'width' and 'height' of the image\n"
+    "        var img = new Image();\n"
+    "        img.src = imgpath0;\n"
+    "        $(me).width(img.width);\n"
+    "        $(me).height(img.height);\n"
+    "\n"
+    "        $(me).css('background-image','url('+imgpath0+')');\n"
+    "\n"
+    "        $(me).hover(function() { $(me).css('background-image','url('+imgpath1+')') }, function() { $(me).css('background-image','url('+imgpath0+')') });\n"
+    "        $(me).on('mousedown',function() { $(me).css('background-image','url('+imgpath2+')') });\n"
+    "        $(me).on('mouseup',function() { $(me).css('background-image','url('+imgpath0+')') });\n"
+    "    }\n"
     "    else\n"
     "      alert('ToDo. Aufruf von setAttribute, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
     "}\n"
@@ -10079,7 +10105,7 @@ BOOL isNumeric(NSString *s)
     "            av[i] = av[i].substring(2,av[i].length-1);\n"
     "\n"
     "            av[i] = av[i].replace('immediateparent','getTheParent()');\n"
-    "    // ToDo -> Das hier können doch alles getter werden, oder?\n"
+    "    // ToDo -> Das hier beides könnten doch getter werden, oder?\n"
     "            av[i] = av[i].replace('parent','getTheParent()');\n"
     "\n"
     "            av[i] = av[i].replace('width','myWidth');\n"
@@ -10098,6 +10124,9 @@ BOOL isNumeric(NSString *s)
     "    {\n"
     "      if (an[i].startsWith('on'))\n"
     "      {\n"
+    "        // Dann ist es JS-Code, Anpassungen vornehmen. Zusätzlich wohl noch die von oben ToDo ToCheck\n"
+    "        av[i] = av[i].replace('setAttribute','setAttribute_');\n"
+    "\n"
     "        // 'on' entfernen\n"
     "        an[i] = an[i].substr(2);\n"
     "\n"
@@ -10136,25 +10165,22 @@ BOOL isNumeric(NSString *s)
     "      }\n"
     "      else if (an[i] === 'resource')\n"
     "      {\n"
-    "        var imgpath0 = window[av[i]][0];\n"
-    "        var imgpath1 = window[av[i]][1];\n"
-    "        var imgpath2 = window[av[i]][2];\n"
-    "\n"
-    "        // Get programmatically 'width' and 'height' of the image\n"
-    "        var img = new Image();\n"
-    //"        img.onload = function() {\n"
-    //"          $(id).width(this.width);\n"
-    //"          $(id).height(this.height);\n"
-    //"        }\n"
-    "        img.src = imgpath0;\n"
-    "        $(id).width(img.width);\n"
-    "        $(id).height(img.height);\n"
-    "\n"
-    "        $(id).css('background-image','url('+imgpath0+')');\n"
-    "\n"
-    "        $(id).hover(function() { $(id).css('background-image','url('+imgpath1+')') }, function() { $(id).css('background-image','url('+imgpath0+')') });\n"
-    "        $(id).on('mousedown',function() { $(id).css('background-image','url('+imgpath2+')') });\n"
-    "        $(id).on('mouseup',function() { $(id).css('background-image','url('+imgpath0+')') });\n"
+    "          id.setAttribute_(an[i],av[i]);\n"
+    //"        var imgpath0 = window[av[i]][0];\n"
+    //"        var imgpath1 = window[av[i]][1];\n"
+    //"        var imgpath2 = window[av[i]][2];\n"
+    //"\n"
+    //"        // Get programmatically 'width' and 'height' of the image\n"
+    //"        var img = new Image();\n"
+    //"        img.src = imgpath0;\n"
+    //"        $(id).width(img.width);\n"
+    //"        $(id).height(img.height);\n"
+    //"\n"
+    //"        $(id).css('background-image','url('+imgpath0+')');\n"
+    //"\n"
+    //"        $(id).hover(function() { $(id).css('background-image','url('+imgpath1+')') }, function() { $(id).css('background-image','url('+imgpath0+')') });\n"
+    //"        $(id).on('mousedown',function() { $(id).css('background-image','url('+imgpath2+')') });\n"
+    //"        $(id).on('mouseup',function() { $(id).css('background-image','url('+imgpath0+')') });\n"
     "      }\n"
     "      else if (an[i] === 'align' && av[i] === 'right')\n"
     "      {\n"

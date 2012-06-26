@@ -463,7 +463,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 }
 
 
-
+// Warum ist das nicht alles setAttribute_() ? ToDo
 - (void) setTheComputedValue:(NSString *)s ofAttribute:(NSString*)attr
 {
     NSLog(@"A computed value, so we are setting the attribute with jQuery");
@@ -476,12 +476,9 @@ void OLLog(xmlParser *self, NSString* s,...)
     s = [self makeTheComputedValueComputable:s];
 
 
-    if ([attr isEqualToString:@"value"])
+    if ([attr isEqualToString:@"text"])
     {
-        // text ist in Wirklichkeit value. Oder Gilt das sogar allgemein? Also vor die If-Abfrage ziehen?
-        s = [s stringByReplacingOccurrencesOfString:@"text" withString:@"value"];
-
-        [o appendFormat:@"  $('#%@').attr('%@',%@);\n",self.zuletztGesetzteID,attr,s];
+        [o appendFormat:@"  $('#%@').html(%@);\n",self.zuletztGesetzteID,s];
     }
 
     if ([attr isEqualToString:@"background-image"])
@@ -1771,7 +1768,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         if ([s rangeOfString:@"spacing:"].location != NSNotFound)
         {
             NSError *error = NULL;
-            NSString* pattern = @"\\bspacing\\b:(\\d)";
+            NSString* pattern = @"\\bspacing\\b:(\\d+)";
 
             NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:pattern options:NSRegularExpressionCaseInsensitive error:&error];
 
@@ -2555,17 +2552,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 }
 
 
--(void) initTextAndKeyInProgress:(NSString*)elementName
-{
-    // This is a string we will append to as the text arrives
-    self.textInProgress = [[NSMutableString alloc] init];
-
-    // Kann ich eventuell noch gebrauchen um das aktuelle Tag abzufragen
-    self.keyInProgress = [elementName copy];
-}
-
-
-
 
 - (void) becauseOfSimpleLayoutXMoveTheChildrenOfElement:(NSString*)elem withSpacing:(NSString*)spacing andAttributes:(NSDictionary*)attributeDict
 {
@@ -2949,11 +2935,6 @@ didStartElement:(NSString *)elementName
         NSLog([NSString stringWithFormat:@"\nSkipping the opening Element %@, (Because we are in <switch>, but not in the first <when>)", elementName]);
         return;
     }
-
-
-
-
-
 
 
 
@@ -3829,36 +3810,38 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
-        [self.output appendString:@"<!-- Normaler button: -->\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
-
-        [self.output appendString:@"<input type=\"button\""];
+        [self.output appendString:@"<button type=\"button\""];
 
         // id hinzufügen und gleichzeitg speichern
         NSString *theId = [self addIdToElement:attributeDict];
 
-
         [self.output appendString:@" class=\"input_standard\" style=\""];
         [self.output appendString:[self addCSSAttributes:attributeDict]];
-        [self.output appendString:@"\""];
+        [self.output appendString:@"\">"];
 
         // Den Text als Beschriftung für den Button setzen
         if ([attributeDict valueForKey:@"text"])
         {
             self.attributeCount++;
+            NSLog(@"Setting the attribute 'text' as the label of the button.");
 
             if ([[attributeDict valueForKey:@"text"] hasPrefix:@"${"])
             {
-                [self setTheComputedValue:[attributeDict valueForKey:@"text"] ofAttribute:@"value"];
+                [self setTheComputedValue:[attributeDict valueForKey:@"text"] ofAttribute:@"text"];
             }
             else
             {
-                [self.output appendString:@" value=\""];
+                //[self.output appendString:@" value=\""];
+                //[self.output appendString:[attributeDict valueForKey:@"text"]];
+                //[self.output appendString:@"\""];
+                // das war früher nötig, als wir noch <input type="button"> hatten
+                // Jetzt neu einfach ausgeben:
                 [self.output appendString:[attributeDict valueForKey:@"text"]];
-                [self.output appendString:@"\""];
             }
         }
 
+
+        [self.output appendString:@"</button>\n"];
 
 
         // ToDo: Wird derzeit nicht ausgewertet
@@ -3893,10 +3876,6 @@ didStartElement:(NSString *)elementName
         }
 
 
-
-
-        [self.output appendString:@"/>\n"];
-
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
     }
 
@@ -3912,10 +3891,8 @@ didStartElement:(NSString *)elementName
 
         if ([elementName isEqualToString:@"basebutton"])
             [self.output appendString:@"<!-- Basebutton: -->\n"];
-        else if ([elementName isEqualToString:@"imgbutton"])
-            [self.output appendString:@"<!-- Imagebutton: -->\n"];
         else
-            [self.output appendString:@"<!-- Buttonnext: -->\n"];
+            [self.output appendString:@"<!-- Imagebutton: -->\n"];
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
@@ -4091,6 +4068,18 @@ didStartElement:(NSString *)elementName
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
     }
 
+    if ([elementName isEqualToString:@"tooltip"])
+    {
+        element_bearbeitet = YES;
+
+        if ([attributeDict valueForKey:@"text"])
+        {
+            self.attributeCount++;
+
+            NSLog(@"Setting the attribute 'text' as text for textInProgress.");
+            [self.textInProgress appendString:[attributeDict valueForKey:@"text"]];
+        }
+    }
 
     // Original von OpenLaszlo eingebautes HTML-<select>-Element
     if ([elementName isEqualToString:@"baselist"])
@@ -5603,12 +5592,6 @@ didStartElement:(NSString *)elementName
         if ([attributeDict valueForKey:@"info"])
             self.attributeCount++;
     }
-    // ToDo - Tooltip kann wie <text>TEXT</text> Text in der Mitte beinhalten!!!
-    // Evtl. dort mit inkludieren
-    if ([elementName isEqualToString:@"tooltip"])
-    {
-        element_bearbeitet = YES;
-    }
     // ToDo
     if ([elementName isEqualToString:@"state"])
     {
@@ -7078,6 +7061,46 @@ BOOL isNumeric(NSString *s)
 }
 
 
+
+-(void) initTextAndKeyInProgress:(NSString*)elementName
+{
+    if (self.textInProgress != nil && [self.textInProgress length] > 0)
+    {
+        [self instableXML:@"Hoppala, das sollte aber nicht passieren, dass ich hier noch nicht ausgewerteten Text habe."];
+    }
+
+
+    // This is a string we will append to as the text arrives
+    self.textInProgress = [[NSMutableString alloc] init];
+
+    // Kann ich eventuell noch gebrauchen um das aktuelle Tag abzufragen
+    self.keyInProgress = [elementName copy];
+}
+
+
+
+// Der Text der zwischen den <tags> gefunden wurde, kann hier einfach entnommen werden
+// Mit jeder Entnahme (und somit Verwertung) ist ein Zurücksetzen des Textes verbunden.
+- (NSString*) holDenGesammeltenTextUndLeereIhn
+{
+    NSString *s = @"";
+
+    // Immer auf nil testen, sonst kann es abstürzen hier
+    if (self.textInProgress != nil)
+    {
+        s = self.textInProgress;
+
+        self.textInProgress = nil;
+    }
+
+    // Remove leading and ending Whitespaces and NewlineCharacters
+    s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+    return s;
+}
+
+
+
 - (void) parser:(NSXMLParser *)parser
   didEndElement:(NSString *)elementName
    namespaceURI:(NSString *)namespaceURI
@@ -7194,23 +7217,9 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-
         self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
 
-
-        // Immer auf nil testen, sonst kann es abstürzen hier
-        NSString *s = @"";
-        if (self.textInProgress != nil)
-        {
-            s = self.textInProgress;
-
-            self.textInProgress = nil;
-            self.keyInProgress = nil;
-        }
-        // Remove leading and ending Whitespaces and NewlineCharacters
-        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
-
+        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
 
 
 
@@ -7458,6 +7467,13 @@ BOOL isNumeric(NSString *s)
 
 
         [self.jsOLClassesOutput appendString:@"};\n"];
+
+        
+        [self.jsOLClassesOutput appendString:@"// Jede Klasse kann auch per Skript erzeugt werden\n"];
+        [self.jsOLClassesOutput appendFormat:@"lz_MetaClass.prototype.%@ = function(scope,attributes) { return createObjectFromScript('%@',scope,attributes); };\n",self.lastUsedNameAttributeOfClass,self.lastUsedNameAttributeOfClass];
+
+        // marker - eventuell kann das wieder entfernt werden
+        self.textInProgress = nil;
     }
 
     if ([elementName isEqualToString:@"class"] ||
@@ -7482,40 +7498,18 @@ BOOL isNumeric(NSString *s)
     {
         // Wenn wir in <class> sind, sammeln wir alles (wird erst später rekursiv ausgewertet)
 
-        NSString *s = @"";
-        if (self.textInProgress != nil)
-            s = self.textInProgress;
+        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
 
-        // Nachdem ausgelesen, auf nil setzen, sonst haben wir ein rekursives Chaos...
-        self.textInProgress = nil;
-
-        // Remove leading and ending Whitespaces and NewlineCharacters
-        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
         // Alle '&' und '<' müssen ersetzt werden, sonst meckert der XML-Parser
         // Das &-ersetzen muss natürlich als erstes kommen, weil ich danach ja wieder
         // welche einfüge (durch die Entitys).
         s = [s stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"];
         s = [s stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
 
-        // Wenn wir nichts eingeschlossen haben und uns sofort wieder schließen. <tag />
-        /*
-        if ([s isEqualToString:@""] && ([self.element_merker isEqualToString:elementName]))
-        {
-            // Dann sind wir ein Element, was kein schließendes Tag hat
-            // Deswegen das '>' am Ende entfernen
-            // Und dafür ein '/>' einfügen
 
-            // Das letzte Char des Strings entfernen:
-            
-            self.collectedContentOfClass = [[NSMutableString alloc] initWithString:[self.collectedContentOfClass substringToIndex:[self.collectedContentOfClass length] - 1]];
-
-            [self.collectedContentOfClass appendString:@" />"];
-        }
-        else
-        { */
         [self.collectedContentOfClass appendString:s];
         [self.collectedContentOfClass appendFormat:@"</%@>",elementName];
-        /* } */
+
 
         return;
     }
@@ -7614,18 +7608,7 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-        // Immer auf nil testen, sonst kann es abstürzen hier
-        NSString *s = @"";
-        if (self.textInProgress != nil)
-        {
-            s = self.textInProgress;
-
-            self.textInProgress = nil;
-            self.keyInProgress = nil;
-        }
-
-        // Remove leading and ending Whitespaces and NewlineCharacters
-        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
 
         [self.output appendString:s];
         [self.output appendString:@"</div>\n"];
@@ -7715,7 +7698,6 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"infobox_euerhinweis"] ||
         [elementName isEqualToString:@"infobox_stnr"] ||
         [elementName isEqualToString:@"infobox_plausi"] ||
-        [elementName isEqualToString:@"tooltip"] ||
         [elementName isEqualToString:@"state"] ||
         [elementName isEqualToString:@"animatorgroup"] ||
         [elementName isEqualToString:@"animator"] ||
@@ -7733,7 +7715,6 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"calcButton"] ||
         [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"debug"] ||
-        [elementName isEqualToString:@"passthrough"] ||
         [elementName isEqualToString:@"evaluateclass"])
     {
         element_geschlossen = YES;
@@ -7759,6 +7740,15 @@ BOOL isNumeric(NSString *s)
     }
 
 
+    // Schließen von passthrough
+    if ([elementName isEqualToString:@"passthrough"])
+    {
+        element_geschlossen = YES;
+
+        // Ich muss in dem Fall den gesammelten Text leeren, da ich diesen nicht verwerte
+        self.textInProgress = nil;
+    }
+
 
     // Schließen von baselistitem
     if ([elementName isEqualToString:@"baselistitem"])
@@ -7766,8 +7756,6 @@ BOOL isNumeric(NSString *s)
         element_geschlossen = YES;
 
         [self.output appendString:@"</option>\n"];
-
-
     }
 
 
@@ -7778,20 +7766,30 @@ BOOL isNumeric(NSString *s)
         element_geschlossen = YES;
 
 
-        // Immer auf nil testen, sonst kann es abstürzen hier
-        NSString *s = @"";
-        if (self.textInProgress != nil)
-            s = self.textInProgress;
-
-        // Remove leading and ending Whitespaces and NewlineCharacters
-        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
 
 
         if (![s isEqualToString:@""])
         {
             s = [NSString stringWithFormat:@"'%@'",s];
-            [self setTheComputedValue:s ofAttribute:@"value"];
+            [self setTheComputedValue:s ofAttribute:@"text"];
         }
+    }
+
+
+
+    // Schließen von tooltip
+    if ([elementName isEqualToString:@"tooltip"])
+    {
+        element_geschlossen = YES;
+
+        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
+
+        [self.jQueryOutput appendString:@"\n  // Tooltip setzen, wird per CSS aus dem HTML5-data-Attribut ausgelesen\n"];
+        [self.jQueryOutput appendFormat:@"  if ($('#%@').offset().top < 40)\n",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"    $('#%@').attr('data-tooltip-bottom','%@');\n",self.zuletztGesetzteID,s];
+        [self.jQueryOutput appendString:@"  else\n"];
+        [self.jQueryOutput appendFormat:@"    $('#%@').attr('data-tooltip','%@');\n",self.zuletztGesetzteID,s];
     }
 
 
@@ -7801,19 +7799,7 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-        // Immer auf nil testen, sonst kann es abstürzen hier
-        NSString *s = @"";
-        if (self.textInProgress != nil)
-        {
-            s = self.textInProgress;
-
-            self.textInProgress = nil;
-            self.keyInProgress = nil;
-        }
-
-        // Remove leading and ending Whitespaces and NewlineCharacters
-        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
+        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
 
         // Hinzufügen von gesammelten Text, falls er zwischen den tags gesetzt wurde
         [self.output appendString:s];
@@ -7832,8 +7818,10 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
+        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
+
         // Hinzufügen von gesammelten Text
-        [self.jsHead2Output appendString:self.textInProgress];
+        [self.jsHead2Output appendString:s];
         [self.jsHead2Output appendString:@"');\n"];
     }
 
@@ -7886,9 +7874,7 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-        NSString *s = self.textInProgress;
-        if (s == nil)
-            s = @"";
+        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
 
 
         // Natürlich auch hier setAttribute durch setAttribute_ ersetzen
@@ -7974,9 +7960,9 @@ BOOL isNumeric(NSString *s)
         // und müssen bekannt sein, deswegen kann es nicht im Head stehen (alte Lösung)
         // [self.jsHead2Output appendString:s];
         // statt dessen:
-        [self.jQueryOutput appendString:@"\n // ausgewertetes <script>-Tag:\n"];
-        [self.jQueryOutput appendString:s];
-        [self.jQueryOutput appendString:@"\n"];
+        [self.jQueryOutput appendString:@"\n  /***** ausgewertetes <script>-Tag - Anfang *****/\n"];
+        [self.jQueryOutput appendFormat:@"  %@",s];
+        [self.jQueryOutput appendString:@"\n  /***** ausgewertetes <script>-Tag - Ende *****/\n"];
     }
 
 
@@ -7988,13 +7974,8 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-        // Immer auf nil testen, sonst kann es abstürzen hier
-        NSString *s = @"";
-        if (self.textInProgress != nil)
-        {
-            s = self.textInProgress;
-            self.textInProgress = [NSMutableString stringWithString:@""];
-        }
+        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
+
         NSLog([NSString stringWithFormat:@"Original code defined in handler: \n**********\n%@\n**********",s]);
 
 
@@ -8052,10 +8033,7 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
-        // Immer auf nil testen, sonst kann es abstürzen hier
-        NSString *s = @"";
-        if (self.textInProgress != nil)
-            s = self.textInProgress;
+        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
 
         NSLog([NSString stringWithFormat:@"Original code defined in method: \n**********\n%@\n**********",s]);
 
@@ -8137,18 +8115,7 @@ BOOL isNumeric(NSString *s)
         [self.output appendString:@"</div>\n"];
 
 
-        // Immer auf nil testen, sonst kann es abstürzen hier
-        NSString *s = @"";
-        if (self.textInProgress != nil)
-        {
-            s = self.textInProgress;
-
-            self.textInProgress = nil;
-            self.keyInProgress = nil;
-        }
-
-        // Remove leading and ending Whitespaces and NewlineCharacters, sonst Absturz, falls ein Newline auftaucht
-        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
 
 
         // Benötigte ID vom stack holen, und danach Element entfernen.
@@ -8176,7 +8143,17 @@ BOOL isNumeric(NSString *s)
     // da ich den Text ja weiter ergänze. Erst ganz am Ende beim Schließen von BDSText mache ich das
     if (!self.weAreCollectingTextAndThereMayBeHTMLTags)
     {
-        // Clear the text and key
+        if (self.textInProgress != nil && [self.textInProgress length] > 0)
+        {
+            // Von den hier genannten Tags wird der Text zwischen den Tags noch nichts ausgewertet
+            if (![self.keyInProgress isEqualToString:@"BDSinputgrid"] &&
+                ![self.keyInProgress isEqualToString:@"BDSreplicator"])
+            {
+                [self instableXML:@"Hoppala, das sollte aber nicht passieren, dass ich hier noch nicht ausgewerteten Text habe."];
+            }
+        }
+
+        // Okay, element closed! So clear the text, that was found between tags and the elementName
         self.textInProgress = nil;
         self.keyInProgress = nil;
     }
@@ -8271,14 +8248,15 @@ BOOL isNumeric(NSString *s)
     // jQuery UI laden (wegen TabSheet)
     [pre appendString:@"<script type=\"text/javascript\" src=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.21/jquery-ui.min.js\"></script>\n"];
 
+    // Unser eigenes Skript lieber zuerst
+    [pre appendString:@"<script type=\"text/javascript\" src=\"jsHelper.js\"></script>\n"];
+
     if (![self.jsOLClassesOutput isEqualToString:@""])
     {
-        // Die von OpenLaszlo gefundenen Klassen werden zuerst integriert
+        // Erst nach jsHelper die Klassen importieren. Den lz_MetaClass muss bekannt sein
         [pre appendString:@"<script type=\"text/javascript\" src=\"collectedClasses.js\"></script>\n"];
     }
 
-    // Unser eigenes Skript lieber zuerst
-    [pre appendString:@"<script type=\"text/javascript\" src=\"jsHelper.js\"></script>\n"];
 
     // Dann erst externe gefundene Skripte
     [pre appendString:self.externalJSFilesOutput];
@@ -8509,16 +8487,32 @@ BOOL isNumeric(NSString *s)
     "}\n"
     "\n"
     "/* Der button, wie er ungefähr in OpenLaszlo aussieht */\n"
-    "input[type=\"button\"]\n"
+    "input[type=\"button\"], button\n"
     "{\n"
     "    border: 1px solid #333; /* fixes a 'can't set height-bug' on webkit */\n"
     "    margin: 0; /* Only for webkit... */\n"
-    "    padding: 12px;\n"
+    "    padding: 6px 10px;\n"
     "    background: #dedede;\n"
     "    background: -moz-linear-gradient(top, #ffffff, #afafaf);\n"
     "    background: -webkit-linear-gradient(top, #ffffff, #afafaf);\n"
     "    background: -ms-linear-gradient(top, #ffffff, #afafaf);\n"
     "    background: -o-linear-gradient(top, #ffffff, #afafaf);\n"
+    "}\n"
+    "input[type=\"button\"]:hover, button:hover\n"
+    "{\n"
+    "    background: #bfbfbf;\n"
+    "    background: -moz-linear-gradient(top, #ffffff, #bfbfbf);\n"
+    "    background: -webkit-linear-gradient(top, #ffffff, #bfbfbf);\n"
+    "    background: -ms-linear-gradient(top, #ffffff, #bfbfbf);\n"
+    "    background: -o-linear-gradient(top, #ffffff, #bfbfbf);\n"
+    "}\n"
+    "input[type=\"button\"]:active, button:active\n"
+    "{\n"
+    "    background: #cbcbcb;\n"
+    "    background: -moz-linear-gradient(top, #535353, #cbcbcb);\n"
+    "    background: -webkit-linear-gradient(top, #535353, #cbcbcb);\n"
+    "    background: -ms-linear-gradient(top, #535353, #cbcbcb);\n"
+    "    background: -o-linear-gradient(top, #535353, #cbcbcb);\n"
     "}\n"
     "\n"
     "/* Damit der Hintergrund weiß wird, entgegen der Angabe in Humanity.css */\n"
@@ -8526,7 +8520,7 @@ BOOL isNumeric(NSString *s)
     "\n"
     "img { border: 0 none; }\n"
     "\n"
-    "div, span, input, select\n"
+    "div, span, input, select, button\n"
     "{\n"
     "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
     "}\n"
@@ -8752,6 +8746,75 @@ BOOL isNumeric(NSString *s)
     "    pointer-events: none; /* Sonst kann ein drüber liegendes div Click-Events wegnehmen */\n"
     "                         /* Wird auf 'auto' gesetzt, wenn wirklich ein event dort ist.*/\n"
     "                         /* Won't work on IE */\n"
+    "}\n"
+    "\n"
+    "/* Ermögliche Tooltips! */\n"
+    "*[data-tooltip]:before\n"
+    "{\n"
+    "    position: absolute;\n"
+    "    z-index: 1000;\n"
+    "    left: 10px;\n"
+    "    top: -40px;\n"
+    "    background-color: orange;\n"
+    "    color: white;\n"
+    "    height: 30px;\n"
+    "    font-size: 10px;\n"
+    "    line-height: 30px;\n"
+    "    border-radius: 5px;\n"
+    "    padding: 0 15px;\n"
+    "    content: attr(data-tooltip);\n"
+    "    white-space: nowrap;\n"
+    "    display: none;\n"
+    "}\n"
+    "*[data-tooltip]:after\n"
+    "{\n"
+    "    position: absolute;\n"
+    "    z-index: 1000;\n"
+    "    left: 25px;\n"
+    "    top: -10px;\n"
+    "    border-top: 7px solid orange;\n"
+    "    border-left: 7px solid transparent;\n"
+    "    border-right: 7px solid transparent;\n"
+    "    content: \"\";\n"
+    "    display: none;\n"
+    "}\n"
+    "*[data-tooltip]:hover:after, *[data-tooltip]:hover:before\n"
+    "{\n"
+    "    display: block;\n"
+    "}\n"
+    "/* Tooltips unten anzeigen, falls oben kein Platz */\n"
+    "*[data-tooltip-bottom]:before\n"
+    "{\n"
+    "    position: absolute;\n"
+    "    z-index: 1000;\n"
+    "    left: 10px;\n"
+    "    bottom: -40px;\n"
+    "    background-color: orange;\n"
+    "    color: white;\n"
+    "    height: 30px;\n"
+    "    font-size: 10px;\n"
+    "    line-height: 30px;\n"
+    "    border-radius: 5px;\n"
+    "    padding: 0 15px;\n"
+    "    content: attr(data-tooltip-bottom);\n"
+    "    white-space: nowrap;\n"
+    "    display: none;\n"
+    "}\n"
+    "*[data-tooltip-bottom]:after\n"
+    "{\n"
+    "    position: absolute;\n"
+    "    z-index: 1000;\n"
+    "    left: 25px;\n"
+    "    bottom: -10px;\n"
+    "    border-bottom: 7px solid orange;\n"
+    "    border-left: 7px solid transparent;\n"
+    "    border-right: 7px solid transparent;\n"
+    "    content: \"\";\n"
+    "    display: none;\n"
+    "}\n"
+    "*[data-tooltip-bottom]:hover:after, *[data-tooltip-bottom]:hover:before\n"
+    "{\n"
+    "    display: block;\n"
     "}\n"
     "\n"
     "#debugWindow\n"
@@ -9279,8 +9342,8 @@ BOOL isNumeric(NSString *s)
     "var objectFromScriptCounter = 1;\n"
     "\n"
     "function createObjectFromScript(name, scope, attributes) {\n"
-    "if (name === undefined || scope === undefined || attributes === undefined)\n"
-    "    throw new TypeError('function createObjectFromScript - no attribute is allowed to be undefined');\n"
+    "if (name === undefined || scope === undefined)\n"
+    "    throw new TypeError('function createObjectFromScript - Neither the name-attribute nor the scope-attribute is allowed to be undefined');\n"
     "\n"
     "    var id = 'objectFromScript'+objectFromScriptCounter;\n"
     "\n"
@@ -9291,26 +9354,32 @@ BOOL isNumeric(NSString *s)
     //"            text: 'Go to Google!'\n"
     "        }).appendTo(scope);\n"
     "    }\n"
-    "\n"
-    "\n"
-    "    if (attributes.name)\n"
+    "    else\n"
     "    {\n"
-    "        window[attributes.name] = document.getElementById(id);\n"
-    "        $('#'+id).parent().get(0)[attributes.name] = document.getElementById(id);\n"
-    "        canvas[attributes.name] = document.getElementById(id);\n"
-    "    \n"
-    "        delete attributes.name;\n"
+    "        alert('Das muss ich noch unterstützen: '+name);\n"
     "    }\n"
-    "    var id = '#'+id;\n"
     "\n"
-    "    // Seems to be not possible, when creating an Object from script\n"
-    "    if (attributes.onclick)\n"
-    "        delete attributes.onclick;\n"
+    "    if (attributes)\n"
+    "    {\n"
+    "        if (attributes.name)\n"
+    "        {\n"
+    "            window[attributes.name] = document.getElementById(id);\n"
+    "            $('#'+id).parent().get(0)[attributes.name] = document.getElementById(id);\n"
+    "            canvas[attributes.name] = document.getElementById(id);\n"
+    "\n"
+    "            delete attributes.name;\n"
+    "        }\n"
+    "        var id = '#'+id;\n"
+    "\n"
+    "        // Seems to be not possible, when creating an Object from script\n"
+    "        if (attributes.onclick)\n"
+    "            delete attributes.onclick;\n"
     "\n"
     "\n"
-    "    Object.keys(attributes).forEach(function(key) {\n"
-    "        $(id).setAttribute_(key,attributes[key]);\n"
-    "    });\n"
+    "        Object.keys(attributes).forEach(function(key) {\n"
+    "            $(id).setAttribute_(key,attributes[key]);\n"
+    "        });\n"
+    "    }\n"
     "/*\n"
     "    if (attributes.myHeight !== undefined)\n"
     "        $(id).css('height', attributes.myHeight);\n"
@@ -9334,6 +9403,8 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "    objectFromScriptCounter++;\n"
+    "\n"
+    "    return $(id).get(0);\n"
     "}\n"
     "\n"
     "\n"
@@ -9370,7 +9441,7 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "    this.view = function(scope,attributes) {\n"
-    "        createObjectFromScript('view',scope,attributes);\n"
+    "        return createObjectFromScript('view',scope,attributes);\n"
     "    }\n"
     "}\n"
     "var lz = new lz_MetaClass();\n"
@@ -9617,9 +9688,11 @@ BOOL isNumeric(NSString *s)
     "    else if (attributeName == 'bgcolor')\n"
     "    {\n"
     "        if (typeof value === 'number')\n"
-    "            value = '#'+value.toString(16);\n"
-    "        if (value === '#0')\n"
-    "            value = '#000000'\n"
+    "        {\n"
+    "            value = value.toString(16);\n"
+    "            while (value.length < 6) value = '0' + value;\n"
+    "            value = '#'+ value;\n"
+    "        }\n"
     "        $(me).css('background-color',value);\n"
     "    }\n"
     "    else if (attributeName == 'x')\n"

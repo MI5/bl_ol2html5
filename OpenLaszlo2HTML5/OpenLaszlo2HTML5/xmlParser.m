@@ -4,7 +4,7 @@
 //
 //
 //
-//
+// iwie gibt es noch ein Problem mit den pointer-events (globalhelp verdeckt Foren-Button)
 //
 //
 // 'name' Attribute werden global gemacht, aber zumindestens bei input-Feldern
@@ -12,6 +12,9 @@
 // 'regelmaessig', 'begruendet', 'complete'
 //
 //
+// Eher unwichtig:
+// - width/height muss nicht mehr initial auf 'auto' gesetzt werden, seitdem der ganze JS-Code
+// in '$(window).load(function()' steckt,
 //
 //
 //  Created by Matthias Blanquett on 13.04.12.
@@ -912,12 +915,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    // Skipping this attributes
-    if ([attributeDict valueForKey:@"scriptlimits"])
-    {
-        self.attributeCount++;
-        NSLog(@"Skipping the attribute 'scriptlimits'.");
-    }
+
     if ([attributeDict valueForKey:@"stretches"])
     {
         // Wird automatisch von CSS bei Hintergrundbildern berücksichtigt
@@ -1035,7 +1033,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         else
         {
             // Die gefunde Res muss auch in JS verfügbar sein in der Variable resource!
-            [self.jQueryOutput appendString:@"\n  // Setting the var 'resource' for internal JS-access"];
+            [self.jsOutput appendString:@"\n  // Setting the var 'resource' for internal JS-access"];
             // ----->
 
 
@@ -1047,7 +1045,7 @@ void OLLog(xmlParser *self, NSString* s,...)
                 // Möglichkeit 1: Resource wird direkt als String angegeben!
 
                 // <----- (hier mit '' setzen, da ja ein String!
-                [self.jQueryOutput appendFormat:@"\n  $('#%@').get(0).resource = '%@';\n",self.zuletztGesetzteID,src];
+                [self.jsOutput appendFormat:@"\n  $('#%@').get(0).resource = '%@';\n",self.zuletztGesetzteID,src];
 
                 s = src;
             }
@@ -1056,7 +1054,7 @@ void OLLog(xmlParser *self, NSString* s,...)
                 // Möglichkeit 2: Resource wurde vorher extern gesetzt+
 
                 // <-----
-                [self.jQueryOutput appendFormat:@"\n  $('#%@').get(0).resource = %@;\n",self.zuletztGesetzteID,src];
+                [self.jsOutput appendFormat:@"\n  $('#%@').get(0).resource = %@;\n",self.zuletztGesetzteID,src];
 
                 // Namen des Bildes aus eigener vorher angelegter Res-DB ermitteln
                 if ([[self.allJSGlobalVars valueForKey:src] isKindOfClass:[NSArray class]])
@@ -1075,8 +1073,19 @@ void OLLog(xmlParser *self, NSString* s,...)
             }
 
             // Ich setze es per setAttribute_ auf JS-Ebene. Aller nachfolgender Code überhaupt noch nötig? ToDo
-            [self.jQueryOutput appendString:@"  // Setting 'resource'\n"];
-            [self.jQueryOutput appendFormat:@"  %@.setAttribute_('resource', '%@');\n",self.zuletztGesetzteID,src];
+            // Geht wohl nur dann wenn ich DIESE CSS-Angaben noch vor alles andere setze, sonst
+            // ist width und height nicht früh genug gesetzt und SA's verschieben sich!
+            [self.jsOutput appendString:@"\n  // Setting 'resource'\n"];
+            if ([src rangeOfString:@"."].location != NSNotFound)
+                [self.jsOutput appendFormat:@"  %@.setAttribute_('resource', '%@');\n",self.zuletztGesetzteID,src];
+            else 
+                [self.jsOutput appendFormat:@"  %@.setAttribute_('resource', %@);\n",self.zuletztGesetzteID,src];
+
+            if ([attributeDict valueForKey:@"frame"])
+            {
+                [self.jsOutput appendString:@"\n  // Setting 'frame'\n"];
+                [self.jsOutput appendFormat:@"  %@.setAttribute_('frame', %d);\n",self.zuletztGesetzteID,index];
+            }
 
 
             NSLog(@"Checking the image-size directly on file-system:");
@@ -1108,6 +1117,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             // position:absolute teste (Simplelayout) und nur bei absolute-Elementen aufrücke
             // Wenn Bilder IMMER absolute wären, würde diese Abfrage brechen
             // [style appendString:@"position:absolute;"];
+
         }
     }
 
@@ -1180,6 +1190,18 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [self.jQueryOutput appendString:@"  $('div:first').append('<div id=\"debugWindow\"><div style=\"background-color:black;color:white;width:100%;\">DEBUG WINDOW</div><div id=\"debugInnerWindow\"></div></div>');\n"];
                 [self.jQueryOutput appendString:@"  $('#debugWindow').draggable();\n\n"];
             }
+        }
+
+        // Skipping this attributes
+        if ([attributeDict valueForKey:@"scriptlimits"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'scriptlimits'.");
+        }
+        if ([attributeDict valueForKey:@"xmlns"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'xmlns'.");
         }
     }
 
@@ -3844,9 +3866,6 @@ didStartElement:(NSString *)elementName
         }
 
 
-        [self.output appendString:@"</button>\n"];
-
-
         // ToDo: Wird derzeit nicht ausgewertet
         if ([attributeDict valueForKey:@"isdefault"])
         {
@@ -6323,10 +6342,7 @@ didStartElement:(NSString *)elementName
     }
 
 
-    // Handler wird immer in anderen <tags> aufgerufen, wir nehmen von diesem umgebenden Tag
-    // einfach die ID um den Handler zuordnen zu können
-    // ToDo -> Ich nutze hier ja self.zuletztgesetzteID anstatt dem umgebenden Tag?!?!?! -> Das kann abweichen!
-    // z. B. wenn der handler erst später kommt und dazwischen noch andere Tags liegen!
+
     if ([elementName isEqualToString:@"handler"])
     {
         element_bearbeitet = YES;
@@ -6823,7 +6839,7 @@ didStartElement:(NSString *)elementName
         // Wird falls nötig auf Javascript-Ebene von der Funktion interpretObject() mit Attributen erweitert.
         [self.output appendString:@"<div"];
         [self addIdToElement:attributeDict];
-        [self.output appendString:@" class=\"div_standard\" style=\""];
+        [self.output appendString:@" class=\"div_standard noPointerEvents\" style=\""];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
@@ -6911,6 +6927,8 @@ didStartElement:(NSString *)elementName
         [d removeObjectForKey:@"mask"];
         [d removeObjectForKey:@"ignoreplacement"];
 
+        [d removeObjectForKey:@"value"];
+
         // Really Build-In-Values??
         [d removeObjectForKey:@"boxheight"];
         [d removeObjectForKey:@"listwidth"];
@@ -6951,19 +6969,6 @@ didStartElement:(NSString *)elementName
         }
 
 
-
-        // ToDo
-        if ([attributeDict valueForKey:@"showbackground"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'showbackground'.");
-        }
-        // ToDo
-         if ([attributeDict valueForKey:@"setfocus"])
-         {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'setfocus'.");
-         }
         // ToDo
         if ([attributeDict valueForKey:@"ignoreplacement"])
         {
@@ -7073,7 +7078,13 @@ BOOL isNumeric(NSString *s)
         // Wenn wir gerade eh nur sammeln (und erst später auswerten), dann bitte nicht testen,
         if (!self.weAreCollectingTheCompleteContentInClass)
         {
-            [self instableXML:[NSString stringWithFormat:@"Hoppala, das sollte aber nicht passieren, dass ich hier noch nicht ausgewerteten Text habe (textInProgress: '%@' - Länge textInProgress: %d - keyInProgress: '%@')",s,[s length],self.keyInProgress]];
+            //[self instableXML:[NSString stringWithFormat:@"Hoppala, das sollte aber nicht passieren, dass ich hier noch nicht ausgewerteten Text habe (textInProgress: '%@' - Länge textInProgress: %d - keyInProgress: '%@')",s,[s length],self.keyInProgress]];
+
+            // Okay bei GFlender-Code kommt das zwar nicht vor, aber es kann gemäß OL
+            // trotzdem passieren (Example 28.16.):
+            // z.B.: <button>Make window red <handler name="onclick">code</handler></button>
+            // wenn so etwas passiert, einfach Text ausgeben... Hoffe das geht in allen Fällen gut
+            [self.output appendString:s];
         }
     }
 
@@ -7773,6 +7784,7 @@ BOOL isNumeric(NSString *s)
     {
         element_geschlossen = YES;
 
+        [self.output appendString:@"</button>\n"];
 
         NSString *s = [self holDenGesammeltenTextUndLeereIhn];
 
@@ -8305,26 +8317,16 @@ BOOL isNumeric(NSString *s)
     // Füge noch die nötigen JS ein:
     [self.output appendString:@"\n<script type=\"text/javascript\">\n"];
 
-    // Firefox braucht eine Extra-Sonderbehandlung OBWOHL ich die ids bereits alle einzeln global mache
-    // Jedoch in '$(window).load(function()'. Und das reicht anscheinend nicht.......... Warum???
-    [self.output appendString:@"// Make all id's from div's global (Firefox)\n"];
-    [self.output appendString:@"makeElementsGlobal(document.getElementsByTagName('div'));\n"];
-    [self.output appendString:@"// Make all id's from input's global (Firefox)\n"];
-    [self.output appendString:@"makeElementsGlobal(document.getElementsByTagName('input'));\n"];
-    [self.output appendString:@"// Make all id's from select's global (Firefox)\n"];
-    [self.output appendString:@"makeElementsGlobal(document.getElementsByTagName('select'));\n"];
-    [self.output appendString:@"// Make canvas accessible\n"];
-    [self.output appendString:@"makeCanvasAccessible();\n"];
+    [self.output appendString:@"// Make all id's global (For Firefox) and init 'canvas'\n"];
+    [self.output appendString:@"makeIDsGlobalAndInitCanvas();\n\n\n"];
+
 
     // Die jQuery-Anweisungen:
 
-    [self.output appendString:@"\n\n// '$(function() {' ist leider zu unverlässig. Bricht z. B. das korrekte setzen der Breite von element9, weil es die direkten Kinder-Elemente nicht richtig auslesen kann\n// Dieses Problem trat nur beim Reloaden auf, nicht beim direkten Betreten der Seite per URL. Very strange!\n// Jedenfalls lässt sich das Problem über '$(window).load(function() {});' anstatt '$(document).ready(function() {});' lösen.\n// http://stackoverflow.com/questions/6504982/jquery-behaving-strange-after-page-refresh-f5-in-chrome\n// Eventuell muss ich dadurch auch nicht mehr alle width/height-Startwerte per css auf 'auto' setzen (To Check).\n"];
+    //[self.output appendString:@"\n\n// '$(function() {' ist leider zu unverlässig. Bricht z. B. das korrekte setzen der Breite von element9, weil es die direkten Kinder-Elemente nicht richtig auslesen kann\n// Dieses Problem trat nur beim Reloaden auf, nicht beim direkten Betreten der Seite per URL. Very strange!\n// Jedenfalls lässt sich das Problem über '$(window).load(function() {});' anstatt '$(document).ready(function() {});' lösen.\n// http://stackoverflow.com/questions/6504982/jquery-behaving-strange-after-page-refresh-f5-in-chrome\n// Dadurch muss ich auch nicht mehr alle width/height-Startwerte per css auf 'auto' setzen.\n"];
     [self.output appendString:@"$(window).load(function()\n{\n"];
 
-    //[self.output appendString:@"  // globalhelp heimlich als Div einführen\n"];
-    //[self.output appendString:@"  $('div:first').prepend('<div id=\"___globalhelp\" class=\"ui-corner-all\" style=\"position:absolute;left:810px;top:150px;width:175px;height:300px;z-index:1000;background-color:white;padding:4px;\">Infocenter</div>');\n\n"];
 
-    // dlgFamilienstandSingle -> ToDo, muss später selbständig erkannt werden
     [self.output appendString:@"  // dlgFamilienstandSingle heimlich als Objekt einführen (diesmal direkt im Objekt, ohne prototype)\n"];
     [self.output appendString:@"  function dlg()\n  {\n    // Extern definiert\n    this.open = open;\n    // Intern definiert (beides möglich)\n"];
     [self.output appendString:@"    this.completeInstantiation = function completeInstantiation() { };\n  }\n"];
@@ -9108,12 +9110,30 @@ BOOL isNumeric(NSString *s)
     "    // ohne var, damit global\n"
     "    canvas = $('.canvas_standard').get(0);\n"
     "\n"
+    "    if (canvas === undefined)\n"
+    "        throw new Error('No element <canvas> found.');\n"
+    "\n"
     "    canvas.lpsversion = '1.0';\n"
     "\n"
     "\n"
     "    canvas.setDefaultContextMenu = function(a) {}; // ToDo\n"
     "    canvas.SetPerson = function() {}; // ToDo\n"
     "\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Führt die beiden oben genannten Methoden aus (init) //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function makeIDsGlobalAndInitCanvas(all) {\n"
+    "    // Make all id's from div's global (Firefox)\n"
+    "    makeElementsGlobal(document.getElementsByTagName('div'));\n"
+    "    // Make all id's from input's global (Firefox)\n"
+    "    makeElementsGlobal(document.getElementsByTagName('input'));\n"
+    "    // Make all id's from select's global (Firefox)\n"
+    "    makeElementsGlobal(document.getElementsByTagName('select'));\n"
+    "    // Make canvas accessible\n"
+    "    makeCanvasAccessible();\n"
     "}\n"
     "\n"
     "\n"
@@ -9350,15 +9370,18 @@ BOOL isNumeric(NSString *s)
     "var objectFromScriptCounter = 1;\n"
     "\n"
     "function createObjectFromScript(name, scope, attributes) {\n"
-    "if (name === undefined || scope === undefined)\n"
-    "    throw new TypeError('function createObjectFromScript - Neither the name-attribute nor the scope-attribute is allowed to be undefined');\n"
+    "    if (name === undefined)\n"
+    "        throw new TypeError('function createObjectFromScript - Neither the name-attribute nor the scope-attribute is allowed to be undefined');\n"
+    "\n"
+    "    if (scope === undefined)\n"
+    "        scope = canvas;\n"
     "\n"
     "    var id = 'objectFromScript'+objectFromScriptCounter;\n"
     "\n"
     "    if (name === 'view') {\n"
     "        jQuery('<div/>', {\n"
     "            id: id,\n"
-    "            class: 'div_standard',\n"
+    "            class: 'div_standard noPointerEvents',\n"
     //"            text: 'Go to Google!'\n"
     "        }).appendTo(scope);\n"
     "    }\n"
@@ -9377,7 +9400,7 @@ BOOL isNumeric(NSString *s)
     "\n"
     "            delete attributes.name;\n"
     "        }\n"
-    "        var id = '#'+id;\n"
+    "\n"
     "\n"
     "        // Seems to be not possible, when creating an Object from script\n"
     "        if (attributes.onclick)\n"
@@ -9385,22 +9408,22 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "        Object.keys(attributes).forEach(function(key) {\n"
-    "            $(id).setAttribute_(key,attributes[key]);\n"
+    "            $('#'+id).setAttribute_(key,attributes[key]);\n"
     "        });\n"
     "    }\n"
     "/*\n"
     "    if (attributes.myHeight !== undefined)\n"
-    "        $(id).css('height', attributes.myHeight);\n"
+    "        $('#'+id).css('height', attributes.myHeight);\n"
     "    if (attributes.myWidth !== undefined)\n"
-    "        $(id).css('width', attributes.myWidth);\n"
+    "        $('#'+id).css('width', attributes.myWidth);\n"
     "    if (attributes.x !== undefined)\n"
-    "        $(id).css('left', attributes.x);\n"
+    "        $('#'+id).css('left', attributes.x);\n"
     "    if (attributes.y !== undefined)\n"
-    "        $(id).css('top', attributes.y);\n"
+    "        $('#'+id).css('top', attributes.y);\n"
     "\n"
     "    if (attributes.bgcolor !== undefined)\n"
     "    {\n"
-    "        $(id).setAttribute_('bgcolor',attributes.bgcolor);\n"
+    "        $('#'+id).setAttribute_('bgcolor',attributes.bgcolor);\n"
     "    }\n"
     "*/\n"
     "\n"
@@ -9412,7 +9435,7 @@ BOOL isNumeric(NSString *s)
     "\n"
     "    objectFromScriptCounter++;\n"
     "\n"
-    "    return $(id).get(0);\n"
+    "    return $('#'+id).get(0);\n"
     "}\n"
     "\n"
     "\n"
@@ -9673,6 +9696,28 @@ BOOL isNumeric(NSString *s)
     "// Neu: Leider bricht setAttribute jQuery.attr(), ein Zurückbehalten auf das originale setAttribute hat wirklich nicht geklapopt \n"
     "// Deswegen arbeite ich nun mit setAttribute_ und replacement dieser Funktionen im OL-Code \n"
     "var setAttributeFunc = function (attributeName, value) {\n"
+    "    function setWidthAndHeightAndBackgroundImage(me, imgpath) {\n"
+    "            // Get programmatically 'width' and 'height' of the image\n"
+    "            var img = new Image();\n"
+    "            img.src = imgpath;\n"
+    "            // Nur wenn noch keine explizite Breite gesetzt wurde, dann Element so Breit machen, wie das Bild ist\n"
+    "            if ($(me).get(0).style.width == '')\n"
+    "                $(me).width(img.width);\n"
+    "            // Nur wenn noch keine explizite Höhe gesetzt wurde, dann Element so hoch machen, wie das Bild ist\n"
+    "            if ($(me).get(0).style.height == '')\n"
+    "                $(me).height(img.height);\n"
+    "\n"
+    "            $(me).css('background-image','url('+imgpath+')');\n"
+    "    }\n"
+    "\n"
+    "    function preload(arrayOfImages) {\n"
+    "        $(arrayOfImages).each(function(){\n"
+    "            $('<img/>')[0].src = this;\n"
+    "            // Alternatively you could use:\n"
+    "            // (new Image()).src = this;\n"
+    "        });\n"
+    "    }\n"
+    "\n"
     "    if (attributeName == undefined || attributeName == '')\n"
     "        throw 'Error calling setAttribute, no argument attributeName given (this = '+this+').';\n"
     "    if (value == undefined)\n"
@@ -9720,8 +9765,11 @@ BOOL isNumeric(NSString *s)
     "        $(me).css('height',value);\n"
     "    }\n"
     "    else if (attributeName == 'frame')\n"
-    "    {\n"// ToDo: Wenn typeof NICHT Array ist, dann kann ich nicht per [i] zugreifen+es gibt gar keine frames!
-    "        $(me).css('background-image','url('+this.resource[i]+')');\n"
+    "    {\n"
+    "        if ($.isArray(me.resource))\n"
+    "          $(me).css('background-image','url('+me.resource[value]+')');\n"
+    "        else\n"
+    "          throw 'setAttribute_ - Error trying to set frame. (value = '+value+', me.resource = '+me.resource+', me.id = '+me.id+').';\n"
     "    }\n"
     "    else if (attributeName == 'enabled' && $(me).is('input'))\n"
     "    {\n"
@@ -9735,21 +9783,39 @@ BOOL isNumeric(NSString *s)
     "    }\n"
     "    else if (attributeName == 'resource')\n"
     "    {\n"
-    "        var imgpath0 = window[value][0];\n"
-    "        var imgpath1 = window[value][1];\n"
-    "        var imgpath2 = window[value][2];\n"
+    "        // Die res kann sowohl als String, als auch als JS-Var übergeben werden. Beides wird erkannt\n"
+    "        if ($.isArray(window[value]) || $.isArray(value))\n"
+    "        {\n"
+    "            var arr = [];\n"
+    "            if ($.isArray(window[value]))\n"
+    "                arr = window[value];\n"
+    "            else\n"
+    "                arr = value;\n"
+    "            // Damit es nicht flackert bei mouseover und Klick:\n"
+    "            preload(arr);\n"
     "\n"
-    "        // Get programmatically 'width' and 'height' of the image\n"
-    "        var img = new Image();\n"
-    "        img.src = imgpath0;\n"
-    "        $(me).width(img.width);\n"
-    "        $(me).height(img.height);\n"
+    "            // Falls ein setAttribute('frame','#'); hinterher kommt:\n"
+    "            me.resource = arr;\n"
     "\n"
-    "        $(me).css('background-image','url('+imgpath0+')');\n"
+    "            var imgpath0 = arr[0];\n"
+    "            var imgpath1 = arr[1];\n"
+    "            var imgpath2 = arr[2];\n"
     "\n"
-    "        $(me).hover(function() { $(me).css('background-image','url('+imgpath1+')') }, function() { $(me).css('background-image','url('+imgpath0+')') });\n"
-    "        $(me).on('mousedown',function() { $(me).css('background-image','url('+imgpath2+')') });\n"
-    "        $(me).on('mouseup',function() { $(me).css('background-image','url('+imgpath0+')') });\n"
+    "            setWidthAndHeightAndBackgroundImage(me,imgpath0)\n"
+    "\n"
+    "            $(me).hover(function() { $(me).css('background-image','url('+imgpath1+')') }, function() { $(me).css('background-image','url('+imgpath0+')') });\n"
+    "            $(me).on('mousedown',function() { $(me).css('background-image','url('+imgpath2+')') });\n"
+    "            $(me).on('mouseup',function() { $(me).css('background-image','url('+imgpath0+')') });\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "            if (typeof value === 'string' && value.contains('.'))\n"
+    "              setWidthAndHeightAndBackgroundImage(me,value);\n"
+    "            else if (typeof value === 'string')\n"
+    "              setWidthAndHeightAndBackgroundImage(me,window[value]);\n"
+    "            else\n"
+    "              throw 'setAttribute_ - Error trying to set reource. (value = '+value+', me.id = '+me.id+').';\n"
+    "        }\n"
     "    }\n"
     "    else\n"
     "      alert('ToDo. Aufruf von setAttribute, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
@@ -10392,6 +10458,26 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
+    "//  class = basewindow (native class)                        //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "var basewindow = function(textBetweenTags) {\n"
+    "  if(typeof(textBetweenTags) === 'undefined')\n"
+    "    textBetweenTags = '';\n"
+    "\n"
+    "  this.name = 'basewindow';\n"
+    "  this.parent = new view();\n"
+    "\n"
+    "  this.attributeNames = [\"text\"];\n"
+    "  this.attributeValues = [textBetweenTags];\n"
+    "\n"
+    "  this.defaultplacement = '';\n"
+    "\n"
+    "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_window\" />';\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
     "//  class = button (native class)                            //\n"
     "///////////////////////////////////////////////////////////////\n"
     "var button = function(textBetweenTags) {\n"
@@ -10401,12 +10487,12 @@ BOOL isNumeric(NSString *s)
     "  this.name = 'button';\n"
     "  this.parent = new view();\n"
     "\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
+    "  this.attributeNames = [\"text\"];\n"
+    "  this.attributeValues = [textBetweenTags];\n"
     "\n"
     "  this.defaultplacement = '';\n"
     "\n"
-    "  this.contentHTML = '<input type=\"button\" id=\"@@@P-L,A#TZHALTER@@@\" class=\"input_standard\" value=\"'+textBetweenTags+'\" style=\"height:inherit;\" />';\n"
+    "  this.contentHTML = '<button type=\"button\" id=\"@@@P-L,A#TZHALTER@@@\" class=\"input_standard\" style=\"height:inherit;\">'+textBetweenTags+'</button>';\n"
     "\n"
     "  this.contentLeadingJSHead = '';\n"
     "\n"

@@ -26,7 +26,7 @@ BOOL alternativeFuerSimplelayout = YES; // Bei YES kann <simplelayout> an belieb
                                         // Es scheint sehr zuverlässig zu funktionieren inzwischen.
                                         // Kann wohl dauerhaft auf YES bleiben!
 
-BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -531,13 +531,22 @@ void OLLog(xmlParser *self, NSString* s,...)
             [style appendString:@"white-space:normal;"];
         }
     }
-
+    
     if ([attributeDict valueForKey:@"bgcolor"])
     {
         self.attributeCount++;
         NSLog(@"Setting the attribute 'bgcolor' as CSS 'background-color'.");
         [style appendString:@"background-color:"];
         [style appendString:[attributeDict valueForKey:@"bgcolor"]];
+        [style appendString:@";"];
+    }
+    
+    if ([attributeDict valueForKey:@"opacity"])
+    {
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'opacity' as CSS 'opacity'.");
+        [style appendString:@"opacity:"];
+        [style appendString:[attributeDict valueForKey:@"opacity"]];
         [style appendString:@";"];
     }
 
@@ -1189,6 +1198,11 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [self.jQueryOutput appendString:@"\n  // Debug-Konsole aktivieren\n"];
                 [self.jQueryOutput appendString:@"  $('div:first').append('<div id=\"debugWindow\"><div style=\"background-color:black;color:white;width:100%;\">DEBUG WINDOW</div><div id=\"debugInnerWindow\"></div></div>');\n"];
                 [self.jQueryOutput appendString:@"  $('#debugWindow').draggable();\n\n"];
+
+                // Soll relativ am Anfang stehen, diese Variable, falls schon andere Sachen
+                // davon abhängig sind (deswegen jsOutput).
+                [self.jsOutput appendString:@"\n  // Debug-Mode wurde aktiviert! Anhand dieser Variable kann im Skript erkannt werden, dass wir im Debugmode sind\n"];
+                [self.jsOutput appendString:@"  $debug = true;\n\n"];
             }
         }
 
@@ -2843,7 +2857,7 @@ didStartElement:(NSString *)elementName
             [self.jsHead2Output appendString:@"\n// Dieses Dataset wird als Objekt angelegt und bekommt alle Elemente als neue Objekt-Propertys mit\n"];
             [self.jsHead2Output appendString:@"var "];
             [self.jsHead2Output appendString:self.lastUsedDataset];
-            [self.jsHead2Output appendString:@" = {};\n"];
+            [self.jsHead2Output appendString:@" = new lz.dataset();\n"];
         }
 
         // Und jetzt alle <tags> dem Objekt als Property, welches wieder ein Objekt ist, hinzufügen
@@ -3408,9 +3422,40 @@ didStartElement:(NSString *)elementName
         element_bearbeitet = YES;
 
         if ([attributeDict valueForKey:@"name"])
+        {
             self.attributeCount++;
+            NSLog(@"Setting the attribute 'name' as JS-varname for the datapointer.");
+        }
+
+
+
         if ([attributeDict valueForKey:@"xpath"])
+        {
             self.attributeCount++;
+            NSLog(@"Setting the attribute 'xpath' as argument for the datapointer.");
+        }
+        else
+        {
+            [self instableXML:@"Ein datapointer ohne 'xpath'-Attribut macht wohl keinen Sinn."];
+        }
+        NSString *dp = [attributeDict valueForKey:@"xpath"];
+        if ([dp length] > 0)
+            dp = [NSString stringWithFormat:@"'%@'",dp];
+
+
+
+        // Ich lege jeden datapointer als globales Objekt an, auf welches zugegriffen werden kann
+        if ([attributeDict valueForKey:@"name"])
+        {
+            [self.jQueryOutput appendString:@"\n  // Ein Datapointer\n"];
+            [self.jQueryOutput appendFormat:@"  var %@ = new lz.datapointer(%@);\n",[attributeDict valueForKey:@"name"],dp];
+        }
+        else
+        {
+            [self.jQueryOutput appendString:@"\n  // Ein Datapointer ohne 'name'-Attribut. Wohl nur um ein Handler daran zu binden oder so\n"];
+            [self.jQueryOutput appendFormat:@"  new lz.datapointer(%@);\n",dp];
+        }
+
     }
 
 
@@ -6273,11 +6318,16 @@ didStartElement:(NSString *)elementName
 
                 if (numberOfMatches > 0)
                 {
+                    NSMutableString *neueArgs = [[NSMutableString alloc] initWithString:@""];
+
+                    // Es kann ja auch eine Mischung geben, von sowohl Argumenten mit
+                    // Defaultwerten als auch solchen ohne. Deswegen hier erstmal ohne
+                    // Defaultargumente setzen und dann gleich die alle mit.
+                    neueArgs = [self holAlleArgumentDieKeineDefaultArgumenteSind:args];
+
                     NSLog([NSString stringWithFormat:@"There is/are %d argument(s) with a default argument. I will regexp them.",numberOfMatches]);
 
                     NSArray *matches = [regexp matchesInString:args options:0 range:NSMakeRange(0, [args length])];
-
-                    NSMutableString *neueArgs = [[NSMutableString alloc] initWithString:@""];
 
                     for (NSTextCheckingResult *match in matches)
                     {
@@ -6298,13 +6348,8 @@ didStartElement:(NSString *)elementName
 
 
                         ///////////////////// Default- Variablen für JS setzen - Anfang /////////////////////
-                        [defaultValues appendString:@"  if(typeof("];
-                        [defaultValues appendString:varName];
-                        [defaultValues appendString:@")==='undefined') "];
-                        [defaultValues appendString:varName];
-                        [defaultValues appendString:@" = "];
-                        [defaultValues appendString:defaultValue];
-                        [defaultValues appendString:@";\n"];
+                        [defaultValues appendFormat:@"    if(typeof(%@)==='undefined') ",varName];
+                        [defaultValues appendFormat:@"%@ = %@;\n",varName,defaultValue];
                         ///////////////////// Default- Variablen für JS setzen - Ende /////////////////////
                     }
                     // ... und hier setzen
@@ -6317,6 +6362,10 @@ didStartElement:(NSString *)elementName
             }
         }
 
+
+        NSString *elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+
         // http://www.openlaszlo.org/lps4.9/docs/reference/ <method> => s. Attribut 'name'
         // Deswegen bei canvas und library 'method' als Funktionen global verfügbar machen
         // UND an canvas binden.
@@ -6324,6 +6373,7 @@ didStartElement:(NSString *)elementName
 
         [self.jQueryOutput0 appendString:@"\n  // Ich binde eine Methode an das genannte Objekt\n"];
 
+        BOOL wirBrauchenWith = NO;
         if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-2] isEqualToString:@"canvas"] ||
             [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-2] isEqualToString:@"library"])
         {
@@ -6331,7 +6381,8 @@ didStartElement:(NSString *)elementName
         }
         else
         {
-            NSString *elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+            // Dann sind wir in einem anderen Scope und brauchen 'with'
+            wirBrauchenWith = YES;
 
             // Folgendes Szenario: Wenn eine selbst definierte Klasse eine Methode definiert, aber gleichzeitig
             // diese erbt, dann hat die selbst definierte Vorrang! Deswegen überschreibe ich mit der Methode
@@ -6344,7 +6395,9 @@ didStartElement:(NSString *)elementName
         [self.jQueryOutput0 appendString:[attributeDict valueForKey:@"name"]];
         [self.jQueryOutput0 appendString:@" = function("];
         [self.jQueryOutput0 appendString:args];
-        [self.jQueryOutput0 appendString:@")\n  {\n"];
+        [self.jQueryOutput0 appendFormat:@")\n  {\n",elem];
+        if (wirBrauchenWith)
+            [self.jQueryOutput0 appendFormat:@"    with (%@) {\n",elem];
 
         // Falls es default values für die Argumente gibt, muss ich diese hier setzen
         if (![defaultValues isEqualToString:@""])
@@ -7069,6 +7122,47 @@ didStartElement:(NSString *)elementName
     // Abfragen ob wir alles erfasst haben (Debug) //
     /////////////////////////////////////////////////
 }
+
+
+-(NSMutableString*) holAlleArgumentDieKeineDefaultArgumenteSind:(NSString*)args
+{
+    NSError *error = NULL;
+
+    // Auf Default values untersuchen...
+    NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:@"\\w+[=]\\w+" options:NSRegularExpressionCaseInsensitive error:&error];
+
+
+    NSUInteger numberOfMatches;
+    do {
+        numberOfMatches = [regexp numberOfMatchesInString:args options:0 range:NSMakeRange(0, [args length])];
+
+        if (numberOfMatches > 0)
+        {
+            NSArray *matches = [regexp matchesInString:args options:0 range:NSMakeRange(0, [args length])];
+
+            // Ein match nach dem anderen, weil sich sonst die range ja verschiebt
+            //for (NSTextCheckingResult *match in matches)
+            {
+                NSRange matchRange = [[matches objectAtIndex:0] range];
+
+                NSString *argumentWithDefaultvalue = [args substringWithRange:matchRange];
+
+                args = [args stringByReplacingOccurrencesOfString:argumentWithDefaultvalue withString:@""];
+            }
+        }
+    } while (numberOfMatches > 0);
+
+
+    // Noch die Kommas zurecht stutzen
+    args = [args stringByReplacingOccurrencesOfString:@",," withString:@","];
+
+    if ( [args length] > 0 && [args hasSuffix:@","])
+        args = [args substringToIndex:[args length] - 1];
+
+    NSMutableString* ms = [[NSMutableString alloc] initWithString:args];
+    return ms;
+}
+
 
 
 static inline BOOL isEmpty(id thing)
@@ -8123,7 +8217,6 @@ BOOL isNumeric(NSString *s)
 
         [self.jQueryOutput0 appendString:@"   "];
         [self.jQueryOutput0 appendString:s];
-        [self.jQueryOutput0 appendString:@"\n  }\n"];
 
 
         // Falls wir in canvas/library sind, dann muss es nicht nur global verfügbar sein
@@ -8131,8 +8224,16 @@ BOOL isNumeric(NSString *s)
         if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"canvas"] ||
             [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"library"])
         {
+            [self.jQueryOutput0 appendString:@"\n  }\n"];
             [self.jQueryOutput0 appendString:@"  // Diese Methode ebenfalls an canvas binden\n"];
             [self.jQueryOutput0 appendFormat:@"  canvas.%@ = %@;\n",self.lastUsedNameAttributeOfMethod,self.lastUsedNameAttributeOfMethod];
+        }
+        else
+        {
+            // Dann hatten wir wegen anderem scope ein 'with (x) {' gesetzt.
+            // Dieses müssen wir hier einmal extra schließen
+            [self.jQueryOutput0 appendString:@"\n    }"];
+            [self.jQueryOutput0 appendString:@"\n  }\n"];
         }
 
 
@@ -8365,6 +8466,9 @@ BOOL isNumeric(NSString *s)
     [self.output appendString:@"$(window).load(function()\n{\n"];
 
 
+    [self.output appendString:@"  if (window['tabsMain']) tabsMain.selecttab = function() {} // ToDo\n"];
+    [self.output appendString:@"  if (window['rudStpfl']) rudStpfl.rolldown = function() {} // ToDo\n"];
+    [self.output appendString:@"  var dlgsave = new dlg();"];
     [self.output appendString:@"  // dlgFamilienstandSingle heimlich als Objekt einführen (diesmal direkt im Objekt, ohne prototype)\n"];
     [self.output appendString:@"  function dlg()\n  {\n    // Extern definiert\n    this.open = open;\n    // Intern definiert (beides möglich)\n"];
     [self.output appendString:@"    this.completeInstantiation = function completeInstantiation() { };\n  }\n"];
@@ -8539,7 +8643,7 @@ BOOL isNumeric(NSString *s)
     "{\n"
     "    border: 1px solid #333; /* fixes a 'can't set height-bug' on webkit */\n"
     "    margin: 0; /* Only for webkit... */\n"
-    "    padding: 6px 10px;\n"
+    "    padding: 5px 10px;\n"
     "    background: #dedede;\n"
     "    background: -moz-linear-gradient(top, #ffffff, #afafaf);\n"
     "    background: -webkit-linear-gradient(top, #ffffff, #afafaf);\n"
@@ -9149,7 +9253,7 @@ BOOL isNumeric(NSString *s)
     "    canvas = $('.canvas_standard').get(0);\n"
     "\n"
     "    if (canvas === undefined)\n"
-    "        throw new Error('No element <canvas> found.');\n"
+    "        throw new Error('No element <canvas> found. The root must be <canvas>.');\n"
     "\n"
     "    canvas.lpsversion = '1.0';\n"
     "\n"
@@ -9157,6 +9261,10 @@ BOOL isNumeric(NSString *s)
     "    canvas.setDefaultContextMenu = function(a) {}; // ToDo\n"
     "    canvas.SetPerson = function() {}; // ToDo\n"
     "\n"
+    "\n"
+    "    // Anhand dieser Variable kann im Skript abgefragt werden, ob wir im Debugmode sind\n"
+    "    // ohne 'var', damit global. \n"
+    "    $debug = false;\n"
     "}\n"
     "\n"
     "\n"
@@ -9504,10 +9612,56 @@ BOOL isNumeric(NSString *s)
     "    }\n"
     "\n"
     "\n"
+    "    this.TimerService = function() {\n"
+    "        this.addTimer = function(handler, millisecs) {\n"
+    "            window.setTimeout(function() { handler(); }, millisecs);\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
     "    this.BrowserService = function() {\n"
     "        this.getInitArg = getInitArg;\n"
     "        this.callJS = function(method,callback,args) {\n"
-    "            window[method](args); };\n"
+    "            window[method](args);\n"
+    "        }\n"
+    "        this.loadJS = function(code,target) {\n"
+    "            eval(code);\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "    this.HistoryService = function() {\n"
+    "        this.save = function(scope,prop,val) {\n"
+    "        }\n"
+    "        this.next = function() {\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "    // A <dataset> tag defines a local dataset. The name of the dataset is used in the datapath attribute of a view.\n"
+    "    this.dataset = function() {\n"
+    "        this.setQueryParam = function(param) {\n"
+    "        }\n"
+    "        this.doRequest = function() {\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "    // handlet intern irgendwie den Zugriff auf die XML-Datensätze (ToDo)\n"
+    "    this.datapointer = function(xpath) {\n"
+    "        this.setXPath = function(xpath) {\n"
+    "            // anstatt des Arguments beim Anlagen des Objektes\n"
+    "        }\n"
+    "        this.xpathQuery = function(query) {\n"
+    "            // Abfragen des Inhalts eines <tags> in der XML-Struktur\n"
+    "        }\n"
+    "        this.setNodeText = function(text) {\n"
+    "        }\n"
+    "        this.deleteNode = function() {\n"
+    "        }\n"
+    "        this.p = {\n"
+    "            appendChild : function() {}\n"
+    "        }\n"
     "    }\n"
     "\n"
     "\n"
@@ -9520,8 +9674,21 @@ BOOL isNumeric(NSString *s)
     "lz.Focus = new lz.FocusService();\n"
     "// lz.Cursor is the single instance of the class lz.CursorService\n"
     "lz.Cursor = new lz.CursorService();\n"
+    "// lz.Timer is the single instance of the class lz.TimerService\n"
+    "lz.Timer = new lz.TimerService();\n"
     "// lz.Browser is the single instance of the class lz.BrowserService.\n"
     "lz.Browser = new lz.BrowserService();\n"
+    "// lz.History is the single instance of the class lz.HistoryService.\n"
+    "lz.History = new lz.HistoryService();\n"
+    "\n"
+    "// Viele Objekte können auch mit vorangestellten Lz aufgerufen werden\n"
+    "LzView = lz.view;"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// LzDelegate scheint es zu ermöglichen eine Methode an einen scope zu binden\n"
+    "/////////////////////////////////////////////////////////\n"
+    "LzDelegate = function(scope,method) { var fn = window[method]; return fn.bind(scope); }\n"
     "\n"
     "\n"
     "var setid = function() {}; // <-- Wird in lz.Browser.callJS aufgerufen ??\n"
@@ -9535,11 +9702,6 @@ BOOL isNumeric(NSString *s)
     // "swfso.data.internalid = ''; // ToDo\n"
     "swfso.flush = function() { }; // ToDo\n"
     "\n"
-    "var dpEingaben = new Object();\n"
-    "dpEingaben.setXPath = function() {}; // ToDo\n"
-    "dpEingaben.deleteNode = function() {}; // ToDo\n"
-    "dpEingaben.p = {}; // ToDo\n"
-    "dpEingaben.p.appendChild = function() {}; // ToDo\n"
     "Steuerberechnung = function() {}; // ToDo\n"
     "var dsEingaben = new Object(); // ToDo\n"
     "dsEingaben.serialize = function() {}; // ToDo\n"
@@ -9803,6 +9965,10 @@ BOOL isNumeric(NSString *s)
     "    else if (attributeName == 'height' || attributeName == 'myHeight')\n"
     "    {\n"
     "        $(me).css('height',value);\n"
+    "    }\n"
+    "    else if (attributeName == 'opacity')\n"
+    "    {\n"
+    "        $(me).css('opacity',value);\n"
     "    }\n"
     "    else if (attributeName == 'frame')\n"
     "    {\n"

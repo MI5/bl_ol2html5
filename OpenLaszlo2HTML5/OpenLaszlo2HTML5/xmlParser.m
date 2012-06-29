@@ -26,7 +26,7 @@ BOOL alternativeFuerSimplelayout = YES; // Bei YES kann <simplelayout> an belieb
                                         // Es scheint sehr zuverlässig zu funktionieren inzwischen.
                                         // Kann wohl dauerhaft auf YES bleiben!
 
-BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -1217,6 +1217,11 @@ void OLLog(xmlParser *self, NSString* s,...)
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'xmlns'.");
         }
+        if ([attributeDict valueForKey:@"proxied"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'proxied'.");
+        }
     }
 
 
@@ -1401,7 +1406,13 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
         [self.jsOutput appendString:@"  // ...and all 'name'-attributes, can be referenced by its parent Element...\n"];
-        [self.jsOutput appendFormat:@"  $('#%@').parent().get(0).%@ = %@;\n",self.zuletztGesetzteID,name, name];
+        // So nicht: !!!!!
+        // [self.jsOutput appendFormat:@"  $('#%@').parent().get(0).%@ = %@;\n",self.zuletztGesetzteID,name, name];
+        // Denn das jQuery-Parent berücksichtigt ja nicht den Doppelsprung bei <input> und <select>
+        // Deswegen getTheParent benutzen. (Was ja intern auch jQuery-parent nimmt, aber notfalls
+        // auch doppelt!)
+        [self.jsOutput appendFormat:@"  %@.getTheParent().%@ = %@;\n",name, name, name];
+
         [self.jsOutput appendString:@"  // ...and all 'name'-attributes, can be referenced by canvas.*\n"];
         [self.jsOutput appendFormat:@"  canvas.%@ = %@;\n",name, name];
     }
@@ -2718,6 +2729,52 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+- (void) evaluateTextOnlyAttributes:(NSDictionary*)attributeDict
+{
+    // Aus der OpenLaszlo-Doku:
+    // If true, the width of the text field will be recomputed each time text is changed,
+    // so that the text view is exactly as wide as the width of the widest line.
+    // Defaults to true.
+    // Falls sich der Textinhalt ändert, soll sich bei true, die Größe also mitändern
+    // true = default, und auch in HTML default
+    if ([attributeDict valueForKey:@"resize"])
+    {
+        if ([[attributeDict valueForKey:@"resize"] isEqualToString:@"true"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'resize=true', because this behaviour is default.");
+        }
+
+        if ([[attributeDict valueForKey:@"resize"] isEqualToString:@"false"])
+        {
+            self.attributeCount++;
+            // Einmal die Width mit sich selber setzen, damit sie fix wird
+            NSLog(@"Setting the attribute 'resize=false' as fixed width.");
+
+            [self.jQueryOutput appendFormat:@"\n  // Setting the width with myself, because resize=false, so I won't resize\n"];
+            [self.jQueryOutput appendFormat:@"  $('#%@').width($('#%@').width());\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+        }
+    }
+
+
+
+}
+
+
+
+- (void) evaluateTextInputOnlyAttributes:(NSDictionary*)attributeDict
+{
+    if ([attributeDict valueForKey:@"text"])
+    {
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'text' as value for the inputfield.");
+
+        [self.jQueryOutput appendFormat:@"\n  // Setting the value-attribute (comes from OL-'text'-attribute)\n"];
+        [self.jQueryOutput appendFormat:@"  $('#%@').val('%@');\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"text"]];
+    }
+}
+
+
 
 #pragma mark Delegate calls
 
@@ -2912,7 +2969,21 @@ didStartElement:(NSString *)elementName
     if (self.weAreCollectingTheCompleteContentInClass)
     {
         // Wenn wir in <class> sind, sammeln wir alles (wird erst später rekursiv ausgewertet)
-        // Erst den Elementnamen hinzufügen
+
+
+        // Erst eventuell gefundenen Text hinzufügen
+        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
+        // Alle '&' und '<' müssen ersetzt werden, sonst meckert der XML-Parser
+        // Das &-ersetzen muss natürlich als erstes kommen, weil ich danach ja wieder
+        // welche einfüge (durch die Entitys).
+        s = [s stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"];
+        s = [s stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
+        if ([s length] > 0)
+            [self.collectedContentOfClass appendString:s];
+
+
+
+        // Dann den Elementnamen hinzufügen
         [self.collectedContentOfClass appendFormat:@"<%@",elementName];
 
 
@@ -3844,7 +3915,24 @@ didStartElement:(NSString *)elementName
 
 
 
+    if ([elementName isEqualToString:@"html"])
+    {
+        element_bearbeitet = YES;
 
+        [self.output appendString:@"<div"];
+
+        [self addIdToElement:attributeDict];
+
+        [self.output appendString:@" class=\"iframe_standard\" style=\""];
+
+
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+
+        [self.output appendString:@"\" />\n"];
+
+        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
+    }
 
 
 
@@ -3871,7 +3959,7 @@ didStartElement:(NSString *)elementName
         }
 
 
-        // ToDo: Seit auswerten von <class> gibt es placement doch merhmals....
+        // ToDo: Seit auswerten von <class> gibt es placement doch mehrmals....
         if ([attributeDict valueForKey:@"placement"])
         {
             self.attributeCount++; // ToDo, dann einzeln reinschieben in die isEqualToString:@"x"
@@ -4045,12 +4133,6 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
-        // Aus der OpenLaszlo-Doku:
-        // If true, the width of the text field will be recomputed each time text is changed,
-        // so that the text view is exactly as wide as the width of the widest line. Defaults to true.
-        if ([attributeDict valueForKey:@"resize"] && [[attributeDict valueForKey:@"resize"] isEqualToString:@"true"])
-            self.attributeCount++;
-
 
         [self.output appendString:@"<div"];
 
@@ -4105,6 +4187,8 @@ didStartElement:(NSString *)elementName
         NSLog(@"We won't include possible following HTML-Tags, because it is content of the text.");
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
+
+        [self evaluateTextOnlyAttributes:attributeDict];
     }
 
 
@@ -4166,14 +4250,7 @@ didStartElement:(NSString *)elementName
             NSLog(@"Skipping the attribute 'maxlength' for now.");
         }
 
-        if ([attributeDict valueForKey:@"text"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'text' as text between opening and closing tag.");
-            [self.output appendString:[attributeDict valueForKey:@"text"]];
-        }
-
-
+        [self evaluateTextInputOnlyAttributes:attributeDict];
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
     }
@@ -4523,7 +4600,7 @@ didStartElement:(NSString *)elementName
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
-        [self.output appendString:@"<div class=\"div_textfield\" >\n"];
+        [self.output appendString:@"<div class=\"div_textfield\">\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
 
@@ -4591,7 +4668,7 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
-        [self.output appendString:@"\">\n"];
+        [self.output appendString:@"\" />\n"];
 
 
 
@@ -4629,11 +4706,6 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'minvalue'.");
         }
-        if ([attributeDict valueForKey:@"text"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'text'.");
-        }
         if ([attributeDict valueForKey:@"enabled"]) // ToDo
         {
             self.attributeCount++;
@@ -4659,6 +4731,7 @@ didStartElement:(NSString *)elementName
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"</div>\n\n"];
 
+        [self evaluateTextInputOnlyAttributes:attributeDict];
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]];
     }
@@ -4834,8 +4907,6 @@ didStartElement:(NSString *)elementName
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
     }
-
-
 
 
 
@@ -5560,15 +5631,17 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
-        if ([attributeDict valueForKey:@"height"])
-            self.attributeCount++;
         if ([attributeDict valueForKey:@"id"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"name"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"info"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"initstage"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"width"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"height"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"visible"])
             self.attributeCount++;
@@ -6321,27 +6394,12 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"\">"];
 
 
+        [self evaluateTextOnlyAttributes:attributeDict];
+
+
         // Dann Text mit foundCharacters sammeln und beim schließen anzeigen
 
 
-        // Falls sich der Textinhalt ändert, soll bei true, die Größe sich mitändern
-        // true = default, und auch in HTML default
-        if ([attributeDict valueForKey:@"resize"])
-        {
-            if ([[attributeDict valueForKey:@"resize"] isEqualToString:@"true"])
-            {
-                self.attributeCount++;
-                NSLog(@"Skipping the attribute 'resize=true', because this behaviour is default.");
-            }
-            if ([[attributeDict valueForKey:@"resize"] isEqualToString:@"false"])
-            {
-                self.attributeCount++;
-                // Einmal die Width mit sich selber setzen, damit sie fix wird
-                NSLog(@"Setting the attribute 'resize=false' as fixed width.");
-                [self.jQueryOutput appendFormat:@"\n  // Setting the width with myself, because resize=false, so I won't resize\n"];
-                [self.jQueryOutput appendFormat:@"  $('#%@').width($('#%@').width());\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-            }
-        }
 
         if ([attributeDict valueForKey:@"text"])
         {
@@ -7929,6 +7987,7 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"font"] ||
         [elementName isEqualToString:@"items"] ||
         [elementName isEqualToString:@"library"] ||
+        [elementName isEqualToString:@"html"] ||
         [elementName isEqualToString:@"audio"] ||
         [elementName isEqualToString:@"include"] ||
         [elementName isEqualToString:@"datapointer"] ||
@@ -8787,11 +8846,17 @@ BOOL isNumeric(NSString *s)
 	"    padding:4px;\n"
     "}\n"
     "\n"
+    "/* Das Standard-OL-HTML-Element (nicht das HTML-HTML-Element!) */\n"
+    ".iframe_standard\n"
+    "{\n"
+	"    position:relative;\n"
+	"    top:0px;\n"
+	"    left:0px;\n"
+    "}\n"
+    "\n"
     "/* Das Standard-View, wie es ungefähr in OpenLaszlo aussieht */\n"
     ".div_standard\n"
     "{\n"
-    "    /* background-color:red; /* Standard ist hier keine (=transparent), zum testen red */\n"
-    "\n"
 	"    height:auto; /* Wirklich wichtig. Damit es einen Startwert gibt.   */\n"
 	"    width:auto;  /* Sonst kann JS die Variable nicht richtig auslesen. */\n"
     "\n"
@@ -9505,6 +9570,7 @@ BOOL isNumeric(NSString *s)
     "function toggleVisibility(id, idAbhaengig, bedingungAlsString)\n"
     "{\n"
     "  var isvalid = typeof isvalid !== 'undefined' ? isvalid : new Object(); // (ToDo - hat was mit DataPointern zu tun)\n"
+    "  var closeable = typeof closeable !== 'undefined' ? closeable : true; // (ToDo - hat was mit nicedialog zu tun)\n"
     "\n"
     "\n"
     "\n"
@@ -9626,7 +9692,7 @@ BOOL isNumeric(NSString *s)
     "        if (attributes.name)\n"
     "        {\n"
     "            window[attributes.name] = document.getElementById(id);\n"
-    "            $('#'+id).parent().get(0)[attributes.name] = document.getElementById(id);\n"
+    "            window[attributes.name].getTheParent()[attributes.name] = document.getElementById(id);\n"
     "            canvas[attributes.name] = document.getElementById(id);\n"
     "\n"
     "            delete attributes.name;\n"
@@ -9710,6 +9776,9 @@ BOOL isNumeric(NSString *s)
     "        this.loadJS = function(code,target) {\n"
     "            eval(code);\n"
     "        }\n"
+    "        this.loadURL = function(url,target) {\n"
+    "            window.open(url, target);\n"
+    "        }\n"
     "    }\n"
     "\n"
     "\n"
@@ -9765,7 +9834,8 @@ BOOL isNumeric(NSString *s)
     "lz.History = new lz.HistoryService();\n"
     "\n"
     "// Viele Objekte können auch mit vorangestellten Lz aufgerufen werden\n"
-    "LzView = lz.view;"
+    "LzBrowser = lz.Browser;\n"
+    "LzView = lz.view;\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -10053,9 +10123,22 @@ BOOL isNumeric(NSString *s)
     "        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
     "        $(me).get(0).myHeight = value;\n"
     "    }\n"
+    "    else if (attributeName == 'focustrap')\n"
+    "    {\n"
+    "        // ToDo When 'true' dann wird der Focus-Bereich z. B. auf ein bestimmtes Fenster beschränkt\n"
+    "    }\n"
     "    else if (attributeName == 'opacity')\n"
     "    {\n"
     "        $(me).css('opacity',value);\n"
+    "    }\n"
+    "    else if (attributeName == 'visible')\n"
+    "    {\n"
+    "        if (value == true || value == 'true')\n"
+    "            $(me).show();\n"
+    "        else if (value == false || value == 'false')\n"
+    "            $(me).hide();\n"
+    "        else\n"
+    "            alert('So far unsupported value for visible. value: '+value);\n"
     "    }\n"
     "    else if (attributeName == 'frame')\n"
     "    {\n"
@@ -10109,6 +10192,11 @@ BOOL isNumeric(NSString *s)
     "            else\n"
     "              throw 'setAttribute_ - Error trying to set reource. (value = '+value+', me.id = '+me.id+').';\n"
     "        }\n"
+    "    }\n"
+    "    else if ($(me).hasClass('iframe_standard') && attributeName == 'src') // Nur vom Element 'html' von Haus aus gesetztes Attribut\n"
+    "    {\n"
+    "        // src-Attribut des iframe setzen\n"
+    "        $(me).html('<iframe style=\"width:inherit;height:inherit;\" src=\"'+value+'\"></iframe>');\n"
     "    }\n"
     "    else\n"
     "    {\n"
@@ -10174,6 +10262,13 @@ BOOL isNumeric(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Methoden von <div> (OL: <view>)                     //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "////////////////////////INCOMPLETE///////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// sendToBack() - nachimplementiert                    //\n"
     "/////////////////////////////////////////////////////////\n"
     "var sendToBackFunction = function (oThis) {\n"
@@ -10183,6 +10278,7 @@ BOOL isNumeric(NSString *s)
     "HTMLDivElement.prototype.sendToBack = sendToBackFunction;\n"
     "HTMLInputElement.prototype.sendToBack = sendToBackFunction;\n"
     "HTMLSelectElement.prototype.sendToBack = sendToBackFunction;\n"
+    "HTMLButtonElement.prototype.sendToBack = sendToBackFunction;\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -10196,6 +10292,64 @@ BOOL isNumeric(NSString *s)
     "HTMLDivElement.prototype.bringToFront = bringToFrontFunction;\n"
     "HTMLInputElement.prototype.bringToFront = bringToFrontFunction;\n"
     "HTMLSelectElement.prototype.bringToFront = bringToFrontFunction;\n"
+    "HTMLButtonElement.prototype.bringToFront = bringToFrontFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Methoden von <input type=\"text\"> (OL: <edittext>)   //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////COMPLETE////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// getText() / getvalue() - nachimplementiert          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var getTextFunction = function () {\n"
+    "    return $(this).val();\n"
+    "}\n"
+    "\n"
+    "// Nur für Input! Da es die Methode nur bei <input> gibt\n"
+    "HTMLInputElement.prototype.getText = getTextFunction;\n"
+    "// Gleiche Methode kann auch über getValue() angesprochen werden\n"
+    "HTMLInputElement.prototype.getValue = getTextFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// clearText() - nachimplementiert                     //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var clearTextFunction = function () {\n"
+    "    $(this).val('');\n"
+    "}\n"
+    "\n"
+    "// Nur für Input! Da es die Methode nur bei <input> gibt\n"
+    "HTMLInputElement.prototype.clearText = clearTextFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// setSelection() - nachimplementiert                  //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var setSelectionFunction = function (start, end) {\n"
+    "    $(this).prop('selectionStart',start);\n"
+    "    $(this).prop('selectionEnd',end);\n"
+    "    this.focus();\n"
+    "}\n"
+    "\n"
+    "// Nur für Input! Da es die Methode nur bei <input> gibt\n"
+    "HTMLInputElement.prototype.setSelection = setSelectionFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// updateText() - nachimplementiert                    //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var updateTextFunction = function () {\n"
+    "    this.text = $(this).val();\n"
+    "}\n"
+    "\n"
+    "// Nur für Input! Da es die Methode nur bei <input> gibt\n"
+    "HTMLInputElement.prototype.updateText = updateTextFunction;\n"
+    "\n"
+    "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Getter for 'mask' (setter only to trigger an event) //\n"
     "// mask seems to be the next clipped parent.           //\n"
@@ -10459,12 +10613,16 @@ BOOL isNumeric(NSString *s)
     "  {\n"
     //"    alert(an[i]);\n"
     //"    alert(av[i]);\n"
-    "    var cssAttributes = ['bgcolor','width','height'];\n"
-    "    var jsAttributes = ['onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown','focusable','styleable','layout','initstage','doesenter','align','resource','text'];\n"
+    "    var cssAttributes = ['bgcolor','x','y','width','height'];\n"
+    "    var jsAttributes = ['onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown','focusable','styleable','layout','initstage','doesenter','align','resource','focustrap','visible','text'];\n"
     "    if (jQuery.inArray(an[i],cssAttributes) != -1)\n"
     "    {\n"
-    "      if (an[i] === 'bgcolor')\n"
-    "        an[i] = 'background-color';\n"
+    "        if (an[i] === 'bgcolor')\n"
+    "          an[i] = 'background-color';\n"
+    "        if (an[i] === 'x')\n"
+    "          an[i] = 'left';\n"
+    "        if (an[i] === 'y')\n"
+    "          an[i] = 'top';\n"
     "\n"
     "        if (av[i].startsWith('${')) // = Computed value\n"
     "        {\n"
@@ -10483,8 +10641,8 @@ BOOL isNumeric(NSString *s)
     "            av[i] = result;\n"
     "        }\n"
     "\n"
-    "      if (jQuery.inArray(an[i],attrArr) == -1)\n"
-    "        $(id).css(an[i],av[i]);\n"
+    "        if (jQuery.inArray(an[i],attrArr) == -1)\n"
+    "          $(id).css(an[i],av[i]);\n"
     "    }\n"
     "    else if (jQuery.inArray(an[i],jsAttributes) != -1)\n"
     "    {\n"
@@ -10527,26 +10685,11 @@ BOOL isNumeric(NSString *s)
     "      }\n"
     "      else if (an[i] === 'initstage' && av[i] === 'defer')\n"
     "      {\n"
-    "        //$(id).hide() //ToDo: Bricht Anzeige Kinder;\n"
+    "        //$(id).hide() // ToDo: Bricht Anzeige Kinder;\n"
     "      }\n"
-    "      else if (an[i] === 'resource')\n"
+    "      else if (an[i] === 'resource' || an[i] === 'focustrap' || an[i] === 'visible')\n"
     "      {\n"
     "          id.setAttribute_(an[i],av[i]);\n"
-    //"        var imgpath0 = window[av[i]][0];\n"
-    //"        var imgpath1 = window[av[i]][1];\n"
-    //"        var imgpath2 = window[av[i]][2];\n"
-    //"\n"
-    //"        // Get programmatically 'width' and 'height' of the image\n"
-    //"        var img = new Image();\n"
-    //"        img.src = imgpath0;\n"
-    //"        $(id).width(img.width);\n"
-    //"        $(id).height(img.height);\n"
-    //"\n"
-    //"        $(id).css('background-image','url('+imgpath0+')');\n"
-    //"\n"
-    //"        $(id).hover(function() { $(id).css('background-image','url('+imgpath1+')') }, function() { $(id).css('background-image','url('+imgpath0+')') });\n"
-    //"        $(id).on('mousedown',function() { $(id).css('background-image','url('+imgpath2+')') });\n"
-    //"        $(id).on('mouseup',function() { $(id).css('background-image','url('+imgpath0+')') });\n"
     "      }\n"
     "      else if (an[i] === 'align' && av[i] === 'right')\n"
     "      {\n"

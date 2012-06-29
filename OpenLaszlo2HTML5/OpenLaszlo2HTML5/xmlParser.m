@@ -26,7 +26,7 @@ BOOL alternativeFuerSimplelayout = YES; // Bei YES kann <simplelayout> an belieb
                                         // Es scheint sehr zuverlässig zu funktionieren inzwischen.
                                         // Kann wohl dauerhaft auf YES bleiben!
 
-BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -3041,11 +3041,13 @@ didStartElement:(NSString *)elementName
             NSLog(@"Skipping the attribute 'name'.");
         }
 
+        // Falls kein Wert für axis gesetzt, ist es immer y
 
         // Simplelayout mit Achse Y berücksichtigen
-        if ([[attributeDict valueForKey:@"axis"] hasSuffix:@"y"])
+        if ([[attributeDict valueForKey:@"axis"] hasSuffix:@"y"] || ![attributeDict valueForKey:@"axis"])
         {
-            self.attributeCount++;
+            if ([[attributeDict valueForKey:@"axis"] hasSuffix:@"y"])
+                self.attributeCount++;
 
 
             // Anstatt nur TRUE gleichzeitig darin die Verschachtelungstiefe speichern
@@ -3676,10 +3678,14 @@ didStartElement:(NSString *)elementName
 
         // Kann auch ein berechneter Werte sein ($ davor). Wenn ja dann $ usw. entfernen
         // und wir arbeiten dann natürlich ohne Quotes.
+        BOOL berechneterWert = NO;
         if ([value hasPrefix:@"$"])
         {
             value = [self makeTheComputedValueComputable:value];
+
             weNeedQuotes = NO;
+
+            berechneterWert = YES;
         }
 
 
@@ -3702,43 +3708,62 @@ didStartElement:(NSString *)elementName
             // War früher mal jsHeadOutput, aber die Elemente sind ja erst nach Instanzierung
             // bekannt, deswegen jQueryOutput0.
 
+            NSString *elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+
             if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-2] isEqualToString:@"canvas"] ||
                 [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-2] isEqualToString:@"library"])
-            {
-                [self.jQueryOutput0 appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut des Elements %@:\n", @"canvas"];
+                elem = @"canvas";
 
-                // Siehe anderer if-Zweig, warum auskommentiert
-                // [self.jQueryOutput0 appendFormat:@"  if (canvas.%@ == undefined)\n  ",[attributeDict valueForKey:@"name"]];
+            [self.jQueryOutput0 appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut des Elements %@:", elem];
 
-                [self.jQueryOutput0 appendString:@"  canvas."];
-            }
-            else
-            {
-                NSString *elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
-                [self.jQueryOutput0 appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut des Elements %@:", elem];
+            // Folgendes Szenario: Wenn eine selbst definierte Klasse ein Attribut definiert, aber gleichzeitig
+            // dieses erbt, dann hat das selbst definierte Vorrang. Deswegen überschreibe ich das Attribut
+            // innerhalb der Klasse nicht! Dazu teste ich einfach vorher, ob es auch wirklich undefined ist!
+            // Puh, ka, ob das so zu halten ist, zumindest schon mal bei 'title' bricht es, weil von JS vordefiniert
+            // Auch bei 'bgcolor' bricht es, weil von openLaszlo vordefiniert! Und ich deswegen
+            // dafür einen getter angelegt habe. Da der getter existiert, kann es nie undefined
+            // geben!
+            // => Deswegen habe ich die ganze Abfrage rausgenommen.
+            // => Es ist wohl nur bei methoden nötig.
+            //if (![[attributeDict valueForKey:@"name"] isEqualToString:@"title"])
+            //    [self.jQueryOutput0 appendFormat:@"\n  if (%@.%@ == undefined)",elem,a];
 
-                // Folgendes Szenario: Wenn eine selbst definierte Klasse ein Attribut definiert, aber gleichzeitig
-                // dieses erbt, dann hat das selbst definierte Vorrang. Deswegen überschreibe ich das Attribut
-                // innerhalb der Klasse nicht! Dazu teste ich einfach vorher, ob es auch wirklich undefined ist!
-                // Puh, ka, ob das so zu halten ist, zumindest schon mal bei 'title' bricht es, weil von JS vordefiniert
-                // Auch bei 'bgcolor' bricht es, weil von openLaszlo vordefiniert! Und ich deswegen
-                // dafür einen getter angelegt habe. Da der getter existiert, kann es nie undefined
-                // geben!
-                // => Deswegen habe ich die ganze Abfrage rausgenommen.
-                // => Es ist wohl nur bei methoden nötig.
-                //if (![[attributeDict valueForKey:@"name"] isEqualToString:@"title"])
-                //    [self.jQueryOutput0 appendFormat:@"\n  if (%@.%@ == undefined)",elem,a];
+            [self.jQueryOutput0 appendFormat:@"\n  %@.",elem];
 
-                [self.jQueryOutput0 appendFormat:@"\n  %@.",elem];
-            }
-            [self.jQueryOutput0 appendString:a];
-            [self.jQueryOutput0 appendString:@" = "];
+
+
+
+            [self.jQueryOutput0 appendFormat:@"%@ = ",a];
             if (weNeedQuotes)
                 [self.jQueryOutput0 appendString:@"\""];
             [self.jQueryOutput0 appendString:value];
             if (weNeedQuotes)
                 [self.jQueryOutput0 appendString:@"\""];
             [self.jQueryOutput0 appendString:@";\n"];
+
+
+            // Erstmal mir hier drin. Eventuell aber auch erst nach der geschweiften Klammer
+            // Und erstmal nicht, wenn wir in canvas sind (globale Attribute)
+            if (berechneterWert)
+            {
+                NSString *orignalValueString = [attributeDict valueForKey:@"value"];
+                orignalValueString = [self removeOccurrencesOfDollarAndCurlyBracketsIn:orignalValueString];
+                // Damit width zu myWidth wird z. B.:
+                orignalValueString = [self modifySomeExpressionsInJSCode:orignalValueString];
+
+
+                // ToDo ToDo ToDo
+                // Wenn ein '+' enthalten ist, das wird noch nicht unterstützt
+                if ([orignalValueString rangeOfString:@"+"].location == NSNotFound)
+                {
+                    NSRange positionDesPunktes = [orignalValueString rangeOfString:@"."];
+                    NSString *zuWatchendeVar = [orignalValueString substringFromIndex:positionDesPunktes.location+1];
+
+                    [self.jQueryOutput0 appendString:@"  // Zusätzlich watchen der Variable, da es ein berechneter Wert ist\n"];
+                    [self.jQueryOutput0 appendFormat:@"  %@.watch('%@', function(prop, oldval, newval) { %@.%@ = newval; })\n",elem,zuWatchendeVar,elem,a];
+                }
+            }
         }
 
 
@@ -4106,9 +4131,9 @@ didStartElement:(NSString *)elementName
                 self.attributeCount++;
 
                 if ([[attributeDict valueForKey:@"pattern"] isEqual:@"[0-9a-z@_.\\-]*"])
-                    [self.output appendString:@"<input type=\"email\""];
+                    [self.output appendFormat:@"<input type=\"email\""];
                 else
-                    [self.output appendString:@"<input type=\"text\""];
+                    [self.output appendFormat:@"<input type=\"text\" pattern=\"%@\"",[attributeDict valueForKey:@"pattern"]];
             }
             else
             {
@@ -4299,7 +4324,7 @@ didStartElement:(NSString *)elementName
 
 
         NSString *dataset = [attributeDict valueForKey:@"dataset"];
-        // Falls es ein Ausdruck ist, muss ich §,{,} entfernen
+        // Falls es ein Ausdruck ist, muss ich $,{,} entfernen
         // Ich lasse den Ausdruck dann von JS auswerten
         // Aber klappt das auch mit dem Attribut '.value' im Ausdruck? (ToDo)
         dataset = [self removeOccurrencesOfDollarAndCurlyBracketsIn:dataset];
@@ -4707,13 +4732,13 @@ didStartElement:(NSString *)elementName
         // Im Prinzip nur wegen controlwidth
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
-        [self.output appendString:@"margin-left:4px;\">\n"];
+        [self.output appendString:@"margin-left:4px;\" />\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"</div>\n\n"];
 
 
         // Jetzt noch den jQuery-Code für den Datepicker
-        [self.jQueryOutput appendString:@"\n  // Für das mit dieser id verbundene input-Field setzen wir einen jQUery UI Datepicker\n"];
+        [self.jQueryOutput appendString:@"\n  // Für das mit dieser id verbundene input-Field setzen wir einen jQuery UI Datepicker\n"];
         [self.jQueryOutput appendString:@"  // Aber bei iOS-Devices nutzen wir den eingebauten Datepicker\n"];
         [self.jQueryOutput appendFormat:@"  if (isiOS())\n    document.getElementById('%@').setAttribute('type', 'date');\n  else\n    $('#%@').datepicker();\n",theId,theId];
 
@@ -4752,6 +4777,63 @@ didStartElement:(NSString *)elementName
     }
 
 
+
+
+
+
+    if ([elementName isEqualToString:@"slider"])
+    {
+        element_bearbeitet = YES;
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"<div class=\"div_slider\">\n"];
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+
+        [self.output appendString:@"<input type=\"range\""];
+
+        NSString *theId =[self addIdToElement:attributeDict];
+
+        NSString *value  = @"50";
+        if ([attributeDict valueForKey:@"value"])
+        {
+            value = [attributeDict valueForKey:@"value"];
+
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'value' as 'value' for the slider.");
+        }
+
+        NSString *minvalue  = @"0";
+        if ([attributeDict valueForKey:@"minvalue"])
+        {
+            minvalue = [attributeDict valueForKey:@"minvalue"];
+
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'minvalue' as 'minvalue' for the slider.");
+        }
+
+        NSString *maxvalue  = @"100";
+        if ([attributeDict valueForKey:@"maxvalue"])
+        {
+            maxvalue = [attributeDict valueForKey:@"maxvalue"];
+
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'maxvalue' as 'maxvalue' for the slider.");
+        }
+
+        [self.output appendString:@" style=\""];
+
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+        [self.output appendFormat:@"\" onchange=\"%@_output.value=parseInt(this.value)\" value=\"%@\" min=\"%@\" max=\"%@\" step=\"1\" />\n",self.zuletztGesetzteID,value,minvalue,maxvalue];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+        // id ist Fallback für alte Browser
+        [self.output appendFormat:@"<output name=\"%@_output\" id=\"%@_output\" for=\"%@\" style=\"position:absolute;left:150px;top:0px;\"></output>\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"</div>\n\n"];
+
+        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
+    }
 
 
 
@@ -7873,6 +7955,7 @@ BOOL isNumeric(NSString *s)
         [elementName isEqualToString:@"calcButton"] ||
         [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"debug"] ||
+        [elementName isEqualToString:@"slider"] ||
         [elementName isEqualToString:@"evaluateclass"])
     {
         element_geschlossen = YES;
@@ -9961,10 +10044,14 @@ BOOL isNumeric(NSString *s)
     "    else if (attributeName == 'width' || attributeName == 'myWidth')\n"
     "    {\n"
     "        $(me).css('width',value);\n"
+    "        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
+    "        $(me).get(0).myWidth = value;\n"
     "    }\n"
     "    else if (attributeName == 'height' || attributeName == 'myHeight')\n"
     "    {\n"
     "        $(me).css('height',value);\n"
+    "        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
+    "        $(me).get(0).myHeight = value;\n"
     "    }\n"
     "    else if (attributeName == 'opacity')\n"
     "    {\n"
@@ -10024,7 +10111,12 @@ BOOL isNumeric(NSString *s)
     "        }\n"
     "    }\n"
     "    else\n"
+    "    {\n"
     "      alert('ToDo. Aufruf von setAttribute, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
+    "    }\n"
+    "\n"
+    "    // In jedem Fall: triggern! Das sieht OL so vor\n"
+    "    $(this).trigger('on'+attributeName);\n"
     "}\n"
     "\n"
     "// Object.prototype ist verboten und bricht jQuery und z.B. JS .split()! Deswegen über defineProperty\n"
@@ -10150,7 +10242,7 @@ BOOL isNumeric(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'y', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('top')); },\n"
-    "    set: function(newValue){ $(this).css('top', newValue); },\n"
+    "    set: function(newValue){ $(this).css('top', newValue); $(this).trigger('ony'); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -10161,7 +10253,7 @@ BOOL isNumeric(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'x', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('left')); },\n"
-    "    set: function(newValue){ $(this).css('left', newValue); },\n"
+    "    set: function(newValue){ $(this).css('left', newValue); $(this).trigger('onx'); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -10172,7 +10264,7 @@ BOOL isNumeric(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'bgcolor', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('background-color')); },\n"
-    "    set: function(newValue){ $(this).css('background-color', newValue); },\n"
+    "    set: function(newValue){ $(this).css('background-color', newValue); $(this).trigger('onbgcolor'); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -10184,7 +10276,7 @@ BOOL isNumeric(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'myHeight', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('height'));  },\n"
-    "    set : function(newValue){ if (isDOM(this)) $(this).css('height',newValue); },\n"
+    "    set : function(newValue){ if (isDOM(this)) $(this).css('height',newValue); $(this).trigger('onheight'); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -10196,7 +10288,7 @@ BOOL isNumeric(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'myWidth', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('width'));  },\n"
-    "    set : function(newValue){ if (isDOM(this)) $(this).css('width',newValue); },\n"
+    "    set : function(newValue){ if (isDOM(this)) $(this).css('width',newValue); $(this).trigger('onwidth'); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"

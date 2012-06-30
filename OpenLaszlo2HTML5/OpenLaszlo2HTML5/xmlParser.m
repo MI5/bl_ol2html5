@@ -555,7 +555,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.attributeCount++;
         NSLog(@"Setting the attribute 'fgcolor' as CSS 'color'.");
 
-        if ([[attributeDict valueForKey:@"fgcolor"] hasPrefix:@"${"])
+        if ([[attributeDict valueForKey:@"fgcolor"] hasPrefix:@"$"])
         {
             [self setTheComputedValue:[attributeDict valueForKey:@"fgcolor"] ofAttribute:@"color"];
         }
@@ -641,7 +641,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         {
             [style appendString:@"height:inherit;"];
         }
-        else if ([s hasPrefix:@"${"])
+        else if ([s hasPrefix:@"$"])
         {
             [self setTheComputedValue:s ofAttribute:@"height"];
         }
@@ -668,7 +668,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         {
             [style appendString:@"height:inherit;"];
         }
-        else if ([s hasPrefix:@"${"])
+        else if ([s hasPrefix:@"$"])
         {
             [self setTheComputedValue:s ofAttribute:@"height"];
         }
@@ -696,7 +696,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         {
             [style appendString:@"width:inherit;"];
         }
-        else if ([s hasPrefix:@"${"])
+        else if ([s hasPrefix:@"$"])
         {
             [self setTheComputedValue:[attributeDict valueForKey:@"width"] ofAttribute:@"width"];
         }
@@ -741,7 +741,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"x"];
 
-        if ([s hasPrefix:@"${"])
+        if ([s hasPrefix:@"$"])
         {
             [self setTheComputedValue:s ofAttribute:@"left"];
         }
@@ -765,7 +765,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"y"];
 
-        if ([s hasPrefix:@"${"])
+        if ([s hasPrefix:@"$"])
         {
             [self setTheComputedValue:s ofAttribute:@"top"];
         }
@@ -884,7 +884,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
 
 
-        if ([[attributeDict valueForKey:@"align"] hasPrefix:@"${"])
+        if ([[attributeDict valueForKey:@"align"] hasPrefix:@"$"])
         {
             NSString *s = [self makeTheComputedValueComputable:[attributeDict valueForKey:@"align"]];
 
@@ -2079,7 +2079,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"mask"];
 
-        if ([s hasPrefix:@"${"])
+        if ([s hasPrefix:@"$"])
             s = [self makeTheComputedValueComputable:s];
 
         NSLog([NSString stringWithFormat:@"Setting the var 'mask' with the value '%@'.",s]);
@@ -2685,8 +2685,12 @@ void OLLog(xmlParser *self, NSString* s,...)
             [o appendFormat:@"        // topValue = i * %@ + kind.prev().outerHeight()/* + kind.prev().position().top*/;\n",spacing];
             [o appendFormat:@"        // Nur so klappt es bei Beispiel <basebutton>:\n",spacing];
             [o appendFormat:@"        topValue = %@ + kind.prev().outerHeight() + kind.prev().position().top;\n",spacing];
-            [o appendString:@"        var leftValue = kind.prev().position().left-kind.prev().outerWidth();\n"];
-            [o appendString:@"        leftValue = leftValue * i;\n"];
+            [o appendString:@"        // var leftValue = kind.prev().position().left-kind.prev().outerWidth();\n"];
+            [o appendString:@"        // leftValue = leftValue * i;\n"];
+            [o appendString:@"        // nur so klappt es bei Bsp. 27.1 (Constraints in tags):\n"];
+            [o appendString:@"        var width = 0;\n"];
+            [o appendString:@"        kind.prevAll().each(function() { width += $(this).outerWidth(); });\n"];
+            [o appendString:@"        var leftValue = width * -1;\n"];
             [o appendString:@"        kind.css('left',leftValue+'px');\n"];
             [o appendString:@"      }\n"];
             [o appendString:@"    }\n"];
@@ -2757,7 +2761,20 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
 
+    if ([attributeDict valueForKey:@"text"])
+    {
+        self.attributeCount++;
 
+        if ([[attributeDict valueForKey:@"text"] hasPrefix:@"$"])
+        {
+            [self setTheComputedValue:[attributeDict valueForKey:@"text"] ofAttribute:@"text"];
+        }
+        else
+        {
+            NSLog(@"Setting the attribute 'text' as text between opening and closing tag.");
+            [self.output appendString:[attributeDict valueForKey:@"text"]];
+        }
+    }
 }
 
 
@@ -3097,7 +3114,7 @@ didStartElement:(NSString *)elementName
 
             spacing = [attributeDict valueForKey:@"spacing"];
 
-            if ([spacing rangeOfString:@"${"].location != NSNotFound)
+            if ([spacing hasPrefix:@"$"])
             {
                 spacing = [self removeOccurrencesOfDollarAndCurlyBracketsIn:spacing];
                 spacing = [NSString stringWithFormat:@"(%@)",spacing]; // ToDo, sollte das nicht eher makeComputable sein, anstatt nur der Klammer? Bitte testen
@@ -4024,7 +4041,7 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Setting the attribute 'text' as the label of the button.");
 
-            if ([[attributeDict valueForKey:@"text"] hasPrefix:@"${"])
+            if ([[attributeDict valueForKey:@"text"] hasPrefix:@"$"])
             {
                 [self setTheComputedValue:[attributeDict valueForKey:@"text"] ofAttribute:@"text"];
             }
@@ -4148,40 +4165,6 @@ didStartElement:(NSString *)elementName
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
         [self.output appendString:@"\">"];
-
-
-        if ([attributeDict valueForKey:@"text"])
-        {
-            self.attributeCount++;
-
-            if ([[attributeDict valueForKey:@"text"] hasPrefix:@"$"])
-            {
-                NSLog(@"Setting the attribute 'text' later with jQuery, because it is Code.");
-                [self.output appendString:@"CODE! - Wird dynamisch mit jQuery ersetzt."];
-
-
-                NSString *code = [attributeDict valueForKey:@"text"];
-                // Remove all occurrences of $,{,}
-                // code = [self removeOccurrencesOfDollarAndCurlyBracketsIn:code];
-                // ToDo, das hier sollte die bessere Lösung sein:: ?!?!?!?!
-                code = [self makeTheComputedValueComputable:code];
-
-                code = [code stringByReplacingOccurrencesOfString:@"classroot" withString:ID_REPLACE_STRING];
-
-
-                // ToDo, mit ShowEUR gibt es noch Probs
-                if ([code rangeOfString:@"ShowEUR"].location == NSNotFound)
-                {
-                    [self.jQueryOutput appendString:@"\n  // Der Text von BDSText wird hier dynamisch gesetzt\n"];
-                    [self.jQueryOutput appendFormat:@"  $('#%@').html(%@);\n",self.zuletztGesetzteID,code];
-                }
-            }
-            else
-            {
-                NSLog(@"Setting the attribute 'text' as text between opening and closing tag.");
-                [self.output appendString:[attributeDict valueForKey:@"text"]];
-            }
-        }
 
         self.weAreCollectingTextAndThereMayBeHTMLTags = YES;
         NSLog(@"We won't include possible following HTML-Tags, because it is content of the text.");
@@ -4515,7 +4498,8 @@ didStartElement:(NSString *)elementName
         if ([attributeDict valueForKey:@"title"])
         {
             self.attributeCount++;
-            NSLog(@"Setting the attribute 'title' in <span>-tags as text in front of checkbox.");
+            NSLog(@"Setting the attribute 'title' in <span>-tags as text after the checkbox.");
+
             if ([[attributeDict valueForKey:@"title"] hasPrefix:@"$"])
             {
                 titelDynamischSetzen = YES;
@@ -4534,6 +4518,7 @@ didStartElement:(NSString *)elementName
 
             [self.output appendString:[attributeDict valueForKey:@"text"]];
         }
+
         [self.output appendString:@"</span>\n"];
 
 
@@ -4545,7 +4530,7 @@ didStartElement:(NSString *)elementName
         {
             NSString *code = [attributeDict valueForKey:@"title"];
 
-            if ([code hasPrefix:@"${"])
+            if ([code hasPrefix:@"$"])
                 code = [self makeTheComputedValueComputable:code];
 
             [self.jQueryOutput appendString:@"\n  // checkbox-Text wird hier dynamisch gesetzt\n"];
@@ -4646,7 +4631,7 @@ didStartElement:(NSString *)elementName
         {
             NSString *code = [attributeDict valueForKey:@"title"];
 
-            if ([code hasPrefix:@"${"])
+            if ([code hasPrefix:@"$"])
                 code = [self makeTheComputedValueComputable:code];
 
             [self.jQueryOutput appendString:@"\n  // textfield-Text wird hier dynamisch gesetzt\n"];
@@ -4791,7 +4776,7 @@ didStartElement:(NSString *)elementName
         {
             NSString *code = [attributeDict valueForKey:@"title"];
 
-            if ([code hasPrefix:@"${"])
+            if ([code hasPrefix:@"$"])
                 code = [self makeTheComputedValueComputable:code];
 
             [self.jQueryOutput appendString:@"\n  // Datepicker-Text wird hier dynamisch gesetzt\n"];
@@ -5095,7 +5080,7 @@ didStartElement:(NSString *)elementName
                 title = @"CODE! - Wird dynamisch mit jQuery ersetzt.";
 
                 NSString *code = [attributeDict valueForKey:@"header"];
-                if ([code hasPrefix:@"${"])
+                if ([code hasPrefix:@"$"])
                     code = [self makeTheComputedValueComputable:code];
 
                 [self.jQueryOutput appendString:@"\n  // Der Titel (header) von rollUpDown wird hier dynamisch gesetzt\n"];
@@ -6401,13 +6386,6 @@ didStartElement:(NSString *)elementName
 
 
 
-        if ([attributeDict valueForKey:@"text"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'text' as text between opening and closing tag.");
-            [self.output appendString:[attributeDict valueForKey:@"text"]];
-        }
-
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
 
@@ -7168,7 +7146,7 @@ didStartElement:(NSString *)elementName
 
                 NSString *s = [d valueForKey:key];
 
-                if ([s hasPrefix:@"${"])
+                if ([s hasPrefix:@"$"])
                     s = [self makeTheComputedValueComputable:s];
 
                 if (isNumeric([d valueForKey:key])) // Dann ohne Anführungszeichen
@@ -7893,13 +7871,6 @@ BOOL isNumeric(NSString *s)
 
 
 
-    // Schließen von canvas oder windows
-    if ([elementName isEqualToString:@"canvas"] || [elementName isEqualToString:@"window"])
-    {
-        element_geschlossen = YES;
-        [self.output appendString:@"</div>\n"];
-    }
-
 
     if ([elementName isEqualToString:@"text"] ||
         [elementName isEqualToString:@"inputtext"])
@@ -8022,8 +7993,11 @@ BOOL isNumeric(NSString *s)
 
 
 
-    // Schließen des Div's
-    if ([elementName isEqualToString:@"view"] ||
+
+    // Nur schließen des Div's
+    if ([elementName isEqualToString:@"canvas"] || 
+        [elementName isEqualToString:@"view"] ||
+        [elementName isEqualToString:@"window"] ||
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"deferviewToDoDeleteMe"] ||
         [elementName isEqualToString:@"checkviewToDoDeleteMe"] ||
@@ -8846,7 +8820,7 @@ BOOL isNumeric(NSString *s)
 	"    padding:4px;\n"
     "}\n"
     "\n"
-    "/* Das Standard-OL-HTML-Element (nicht das HTML-HTML-Element!) */\n"
+    "/* Das Standard-OL-HTML-Element (=iframe) (nicht das HTML-HTML-Element!) */\n"
     ".iframe_standard\n"
     "{\n"
 	"    position:relative;\n"
@@ -8996,8 +8970,9 @@ BOOL isNumeric(NSString *s)
     "    pointer-events: auto;\n"
     "}\n"
     "\n"
-    "/* Standard-textfield (das umgebende Div) */\n"
-    ".div_textfield\n"
+    "/* Standard-Textfield (das umgebende Div) */\n"
+    "/* Standard-Slider (das umgebende Div) */\n"
+    ".div_textfield, .div_slider\n"
     "{\n"
     "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
@@ -10624,7 +10599,7 @@ BOOL isNumeric(NSString *s)
     "        if (an[i] === 'y')\n"
     "          an[i] = 'top';\n"
     "\n"
-    "        if (av[i].startsWith('${')) // = Computed value\n"
+    "        if (av[i].startsWith('$')) // = Constraint value\n"
     "        {\n"
     "            av[i] = av[i].substring(2,av[i].length-1);\n"
     "\n"

@@ -26,7 +26,7 @@ BOOL alternativeFuerSimplelayout = YES; // Bei YES kann <simplelayout> an belieb
                                         // Es scheint sehr zuverlässig zu funktionieren inzwischen.
                                         // Kann wohl dauerhaft auf YES bleiben!
 
-BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -467,14 +467,32 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 // Warum ist das nicht alles setAttribute_() ? ToDo
-- (void) setTheComputedValue:(NSString *)s ofAttribute:(NSString*)attr
+- (void) setTheConstraintValue:(NSString *)s ofAttribute:(NSString*)attr
 {
-    NSLog(@"A computed value, so we are setting the attribute with jQuery");
+    NSLog(@"A constraint value, so we are setting the attribute with jQuery + we need to watch it (ToDo)!");
 
     NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
-    [o appendFormat:@"\n  // Setting the Attribute '%@' of '#%@' by jQuery, because it is a computed value (%@)\n",attr,self.zuletztGesetzteID,s];
+    [o appendFormat:@"\n  // Setting the Attribute '%@' of '#%@' by jQuery, because it is a constraint value (%@)\n",attr,self.zuletztGesetzteID,s];
 
+    BOOL nochVorDOMAusfuehren = NO;
+    if ([s hasPrefix:@"$immediately{"])
+    {
+        nochVorDOMAusfuehren = YES;
+        s = [s substringFromIndex:12];
+    }
+
+    if ([s hasPrefix:@"$once{"])
+    {
+        nochVorDOMAusfuehren = YES;
+        s = [s substringFromIndex:5];
+    }
+
+    if ([s hasPrefix:@"$always{"])
+    {
+        nochVorDOMAusfuehren = YES;
+        s = [s substringFromIndex:7];
+    }
 
     s = [self makeTheComputedValueComputable:s];
 
@@ -498,7 +516,10 @@ void OLLog(xmlParser *self, NSString* s,...)
         [o appendFormat:@"  $('#%@').css('%@',%@);\n",self.zuletztGesetzteID,attr,s];
     }
 
-    [self.jQueryOutput appendString:o];
+    if (nochVorDOMAusfuehren)
+        [self.jQueryOutput appendString:o];
+    else
+        [self.jQueryOutput appendString:o];
 }
 
 
@@ -557,7 +578,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         if ([[attributeDict valueForKey:@"fgcolor"] hasPrefix:@"$"])
         {
-            [self setTheComputedValue:[attributeDict valueForKey:@"fgcolor"] ofAttribute:@"color"];
+            [self setTheConstraintValue:[attributeDict valueForKey:@"fgcolor"] ofAttribute:@"color"];
         }
         else
         {
@@ -643,7 +664,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
         else if ([s hasPrefix:@"$"])
         {
-            [self setTheComputedValue:s ofAttribute:@"height"];
+            [self setTheConstraintValue:s ofAttribute:@"height"];
         }
         else
         {
@@ -670,7 +691,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
         else if ([s hasPrefix:@"$"])
         {
-            [self setTheComputedValue:s ofAttribute:@"height"];
+            [self setTheConstraintValue:s ofAttribute:@"height"];
         }
         else
         {
@@ -698,7 +719,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
         else if ([s hasPrefix:@"$"])
         {
-            [self setTheComputedValue:[attributeDict valueForKey:@"width"] ofAttribute:@"width"];
+            [self setTheConstraintValue:[attributeDict valueForKey:@"width"] ofAttribute:@"width"];
         }
         else
         {
@@ -743,7 +764,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         if ([s hasPrefix:@"$"])
         {
-            [self setTheComputedValue:s ofAttribute:@"left"];
+            [self setTheConstraintValue:s ofAttribute:@"left"];
         }
         else
         {
@@ -767,7 +788,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         if ([s hasPrefix:@"$"])
         {
-            [self setTheComputedValue:s ofAttribute:@"top"];
+            [self setTheConstraintValue:s ofAttribute:@"top"];
         }
         else
         {
@@ -1197,6 +1218,9 @@ void OLLog(xmlParser *self, NSString* s,...)
             {
                 [self.jQueryOutput appendString:@"\n  // Debug-Konsole aktivieren\n"];
                 [self.jQueryOutput appendString:@"  $('div:first').append('<div id=\"debugWindow\"><div style=\"background-color:black;color:white;width:100%;\">DEBUG WINDOW</div><div id=\"debugInnerWindow\"></div></div>');\n"];
+                [self.jQueryOutput appendString:@"  // Mach Debug-Fenster so breit wie Fenster abzgl. 2x die Top-Angabe\n"];
+                [self.jQueryOutput appendString:@"  $('#debugWindow').width($('div:first').width()-100);\n"];
+                [self.jQueryOutput appendString:@"  $('#debugInnerWindow').width($('div:first').width()-100);\n"];
                 [self.jQueryOutput appendString:@"  $('#debugWindow').draggable();\n\n"];
 
                 // Soll relativ am Anfang stehen, diese Variable, falls schon andere Sachen
@@ -1370,7 +1394,15 @@ void OLLog(xmlParser *self, NSString* s,...)
 - (void) changeMouseCursorOnHoverOverElement:(NSString*)idName
 {
     [self.jQueryOutput appendString:@"\n  // onClick-Funktionalität, deswegen anderer Mauscursor\n"];
-    [self.jQueryOutput appendFormat:@"  $('#%@').hover(function(e) { if (this == e.target) $(this).css('cursor','pointer'); }, function(e) { if (this == e.target) $(this).css('cursor','auto');});\n",idName];
+    //if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+    if (NO)
+    {
+        [self.jQueryOutput appendFormat:@"  $('#%@').find('*').andSelf().hover(function(e) { $(this).css('cursor','pointer'); }, function(e) { $(this).css('cursor','auto');});\n",idName];
+    }
+    else
+    {
+        [self.jQueryOutput appendFormat:@"  $('#%@').hover(function(e) { if (this == e.target) $(this).css('cursor','pointer'); }, function(e) { if (this == e.target) $(this).css('cursor','auto');});\n",idName];
+    }
 }
 
 
@@ -1433,6 +1465,23 @@ void OLLog(xmlParser *self, NSString* s,...)
     else
     {
         NSError *error = NULL;
+
+        // Ein paar Character müssen vor der Suche escaped werden für den RegExp:
+        f = [f stringByReplacingOccurrencesOfString:@"\\" withString:@"\\\\"]; // <-- MUSS als erstes
+        f = [f stringByReplacingOccurrencesOfString:@"{" withString:@"\\{"];
+        f = [f stringByReplacingOccurrencesOfString:@"}" withString:@"\\}"];
+        f = [f stringByReplacingOccurrencesOfString:@"*" withString:@"\\*"];
+        f = [f stringByReplacingOccurrencesOfString:@"?" withString:@"\\?"];
+        f = [f stringByReplacingOccurrencesOfString:@"+" withString:@"\\+"];
+        f = [f stringByReplacingOccurrencesOfString:@"[" withString:@"\\["];
+        f = [f stringByReplacingOccurrencesOfString:@"(" withString:@"\\("];
+        f = [f stringByReplacingOccurrencesOfString:@")" withString:@"\\)"];
+        f = [f stringByReplacingOccurrencesOfString:@"^" withString:@"\\^"];
+        f = [f stringByReplacingOccurrencesOfString:@"$" withString:@"\\$"];
+        f = [f stringByReplacingOccurrencesOfString:@"|" withString:@"\\|"];
+        f = [f stringByReplacingOccurrencesOfString:@"." withString:@"\\."];
+        f = [f stringByReplacingOccurrencesOfString:@"/" withString:@"\\/"];
+
         NSString* pattern = [NSString stringWithFormat:@"%@\\s*(?=([^\"]*\"[^\"]*\")*[^\"]*$)",f];
 
         NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:pattern options:/*NSRegularExpressionCaseInsensitive*/0 error:&error];
@@ -1885,8 +1934,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jQueryOutput appendString:@"\n  // jQuery-click-event (anstelle des Attributs onclick)\n"];
         [self.jQueryOutput appendFormat:@"  $('#%@').click(function(){ with (this) { %@ } });\n",idName,s];
 
-        // Wenn es ein onclick gibt, soll sich immer der Mauszeiger ändern.
-        [self changeMouseCursorOnHoverOverElement:idName];
+        // Wenn es ein onclick gibt, soll sich der Mauszeiger ändern.
+        if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
+            [self changeMouseCursorOnHoverOverElement:idName];
     }
 
 
@@ -1903,8 +1953,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jQueryOutput appendString:@"\n  // jQuery-dblclick-event (anstelle des Attributs ondblclick)\n"];
         [self.jQueryOutput appendFormat:@"  $('#%@').dblclick(function(){ with (this) { %@ } });\n",idName,s];
 
-        // Wenn es ein ondblclick gibt, soll sich immer der Mauszeiger ändern.
-        [self changeMouseCursorOnHoverOverElement:idName];
+        // Wenn es ein ondblclick gibt, soll sich der Mauszeiger ändern.
+        if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
+            [self changeMouseCursorOnHoverOverElement:idName];
     }
 
 
@@ -1965,7 +2016,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jQueryOutput appendString:@"\n  // jQuery-mousedown-event (anstelle des Attributs onmousedown)\n"];
         [self.jQueryOutput appendFormat:@"  $('#%@').mousedown(function(){ with (this) { %@ } });\n",idName,s];
 
-        [self changeMouseCursorOnHoverOverElement:idName];
+        if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
+            [self changeMouseCursorOnHoverOverElement:idName];
     }
 
 
@@ -1982,7 +2034,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jQueryOutput appendString:@"\n  // jQuery-mouseup-event (anstelle des Attributs onmouseup)\n"];
         [self.jQueryOutput appendFormat:@"  $('#%@').mouseup(function(){ with (this) { %@ } });\n",idName,s];
 
-        [self changeMouseCursorOnHoverOverElement:idName];
+        if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
+            [self changeMouseCursorOnHoverOverElement:idName];
     }
 
 
@@ -1999,7 +2052,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jQueryOutput appendString:@"\n  // jQuery-mouseout-event (anstelle des Attributs onmouseout)\n"];
         [self.jQueryOutput appendFormat:@"  $('#%@').mouseout(function(){ with (this) { %@ } });\n",idName,s];
 
-        [self changeMouseCursorOnHoverOverElement:idName];
+        if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
+            [self changeMouseCursorOnHoverOverElement:idName];
     }
 
 
@@ -2016,7 +2070,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jQueryOutput appendString:@"\n  // jQuery-mouseover-event (anstelle des Attributs onmouseover)\n"];
         [self.jQueryOutput appendFormat:@"  $('#%@').mouseover(function(){ with (this) { %@ } });\n",idName,s];
 
-        [self changeMouseCursorOnHoverOverElement:idName];
+        if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
+            [self changeMouseCursorOnHoverOverElement:idName];
     }
 
 
@@ -2067,6 +2122,22 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSLog(@"Skipping the attribute 'clickable'.");
     }
 
+    // steht erst am Ende, falls onClick oder so etwas den Cursor setzt, wir er hier removed
+    if ([attributeDict valueForKey:@"showhandcursor"])
+    {
+        if ([[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'showhandcursor=true' by doing nothing. If the element is clickable it will get the handcursor anyway.");
+        }
+
+        if ([[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"false"])
+        {
+            self.attributeCount++;
+
+            NSLog(@"Setting the attribute 'showhandcursor=false' by not adding a hover-effect (previously considered).");
+        }
+    }
 
 
 
@@ -2767,7 +2838,11 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         if ([[attributeDict valueForKey:@"text"] hasPrefix:@"$"])
         {
-            [self setTheComputedValue:[attributeDict valueForKey:@"text"] ofAttribute:@"text"];
+            // MUSS derzeit noch rein, sonst verschwindet Schriftzug "Seine Steuererklärung 2011"
+            // Ich vermute, weil er sonst bestimmte Simplelayouts nicht richtig berechnen kann (ToDo?)
+            [self.output appendString:@"CODE! - Wird dynamisch mit jQuery ersetzt."];
+
+            [self setTheConstraintValue:[attributeDict valueForKey:@"text"] ofAttribute:@"text"];
         }
         else
         {
@@ -3020,11 +3095,14 @@ didStartElement:(NSString *)elementName
                 // auch '&lt;' und nicht '<'. Warum wandelt der Parser dies um????
                 // Jedenfalls muss ich durch alle Attribute durch und dort '<' durch '&lt;'
                 // wieder zurück ersetzen. Das gleiche gilt für & und &amp;
+                // Und Eventuelle " müssen durch ' ersetzt werden
+                // (Wegen Beispiel 2 bei <text>, bei OL kommt sowas nicht vor)
                 NSString *s = [attributeDict valueForKey:key];
                 // Das &-ersetzen muss natürlich als erstes kommen, weil ich danach ja wieder
                 // welche einfüge (durch die Entitys).
                 s = [s stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"];
                 s = [s stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
+                s = [s stringByReplacingOccurrencesOfString:@"\"" withString:@"'"];
 
 
                 [self.collectedContentOfClass appendString:s];
@@ -3401,7 +3479,7 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
 
             [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere y-Position haben\n"];
-            [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('top','%@px');\n\n",[attributeDict valueForKey:@"y"]];
+            [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('top','%@');\n\n",[attributeDict valueForKey:@"y"]];
         }
 
         if ([attributeDict valueForKey:@"height"])
@@ -3409,8 +3487,16 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             
             [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere Höhe haben\n"];
-            [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('height','%@px');\n",[attributeDict valueForKey:@"height"]];
-            [self.jQueryOutput appendFormat:@"  $('#debugInnerWindow').css('height','%dpx');\n\n",[[attributeDict valueForKey:@"height"] intValue]-30];
+            [self.jQueryOutput appendFormat:@"  $('#debugWindow').height('%@');\n",[attributeDict valueForKey:@"height"]];
+            // Mindestens bei %-Angaben, aber vermutlich immer, muss ich auch noch
+            // den Rahmen (oben+unten) abziehen und Padding (oben+unten) (Bsp. lz.Formatter - Beispiel 5)
+            [self.jQueryOutput appendString:@"  // Abzüglich Padding oben+unten (2*10) und border-width (2*5);\n"];
+            [self.jQueryOutput appendString:@"  $('#debugWindow').height($('#debugWindow').height()-30);\n"];
+
+            // Bricht bei %-Angaben:
+            //[self.jQueryOutput appendFormat:@"  $('#debugInnerWindow').css('height','%dpx');\n\n",[[attributeDict valueForKey:@"height"] intValue]-30];
+            // Deswegen einfach direkt auf den eben ausgerechneten Wert beziehen:
+            [self.jQueryOutput appendString:@"  $('#debugInnerWindow').height($('#debugWindow').height()-30);\n\n"];
         }
     }
 
@@ -3537,8 +3623,8 @@ didStartElement:(NSString *)elementName
         // Ich lege jeden datapointer als globales Objekt an, auf welches zugegriffen werden kann
         if ([attributeDict valueForKey:@"name"])
         {
-            [self.jQueryOutput appendString:@"\n  // Ein Datapointer\n"];
-            [self.jQueryOutput appendFormat:@"  var %@ = new lz.datapointer(%@);\n",[attributeDict valueForKey:@"name"],dp];
+            [self.jQueryOutput appendString:@"\n  // Ein Datapointer (bewusst ohne var, damit global verfügbar)\n"];
+            [self.jQueryOutput appendFormat:@"  %@ = new lz.datapointer(%@);\n",[attributeDict valueForKey:@"name"],dp];
         }
         else
         {
@@ -4043,7 +4129,7 @@ didStartElement:(NSString *)elementName
 
             if ([[attributeDict valueForKey:@"text"] hasPrefix:@"$"])
             {
-                [self setTheComputedValue:[attributeDict valueForKey:@"text"] ofAttribute:@"text"];
+                [self setTheConstraintValue:[attributeDict valueForKey:@"text"] ofAttribute:@"text"];
             }
             else
             {
@@ -4349,13 +4435,10 @@ didStartElement:(NSString *)elementName
         if (titelDynamischSetzen)
         {
             NSString *code = [attributeDict valueForKey:@"title"];
-            // Remove all occurrences of $,{,}
-            // ToDo, das hier checken, warum ist das nicht makeComputevalueComputable?
-            // Und warum kein Check auf $ vorher?
-            code = [self removeOccurrencesOfDollarAndCurlyBracketsIn:code];
+
+            code = [self makeTheComputedValueComputable:code];
 
             [self.jQueryOutput appendString:@"\n  // combobox-Text wird hier dynamisch gesetzt\n"];
-            // [self.jQueryOutput appendFormat:@"  $('#%@').before(%@);",id,code];
             [self.jQueryOutput appendFormat:@"  $('#%@').prev().text(%@);\n",id,code];
         }
 
@@ -4530,8 +4613,7 @@ didStartElement:(NSString *)elementName
         {
             NSString *code = [attributeDict valueForKey:@"title"];
 
-            if ([code hasPrefix:@"$"])
-                code = [self makeTheComputedValueComputable:code];
+            code = [self makeTheComputedValueComputable:code];
 
             [self.jQueryOutput appendString:@"\n  // checkbox-Text wird hier dynamisch gesetzt\n"];
             [self.jQueryOutput appendFormat:@"  $('#%@').next().text(%@);\n",id,code];
@@ -4584,8 +4666,12 @@ didStartElement:(NSString *)elementName
         element_bearbeitet = YES;
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        if ([attributeDict valueForKey:@"title"])
+            [self.output appendString:@"<div class=\"div_textfield\">\n"];
+        else
+            [self.output appendString:@"<div class=\"div_textfield_ohne_vorangehenden_text\">\n"];
 
-        [self.output appendString:@"<div class=\"div_textfield\">\n"];
+
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
 
@@ -4619,7 +4705,7 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"</span>\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
-        [self.output appendString:@"<input type=\"text\""];
+        [self.output appendString:@"<input class=\"input_textfield\" type=\"text\""];
 
 
         NSString *id =[self addIdToElement:attributeDict];
@@ -4631,8 +4717,7 @@ didStartElement:(NSString *)elementName
         {
             NSString *code = [attributeDict valueForKey:@"title"];
 
-            if ([code hasPrefix:@"$"])
-                code = [self makeTheComputedValueComputable:code];
+            code = [self makeTheComputedValueComputable:code];
 
             [self.jQueryOutput appendString:@"\n  // textfield-Text wird hier dynamisch gesetzt\n"];
             [self.jQueryOutput appendFormat:@"  $('#%@').prev().text(%@);\n",id,code];
@@ -4776,8 +4861,7 @@ didStartElement:(NSString *)elementName
         {
             NSString *code = [attributeDict valueForKey:@"title"];
 
-            if ([code hasPrefix:@"$"])
-                code = [self makeTheComputedValueComputable:code];
+            code = [self makeTheComputedValueComputable:code];
 
             [self.jQueryOutput appendString:@"\n  // Datepicker-Text wird hier dynamisch gesetzt\n"];
             [self.jQueryOutput appendFormat:@"  $('#%@').prev().text(%@);\n",theId,code];
@@ -5510,7 +5594,7 @@ didStartElement:(NSString *)elementName
             // if ([keys count] > 0)
             {
                 // Alle Attributnamen als Array hinzufügen
-                [self.jsOLClassesOutput appendString:@"  this.attributeNames = ['_textBetweenTags'"];
+                [self.jsOLClassesOutput appendString:@"  this.attributeNames = ['textBetweenTags_'"];
 
                 int i = 0;
                 for (NSString *key in keys)
@@ -5640,7 +5724,6 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
         if ([attributeDict valueForKey:@"showhandcursor"])
             self.attributeCount++;
-
 
         // ToDo
         // Alles was in diesen Dialogen definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
@@ -6251,8 +6334,8 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Setting the attribute 'src' as external JS-File in the <head> of our HTML-File.");
 
-            if ([[attributeDict valueForKey:@"src"] isEqualToString:@"app-includes/steuerberechnung.js"] ||
-                [[attributeDict valueForKey:@"src"] isEqualToString:@"app-includes/taxango.js"])
+            if ([[attributeDict valueForKey:@"src"] isEqualToString:@"app-includes/steuerberechnung.jsToDoTakeMeOut"] ||
+                [[attributeDict valueForKey:@"src"] isEqualToString:@"app-includes/taxango.jsToDoTakeMeOut"])
             {
                 // Skippen, weil es da drin einen JS-Bug gibt
                 NSLog(@"Skipping this script (ToDo).");
@@ -7055,7 +7138,8 @@ didStartElement:(NSString *)elementName
             [o appendString:@"\n  // Setzen aller Attribute der Klasse mit den Defaultwerten"];
             for (NSString *key in keys)
             {
-                if (isNumeric([keys valueForKey:key])) // Dann ohne Anführungszeichen
+                // Falls Bedingung zutrifft, dann ohne Anführungszeichen, ansonsten mit
+                if (isNumeric([keys valueForKey:key]) || isJSArray([keys valueForKey:key]))
                 {
                     [o appendFormat:@"\n  %@.%@ = %@;",self.zuletztGesetzteID,key,[keys valueForKey:key]];
                 }
@@ -7118,6 +7202,7 @@ didStartElement:(NSString *)elementName
         [d removeObjectForKey:@"onkeydown"];
         [d removeObjectForKey:@"datapath"];
         [d removeObjectForKey:@"clickable"];
+        [d removeObjectForKey:@"showhandcursor"];
         [d removeObjectForKey:@"mask"];
         [d removeObjectForKey:@"ignoreplacement"];
 
@@ -7149,11 +7234,12 @@ didStartElement:(NSString *)elementName
                 if ([s hasPrefix:@"$"])
                     s = [self makeTheComputedValueComputable:s];
 
-                if (isNumeric([d valueForKey:key])) // Dann ohne Anführungszeichen
+                // Falls Bedingung zutrifft, dann ohne Anführungszeichen...
+                if (isNumeric([keys valueForKey:key]) || isJSArray([keys valueForKey:key]))
                 {
                     [o appendFormat:@"\n  %@.%@ = %@;",self.zuletztGesetzteID,key,s];
                 }
-                else // ansonsten mit Anführungszeichen!
+                else // ...ansonsten mit Anführungszeichen!
                 {
                     [o appendFormat:@"\n  %@.%@ = '%@';",self.zuletztGesetzteID,key,s];
                 }
@@ -7295,12 +7381,27 @@ static inline BOOL isEmpty(id thing)
 
 BOOL isNumeric(NSString *s)
 {
+    if (s == nil)
+    {
+        return NO;
+    }
     NSScanner *sc = [NSScanner scannerWithString: s];
     if ( [sc scanFloat:NULL] )
     {
         return [sc isAtEnd];
     }
     return NO;
+}
+
+
+
+BOOL isJSArray(NSString *s)
+{
+    // Mit Sicherheit noch verbesserungswürdig, aber erstmal funktioniert es
+    if ([s hasPrefix:@"["] && [s hasSuffix:@"]"])
+        return YES;
+    else
+        return NO;
 }
 
 
@@ -7699,11 +7800,67 @@ BOOL isNumeric(NSString *s)
         rekursiveRueckgabeJsHeadOutput = [rekursiveRueckgabeJsHeadOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
 
         [self.jsOLClassesOutput appendString:@"  // Der Vollständigkeit halber. Wird derzeit noch vor dem Instanzieren ausgewertet und spielt hier drin keine Rolle\n"];
+        [self.jsOLClassesOutput appendString:@"  // Bei text/textinput wird dieses Objekt auch schon intern ausgewertet! Eventuell folgt später noch mehr.\n"];
 
+
+/* // Dieser alte Code war zu ungenau, und hat z.B. Arrays nicht als Arrays erkannt, sondern nur als Strings.
         NSString *newlyIntroducedAttributes = [NSString stringWithFormat:@"%@",[self.allFoundClasses objectForKey:self.lastUsedNameAttributeOfClass]];
-        newlyIntroducedAttributes = [newlyIntroducedAttributes stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+
+        // Alle Newlines außerhalb von String ersetzen, damit es JS-Objekt-konform wird
+        newlyIntroducedAttributes= [self inString:newlyIntroducedAttributes searchFor:@"\n" andReplaceWith:@", " ignoringTextInQuotes:YES];
+
+        // Das Komma ganz am Anfang entfernen
+        newlyIntroducedAttributes= [self inString:newlyIntroducedAttributes searchFor:@"{," andReplaceWith:@"{" ignoringTextInQuotes:YES];
+
+        // Das Komma ganz am Ende entfernen
+        newlyIntroducedAttributes= [self inString:newlyIntroducedAttributes searchFor:@", }" andReplaceWith:@" }" ignoringTextInQuotes:YES];
+
+        // Verbleibende Newlines (auch) IN Strings escapen
+        newlyIntroducedAttributes = [newlyIntroducedAttributes stringByReplacingOccurrencesOfString:@"\n" withString:@"\\\n"];
         newlyIntroducedAttributes = [newlyIntroducedAttributes stringByReplacingOccurrencesOfString:@"\'" withString:@"\\'"];
-        [self.jsOLClassesOutput appendFormat:@"  this.selfDefinedAttributes = '%@';\n\n",newlyIntroducedAttributes];
+        // Um es zu einem JS-Objekt zu machen:
+        newlyIntroducedAttributes= [self inString:newlyIntroducedAttributes searchFor:@"=" andReplaceWith:@":" ignoringTextInQuotes:YES];
+        newlyIntroducedAttributes= [self inString:newlyIntroducedAttributes searchFor:@";" andReplaceWith:@"" ignoringTextInQuotes:YES];
+        newlyIntroducedAttributes= [self inString:newlyIntroducedAttributes searchFor:@"  " andReplaceWith:@" " ignoringTextInQuotes:YES];
+
+        [self.jsOLClassesOutput appendFormat:@"  this.selfDefinedAttributes = %@;\n\n",newlyIntroducedAttributes];
+*/
+
+
+        [self.jsOLClassesOutput appendFormat:@"  this.selfDefinedAttributes = { "];
+
+        NSArray *keys = [self.allFoundClasses objectForKey:self.lastUsedNameAttributeOfClass];
+        if ([keys count] > 0)
+        {
+            for (NSString *key in keys)
+            {
+                NSString *value = [keys valueForKey:key];
+
+                // Falls Bedingung zutrifft, dann ohne Anführungszeichen, ansonsten mit
+                if (isNumeric([keys valueForKey:key]) || isJSArray([keys valueForKey:key]))
+                {
+                    [self.jsOLClassesOutput appendFormat:@" %@ : %@,", key, value];
+                }
+                else
+                {
+                    // ' und Newlines escapen:
+                    value = [value stringByReplacingOccurrencesOfString:@"\'" withString:@"\\'"];
+                    value = [value stringByReplacingOccurrencesOfString:@"\n" withString:@"\\\n"];
+
+                    [self.jsOLClassesOutput appendFormat:@" %@ : '%@',", key, value];
+                }
+            }
+        }
+        else
+        {
+            // Keine Attribute vorhanden, die gesetzt werden müssen
+        }
+        // Das letzte Komma wieder entfernen
+        if ([self.jsOLClassesOutput hasSuffix:@","])
+            self.jsOLClassesOutput = [[NSMutableString alloc] initWithString:[self.jsOLClassesOutput substringToIndex:[self.jsOLClassesOutput length] - 1]];
+
+        [self.jsOLClassesOutput appendFormat:@" };\n\n"];
+
 
         // defaultplacement immer mit speichern, damit es besser ausgelesen werden kann,
         // falls gesetzt.
@@ -8047,7 +8204,7 @@ BOOL isNumeric(NSString *s)
         if (![s isEqualToString:@""])
         {
             s = [NSString stringWithFormat:@"'%@'",s];
-            [self setTheComputedValue:s ofAttribute:@"text"];
+            [self setTheConstraintValue:s ofAttribute:@"text"];
         }
     }
 
@@ -8275,10 +8432,23 @@ BOOL isNumeric(NSString *s)
         {
             // Gemäß OpenLaszlo reagieren, entgegen JS, eventuelle Kinder nicht auf das Ereignis!
             // Deswegen diese Zeile davorschalten. Variable 'e' wurde vorher als Argument gesetzt
-            [self.jQueryOutput appendString:@"if (this == e.target) {\n      with (this) {\n        "];
+            // Wenn ich innerhalb einer Klasse bin, kann ich nicht so restriktiv sein, weil ich derzeit ja zu dem
+            // außenstehenden Element appende, anstatt es zu ersetzen. (2. Beispiel von <text> in der OL-Doku)
+            // Ich denke es klappt jetzt auch so, seitdem ich das äußerste Elemente bei <class extends="text">
+            // ersetze, anstatt zu appenden. Dadurch spreche ich automatisch das richtige Element an!
+            //if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+            if (NO)
+                [self.jQueryOutput appendString:@"  with (this) {\n        "];
+            else
+                [self.jQueryOutput appendString:@"if (this == e.target) {\n      with (this) {\n        "];
 
             [self.jQueryOutput appendString:s];
-            [self.jQueryOutput appendString:@"\n      }\n    }\n  });\n"];
+
+            [self.jQueryOutput appendString:@"\n      }\n"];
+            //if (![[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+            if (YES)
+                [self.jQueryOutput appendString:@"    }\n"];
+            [self.jQueryOutput appendString:@"  });\n"];
         }
 
         // Erkennungszeichen für oninit in jedem Fall zurücksetzen
@@ -8944,6 +9114,8 @@ BOOL isNumeric(NSString *s)
     "{\n"
     "    cursor:pointer;\n"
     "\n"
+    "    margin-right:8px;\n"
+    "\n"
     "    pointer-events: auto;\n"
     "}\n"
     "\n"
@@ -8974,11 +9146,33 @@ BOOL isNumeric(NSString *s)
     "/* Standard-Slider (das umgebende Div) */\n"
     ".div_textfield, .div_slider\n"
     "{\n"
-    "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
+    "    width:100%; /* Eine combobox soll immer die ganze Zeile einnehmen. */\n"
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
     "    text-align:left;\n"
+    "    padding:4px;\n"
+    "    margin-top: 8px;\n"
+    "\n"
+    "    pointer-events: auto;\n"
+    "}\n"
+    "\n"
+    "/* Das Search-field, welches keinen vorangehenden Text hat, braucht derzeit noch eine Sonderbehandlung */\n"
+    "/* Das darf nicht width:100% sein, sonst fällt der Search-Button hinten runter. */\n"
+    ".div_textfield_ohne_vorangehenden_text\n"
+    "{\n"
+    "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
+    "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
+    "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
+    "    text-align:left;\n"
     "    padding:2px;\n"
+    "\n"
+    "    pointer-events: auto;\n"
+    "}\n"
+    "\n"
+    "/* Standard-checkbox (die checkbox selber) */\n"
+    ".input_textfield\n"
+    "{\n"
+    "    margin-left:5px;\n"
     "\n"
     "    pointer-events: auto;\n"
     "}\n"
@@ -9136,6 +9330,12 @@ BOOL isNumeric(NSString *s)
         ".div_rudPanel .div_text /* wenn ein div_text in einem div_rudPanel ist */\n"
         "{\n"
         "    width:100%;\n"
+        "}\n"
+        "/* Übergangsweise, damit der Kalender die Überschrift mittig anzeigt, */\n"
+        "/* für alle Elemente im Kalender die float-Angabe aufheben */\n"
+        ".ui-datepicker *\n"
+        "{\n"
+        "    float:none;\n"
         "}\n";
 
         css = [NSString stringWithFormat:@"%@%@",css,css2];
@@ -9208,6 +9408,259 @@ BOOL isNumeric(NSString *s)
     "        return fBound;\n"
     "    };\n"
     "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// keys() für ältere Browser nachrüsten                  \n"
+    "// https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Object/keys\n"
+    "/////////////////////////////////////////////////////////\n"
+    "if (!Object.keys) {\n"
+    "    Object.keys = (function () {\n"
+    "        var hasOwnProperty = Object.prototype.hasOwnProperty,\n"
+    "        hasDontEnumBug = !({toString: null}).propertyIsEnumerable('toString'),\n"
+    "        dontEnums = [\n"
+    "                     'toString',\n"
+    "                     'toLocaleString',\n"
+    "                     'valueOf',\n"
+    "                     'hasOwnProperty',\n"
+    "                     'isPrototypeOf',\n"
+    "                     'propertyIsEnumerable',\n"
+    "                     'constructor'\n"
+    "                     ],\n"
+    "        dontEnumsLength = dontEnums.length\n"
+    "\n"
+    "        return function (obj) {\n"
+    "            if (typeof obj !== 'object' && typeof obj !== 'function' || obj === null) throw new TypeError('Object.keys called on non-object')\n"
+    "\n"
+    "                var result = []\n"
+    "\n"
+    "                for (var prop in obj) {\n"
+    "                    if (hasOwnProperty.call(obj, prop)) result.push(prop)\n"
+    "                        }\n"
+    "\n"
+    "            if (hasDontEnumBug) {\n"
+    "                for (var i=0; i < dontEnumsLength; i++) {\n"
+    "                    if (hasOwnProperty.call(obj, dontEnums[i])) result.push(dontEnums[i])\n"
+    "                        }\n"
+    "            }\n"
+    "            return result\n"
+    "        }\n"
+    "    })()\n"
+    "};\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// sprintf() für format()                                \n"
+    "/////////////////////////////////////////////////////////\n"
+    "/**\n"
+    " sprintf() for JavaScript 0.7-beta1\n"
+    " http://www.diveintojavascript.com/projects/javascript-sprintf\n"
+    "\n"
+    " Copyright (c) Alexandru Marasteanu <alexaholic [at) gmail (dot] com>\n"
+    " All rights reserved.\n"
+    "\n"
+    " Redistribution and use in source and binary forms, with or without\n"
+    " modification, are permitted provided that the following conditions are met:\n"
+    " * Redistributions of source code must retain the above copyright\n"
+    " notice, this list of conditions and the following disclaimer.\n"
+    " * Redistributions in binary form must reproduce the above copyright\n"
+    " notice, this list of conditions and the following disclaimer in the\n"
+    " documentation and/or other materials provided with the distribution.\n"
+    " * Neither the name of sprintf() for JavaScript nor the\n"
+    " names of its contributors may be used to endorse or promote products\n"
+    " derived from this software without specific prior written permission.\n"
+    "\n"
+    " THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\" AND\n"
+    " ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED\n"
+    " WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\n"
+    " DISCLAIMED. IN NO EVENT SHALL Alexandru Marasteanu BE LIABLE FOR ANY\n"
+    " DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES\n"
+    " (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;\n"
+    " LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND\n"
+    " ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT\n"
+    " (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS\n"
+    " SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+    "\n"
+    "**/\n"
+    "\n"
+    "var sprintf = (function() {\n"
+    "    function get_type(variable) {\n"
+    "        return Object.prototype.toString.call(variable).slice(8, -1).toLowerCase();\n"
+    "    }\n"
+    "    function str_repeat(input, multiplier) {\n"
+    "        for (var output = []; multiplier > 0; output[--multiplier] = input) {/* do nothing */}\n"
+    "        return output.join('');\n"
+    "    }\n"
+    "\n"
+    "    var str_format = function() {\n"
+    "        if (!str_format.cache.hasOwnProperty(arguments[0])) {\n"
+    "            str_format.cache[arguments[0]] = str_format.parse(arguments[0]);\n"
+    "        }\n"
+    "        return str_format.format.call(null, str_format.cache[arguments[0]], arguments);\n"
+    "    };\n"
+    "\n"
+    "    str_format.format = function(parse_tree, argv) {\n"
+    "        var cursor = 1, tree_length = parse_tree.length, node_type = '', arg, output = [], i, k, match, pad, pad_character, pad_length;\n"
+    "        for (i = 0; i < tree_length; i++) {\n"
+    "            node_type = get_type(parse_tree[i]);\n"
+    "            if (node_type === 'string') {\n"
+    "                output.push(parse_tree[i]);\n"
+    "            }\n"
+    "            else if (node_type === 'array') {\n"
+    "                match = parse_tree[i]; // convenience purposes only\n"
+    "                if (match[2]) { // keyword argument\n"
+    "                    arg = argv[cursor];\n"
+    "                    for (k = 0; k < match[2].length; k++) {\n"
+    "                        if (!arg.hasOwnProperty(match[2][k])) {\n"
+    "                            throw(sprintf('[sprintf] property \"%s\" does not exist', match[2][k]));\n"
+    "                        }\n"
+    "                        arg = arg[match[2][k]];\n"
+    "                    }\n"
+    "                }\n"
+    "                else if (match[1]) { // positional argument (explicit)\n"
+    "                    arg = argv[match[1]];\n"
+    "                }\n"
+    "                else { // positional argument (implicit)\n"
+    "                    arg = argv[cursor++];\n"
+    "                }\n"
+    "\n"
+    "                if (/[^s]/.test(match[8]) && (get_type(arg) != 'number')) {\n"
+    "                    throw(sprintf('[sprintf] expecting number but found %s', get_type(arg)));\n"
+    "                }\n"
+    "                switch (match[8]) {\n"
+    "                    case 'b': arg = arg.toString(2); break;\n"
+    "                    case 'c': arg = String.fromCharCode(arg); break;\n"
+    "                    case 'd': arg = parseInt(arg, 10); break;\n"
+    "                    case 'e': arg = match[7] ? arg.toExponential(match[7]) : arg.toExponential(); break;\n"
+    "                    case 'f': arg = match[7] ? parseFloat(arg).toFixed(match[7]) : parseFloat(arg); break;\n"
+    "                    case 'o': arg = arg.toString(8); break;\n"
+    "                    case 's': arg = ((arg = String(arg)) && match[7] ? arg.substring(0, match[7]) : arg); break;\n"
+    "                    case 'u': arg = Math.abs(arg); break;\n"
+    "                    case 'x': arg = arg.toString(16); break;\n"
+    "                    case 'X': arg = arg.toString(16).toUpperCase(); break;\n"
+    "                }\n"
+    "                arg = (/[def]/.test(match[8]) && match[3] && arg >= 0 ? '+'+ arg : arg);\n"
+    "                pad_character = match[4] ? match[4] == '0' ? '0' : match[4].charAt(1) : ' ';\n"
+    "                pad_length = match[6] - String(arg).length;\n"
+    "                pad = match[6] ? str_repeat(pad_character, pad_length) : '';\n"
+    "                output.push(match[5] ? arg + pad : pad + arg);\n"
+    "            }\n"
+    "        }\n"
+    "        return output.join('');\n"
+    "    };\n"
+    "\n"
+    "    str_format.cache = {};\n"
+    "\n"
+    "    str_format.parse = function(fmt) {\n"
+    "        var _fmt = fmt, match = [], parse_tree = [], arg_names = 0;\n"
+    "        while (_fmt) {\n"
+    "            if ((match = /^[^\\x25]+/.exec(_fmt)) !== null) {\n"
+    "                parse_tree.push(match[0]);\n"
+    "            }\n"
+    "            else if ((match = /^\\x25{2}/.exec(_fmt)) !== null) {\n"
+    "                parse_tree.push('%');\n"
+    "            }\n"
+    "            else if ((match = /^\\x25(?:([1-9]\\d*)\\$|\\(([^\\)]+)\\))?(\\+)?(0|'[^$])?(-)?(\\d+)?(?:\\.(\\d+))?([b-fosuxX])/.exec(_fmt)) !== null) {\n"
+    "              if (match[2]) {\n"
+    "                arg_names |= 1;\n"
+    "                var field_list = [], replacement_field = match[2], field_match = [];\n"
+    "                if ((field_match = /^([a-z_][a-z_\\d]*)/i.exec(replacement_field)) !== null) {\n"
+    "                  field_list.push(field_match[1]);\n"
+    "                while ((replacement_field = replacement_field.substring(field_match[0].length)) !== '') {\n"
+    "                  if ((field_match = /^\\.([a-z_][a-z_\\d]*)/i.exec(replacement_field)) !== null) {\n"
+    "                    field_list.push(field_match[1]);\n"
+    "                  }\n"
+    "                  else if ((field_match = /^\\[(\\d+)\\]/.exec(replacement_field)) !== null) {\n"
+    "                    field_list.push(field_match[1]);\n"
+    "                  }\n"
+    "                  else {\n"
+    "                    throw('[sprintf] huh?');\n"
+    "                  }\n"
+    "                }\n"
+    "              }\n"
+    "              else {\n"
+    "                throw('[sprintf] huh?');\n"
+    "              }\n"
+    "              match[2] = field_list;\n"
+    "            }\n"
+    "            else {\n"
+    "              arg_names |= 2;\n"
+    "            }\n"
+    "            if (arg_names === 3) {\n"
+    "              throw('[sprintf] mixing positional and named placeholders is not (yet) supported');\n"
+    "            }\n"
+    "            parse_tree.push(match);\n"
+    "          }\n"
+    "          else {\n"
+    "            throw('[sprintf] huh?');\n"
+    "          }\n"
+    "          _fmt = _fmt.substring(match[0].length);\n"
+    "        }\n"
+    "        return parse_tree;\n"
+    "      };\n"
+    "\n"
+    "    return str_format;\n"
+    "})();\n"
+    "\n"
+    "var vsprintf = function(fmt, argv) {\n"
+    "  argv.unshift(fmt);\n"
+    "  return sprintf.apply(null, argv);\n"
+    "};\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// watch/unwatch-Skript um auf Änderungen von Variablen reagieren zu können\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/*\n"
+    "* object.watch polyfill\n"
+    "*\n"
+    "* 2012-04-03\n"
+    "*\n"
+    "* By Eli Grey, http://eligrey.com\n"
+    "* Public Domain.\n"
+    "* NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.\n"
+    "*/\n"
+    "\n"
+    "// object.watch\n"
+    "if (!Object.prototype.watch) {\n"
+    "    Object.defineProperty(Object.prototype, 'watch', {\n"
+    "        enumerable: false,\n"
+    "        configurable: true,\n"
+    "        writable: false,\n"
+    "        value: function (prop, handler) {\n"
+    "            var oldval = this[prop], newval = oldval,\n"
+    "            getter = function () {\n"
+    "                return newval;\n"
+    "            },\n"
+    "            setter = function (val) {\n"
+    "                oldval = newval;\n"
+    "                return newval = handler.call(this, prop, oldval, val);\n"
+    "            };\n"
+    "            if (delete this[prop]) { // can't watch constants\n"
+    "                Object.defineProperty(this, prop, {\n"
+    "                get: getter,\n"
+    "                set: setter,\n"
+    "                enumerable: true,\n"
+    "                configurable: true\n"
+    "                });\n"
+    "            }\n"
+    "        }\n"
+    "    });\n"
+    "}\n"
+    "\n"
+    "// object.unwatch\n"
+    "if (!Object.prototype.unwatch) {\n"
+    "    Object.defineProperty(Object.prototype, 'unwatch', {\n"
+    "        enumerable: false,\n"
+    "        configurable: true,\n"
+    "        writable: false,\n"
+    "        value: function (prop) {\n"
+    "            var val = this[prop];\n"
+    "            delete this[prop]; // remove accessors\n"
+    "            this[prop] = val;\n"
+    "        }\n"
+    "    });\n"
+    "}"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -9388,6 +9841,7 @@ BOOL isNumeric(NSString *s)
     "    // Anhand dieser Variable kann im Skript abgefragt werden, ob wir im Debugmode sind\n"
     "    // ohne 'var', damit global. \n"
     "    $debug = false;\n"
+    "    $swf8 = false;\n"
     "}\n"
     "\n"
     "\n"
@@ -9650,10 +10104,17 @@ BOOL isNumeric(NSString *s)
     "\n"
     "    var id = 'objectFromScript'+objectFromScriptCounter;\n"
     "\n"
+    "    // Die id mitgeben, damit ich es nach dem Einfügen daran wieder identifizieren und finden kann!\n"
     "    if (name === 'view') {\n"
     "        jQuery('<div/>', {\n"
     "            id: id,\n"
     "            class: 'div_standard noPointerEvents',\n"
+    "        }).appendTo(scope);\n"
+    "    }\n"
+    "    else if (name === 'text') {\n"
+    "        jQuery('<div/>', {\n"
+    "            id: id,\n"
+    "            class: 'div_text',\n"
     //"            text: 'Go to Google!'\n"
     "        }).appendTo(scope);\n"
     "    }\n"
@@ -9765,6 +10226,14 @@ BOOL isNumeric(NSString *s)
     "    }\n"
     "\n"
     "\n"
+    "    this.Formatter = function() {\n"
+    "        this.todo = function(scope,prop,val) {\n"
+    "        }\n"
+    "    }\n"
+    "    // Warum auch immer, hängt gemäß OL formatToString direkt im prototype...\n"
+    "    this.Formatter.prototype.formatToString = function() { return sprintf.apply(null, arguments); }\n"
+    "\n"
+    "\n"
     "    // A <dataset> tag defines a local dataset. The name of the dataset is used in the datapath attribute of a view.\n"
     "    this.dataset = function() {\n"
     "        this.setQueryParam = function(param) {\n"
@@ -9795,6 +10264,11 @@ BOOL isNumeric(NSString *s)
     "    this.view = function(scope,attributes) {\n"
     "        return createObjectFromScript('view',scope,attributes);\n"
     "    }\n"
+    "    this.text = function(scope,attributes) {\n"
+    "        return createObjectFromScript('text',scope,attributes);\n"
+    "    }\n"
+    "    // Warum auch immer, hängt gemäß OL formatToString direkt im prototype...\n"
+    "    this.text.prototype.formatToString = function() { return sprintf.apply(null, arguments); }\n"
     "}\n"
     "var lz = new lz_MetaClass();\n"
     "// lz.Focus is the single instance of the class lz.FocusService\n"
@@ -9810,7 +10284,9 @@ BOOL isNumeric(NSString *s)
     "\n"
     "// Viele Objekte können auch mit vorangestellten Lz aufgerufen werden\n"
     "LzBrowser = lz.Browser;\n"
+    "LzFormatter = lz.Formatter;\n"
     "LzView = lz.view;\n"
+    "LzText = lz.text;\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -9819,7 +10295,7 @@ BOOL isNumeric(NSString *s)
     "LzDelegate = function(scope,method) { var fn = window[method]; return fn.bind(scope); }\n"
     "\n"
     "\n"
-    "var setid = function() {}; // <-- Wird in lz.Browser.callJS aufgerufen ??\n"
+    //"var setid = function() {}; // <-- Wird in lz.Browser.callJS aufgerufen ??\n"
     "\n"
     "function LzContextMenu() { }\n"
     "\n"
@@ -9839,7 +10315,7 @@ BOOL isNumeric(NSString *s)
     //"// var canvas = new Object();\n"
     //"// statt dessen besser:\n"
     //"function canvasKlasse() {\n}\nvar canvas = new canvasKlasse();\n"
-    "var CheckBerufstatus = function() {}; //ToDo <-- Gefunden!\n"
+    "var SonstigeAusgaben = null; //function() {}; //ToDo <-- id von BDSinputgrid, welches noch nicht ausgewertet wird, deswegen muss ich die Var noch manuell bekannt machen\n"
     "\n"
     "var LzDataElement = {};\n"
     "LzDataElement.stringToLzData = function() {};\n"
@@ -9850,11 +10326,14 @@ BOOL isNumeric(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Debug = {};\n"
     "Debug.debug = function(s,v) {\n"
-    "    s = s.replace('%s',v);\n"
-    "    s = s.replace('%w',v);\n"
+    "    // Damit Example 5 von lz.Formatter kompiliert (jedoch ohne zu klappen):\n"
+    "    s = s.replace(' %w',' %s');\n"
+    "    s = s.replace(' %#w',' %s');\n"
+    //"    s = s.replace('%s',v);\n"
+    //"    s = s.replace('%w',v);\n"
     "    s = s + '<br />'\n"
     "    if ($('#debugInnerWindow').length)\n"
-    "        $('#debugInnerWindow').append(s)\n"
+    "        $('#debugInnerWindow').append(sprintf(s, v))\n"
     "    //alert(s)\n"
     "};\n"
     "Debug.write = function(s1,v) {\n"
@@ -9897,67 +10376,6 @@ BOOL isNumeric(NSString *s)
     "{\n"
     "    adjustOffsetOnBrowserResize();\n"
     "});\n"
-    "\n"
-    "\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// watch/unwatch-Skript um auf Änderungen von Variablen reagieren zu können\n"
-    "/////////////////////////////////////////////////////////\n"
-    "/*\n"
-    "* object.watch polyfill\n"
-    "*\n"
-    "* 2012-04-03\n"
-    "*\n"
-    "* By Eli Grey, http://eligrey.com\n"
-    "* Public Domain.\n"
-    "* NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.\n"
-    "*/\n"
-    "\n"
-    "// object.watch\n"
-    "if (!Object.prototype.watch) {\n"
-    "    Object.defineProperty(Object.prototype, 'watch', {\n"
-    "        enumerable: false,\n"
-    "        configurable: true,\n"
-    "        writable: false,\n"
-    "        value: function (prop, handler) {\n"
-    "            var oldval = this[prop], newval = oldval,\n"
-    "            getter = function () {\n"
-    "                return newval;\n"
-    "            },\n"
-    "            setter = function (val) {\n"
-    "                oldval = newval;\n"
-    "                return newval = handler.call(this, prop, oldval, val);\n"
-    "            };\n"
-    "            if (delete this[prop]) { // can't watch constants\n"
-    "                Object.defineProperty(this, prop, {\n"
-    "                get: getter,\n"
-    "                set: setter,\n"
-    "                enumerable: true,\n"
-    "                configurable: true\n"
-    "                });\n"
-    "            }\n"
-    "        }\n"
-    "    });\n"
-    "}\n"
-    "\n"
-    "// object.unwatch\n"
-    "if (!Object.prototype.unwatch) {\n"
-    "    Object.defineProperty(Object.prototype, 'unwatch', {\n"
-    "        enumerable: false,\n"
-    "        configurable: true,\n"
-    "        writable: false,\n"
-    "        value: function (prop) {\n"
-    "            var val = this[prop];\n"
-    "            delete this[prop]; // remove accessors\n"
-    "            this[prop] = val;\n"
-    "        }\n"
-    "    });\n"
-    "}"
-    "\n"
-    "\n"
-    "//////////////////////////////////////////////////////////\n"
-    "// Eigene addText()-Methode für ALLE DivElement-Objekte //\n"
-    "//////////////////////////////////////////////////////////\n"
-    "HTMLDivElement.prototype.addText = function(s) { $(this).append(s);};\n"
     "\n"
     "\n"
     "//////////////////////////////////////////////////////////\n"
@@ -10008,20 +10426,6 @@ BOOL isNumeric(NSString *s)
     "//////////////////////////////////////////////////////////\n"
     "// Eigene setAttribute-Methode für ALLE Objekte (JS+DOM)//\n"
     "//////////////////////////////////////////////////////////\n"
-    "/*\n"
-    "Object.prototype.setAttribute_ = function(attributeName,value)\n"
-    "{\n"
-    "    if (attributeName == undefined || attributeName == '')\n"
-    "        return;\n"
-    "    if (value == undefined)\n"
-    "        return;\n"
-    "\n"
-    "    if (attributeName == 'text')\n"
-    "        $(this).html(value);\n"
-    "};\n"
-    "*/\n"
-    "\n"
-    "\n"
     "// Diese Funktion werde ich gleich 3 mal prototypen müssen um setAttribute in allen Browsern zu überschreiben\n"
     "// Neu: Leider bricht setAttribute jQuery.attr(), ein Zurückbehalten auf das originale setAttribute hat wirklich nicht geklapopt \n"
     "// Deswegen arbeite ich nun mit setAttribute_ und replacement dieser Funktionen im OL-Code \n"
@@ -10238,6 +10642,27 @@ BOOL isNumeric(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Methoden von <div> (OL: <node>)                     //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "////////////////////////INCOMPLETE///////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// destroy() - nachimplementiert                       //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var destroyFunction = function () {\n"
+    "    $(this).remove;\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.destroy = destroyFunction;\n"
+    "HTMLInputElement.prototype.destroy = destroyFunction;\n"
+    "HTMLSelectElement.prototype.destroy = destroyFunction;\n"
+    "HTMLButtonElement.prototype.destroy = destroyFunction;\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
     "// Methoden von <div> (OL: <view>)                     //\n"
     "/////////////////////////////////////////////////////////\n"
     "////////////////////////INCOMPLETE///////////////////////\n"
@@ -10268,6 +10693,108 @@ BOOL isNumeric(NSString *s)
     "HTMLInputElement.prototype.bringToFront = bringToFrontFunction;\n"
     "HTMLSelectElement.prototype.bringToFront = bringToFrontFunction;\n"
     "HTMLButtonElement.prototype.bringToFront = bringToFrontFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Methoden von <div class=\"div_text\"> (OL: <text>)    //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "////////////////////////INCOMPLETE///////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Nur für class='div_text' sind diese Methoden gültig //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function warnOnWrongClass(me) {\n"
+    "    if (!$(me).hasClass('div_text'))\n"
+    "    {\n"
+    "        alert('Wieso meinst du mich aufrufen zu können? Du bist doch gar kein \\'div_text\\'. Ernsthafte Frage!');\n"
+    "        return true;\n"
+    "    }\n"
+    "    return false;\n"
+    "}\n"
+    "\n"
+    "\n"
+    "//////////////////////////////////////////////////////////\n"
+    "// addFormat() - nachimplementiert                      //\n"
+    "//////////////////////////////////////////////////////////\n"
+    "HTMLDivElement.prototype.addFormat = function() {\n"
+    "    warnOnWrongClass(this);\n"
+    "    $(this).append(sprintf.apply(null, arguments));\n"
+    "}\n"
+    "\n"
+    "\n"
+    "//////////////////////////////////////////////////////////\n"
+    "// addText() - nachimplementiert                        //\n"
+    "//////////////////////////////////////////////////////////\n"
+    "HTMLDivElement.prototype.addText = function(s) {\n"
+    "    warnOnWrongClass(this);\n"
+    "    $(this).append(s);\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// clearText() - nachimplementiert                     //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var clearTextFunction = function () {\n"
+    "    warnOnWrongClass(this);\n"
+    "    $(this).html('');\n"
+    "}\n"
+    "\n"
+    "// Nur für div! Da es die Methode nur bei <div class=\"div_text\"> gibt\n"
+    "HTMLDivElement.prototype.clearText = clearTextFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// getText() - nachimplementiert - deprecated!         //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var getTextFunction = function () {\n"
+    "    warnOnWrongClass(this);\n"
+    "    return $(this).html();\n"
+    "}\n"
+    "\n"
+    "// Nur für div! Da es die Methode nur bei <div class=\"div_text\"> gibt\n"
+    "HTMLDivElement.prototype.getText = getTextFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// getTextHeight() - nachimplementiert                 //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var getTextHeightFunction = function () {\n"
+    "    warnOnWrongClass(this);\n"
+    "    return $(this).outerHeight();\n"
+    "}\n"
+    "\n"
+    "// Nur für div! Da es die Methode nur bei <div class=\"div_text\"> gibt\n"
+    "HTMLDivElement.prototype.getTextHeight = getTextHeightFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// getTextWidth() - nachimplementiert                  //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var getTextWidthFunction = function () {\n"
+    "    warnOnWrongClass(this);\n"
+    "    return $(this).outerWidth();\n"
+    "}\n"
+    "\n"
+    "// Nur für div! Da es die Methode nur bei <div class=\"div_text\"> gibt\n"
+    "HTMLDivElement.prototype.getTextWidth = getTextWidthFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// format() - nachimplementiert                        //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var formatFunction = function () {\n"
+    "    warnOnWrongClass(this);\n"
+    "    $(this).html(sprintf.apply(null, arguments));\n"
+    // "    alert(sprintf.apply(this, arguments));\n"
+    "}\n"
+    "\n"
+    "// Nur für div! Da es die Methode nur bei <div class=\"div_text\"> gibt\n"
+    "HTMLDivElement.prototype.format = formatFunction;\n"
+    "\n"
+    "// Ziemlich seltsame Geschichte, aber formatToString hängt iwie auch bei <text> mit drin\n"
+    "HTMLDivElement.prototype.formatToString = LzFormatter.prototype.formatToString;\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -10514,7 +11041,7 @@ BOOL isNumeric(NSString *s)
     "  // und die Attribute übernehmen (bei gleichen gelten die hierachiemäßig allernächsten).\n"
     "  // Außerdem den HTML-Content von Vorfahren einfügen und individuelle ID vergeben.\n"
     "  var currentObj = obj; // Zwischenspeichern\n"
-    "  while (obj.parent.name !== 'view')\n"
+    "  while (obj.parent !== undefined)\n"
     "  {\n"
     "    // Doppelte Einträge von Attributen entfernen\n"
     "    obj.parent = deleteAttributesPreviousDeclared(currentObj.attributeNames,obj.parent);\n"
@@ -10531,9 +11058,39 @@ BOOL isNumeric(NSString *s)
     "    // Dann den HTML-Content des Vorfahren einfügen\n"
     "    // Prepend! Da es der OpenLaszlo-Logik entspricht, tiefer verschachtelte Vorfahren immer davor zu setzen\n"
     "    // Vorher aber die ID ersetzen\n"
-    "    obj.parent.contentHTML = replaceID(obj.parent.contentHTML,''+$(id).attr('id')+'_'+obj.parent.name);\n"
-    "    $(id).prepend(obj.parent.contentHTML);\n"
-    "    // Warum hänge ich da den Namen parent.name dran??? ToDo ???\n"
+    "    // Irgendwas stimmt in der Logik noch nicht... Nach meinem Verständnis erben alle Klassen von view\n"
+    "    // So steht es auch in der Doku. Deswegen ist um alle Klassen eine View <div class='div-standard'> herumgebaut, an welche dann immer prepended wird.\n"
+    "    // Dies geht aber nicht auf z. B. bei extends='text', dann nämlich muss die äußerste view ein\n"
+    "    // <div class='div_text'> sein. (obwohl 'text' ja eigentlich auch nochmal von view erbt...)\n"
+    "    // Dies äußerst sich darin, dass z. B. ein onclick-Handler auf höchster Ebene der Klasse mit 'this' auch"
+    "    // Methoden von <text> aufrufen kann (2. Beispiel von <text> in OL-Doku)\n"
+    "    // Derzeitige Lösung: Bei Text nicht appenden, sondern ersetzen... (und die Attribute übernehmen)\n"
+    "    if (obj.parent.name === 'text' || obj.parent.name === 'inputtext')\n"
+    "    {\n"
+    "        // Da wir ersetzen, bekommt dieses Element den Universal-id-Namen\n"
+    "        obj.parent.contentHTML = replaceID(obj.parent.contentHTML,''+$(id).attr('id'));\n"
+    "        var theSavedCSSFromRemovedElement = $(id).replaceWith(obj.parent.contentHTML).attr('style');\n"
+    "        // Interne ID der Funktion neu setzen\n"
+    "        id = document.getElementById(id.id);\n"
+    "        // Und externen elementnamen neu setzen\n"
+    "        window[id.id] = id; // Falls es irgendwo als parent gesetzt wurde, puh... überlegen, wie ich da dran käme\n"
+    "        // Und das gerettete CSS wieder einsetzen\n"
+    "        $(id).attr('style',theSavedCSSFromRemovedElement);\n"
+    "        // Und die Original-Propertys wieder herstellen mit Default-Werten (Wie käme ich an die Nicht-Default-Werte ... ?)\n"
+    "        Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
+    "        {\n"
+    "            id[key] = obj.selfDefinedAttributes[key];\n"
+    "        });\n"
+    "    }\n"
+    "    else\n"
+    "    {\n"
+    "        if (obj.parent.contentHTML.length > 0)\n"
+    "        {\n"
+    "            // Damit es die IDs nicht doppelt gibt, hänge ich 'parent.name' dran.\n"
+    "            obj.parent.contentHTML = replaceID(obj.parent.contentHTML,''+$(id).attr('id')+'_'+obj.parent.name);\n"
+    "            $(id).prepend(obj.parent.contentHTML);\n"
+    "        }\n"
+    "    }\n"
     "\n"
     "    // Dann den kompletten JS-Code ausführen\n"
     "    executeJSCodeOfThisObject(obj.parent, id);\n"
@@ -10693,13 +11250,20 @@ BOOL isNumeric(NSString *s)
     "      }\n"
     "      else if (an[i] === 'text')\n"
     "      {\n"
-    "        $(id).children().html(av[i]);\n"
+    //"        $(id).children().html(av[i]);\n"
+    "        // JEDE Klasse hat das Attribut 'text', weil es den Text zwischen öffnendem und schließendem Tag darstellt\n"
+    "        // Deswegen nur dann setzen, wenn auch Text zwischen den Tags war. Sonst werden eventuell andere Tags überschrieben\n"
+    "        if (av[i] != '')\n"
+    "            $(id).html(av[i]);\n"
     "      }\n"
     "      else { alert('Hoppala, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() als jsAttribute ausgewertet werden.'); }\n"
     "    }\n"
-    "    else if (an[i] === '_textBetweenTags')\n"
+    "    else if (an[i] === 'textBetweenTags_')\n"
     "    {\n"
-    "        // Wird erst weiter unten ausgewertet\n"
+    "        // Damit passiert erstmal nichts. Aber falls die Klasse ein Attribut text definiert hat, wird der Wert zugeordnet\n"
+    "        // Klassen die <text> oder <inputtext> extenden haben dieses Attribut von haus aus und IMMER Zugriff auf Text der zwischen Tags übergeben wurde (Example 28.9 und Example 28.10)\n"
+    "        if (id.text !== undefined)\n"
+    "            id.text = av[i];\n"
     "    }\n"
     "    else { alert('Whoops, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() ausgewertet werden.'); }\n"
     "  }\n"
@@ -10717,13 +11281,13 @@ BOOL isNumeric(NSString *s)
     "  $(id).prepend(s); // dann den neuen Code anfügen\n"
     "\n"
     "\n"
-    "  // Wenn es Ein Text-Attribut gibt und eine Klasse mit class='div_text' vorliegt, und auch text übergeben wurde,\n"
-    "  // dann wird der textBetweenTags in das Element, welches 'div_text' als Klasse hat, eingefügt.\n"
-    "  // Example 28.10. Defining new text classes\n"
-    "  if (id.text !== undefined && $(s).hasClass('div_text') && jQuery.inArray('_textBetweenTags',an) != -1 && av[jQuery.inArray('_textBetweenTags',an)] !== '')\n"
-    "    $('#'+$(s).attr('id')).html(av[jQuery.inArray('_textBetweenTags',an)]);\n"
-    "\n"
-    "\n"
+    //"  // Wenn es Ein Text-Attribut gibt und eine Klasse mit class='div_text' vorliegt, und auch text übergeben wurde,\n"
+    //"  // dann wird der textBetweenTags in das Element, welches 'div_text' als Klasse hat, eingefügt.\n"
+    //"  // Example 28.10. Defining new text classes\n"
+    //"  if (id.text !== undefined && $(s).hasClass('div_text') && jQuery.inArray('textBetweenTags_',an) != -1 && av[jQuery.inArray('textBetweenTags_',an)] !== '')\n"
+    //"    $('#'+$(s).attr('id')).html(av[jQuery.inArray('textBetweenTags_',an)]);\n"
+    //"\n"
+    //"\n"
     "  // ********* Damit 'defaultplacement' gesetzt werden kann *********\n"
     "  // ********* Die Variable, auf die defaultplacement verweist, wird hier bekannt gemacht *********\n"
     "      // Replace-IDs von contentJS ersetzen\n"
@@ -10748,30 +11312,35 @@ BOOL isNumeric(NSString *s)
     "function executeJSCodeOfThisObject(obj, id)\n"
     "{\n"
     "  // Replace-IDs von contentLeadingJSHead ersetzen\n"
-    "  var s = replaceID(obj.contentLeadingJSHead,$(id).attr('id'));\n"
+    "  var s = replaceID(obj.contentLeadingJSHead, $(id).attr('id'));\n"
     "  // Dann den LeadingJSHead-Content hinzufügen/auswerten\n"
-    "  evalCode(s);\n"
+    "  if (s.length > 0)\n"
+    "    evalCode(s);\n"
     "\n"
     "  // Replace-IDs von contentJSHead ersetzen\n"
-    "  var s = replaceID(obj.contentJSHead,$(id).attr('id'));\n"
+    "  var s = replaceID(obj.contentJSHead, $(id).attr('id'));\n"
     "  // Dann den JSHead-Content hinzufügen/auswerten\n"
-    "  evalCode(s);\n"
+    "  if (s.length > 0)\n"
+    "    evalCode(s);\n"
     "\n"
     "  // Replace-IDs von contentJS ersetzen\n"
-    "  var s = replaceID(obj.contentJS,$(id).attr('id'));\n"
+    "  var s = replaceID(obj.contentJS, $(id).attr('id'));\n"
     "  // Dann den JS-Content hinzufügen/auswerten\n"
-    "  evalCode(s);\n"
+    "  if (s.length > 0)\n"
+    "    evalCode(s);\n"
     "\n"
     "  // Replace-IDs von contentLeadingJQuery ersetzen\n"
-    "  var s = replaceID(obj.contentLeadingJQuery,$(id).attr('id'));\n"
+    "  var s = replaceID(obj.contentLeadingJQuery, $(id).attr('id'));\n"
     "  // Dann den LeadingJQuery-Content hinzufügen/auswerten\n"
     "  // evalCode benötigt Referenz auf id, damit es Methoden direkt adden kann\n"
-    "  evalCode(s,id);\n"
+    "  if (s.length > 0)\n"
+    "    evalCode(s,id);\n"
     "\n"
     "  // Replace-IDs von contentJQuery ersetzen\n"
-    "  var s = replaceID(obj.contentJQuery,$(id).attr('id'));\n"
+    "  var s = replaceID(obj.contentJQuery, $(id).attr('id'));\n"
     "  // Dann den jQuery-Content hinzufügen/auswerten\n"
-    "  evalCode(s);\n"
+    "  if (s.length > 0)\n"
+    "    evalCode(s);\n"
     "}\n"
     "\n"
     "\n"
@@ -10827,6 +11396,8 @@ BOOL isNumeric(NSString *s)
     "\n"
     "  this.attributeNames = [];\n"
     "  this.attributeValues = [];\n"
+    "\n"
+    "  this.contentHTML = '';\n"
     "}\n"
     "\n"
     "\n"

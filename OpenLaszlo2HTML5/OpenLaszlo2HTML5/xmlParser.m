@@ -10,12 +10,22 @@
 // 'name' Attribute werden global gemacht, aber zumindestens bei input-Feldern
 // überschreiben Sie sich dann gegenseitig. z. B. 'Gewerbesteuerpflicht', 'cbType' oder
 // 'regelmaessig', 'begruendet', 'complete'
+// -> Ja, ist ja auch Unsinn. Aber erst toggleVisibility auf constraints umstellen, dann kann ich
+// die Zeile die 'name'-Attribute global macht, wohl rausnehmen!
+// -> Aber Vorsicht!! Wenn die View auf erster Ebene ist, muss sie weiterhin global bleiben!
+// http://www.openlaszlo.org/lps4.2/docs/developers/program-development.html Dort 2.2.3
+//
 //
 //
 // Eher unwichtig:
 // - width/height muss nicht mehr initial auf 'auto' gesetzt werden, seitdem der ganze JS-Code
 // in '$(window).load(function()' steckt,
 //
+//
+//
+// Als Optionen mit anbieten
+// - skip build-in-splash-Tag
+// - keep comments
 //
 //  Created by Matthias Blanquett on 13.04.12.
 //  Copyright (c) 2012 Buhl. All rights reserved.
@@ -26,9 +36,11 @@ BOOL alternativeFuerSimplelayout = YES; // Bei YES kann <simplelayout> an belieb
                                         // Es scheint sehr zuverlässig zu funktionieren inzwischen.
                                         // Kann wohl dauerhaft auf YES bleiben!
 
-BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
+
+BOOL legeDatasetsAlsXMLan = NO;
 
 
 #import "xmlParser.h"
@@ -1437,16 +1449,19 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jsOutput appendFormat:@"  %@ = document.getElementById('%@');\n",name, self.zuletztGesetzteID];
 
 
-        [self.jsOutput appendString:@"  // ...and all 'name'-attributes, can be referenced by its parent Element...\n"];
+        [self.jsOutput appendString:@"  // All 'name'-attributes, can be referenced by its parent Element\n"];
         // So nicht: !!!!!
         // [self.jsOutput appendFormat:@"  $('#%@').parent().get(0).%@ = %@;\n",self.zuletztGesetzteID,name, name];
         // Denn das jQuery-Parent berücksichtigt ja nicht den Doppelsprung bei <input> und <select>
         // Deswegen getTheParent benutzen. (Was ja intern auch jQuery-parent nimmt, aber notfalls
         // auch doppelt!)
-        [self.jsOutput appendFormat:@"  %@.getTheParent().%@ = %@;\n",name, name, name];
+        [self.jsOutput appendFormat:@"  document.getElementById('%@').getTheParent().%@ = %@;\n",self.zuletztGesetzteID, name, name];
 
-        [self.jsOutput appendString:@"  // ...and all 'name'-attributes, can be referenced by canvas.*\n"];
-        [self.jsOutput appendFormat:@"  canvas.%@ = %@;\n",name, name];
+        //[self.jsOutput appendString:@"  // ...and all 'name'-attributes, can be referenced by canvas.*\n"];
+        //[self.jsOutput appendFormat:@"  canvas.%@ = %@;\n",name, name];
+        // Nein... das stimmt nicht so generell. Es kann nur sein, dass sich dies ergibt, weil
+        // der parent halt 'canvas' ist. Deswegen musste diese Anweisung raus, hat sonst Sachen
+        // überschrieben, wenn es mehrere name-Attribute im Dokument mit gleichem Namen gab
     }
 }
 
@@ -2114,6 +2129,27 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
 
+    // <splash view> -> Nur <view>'s innerhalb von <splash> haben dieses Attribute
+    if ([attributeDict valueForKey:@"center"])
+    {
+        self.attributeCount++;
+
+        if ([[attributeDict valueForKey:@"center"] isEqualToString:@"true"])
+        {
+            NSLog(@"Setting the attribute 'center=true' as setAttribute('align','center');");
+
+            [self.jQueryOutput appendString:@"\n  // the Splashscreen should be in the center\n"];
+            [self.jQueryOutput appendFormat:@"  %@.setAttribute_('align','center');\n",self.zuletztGesetzteID];
+        }
+
+    }
+    // <splash view> -> Nur <view>'s innerhalb von <splash> haben dieses Attribute
+    // Scheint mir unwichtig (ToDo?)
+    if ([attributeDict valueForKey:@"ratio"])
+    {
+        self.attributeCount++;
+        NSLog(@"Skipping the attribute 'ratio'.");
+    }
 
     // ToDo
     if ([attributeDict valueForKey:@"clickable"])
@@ -2964,10 +3000,16 @@ didStartElement:(NSString *)elementName
         self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
     }
 
+
     // Alle Elemente in dataset, die nicht 'items' sind, werden in Objekt-Propertys des zugehörigen
     // Objektes umgewandelt (Der Objektname kommt aus dem dataset-'name'-Attribut)
+    // Neu: Sie werden alternativ in eine XML-Struktur überführt
     if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
     {
+
+        NSString *gesammelterText = [self holDenGesammeltenTextUndLeereIhn];
+
+
         if (self.textInProgress != nil)
             self.textInProgress = [NSMutableString stringWithFormat:@""];
 
@@ -2987,6 +3029,7 @@ didStartElement:(NSString *)elementName
             [self.lastUsedDataset isEqualToString:@"dsElsterSend"] ||
             [self.lastUsedDataset isEqualToString:@"dsElsterError"] ||
             [self.lastUsedDataset isEqualToString:@"dsPaymentPaypal"] ||
+            [self.lastUsedDataset isEqualToString:@"dsPayment"] ||
             [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExt"] ||
             [self.lastUsedDataset isEqualToString:@"dsmetaBelege"] ||
             [self.lastUsedDataset isEqualToString:@"dsCalcedData"] ||
@@ -3003,52 +3046,81 @@ didStartElement:(NSString *)elementName
         // Ganz am Anfang erstmal das Objekt an sich anlegen
         if (self.datasetItemsCounter == 0)
         {
-            [self.jsHead2Output appendString:@"\n// Dieses Dataset wird als Objekt angelegt und bekommt alle Elemente als neue Objekt-Propertys mit\n"];
-            [self.jsHead2Output appendString:@"var "];
-            [self.jsHead2Output appendString:self.lastUsedDataset];
-            [self.jsHead2Output appendString:@" = new lz.dataset();\n"];
+            if (legeDatasetsAlsXMLan)
+            {
+                [self.jsHead2Output appendString:@"\n// Dieses Dataset wird als XML-Struktur angelegt und in einer JS-String-Var gespeichert.\n"];
+                [self.jsHead2Output appendString:@"var "];
+                [self.jsHead2Output appendString:self.lastUsedDataset];
+                [self.jsHead2Output appendString:@" = '';\n"];
+            }
+            else
+            {
+                [self.jsHead2Output appendString:@"\n// Dieses Dataset wird als Objekt angelegt und bekommt alle Elemente als neue Objekt-Propertys mit\n"];
+                [self.jsHead2Output appendString:@"var "];
+                [self.jsHead2Output appendString:self.lastUsedDataset];
+                [self.jsHead2Output appendString:@" = new lz.dataset();\n"];
+            }
         }
 
-        // Und jetzt alle <tags> dem Objekt als Property, welches wieder ein Objekt ist, hinzufügen
-        // Wenn das <tag> jedoch ein Attribut 'id' hat, dann mach doch ein Array.
-        if ([attributeDict valueForKey:@"id"])
+
+        if (legeDatasetsAlsXMLan)
         {
-            [self.jsHead2Output appendString:self.lastUsedDataset];
-            [self addEnclosingElementsToDatasetProperty];
-            [self.jsHead2Output appendFormat:@".%@ = ['%@'];\n",elementName,[attributeDict valueForKey:@"id"]];
+                [self.jsHead2Output appendFormat:@"%@ += '%@<%@>';\n", self.lastUsedDataset, gesammelterText, elementName];
         }
         else
         {
-            [self.jsHead2Output appendString:self.lastUsedDataset];
-            [self addEnclosingElementsToDatasetProperty];
-            [self.jsHead2Output appendFormat:@".%@ = {};\n",elementName];
-        }
-
-        // Dann bekommen die internen Objekt-Propertys die Attribute als Propertys mit
-        NSArray *keys = [attributeDict allKeys];
-        if ([keys count] > 0)
-        {
-            for (NSString *key in keys)
+            // Jetzt alle <tags> dem Objekt als Property, welches wieder ein Objekt ist, hinzufügen
+            // Wenn das <tag> jedoch ein Attribut 'id' hat, dann mach doch ein Array.
+            if ([attributeDict valueForKey:@"id"])
             {
-                NSString *s = [attributeDict valueForKey:key];
-                // Übernommen analog zur anderen attributeDict-Schleife. Siehe dort
-                s = [s stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"];
-                s = [s stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
+                [self.jsHead2Output appendString:self.lastUsedDataset];
+                [self addEnclosingElementsToDatasetProperty];
+                [self.jsHead2Output appendFormat:@".%@ = ['%@'];\n",elementName,[attributeDict valueForKey:@"id"]];
+            }
+            else
+            {
+                [self.jsHead2Output appendString:self.lastUsedDataset];
+                [self addEnclosingElementsToDatasetProperty];
+                [self.jsHead2Output appendFormat:@".%@ = {};\n",elementName];
+            }
 
-                // Weil wir 'id' ja weiter oben berücksichtigt haben
-                if (![key isEqualToString:@"id"])
+
+            // Dann bekommen die internen Objekt-Propertys die Attribute als Propertys mit
+            NSArray *keys = [attributeDict allKeys];
+            if ([keys count] > 0)
+            {
+                for (NSString *key in keys)
                 {
-                    [self.jsHead2Output appendString:self.lastUsedDataset];
-                    [self addEnclosingElementsToDatasetProperty];
-                    [self.jsHead2Output appendFormat:@".%@.%@ = \"%@\";\n",elementName,key,s];
+                    NSString *s = [attributeDict valueForKey:key];
+                    // Übernommen analog zur anderen attributeDict-Schleife. Siehe dort
+                    s = [s stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"];
+                    s = [s stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
+                    
+                    // Weil wir 'id' ja weiter oben berücksichtigt haben
+                    if (![key isEqualToString:@"id"])
+                    {
+                        [self.jsHead2Output appendString:self.lastUsedDataset];
+                        [self addEnclosingElementsToDatasetProperty];
+                        [self.jsHead2Output appendFormat:@".%@.%@ = \"%@\";\n",elementName,key,s];
+                    }
                 }
             }
         }
+
+
+
+
+
 
         self.datasetItemsCounter++;
 
         // In den Strings von datasets können auch <br />'s drin sein, usw.
         self.weAreCollectingTextAndThereMayBeHTMLTags = YES;
+
+
+        // Aber das muss ich hier noch aufrufen, wegen dem vorzeitigen return:
+        [self initTextAndKeyInProgress:elementName];
+
 
         // Nicht weiter auswerten hier! Das sind selbst definierte Tags. Die werden nicht matchen
         // Es wurde eh alles erledigt (dataset-Eintrag wurde als property in das Objekt übernommen)
@@ -3056,8 +3128,7 @@ didStartElement:(NSString *)elementName
     }
 
 
-    // skipping all Elements in splash (ToDo)
-    // skipping all Elements in fileUpload (ToDo)
+    // skipping all Elements in fileUpload (ToDo) (and other elements)
     if (self.weAreCollectingTheCompleteContentInClass)
     {
         // Wenn wir in <class> sind, sammeln wir alles (wird erst später rekursiv ausgewertet)
@@ -3124,6 +3195,9 @@ didStartElement:(NSString *)elementName
 
         return;
     }
+
+
+
     // skipping All Elements in BDSreplicator (ToDo)
     // skipping all Elements in BDSinputgrid (ToDo)
     if (self.weAreSkippingTheCompleteContentInThisElement2)
@@ -3131,6 +3205,7 @@ didStartElement:(NSString *)elementName
         NSLog([NSString stringWithFormat:@"\nSkipping the Element %@", elementName]);
         return;
     }
+
     // skipping All Elements in nicebox (ToDo)
     if (self.weAreSkippingTheCompleteContentInThisElement3)
     {
@@ -3145,19 +3220,20 @@ didStartElement:(NSString *)elementName
         return;
     }
 
-
-
+    // Muss nach dieser when-truncs-Abfrage kommen, deswegen oben teilweise
+    // nochmal diese Initialisierung
+    [self initTextAndKeyInProgress:elementName];
 
 
     NSLog([NSString stringWithFormat:@"\nOpening Element: %@ (Neue Verschachtelungstiefe: %d)", elementName,self.verschachtelungstiefe]);
     NSLog([NSString stringWithFormat:@"with these attributes: %@\n", attributeDict]);
 
 
-    [self initTextAndKeyInProgress:elementName];
 
 
     if ([elementName isEqualToString:@"window"] ||
         [elementName isEqualToString:@"view"] ||
+        [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"basebutton"] ||
@@ -3600,9 +3676,14 @@ didStartElement:(NSString *)elementName
         if ([attributeDict valueForKey:@"name"])
         {
             self.attributeCount++;
-            NSLog(@"Setting the attribute 'name' as JS-varname for the datapointer.");
+            NSLog(@"Setting the attribute 'name' as JS-var-name for the datapointer.");
         }
 
+        if ([attributeDict valueForKey:@"id"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'id' as JS-var-name for the datapointer.");
+        }
 
 
         if ([attributeDict valueForKey:@"xpath"])
@@ -3615,20 +3696,28 @@ didStartElement:(NSString *)elementName
             [self instableXML:@"Ein datapointer ohne 'xpath'-Attribut macht wohl keinen Sinn."];
         }
         NSString *dp = [attributeDict valueForKey:@"xpath"];
+        // In Anführungszeichen setzen:
         if ([dp length] > 0)
             dp = [NSString stringWithFormat:@"'%@'",dp];
 
 
+        // Den Namen für den Datapointer ermitteln. Entweder anhand 'name' oder 'id'.
+        // Wenn beides dann id bevorzugen
+        NSString *name = @"";
+        if ([attributeDict valueForKey:@"name"])
+            name = [attributeDict valueForKey:@"name"];
+        if ([attributeDict valueForKey:@"id"])
+            name = [attributeDict valueForKey:@"id"];
 
         // Ich lege jeden datapointer als globales Objekt an, auf welches zugegriffen werden kann
-        if ([attributeDict valueForKey:@"name"])
+        if ([name length] > 0)
         {
             [self.jQueryOutput appendString:@"\n  // Ein Datapointer (bewusst ohne var, damit global verfügbar)\n"];
             [self.jQueryOutput appendFormat:@"  %@ = new lz.datapointer(%@);\n",[attributeDict valueForKey:@"name"],dp];
         }
         else
         {
-            [self.jQueryOutput appendString:@"\n  // Ein Datapointer ohne 'name'-Attribut. Wohl nur um ein Handler daran zu binden oder so\n"];
+            [self.jQueryOutput appendString:@"\n  // Ein Datapointer ohne 'name'- oder 'id'-Attribut. Wohl nur um ein Handler daran zu binden oder so... hmmm\n"];
             [self.jQueryOutput appendFormat:@"  new lz.datapointer(%@);\n",dp];
         }
 
@@ -5422,7 +5511,12 @@ didStartElement:(NSString *)elementName
 
 
 
+    if ([elementName isEqualToString:@"splash"])
+    {
+        element_bearbeitet = YES;
 
+        [self.output appendString:@"<div id=\"splashtag_\" style=\"width:100%;height:100%;z-index:10001;\">\n"];
+    }
 
 
 
@@ -5658,11 +5752,7 @@ didStartElement:(NSString *)elementName
         // Alles was in class definiert wird, wird extra gesammelt
         self.weAreCollectingTheCompleteContentInClass = YES;
     }
-    if ([elementName isEqualToString:@"splash"]) // ToDo (ist das vielleicht selbst definierte Klasse?)
-    {
-        element_bearbeitet = YES;
-        self.weAreCollectingTheCompleteContentInClass = YES;
-    }
+
     if ([elementName isEqualToString:@"fileUpload"]) // ToDo (ist selbst defnierte Klasse)
     {
         element_bearbeitet = YES;
@@ -7436,7 +7526,7 @@ BOOL isJSArray(NSString *s)
         // Wenn wir gerade eh nur sammeln (und erst später auswerten), dann bitte nicht testen,
         if (!self.weAreCollectingTheCompleteContentInClass)
         {
-            //[self instableXML:[NSString stringWithFormat:@"Hoppala, das sollte aber nicht passieren, dass ich hier noch nicht ausgewerteten Text habe (textInProgress: '%@' - Länge textInProgress: %d - keyInProgress: '%@')",s,[s length],self.keyInProgress]];
+            [self instableXML:[NSString stringWithFormat:@"Hoppala, das sollte aber nicht passieren, dass ich hier noch nicht ausgewerteten Text habe (textInProgress: '%@' - Länge textInProgress: %d - keyInProgress: '%@')",s,[s length],self.keyInProgress]];
 
             // Okay bei GFlender-Code kommt das zwar nicht vor, aber es kann gemäß OL
             // trotzdem passieren (Example 28.16.):
@@ -7596,7 +7686,7 @@ BOOL isJSArray(NSString *s)
 
         self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
 
-        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
+        NSString *gesammelterText = [self holDenGesammeltenTextUndLeereIhn];
 
 
 
@@ -7614,6 +7704,7 @@ BOOL isJSArray(NSString *s)
             [self.lastUsedDataset isEqualToString:@"dsElsterSend"] ||
             [self.lastUsedDataset isEqualToString:@"dsElsterError"] ||
             [self.lastUsedDataset isEqualToString:@"dsPaymentPaypal"] ||
+            [self.lastUsedDataset isEqualToString:@"dsPayment"] ||
             [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExt"] ||
             [self.lastUsedDataset isEqualToString:@"dsmetaBelege"] ||
             [self.lastUsedDataset isEqualToString:@"dsCalcedData"] ||
@@ -7623,15 +7714,21 @@ BOOL isJSArray(NSString *s)
 
 
 
-
-        if ([s length] > 0)
+        if (legeDatasetsAlsXMLan)
         {
-            // Dann ist es doch kein Objekt... sondern es wird ein Inhalt erfasst.
-            if ( [self.jsHead2Output length] > 0)
-                self.jsHead2Output = [NSMutableString stringWithFormat:[self.jsHead2Output substringToIndex:[self.jsHead2Output length] - 4]];
+            [self.jsHead2Output appendFormat:@"%@ += '%@</%@>';\n",self.lastUsedDataset, gesammelterText, elementName];
+        }
+        else
+        {
+            if ([gesammelterText length] > 0)
+            {
+                // Dann ist es doch kein Objekt... sondern es wird ein Inhalt erfasst.
+                if ( [self.jsHead2Output length] > 0)
+                    self.jsHead2Output = [NSMutableString stringWithFormat:[self.jsHead2Output substringToIndex:[self.jsHead2Output length] - 4]];
 
-            // Und hinzufügen von gesammelten Text, falls er zwischen den tags gesetzt wurde.
-            [self.jsHead2Output appendFormat:@"%@;\n",s];
+                // Und hinzufügen von gesammelten Text, falls er zwischen den tags gesetzt wurde.
+                [self.jsHead2Output appendFormat:@"%@;\n",gesammelterText];
+            }
         }
 
 
@@ -7640,7 +7737,7 @@ BOOL isJSArray(NSString *s)
 
 
         // Das sind selbstdefinierte Tags. Raus hier. Die werden niemals matchen
-        // Es wurde ja alles schon beim öffnen erledigt.
+        // Es wurde ja alles erledigt.
         return;
     }
 
@@ -7910,7 +8007,6 @@ BOOL isJSArray(NSString *s)
     }
 
     if ([elementName isEqualToString:@"class"] ||
-        [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"fileUpload"] ||
         [elementName isEqualToString:@"dlginfo"] ||
         [elementName isEqualToString:@"dlgwarning"] ||
@@ -8013,6 +8109,7 @@ BOOL isJSArray(NSString *s)
 
     if ([elementName isEqualToString:@"window"] ||
         [elementName isEqualToString:@"view"] ||
+        [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"deferviewToDoDeleteMe"] ||
         [elementName isEqualToString:@"rotateNumber"] ||
@@ -8155,6 +8252,7 @@ BOOL isJSArray(NSString *s)
     if ([elementName isEqualToString:@"canvas"] || 
         [elementName isEqualToString:@"view"] ||
         [elementName isEqualToString:@"window"] ||
+        [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"deferviewToDoDeleteMe"] ||
         [elementName isEqualToString:@"checkviewToDoDeleteMe"] ||
@@ -8693,6 +8791,9 @@ BOOL isJSArray(NSString *s)
     // jQuery UI laden (wegen TabSheet)
     [pre appendString:@"<script type=\"text/javascript\" src=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.21/jquery-ui.min.js\"></script>\n"];
 
+    // Warum auch immer: general.js wird automatisch importiert
+    [pre appendString:@"<script type=\"text/javascript\" src=\"includes/general.js\"></script>\n"];
+
     // Unser eigenes Skript lieber zuerst
     [pre appendString:@"<script type=\"text/javascript\" src=\"jsHelper.js\"></script>\n"];
 
@@ -8803,6 +8904,7 @@ BOOL isJSArray(NSString *s)
         [self.output appendString:@"  $('ul').addClass('ui-corner-top');\n"];
     }
     // Remove Splashscreen
+    [self.output appendString:@"\n  $('#splashtag_').remove(); // The Build-In-SplashTag"];
     [self.output appendString:@"\n  $('#splashscreen_').remove();\n"];
 
     [self.output appendString:@"});\n</script>\n\n"];
@@ -10127,9 +10229,13 @@ BOOL isJSArray(NSString *s)
     "    {\n"
     "        if (attributes.name)\n"
     "        {\n"
-    "            window[attributes.name] = document.getElementById(id);\n"
-    "            window[attributes.name].getTheParent()[attributes.name] = document.getElementById(id);\n"
-    "            canvas[attributes.name] = document.getElementById(id);\n"
+    "            // 'name'-Attribut ist initialize-only und kann später nicht geändert werden\n"
+    "            // Deswegen gibt es dafür keinen getter/setter\n"
+    //"            window[attributes.name] = document.getElementById(id);\n"
+    "            var elem = document.getElementById(id);\n"
+    "            elem.getTheParent()[attributes.name] = elem;\n"
+    // Unsinn: http://www.openlaszlo.org/lps4.2/docs/developers/language-preliminaries.html
+    // "            canvas[attributes.name] = document.getElementById(id);\n"
     "\n"
     "            delete attributes.name;\n"
     "        }\n"
@@ -10204,6 +10310,13 @@ BOOL isJSArray(NSString *s)
     "    }\n"
     "\n"
     "\n"
+    "    this.AudioService = function() {\n"
+    "        this.playSound = function(res) {\n"
+    "            // Play the Sound (ToDo);\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
     "    this.BrowserService = function() {\n"
     "        this.getInitArg = getInitArg;\n"
     "        this.callJS = function(method,callback,args) {\n"
@@ -10244,7 +10357,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "    // handlet intern irgendwie den Zugriff auf die XML-Datensätze (ToDo)\n"
-    "    this.datapointer = function(xpath) {\n"
+    "    this.datapointer = function(xpath,rerun) {\n"
     "        this.setXPath = function(xpath) {\n"
     "            // anstatt des Arguments beim Anlagen des Objektes\n"
     "        }\n"
@@ -10252,6 +10365,23 @@ BOOL isJSArray(NSString *s)
     "            // Abfragen des Inhalts eines <tags> in der XML-Struktur\n"
     "        }\n"
     "        this.setNodeText = function(text) {\n"
+    "        }\n"
+    "        this.setNodeAttribute = function(attr) {\n"
+    "        }\n"
+    "        this.getNodeText = function() {\n"
+    "            return '';\n"
+    "        }\n"
+    "        this.getNodeAttribute = function() {\n"
+    "            return '';\n"
+    "        }\n"
+    "        this.getNodeCount = function() {\n"
+    "            return 0;\n"
+    "        }\n"
+    "        // Return a new datapointer that points to the same node, has a null xpath and a false rerunxpath attribute\n"
+    "        this.dupePointer = function() {\n"
+    "            return new lz.datapointer(null,false);\n"
+    "        }\n"
+    "        this.selectChild = function() {\n"
     "        }\n"
     "        this.deleteNode = function() {\n"
     "        }\n"
@@ -10277,6 +10407,8 @@ BOOL isJSArray(NSString *s)
     "lz.Cursor = new lz.CursorService();\n"
     "// lz.Timer is the single instance of the class lz.TimerService\n"
     "lz.Timer = new lz.TimerService();\n"
+    "// lz.Audio is the single instance of the class lz.AudioService.\n"
+    "lz.Audio = new lz.AudioService();\n"
     "// lz.Browser is the single instance of the class lz.BrowserService.\n"
     "lz.Browser = new lz.BrowserService();\n"
     "// lz.History is the single instance of the class lz.HistoryService.\n"
@@ -10295,7 +10427,8 @@ BOOL isJSArray(NSString *s)
     "LzDelegate = function(scope,method) { var fn = window[method]; return fn.bind(scope); }\n"
     "\n"
     "\n"
-    //"var setid = function() {}; // <-- Wird in lz.Browser.callJS aufgerufen ??\n"
+    "document.exitpage = {}; // <-- Taucht in general.js in 'setid' auf\n"
+    "document.exitpage.request = {}; // <-- Taucht in general.js in 'setid' auf\n"
     "\n"
     "function LzContextMenu() { }\n"
     "\n"
@@ -10306,7 +10439,6 @@ BOOL isJSArray(NSString *s)
     // "swfso.data.internalid = ''; // ToDo\n"
     "swfso.flush = function() { }; // ToDo\n"
     "\n"
-    "Steuerberechnung = function() {}; // ToDo\n"
     "var dsEingaben = new Object(); // ToDo\n"
     "dsEingaben.serialize = function() {}; // ToDo\n"
     "\n"
@@ -10506,6 +10638,13 @@ BOOL isJSArray(NSString *s)
     "    {\n"
     "        // ToDo When 'true' dann wird der Focus-Bereich z. B. auf ein bestimmtes Fenster beschränkt\n"
     "    }\n"
+    "    else if (attributeName == 'align')\n"
+    "    {\n"
+    "        if (value === 'center')\n"
+    "            this.align = value; // hmmm, Zugriff auf die Original-JS-Propertys erstmal \n"
+    "        else\n"
+    "            alert('So far unsupported value for align. value: '+value);\n"
+    "    }\n"
     "    else if (attributeName == 'opacity')\n"
     "    {\n"
     "        $(me).css('opacity',value);\n"
@@ -10558,9 +10697,22 @@ BOOL isJSArray(NSString *s)
     "\n"
     "            setWidthAndHeightAndBackgroundImage(me,imgpath0)\n"
     "\n"
+    // touchstart = mousedown
+    // touchend = mouseup
+    // (touchmove = mousemove)
+    "            // hover löst regelmäßig auch aus, wenn man kurz antoucht. Aber kann man wohl so lassen\n"
     "            $(me).hover(function() { $(me).css('background-image','url('+imgpath1+')') }, function() { $(me).css('background-image','url('+imgpath0+')') });\n"
-    "            $(me).on('mousedown',function() { $(me).css('background-image','url('+imgpath2+')') });\n"
-    "            $(me).on('mouseup',function() { $(me).css('background-image','url('+imgpath0+')') });\n"
+    "            if ('ontouchstart' in document.documentElement)\n"
+    "            {\n"
+    "                $(me).on('touchstart',function() { $(me).css('background-image','url('+imgpath2+')') });\n"
+    "                $(me).on('touchend',function() { $(me).css('background-image','url('+imgpath0+')') });\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                $(me).on('mousedown',function() { $(me).css('background-image','url('+imgpath2+')') });\n"
+    "                $(me).on('mouseup',function() { $(me).css('background-image','url('+imgpath0+')') });\n"
+    "            }\n"
+
     "        }\n"
     "        else\n"
     "        {\n"
@@ -10579,7 +10731,20 @@ BOOL isJSArray(NSString *s)
     "    }\n"
     "    else\n"
     "    {\n"
-    "      alert('ToDo. Aufruf von setAttribute, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
+    "      // Wenn es vorher nicht matcht, dann einfach die Property setzen, dann ist es eine selbst definierte Variable\n"
+    "      // Aber erstmal noch sammeln der Vars, die gesetzt werden sollen. Später lockern\n"
+    "      // Vorher aber Test ob die Property auch vorher definiert wurde! Sonst läuft wohl etwas schief\n"
+    "      if (attributeName === 'zusammenveranlagung')\n"
+    "      {\n"
+    "         if (this.zusammenveranlagung !== undefined)\n"
+    "             this.zusammenveranlagung = value;\n"
+    "         else\n"
+    "             alert('Trying to set a property that never was declared!');\n"
+    "      }\n"
+    "      else\n"
+    "      {\n"
+    "          alert('ToDo. Aufruf von setAttribute, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
+    "      }\n"
     "    }\n"
     "\n"
     "    // In jedem Fall: triggern! Das sieht OL so vor\n"

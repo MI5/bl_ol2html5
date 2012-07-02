@@ -40,7 +40,7 @@ BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber 
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
-BOOL legeDatasetsAlsXMLan = NO;
+BOOL legeDatasetsAlsXMLan = YES; // Noch der ganze Code ist auf NO ausgelegt, aber wohl YES richtig.
 
 
 #import "xmlParser.h"
@@ -3009,10 +3009,8 @@ didStartElement:(NSString *)elementName
 
         NSString *gesammelterText = [self holDenGesammeltenTextUndLeereIhn];
 
-
-        if (self.textInProgress != nil)
-            self.textInProgress = [NSMutableString stringWithFormat:@""];
-
+        // Da wir es in ' einschließen, müssen diese escaped werden:
+        gesammelterText = [gesammelterText stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
 
 
         // Was ist das schon wieder für eine scheiße? Jetzt können in Datasets sogar Attribute und Methoden auftauchen... WTF???? ToDo ToDo ToDo ToDo ToDo
@@ -3040,6 +3038,7 @@ didStartElement:(NSString *)elementName
         // elementNamen können auch  ein Minus (-) enthalten.
         // Aber natürlich ist ein - im Objektnamen nicht möglich
         // Deswegen in _ umwandeln
+        // ToDo -  Gilt das nachwievor???
         elementName = [elementName stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
 
 
@@ -3049,9 +3048,8 @@ didStartElement:(NSString *)elementName
             if (legeDatasetsAlsXMLan)
             {
                 [self.jsHead2Output appendString:@"\n// Dieses Dataset wird als XML-Struktur angelegt und in einer JS-String-Var gespeichert.\n"];
-                [self.jsHead2Output appendString:@"var "];
-                [self.jsHead2Output appendString:self.lastUsedDataset];
-                [self.jsHead2Output appendString:@" = '';\n"];
+                [self.jsHead2Output appendFormat:@"var %@",self.lastUsedDataset];
+                [self.jsHead2Output appendFormat:@" = '<%@>';\n",self.lastUsedDataset];
             }
             else
             {
@@ -3713,7 +3711,7 @@ didStartElement:(NSString *)elementName
         if ([name length] > 0)
         {
             [self.jQueryOutput appendString:@"\n  // Ein Datapointer (bewusst ohne var, damit global verfügbar)\n"];
-            [self.jQueryOutput appendFormat:@"  %@ = new lz.datapointer(%@);\n",[attributeDict valueForKey:@"name"],dp];
+            [self.jQueryOutput appendFormat:@"  %@ = new lz.datapointer(%@);\n",name,dp];
         }
         else
         {
@@ -7526,7 +7524,7 @@ BOOL isJSArray(NSString *s)
         // Wenn wir gerade eh nur sammeln (und erst später auswerten), dann bitte nicht testen,
         if (!self.weAreCollectingTheCompleteContentInClass)
         {
-            [self instableXML:[NSString stringWithFormat:@"Hoppala, das sollte aber nicht passieren, dass ich hier noch nicht ausgewerteten Text habe (textInProgress: '%@' - Länge textInProgress: %d - keyInProgress: '%@')",s,[s length],self.keyInProgress]];
+            //[self instableXML:[NSString stringWithFormat:@"Hoppala, das sollte aber nicht passieren, dass ich hier noch nicht ausgewerteten Text habe (textInProgress: '%@' - Länge textInProgress: %d - keyInProgress: '%@')",s,[s length],self.keyInProgress]];
 
             // Okay bei GFlender-Code kommt das zwar nicht vor, aber es kann gemäß OL
             // trotzdem passieren (Example 28.16.):
@@ -7674,9 +7672,17 @@ BOOL isJSArray(NSString *s)
         self.datasetItemsCounter = 0;
 
         if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
+        {
+            if (legeDatasetsAlsXMLan)
+            {
+                [self.jsHead2Output appendFormat:@"%@ += '</%@>';\n",self.lastUsedDataset, self.lastUsedDataset];
+            }
             self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
+        }
         else
+        {
             [self.jsHead2Output appendString:@"\n"];
+        }
     }
 
     // Handle unknown closing Elements in dataset
@@ -7687,6 +7693,9 @@ BOOL isJSArray(NSString *s)
         self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
 
         NSString *gesammelterText = [self holDenGesammeltenTextUndLeereIhn];
+
+        // Da wir es in ' einschließen, müssen diese escaped werden:
+        gesammelterText = [gesammelterText stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
 
 
 
@@ -7723,11 +7732,13 @@ BOOL isJSArray(NSString *s)
             if ([gesammelterText length] > 0)
             {
                 // Dann ist es doch kein Objekt... sondern es wird ein Inhalt erfasst.
-                if ( [self.jsHead2Output length] > 0)
-                    self.jsHead2Output = [NSMutableString stringWithFormat:[self.jsHead2Output substringToIndex:[self.jsHead2Output length] - 4]];
+                if ([self.jsHead2Output length] > 0)
+                {
+                    // self.jsHead2Output = [NSMutableString stringWithFormat:[self.jsHead2Output substringToIndex:[self.jsHead2Output length] - 4]];
+                }
 
                 // Und hinzufügen von gesammelten Text, falls er zwischen den tags gesetzt wurde.
-                [self.jsHead2Output appendFormat:@"%@;\n",gesammelterText];
+                //[self.jsHead2Output appendFormat:@"%@;\n",gesammelterText];
             }
         }
 
@@ -10279,6 +10290,49 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// XML-Funktionen, die zu <datapointer> gehören        //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function getXMLDocumentFromString(s) {\n"
+    "    var xmlDoc = null;\n"
+    "\n"
+    "    if (window.DOMParser)\n"
+    "    {\n"
+    "        var parser = new DOMParser();\n"
+    "        xmlDoc = parser.parseFromString(s,'text/xml');\n"
+    "    }\n"
+    "    else // Internet Explorer\n"
+    "    {\n"
+    "        xmlDoc = new ActiveXObject('Microsoft.XMLDOM');\n"
+    "        xmlDoc.async = false;\n"
+    "        xmlDoc.loadXML(s);\n"
+    "    }\n"
+    "\n"
+    "    return xmlDoc;\n"
+    "}\n"
+    "\n"
+    "\n"
+    "function getXMLDocumentFromFile(file) {\n"
+    "    if (window.XMLHttpRequest)\n"
+    "    { // code for IE7+, Firefox, Chrome, Opera, Safari\n"
+    "        var xmlhttp = new XMLHttpRequest();\n"
+    "    }\n"
+    "    else\n"
+    "    { // code for IE6, IE5\n"
+    "        var xmlhttp = new ActiveXObject('Microsoft.XMLHTTP');\n"
+    "    }\n"
+    "    xmlhttp.open('GET',file,false);\n"
+    "    xmlhttp.send();\n"
+    "    var xmlDoc = xmlhttp.responseXML;\n"
+    "\n"
+    "    return xmlDoc;\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// DIE lz-Klasse mit allen Services als Klassen.       //\n"
     "//  Die Services definieren darin ihre Methoden.       //\n"
     "/////////////////////////////////////////////////////////\n"
@@ -10358,9 +10412,71 @@ BOOL isJSArray(NSString *s)
     "\n"
     "    // handlet intern irgendwie den Zugriff auf die XML-Datensätze (ToDo)\n"
     "    this.datapointer = function(xpath,rerun) {\n"
-    "        this.setXPath = function(xpath) {\n"
-    "            // anstatt des Arguments beim Anlagen des Objektes\n"
+    "        if (typeof xpath !== 'string')\n"
+    "            throw new TypeError('Constructor function datapointer - first argument is no string.');\n"
+    "        if (xpath === '')\n"
+    "            throw new TypeError('Constructor function datapointer - first argument is empty.');\n"
+    "\n"
+    "        this.xpath = xpath;\n"
+    "        this.rerun = rerun;\n"
+    "\n"
+    "        this.datasetName = xpath.substring(0,xpath.indexOf(':'));\n"
+    "\n"
+    //"        this.xpath = '/'+this.datasetName+xpath.substring(xpath.indexOf(':')+1,xpath.length);\n"
+    "\n"
+    "        this.dataset = window[this.datasetName];\n"
+    "\n"
+    "        this.xml = getXMLDocumentFromString(this.dataset);\n"
+    "\n"
+    "        this.lastNode = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
+    "        this.lastNodeText = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
+    "        this.lastNodeName = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
+    "\n"
+    "\n"
+    "        // Hardcore-Code..... Diese Funktion ist das Arbeitstier\n"
+    "        this.setXPath = function(xpath_) {\n"
+    "            var xpath = '/'+this.datasetName+xpath_.substring(xpath_.indexOf(':')+1,xpath_.length);\n"
+    "\n"
+    "            var nodeValue = '';\n"
+    "            var nodeName = '';\n"
+    "            var node = '';\n"
+    "\n"
+    "            if (window.ActiveXObject)\n"
+    "            {\n"
+    "                var nodes = this.xml.selectNodes(xpath);\n"
+    "\n"
+    "                for (var i = 0;i < nodes.length;i++)\n"
+    "                {\n"
+    "                    node += nodes[i].childNodes[0].parentNode;\n"
+    "                    nodeValue += nodes[i].childNodes[0].nodeValue;\n"
+    "                    nodeName += nodes[i].childNodes[0].parentNode.nodeName;\n"
+    "                }\n"
+    "            }\n"
+    "            else if (document.implementation && document.implementation.createDocument) // code for Mozilla, Firefox, Opera, etc.\n"
+    "            {\n"
+    "                var nodes = this.xml.evaluate(xpath, this.xml, null, XPathResult.ANY_TYPE, null);\n"
+    "                var result = nodes.iterateNext();\n"
+    "\n"
+    "                while(result)\n"
+    "                {\n"
+    "                    node += result.childNodes[0].parentNode;\n"
+    "                    nodeValue += result.childNodes[0].nodeValue;\n"
+    "                    nodeName += result.childNodes[0].parentNode.nodeName;\n"
+    "\n"
+    "                    result = nodes.iterateNext(); // Sonst infinite loop\n"
+    "                }\n"
+    "            }\n"
+    "\n"
+    "            this.lastNode = node;\n"
+    "            this.lastNodeText = nodeValue;\n"
+    "            this.lastNodeName = nodeName;\n"
     "        }\n"
+    "\n"
+    "\n"
+    "        // Beim konstruieren des Objekts setXPath auch immer aufrufen!\n"
+    "        this.setXPath(this.xpath);\n"
+    "\n"
+    "\n"
     "        this.xpathQuery = function(query) {\n"
     "            // Abfragen des Inhalts eines <tags> in der XML-Struktur\n"
     "        }\n"
@@ -10369,9 +10485,16 @@ BOOL isJSArray(NSString *s)
     "        this.setNodeAttribute = function(attr) {\n"
     "        }\n"
     "        this.getNodeText = function() {\n"
-    "            return '';\n"
+    "            return this.lastNodeText;\n"
+    "        }\n"
+    "        this.getNodeName = function() {\n"
+    "            return this.lastNodeName;\n"
     "        }\n"
     "        this.getNodeAttribute = function() {\n"
+    "            return '';\n"
+    "        }\n"
+    "        this.selectNext = function() {\n"
+    "            alert(this.lastNode.nextSibling);\n"
     "            return '';\n"
     "        }\n"
     "        this.getNodeCount = function() {\n"
@@ -10944,6 +11067,18 @@ BOOL isJSArray(NSString *s)
     "\n"
     "// Nur für div! Da es die Methode nur bei <div class=\"div_text\"> gibt\n"
     "HTMLDivElement.prototype.getTextWidth = getTextWidthFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// setText() - nachimplementiert - deprecated!         //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var setTextFunction = function (s) {\n"
+    "    warnOnWrongClass(this);\n"
+    "    this.setAttribute_('text', s);\n"
+    "}\n"
+    "\n"
+    "// Nur für div! Da es die Methode nur bei <div class=\"div_text\"> gibt\n"
+    "HTMLDivElement.prototype.setText = setTextFunction;\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"

@@ -478,7 +478,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 }
 
 
-// Warum ist das nicht alles setAttribute_() ? ToDo
+// Alle Aufrufe hier drin leitern weiter zu setAttribute_()
+// setAttribute_() wird zur absolutern PRIORITY-Function. Über die läuft alles!
 - (void) setTheConstraintValue:(NSString *)s ofAttribute:(NSString*)attr
 {
     NSLog(@"A constraint value, so we are setting the attribute with jQuery + we need to watch it (ToDo)!");
@@ -516,7 +517,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([attr isEqualToString:@"background-image"])
     {
-        [o appendFormat:@"  $('#%@').css('%@','url('+%@+')');\n",self.zuletztGesetzteID,attr,s];
+        //[o appendFormat:@"  $('#%@').css('%@','url('+%@+')');\n",self.zuletztGesetzteID,attr,s];
+        // Neu:
+        [o appendFormat:@"  %@.setAttribute_('%@',%@);\n",self.zuletztGesetzteID,attr,s];
     }
 
     if ([attr isEqualToString:@"color"] ||
@@ -525,7 +528,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         [attr isEqualToString:@"left"] ||
         [attr isEqualToString:@"top"])
     {
-        [o appendFormat:@"  $('#%@').css('%@',%@);\n",self.zuletztGesetzteID,attr,s];
+        // [o appendFormat:@"  $('#%@').css('%@',%@);\n",self.zuletztGesetzteID,attr,s];
+        // Neu:
+        [o appendFormat:@"  %@.setAttribute_('%@',%@);\n",self.zuletztGesetzteID,attr,s];
     }
 
     if (nochVorDOMAusfuehren)
@@ -3011,6 +3016,8 @@ didStartElement:(NSString *)elementName
 
         // Da wir es in ' einschließen, müssen diese escaped werden:
         gesammelterText = [gesammelterText stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
+        // Auch newlines müssen escaped werden
+        gesammelterText = [gesammelterText stringByReplacingOccurrencesOfString:@"\n" withString:@"\\\n"];
 
 
         // Was ist das schon wieder für eine scheiße? Jetzt können in Datasets sogar Attribute und Methoden auftauchen... WTF???? ToDo ToDo ToDo ToDo ToDo
@@ -3031,6 +3038,11 @@ didStartElement:(NSString *)elementName
             [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExt"] ||
             [self.lastUsedDataset isEqualToString:@"dsmetaBelege"] ||
             [self.lastUsedDataset isEqualToString:@"dsCalcedData"] ||
+            [self.lastUsedDataset isEqualToString:@"dsFinanzaemter"] ||
+            [self.lastUsedDataset isEqualToString:@"dsEingaben"] ||
+            [self.lastUsedDataset isEqualToString:@"dsEingabenElster"] ||
+            [self.lastUsedDataset isEqualToString:@"dsOrte"] ||
+            [self.lastUsedDataset isEqualToString:@"dsPaymentRequest"] ||
             [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelGWG"])
             return;
 
@@ -3047,7 +3059,7 @@ didStartElement:(NSString *)elementName
         {
             if (legeDatasetsAlsXMLan)
             {
-                [self.jsHead2Output appendString:@"\n// Dieses Dataset wird als XML-Struktur angelegt und in einer JS-String-Var gespeichert.\n"];
+                [self.jsHead2Output appendString:@"\n// Dieses Dataset wird als XML-Struktur angelegt und in einem JS-String gespeichert.\n"];
                 [self.jsHead2Output appendFormat:@"var %@",self.lastUsedDataset];
                 [self.jsHead2Output appendFormat:@" = '<%@>';\n",self.lastUsedDataset];
             }
@@ -3652,6 +3664,10 @@ didStartElement:(NSString *)elementName
                     NSLog(@"I will ignore this src-file for now (it's a POST-Request).");
                 else
                     NSLog(@"I will ignore this src-file for now (it's a GET-Request).");
+
+                // Trotzdem anlegen, damit das Programm nicht laufend abstürzt.
+                [self.jsHead2Output appendString:@"// Ein Dataset, welches noch ausgewertet werden muss. Aber ich lege trotzdem schonmal ein Objekt an, damit Attribute und Methoden erfolgreich daran gebunden werden können.\n"];
+                [self.jsHead2Output appendFormat:@"%@ = new lz.dataset(); // muss vom Typ dataset sein, damit er auf die Methode 'setQueryParam' z. B. zugreifen kann\n",self.lastUsedDataset, self.lastUsedDataset];
             }
             else
             {
@@ -3659,6 +3675,9 @@ didStartElement:(NSString *)elementName
 
                 [self callMyselfRecursive:[attributeDict valueForKey:@"src"]];
             }
+
+            // Nach dem Verlassen der Rekursion müssen wir nicht länger ein Dataset auswerten
+            self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
         }
         else
         {
@@ -3960,23 +3979,23 @@ didStartElement:(NSString *)elementName
             
             if (![self.allFoundClasses objectForKey:className])
                 [self instableXML:@"Nunja, das geht so nicht. Wenn ich Attribute hinzufüge zu einer Klasse, muss ich ja vorher auf diese Klasse gestoßen sein!"];
+
             NSMutableDictionary *attrDictOfClass = [self.allFoundClasses objectForKey:className];
             
             [attrDictOfClass setObject:value forKey:a];
         }
         else
         {
-            // War früher mal jsHeadOutput, aber die Elemente sind ja erst nach Instanzierung
-            // bekannt, deswegen jQueryOutput0.
-
             NSString *elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
 
+            NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
 
-            if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-2] isEqualToString:@"canvas"] ||
-                [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-2] isEqualToString:@"library"])
+            if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
                 elem = @"canvas";
 
-            [self.jQueryOutput0 appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut des Elements %@:", elem];
+            // Hier drin sammle ich erstmal alle Ausgaben
+            NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
+
 
             // Folgendes Szenario: Wenn eine selbst definierte Klasse ein Attribut definiert, aber gleichzeitig
             // dieses erbt, dann hat das selbst definierte Vorrang. Deswegen überschreibe ich das Attribut
@@ -3988,20 +4007,33 @@ didStartElement:(NSString *)elementName
             // => Deswegen habe ich die ganze Abfrage rausgenommen.
             // => Es ist wohl nur bei methoden nötig.
             //if (![[attributeDict valueForKey:@"name"] isEqualToString:@"title"])
-            //    [self.jQueryOutput0 appendFormat:@"\n  if (%@.%@ == undefined)",elem,a];
-
-            [self.jQueryOutput0 appendFormat:@"\n  %@.",elem];
+            //    [o appendFormat:@"\n  if (%@.%@ == undefined)",elem,a];
 
 
 
+            // Wenn wir ein Attribut eines Datasets haben, dann binde ich an self.lastUsedDataset
+            // Denn Datasets werden oft nur per 'name' gesetzt und nicht per 'id'
+            if ([elemTyp isEqualToString:@"dataset"])
+            {
+                [o appendFormat:@"\n// Ein per <attribute> gesetztes Attribut des Elements %@ (Objekttyp: %@)", self.lastUsedDataset, elemTyp];
+                [o appendFormat:@"\n%@.",self.lastUsedDataset];
+            }
+            else
+            {
+                [o appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut des Elements %@ (Objekttyp: %@)", elem, elemTyp];
+                [o appendFormat:@"\n  %@.",elem];
+            }
 
-            [self.jQueryOutput0 appendFormat:@"%@ = ",a];
+
+
+
+            [o appendFormat:@"%@ = ",a];
             if (weNeedQuotes)
-                [self.jQueryOutput0 appendString:@"\""];
-            [self.jQueryOutput0 appendString:value];
+                [o appendString:@"\""];
+            [o appendString:value];
             if (weNeedQuotes)
-                [self.jQueryOutput0 appendString:@"\""];
-            [self.jQueryOutput0 appendString:@";\n"];
+                [o appendString:@"\""];
+            [o appendString:@";\n"];
 
 
             // Erstmal mir hier drin. Eventuell aber auch erst nach der geschweiften Klammer
@@ -4021,9 +4053,22 @@ didStartElement:(NSString *)elementName
                     NSRange positionDesPunktes = [orignalValueString rangeOfString:@"."];
                     NSString *zuWatchendeVar = [orignalValueString substringFromIndex:positionDesPunktes.location+1];
 
-                    [self.jQueryOutput0 appendString:@"  // Zusätzlich watchen der Variable, da es ein berechneter Wert ist\n"];
-                    [self.jQueryOutput0 appendFormat:@"  %@.watch('%@', function(prop, oldval, newval) { %@.%@ = newval; })\n",elem,zuWatchendeVar,elem,a];
+                    [o appendString:@"  // Zusätzlich watchen der Variable, da es ein berechneter Wert ist\n"];
+                    [o appendFormat:@"  %@.watch('%@', function(prop, oldval, newval) { %@.%@ = newval; })\n",elem,zuWatchendeVar,elem,a];
                 }
+            }
+
+
+            // War früher mal jsHeadOutput, aber die Elemente sind ja erst nach Instanzierung
+            // bekannt, deswegen jQueryOutput0.
+            // Wenn wir ein Attribut eines Datasets haben, dann direkt hinter das dataset schreiben
+            if ([elemTyp isEqualToString:@"dataset"])
+            {
+                [self.jsHead2Output appendString:o];
+            }
+            else
+            {
+                [self.jQueryOutput0 appendString:o];
             }
         }
 
@@ -6653,6 +6698,7 @@ didStartElement:(NSString *)elementName
 
 
         NSString *elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+        NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
 
 
         // http://www.openlaszlo.org/lps4.9/docs/reference/ <method> => s. Attribut 'name'
@@ -6660,13 +6706,16 @@ didStartElement:(NSString *)elementName
         // UND an canvas binden.
         // Ansonsten 'method' als Methode an das umgebende Objekt koppeln.
 
-        [self.jQueryOutput0 appendString:@"\n  // Ich binde eine Methode an das genannte Objekt\n"];
+        // Hier drin sammle ich erstmal alle Ausgaben
+        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
+
+
+        [o appendFormat:@"\n  // Ich binde eine Methode an das genannte Objekt (Objekttyp: %@)\n", elemTyp];
 
         BOOL wirBrauchenWith = NO;
-        if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-2] isEqualToString:@"canvas"] ||
-            [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-2] isEqualToString:@"library"])
+        if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
         {
-            [self.jQueryOutput0 appendFormat:@"  if (window.%@ == undefined)\n  ",[attributeDict valueForKey:@"name"]];
+            [o appendFormat:@"  if (window.%@ == undefined)\n  ",[attributeDict valueForKey:@"name"]];
         }
         else
         {
@@ -6676,32 +6725,51 @@ didStartElement:(NSString *)elementName
             // Folgendes Szenario: Wenn eine selbst definierte Klasse eine Methode definiert, aber gleichzeitig
             // diese erbt, dann hat die selbst definierte Vorrang! Deswegen überschreibe ich mit der Methode
             // innerhalb der Klasse nicht! Dazu teste ich einfach vorher ob sie auch wirklich undefined ist!
-            [self.jQueryOutput0 appendFormat:@"  if (%@.%@ == undefined)",elem,[attributeDict valueForKey:@"name"]];
 
-            [self.jQueryOutput0 appendFormat:@"\n  %@.",elem];
+            // Tja... auch Datasets können jetzt Methoden haben...
+            // In so einem Fall immer an das letzte Dataset binden, nicht an die ID.
+            // Denn Datasets werden unter Umständen auch per 'name'-Attribut angesprochen!
+            // (und nicht per id)
+            if ([elemTyp isEqualToString:@"dataset"])
+            {
+                [o appendFormat:@"  if (%@.%@ == undefined)",self.lastUsedDataset,[attributeDict valueForKey:@"name"]];
+                [o appendFormat:@"\n  %@.",self.lastUsedDataset];
+            }
+            else
+            {
+                [o appendFormat:@"  if (%@.%@ == undefined)",elem,[attributeDict valueForKey:@"name"]];
+                [o appendFormat:@"\n  %@.",elem];
+            }
         }
 
-        [self.jQueryOutput0 appendString:[attributeDict valueForKey:@"name"]];
-        [self.jQueryOutput0 appendString:@" = function("];
-        [self.jQueryOutput0 appendString:args];
-        [self.jQueryOutput0 appendFormat:@")\n  {\n",elem];
+        [o appendString:[attributeDict valueForKey:@"name"]];
+        [o appendFormat:@" = function(%@)\n  {\n",args];
         if (wirBrauchenWith)
-            [self.jQueryOutput0 appendFormat:@"    with (%@) {\n",elem];
+        {
+            if ([elemTyp isEqualToString:@"dataset"])
+                [o appendFormat:@"    with (%@) {\n",self.lastUsedDataset];
+            else
+                [o appendFormat:@"    with (%@) {\n",elem];
+        }
 
         // Falls es default values für die Argumente gibt, muss ich diese hier setzen
         if (![defaultValues isEqualToString:@""])
         {
-            [self.jQueryOutput0 appendString:defaultValues];
-            [self.jQueryOutput0 appendString:@"\n"];
+            [o appendString:defaultValues];
+            [o appendString:@"\n"];
         }
 
         // OL benutzt 'classroot' als Variable für den Zugriff auf das erste in einer Klasse
         // definierte Elemente. Deswegen, falls wir eine Klasse auswerten, einfach die Var setzen
         if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-            [self.jQueryOutput0 appendFormat:@"    var classroot = %@;\n\n",ID_REPLACE_STRING];
+            [o appendFormat:@"    var classroot = %@;\n\n",ID_REPLACE_STRING];
 
         // Um es auszurichten mit dem Rest
-        [self.jQueryOutput0 appendString:@" "];
+        [o appendString:@" "];
+
+
+        [self.jQueryOutput0 appendString:o];
+
 
         // Okay, jetzt Text der Methode sammeln und beim schließen einfügen
     }
@@ -7664,6 +7732,23 @@ BOOL isJSArray(NSString *s)
     }
 
 
+
+    // Neu eingeführt, seitdem wir datasets als xml-struktur auswerten
+    // Wenn wir <items> hatten, haben wir bisher immer ein Array angelegt.
+    // Jedenfalls hier jetzt setzen der Var auf NO, damit er im schließenden
+    // Dataset nicht das schließende Tag der XML-Struktur auch bei Arrays anlegt
+    // Langfristig eh überdenken, ob es noch sinnvoll ist Arrays anzulegen.
+    // Am besten IMMER xml-struktur, wenn möglich.
+    if ([elementName isEqualToString:@"items"])
+    //{
+        element_geschlossen = YES;
+
+    //    self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;        
+    //}
+    
+
+
+
     // Schließen von dataset
     if ([elementName isEqualToString:@"dataset"])
     {
@@ -7675,7 +7760,36 @@ BOOL isJSArray(NSString *s)
         {
             if (legeDatasetsAlsXMLan)
             {
-                [self.jsHead2Output appendFormat:@"%@ += '</%@>';\n",self.lastUsedDataset, self.lastUsedDataset];
+                // Die Liste gibt es insgesamt 3 mal
+                if ([self.lastUsedDataset isEqualToString:@"dsEingabenOnline"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelSingle"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittel"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsmetaFahrtenSingle"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExtSingle"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsmetaUnterkunftskosten"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsmetaLohnersatz"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsmetaLohnersatzSingle"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsmetaFahrten"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsElsterSend"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsElsterError"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsPaymentPaypal"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsPayment"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExt"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsmetaBelege"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsCalcedData"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsFinanzaemter"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsEingaben"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsEingabenElster"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsOrte"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsPaymentRequest"] ||
+                    [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelGWG"])
+                {
+                    // Nothing To Do
+                }
+                else
+                {
+                    [self.jsHead2Output appendFormat:@"%@ += '</%@>';\n",self.lastUsedDataset, self.lastUsedDataset];
+                }
             }
             self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
         }
@@ -7696,11 +7810,13 @@ BOOL isJSArray(NSString *s)
 
         // Da wir es in ' einschließen, müssen diese escaped werden:
         gesammelterText = [gesammelterText stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
-
+        // Auch newlines müssen escaped werden
+        gesammelterText = [gesammelterText stringByReplacingOccurrencesOfString:@"\n" withString:@"\\\n"];
 
 
         // Was ist das schon wieder für eine scheiße? Jetzt können in Datasets sogar Attribute und Methoden auftauchen... WTF???? ToDo ToDo ToDo ToDo ToDo
         // Gleiche Liste beim öffnenden Tag
+        // Die Liste gibt es noch ein 3. mal
         if ([self.lastUsedDataset isEqualToString:@"dsEingabenOnline"] ||
             [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelSingle"] ||
             [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittel"] ||
@@ -7717,6 +7833,11 @@ BOOL isJSArray(NSString *s)
             [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExt"] ||
             [self.lastUsedDataset isEqualToString:@"dsmetaBelege"] ||
             [self.lastUsedDataset isEqualToString:@"dsCalcedData"] ||
+            [self.lastUsedDataset isEqualToString:@"dsFinanzaemter"] ||
+            [self.lastUsedDataset isEqualToString:@"dsEingaben"] ||
+            [self.lastUsedDataset isEqualToString:@"dsEingabenElster"] ||
+            [self.lastUsedDataset isEqualToString:@"dsOrte"] ||
+            [self.lastUsedDataset isEqualToString:@"dsPaymentRequest"] ||
             [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelGWG"])
             return;
 
@@ -8221,7 +8342,6 @@ BOOL isJSArray(NSString *s)
         [elementName isEqualToString:@"BDSFinanzaemter"] ||
         [elementName isEqualToString:@"frame"] ||
         [elementName isEqualToString:@"font"] ||
-        [elementName isEqualToString:@"items"] ||
         [elementName isEqualToString:@"library"] ||
         [elementName isEqualToString:@"html"] ||
         [elementName isEqualToString:@"audio"] ||
@@ -9495,6 +9615,20 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// All color-code are available as constants           //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var white = 'white';\n"
+    "var black = 'black';\n"
+    "var red = 'red';\n"
+    "var green = 'green';\n"
+    "var blue = 'blue';\n"
+    "var yellow = 'yellow';\n"
+    "var magenta = 'magenta';\n"
+    "var purple = 'purple';\n"
+    "var brown = 'brown';\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// bind() für ältere Browser nachrüsten                  \n"
     "// https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Function/bind\n"
     "/////////////////////////////////////////////////////////\n"
@@ -10242,9 +10376,11 @@ BOOL isJSArray(NSString *s)
     "        {\n"
     "            // 'name'-Attribut ist initialize-only und kann später nicht geändert werden\n"
     "            // Deswegen gibt es dafür keinen getter/setter\n"
-    //"            window[attributes.name] = document.getElementById(id);\n"
     "            var elem = document.getElementById(id);\n"
     "            elem.getTheParent()[attributes.name] = elem;\n"
+    "            // Alle name-Attribute im äußeren Scope sind global. Da <script> immer im\n"
+    "            // äußersten Scope sollten eigentlich alle 'name's hier global werden.\n"
+    "            window[attributes.name] = elem;\n"
     // Unsinn: http://www.openlaszlo.org/lps4.2/docs/developers/language-preliminaries.html
     // "            canvas[attributes.name] = document.getElementById(id);\n"
     "\n"
@@ -10412,34 +10548,27 @@ BOOL isJSArray(NSString *s)
     "\n"
     "    // handlet intern irgendwie den Zugriff auf die XML-Datensätze (ToDo)\n"
     "    this.datapointer = function(xpath,rerun) {\n"
-    "        if (typeof xpath !== 'string')\n"
-    "            throw new TypeError('Constructor function datapointer - first argument is no string.');\n"
-    "        if (xpath === '')\n"
-    "            throw new TypeError('Constructor function datapointer - first argument is empty.');\n"
-    "\n"
-    "        this.xpath = xpath;\n"
-    "        this.rerun = rerun;\n"
-    "\n"
-    "        this.datasetName = xpath.substring(0,xpath.indexOf(':'));\n"
-    "\n"
-    //"        this.xpath = '/'+this.datasetName+xpath.substring(xpath.indexOf(':')+1,xpath.length);\n"
-    "\n"
-    "        this.dataset = window[this.datasetName];\n"
-    "\n"
-    "        this.xml = getXMLDocumentFromString(this.dataset);\n"
-    "\n"
-    "        this.lastNode = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
-    "        this.lastNodeText = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
-    "        this.lastNodeName = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
-    "\n"
     "\n"
     "        // Hardcore-Code..... Diese Funktion ist das Arbeitstier\n"
     "        this.setXPath = function(xpath_) {\n"
-    "            var xpath = '/'+this.datasetName+xpath_.substring(xpath_.indexOf(':')+1,xpath_.length);\n"
+    "            if (this.xpath === undefined || this.xpath == null)\n"
+    "            {"
+    "                // Dann noch nachträglich initialisieren\n"
+    "                this.init(xpath_);\n"
+    "            }\n"
+    "\n"
+    "            var pfad = xpath_.substring(xpath_.indexOf(':')+1,xpath_.length);\n"
+    "            // Durch das umbilden der speziellen OL-Syntax auf xpath müssen wir einen einzelnen\n"
+    "            // Slash (= Root-Element) am Ende ignorieren. Wir fügen den / eh immer hinzu\n"
+    "            if (pfad.charAt(pfad.length-1) == '/')\n"
+    "                pfad = pfad.substring(0, pfad.length-1);\n"
+    "            var xpath = '/' + this.datasetName + pfad;\n"
+    "\n"
+    "            // Gets all nodes: var xpath = '/' + this.datasetName + '//*';\n"
     "\n"
     "            var nodeValue = '';\n"
     "            var nodeName = '';\n"
-    "            var node = '';\n"
+    "            var node = {};\n"
     "\n"
     "            if (window.ActiveXObject)\n"
     "            {\n"
@@ -10447,9 +10576,9 @@ BOOL isJSArray(NSString *s)
     "\n"
     "                for (var i = 0;i < nodes.length;i++)\n"
     "                {\n"
-    "                    node += nodes[i].childNodes[0].parentNode;\n"
-    "                    nodeValue += nodes[i].childNodes[0].nodeValue;\n"
-    "                    nodeName += nodes[i].childNodes[0].parentNode.nodeName;\n"
+    "                    node = nodes[i].childNodes[0].parentNode;\n"
+    "                    nodeValue = nodes[i].childNodes[0].nodeValue;\n"
+    "                    nodeName = nodes[i].childNodes[0].parentNode.nodeName;\n"
     "                }\n"
     "            }\n"
     "            else if (document.implementation && document.implementation.createDocument) // code for Mozilla, Firefox, Opera, etc.\n"
@@ -10459,9 +10588,9 @@ BOOL isJSArray(NSString *s)
     "\n"
     "                while(result)\n"
     "                {\n"
-    "                    node += result.childNodes[0].parentNode;\n"
-    "                    nodeValue += result.childNodes[0].nodeValue;\n"
-    "                    nodeName += result.childNodes[0].parentNode.nodeName;\n"
+    "                    node = result.childNodes[0].parentNode;\n"
+    "                    nodeValue = result.childNodes[0].nodeValue;\n"
+    "                    nodeName = result.childNodes[0].parentNode.nodeName;\n"
     "\n"
     "                    result = nodes.iterateNext(); // Sonst infinite loop\n"
     "                }\n"
@@ -10473,8 +10602,43 @@ BOOL isJSArray(NSString *s)
     "        }\n"
     "\n"
     "\n"
-    "        // Beim konstruieren des Objekts setXPath auch immer aufrufen!\n"
-    "        this.setXPath(this.xpath);\n"
+    "        // Normalweise wird beim anlegen alles initialisiert anhand des Arguments xpath\n"
+    "        // Es gibt jedoch eine Stelle im GFlender-Code (CalcUmzugskostenpauschale)\n"
+    "        // wo Quatsch übergeben wird als Argument. Das muss ich abfangen.\n"
+    "        // **private** (ToDo - iwie private machen)\n"
+    "        this.init = function(xpath) {\n"
+    "            this.xpath = xpath;\n"
+    "\n"
+    "            this.datasetName = xpath.substring(0,xpath.indexOf(':'));\n"
+    "\n"
+    "            this.dataset = window[this.datasetName];\n"
+    "\n"
+    "            this.xml = getXMLDocumentFromString(this.dataset);\n"
+    "        }\n"
+    "\n"
+    "\n"
+    "        // Das 'object' (DOMWindow), welches GFlender einmal übergibt lass ich passieren\n"
+    "        if (typeof xpath !== 'string' && typeof xpath !== 'object')\n"
+    "            throw new TypeError('Constructor function datapointer - first argument is no string.');\n"
+    "        if (xpath === '')\n"
+    "            throw new TypeError('Constructor function datapointer - first argument should not be empty.');\n"
+    "\n"
+    "        this.rerun = rerun; // Noch ziemlich oft 'undefined', aber das ist Absicht\n"
+    "\n"
+    "        this.lastNode = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
+    "        this.lastNodeText = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
+    "        this.lastNodeName = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
+    "\n"
+    "        // Wenn dieses blöde Objekt kommt, dann keine Initialisierung\n"
+    "        if (typeof xpath !== 'object')\n"
+    "        {\n"
+    "            this.init(xpath);\n"
+    "\n"
+    "            // Beim konstruieren des Objekts setXPath auch immer mit aufrufen!\n"
+    "            this.setXPath(this.xpath);\n"
+    "        }\n"
+    "\n"
+    "\n"
     "\n"
     "\n"
     "        this.xpathQuery = function(query) {\n"
@@ -10494,15 +10658,35 @@ BOOL isJSArray(NSString *s)
     "            return '';\n"
     "        }\n"
     "        this.selectNext = function() {\n"
-    "            alert(this.lastNode.nextSibling);\n"
-    "            return '';\n"
+    "            // Node aktualisieren in dem ich eins weiter wandere\n"
+    "            // Aber der 'Zeiger' bleibt unverändert, oder??  hmmm\n"
+    "            if (this.lastNode)\n"
+    "                this.lastNode = this.lastNode.nextSibling;\n"
+    "            else\n"
+    "                this.lastNode = null;\n"
+    "            if (this.lastNode != null)\n"
+    "            {\n"
+    "                this.lastNodeText = this.lastNode.firstChild.nodeValue;\n"
+    "                this.lastNodeName = this.lastNode.nodeName;\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                this.lastNodeText = '';\n"
+    "                this.lastNodeName = '';\n"
+    "            }\n"
+    "            return this.lastNode != null;\n"
     "        }\n"
     "        this.getNodeCount = function() {\n"
     "            return 0;\n"
     "        }\n"
     "        // Return a new datapointer that points to the same node, has a null xpath and a false rerunxpath attribute\n"
     "        this.dupePointer = function() {\n"
-    "            return new lz.datapointer(null,false);\n"
+    "            var dupe = new lz.datapointer(this.xpath,false);\n"
+    "            dupe.lastNode = this.lastNode;\n"
+    "            dupe.lastNodeText = this.lastNodeText;\n"
+    "            dupe.lastNodeName = this.lastNodeName;\n"
+    "            dupe.xpath = null;\n"
+    "            return dupe;\n"
     "        }\n"
     "        this.selectChild = function() {\n"
     "        }\n"
@@ -10737,11 +10921,11 @@ BOOL isJSArray(NSString *s)
     "        }\n"
     "        $(me).css('background-color',value);\n"
     "    }\n"
-    "    else if (attributeName == 'x')\n"
+    "    else if (attributeName == 'x' || attributeName == 'left')\n"
     "    {\n"
     "        $(me).css('left',value);\n"
     "    }\n"
-    "    else if (attributeName == 'y')\n"
+    "    else if (attributeName == 'y' || attributeName == 'top')\n"
     "    {\n"
     "        $(me).css('top',value);\n"
     "    }\n"
@@ -10787,6 +10971,10 @@ BOOL isJSArray(NSString *s)
     "          $(me).css('background-image','url('+me.resource[value]+')');\n"
     "        else\n"
     "          throw 'setAttribute_ - Error trying to set frame. (value = '+value+', me.resource = '+me.resource+', me.id = '+me.id+').';\n"
+    "    }\n"
+    "    else if (attributeName == 'background-image')\n"
+    "    {\n"
+    "        $(me).css('background-image','url('+value+')');\n"
     "    }\n"
     "    else if (attributeName == 'enabled' && $(me).is('input'))\n"
     "    {\n"
@@ -10866,7 +11054,7 @@ BOOL isJSArray(NSString *s)
     "      }\n"
     "      else\n"
     "      {\n"
-    "          alert('ToDo. Aufruf von setAttribute, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
+    "          alert('Aufruf von setAttribute, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
     "      }\n"
     "    }\n"
     "\n"

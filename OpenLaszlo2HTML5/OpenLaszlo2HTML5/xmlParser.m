@@ -36,7 +36,7 @@ BOOL alternativeFuerSimplelayout = YES; // Bei YES kann <simplelayout> an belieb
                                         // Es scheint sehr zuverlässig zu funktionieren inzwischen.
                                         // Kann wohl dauerhaft auf YES bleiben!
 
-BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -478,6 +478,82 @@ void OLLog(xmlParser *self, NSString* s,...)
 }
 
 
+
+
+-(NSMutableArray *) getTheDependingVarsOfTheConstraint:(NSString*)s
+{
+    NSError *error = NULL;
+
+
+    NSMutableArray *vars = [[NSMutableArray alloc] init];
+
+    s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
+    s = [self removeOccurrencesofBracketsIn:s];
+
+
+    // Remove everything between ' (including the ')
+    NSString* pattern = @"'[^']*'";
+    NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:&error];
+    NSUInteger numberOfMatches = [regexp numberOfMatchesInString:s options:0 range:NSMakeRange(0, [s length])];
+    if (numberOfMatches > 0)
+        s = [regexp stringByReplacingMatchesInString:s options:0 range:NSMakeRange(0, [s length]) withTemplate:@""];
+
+    // Remove everything between " (including the ")
+    pattern = @"\"[^\"]*\"";
+    regexp = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:&error];
+    numberOfMatches = [regexp numberOfMatchesInString:s options:0 range:NSMakeRange(0, [s length])];
+    if (numberOfMatches > 0)
+        s = [regexp stringByReplacingMatchesInString:s options:0 range:NSMakeRange(0, [s length]) withTemplate:@""];
+
+
+    // Okay, falls es ein ? : Ausdruck ist, remove nun alles nach dem ? (inklusive dem ?)
+    s = [[s componentsSeparatedByString: @"?"] objectAtIndex:0];
+
+
+    // Remove leading and ending Whitespaces and NewlineCharacters
+    s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+
+
+    // so get all var-names, that are left
+    // Auch per Punkt verkettete Vars erlauben ( _ ist automatisch mit drin bei \W )
+    pattern = @"[^\\W\\d](\\w|[.]{1,2}(?=\\w))*";
+
+    regexp = [NSRegularExpression regularExpressionWithPattern:pattern options:NSRegularExpressionCaseInsensitive error:&error];
+
+    numberOfMatches = [regexp numberOfMatchesInString:s options:0 range:NSMakeRange(0, [s length])];
+
+    if (numberOfMatches > 0)
+    {
+        NSArray *matches = [regexp matchesInString:s options:0 range:NSMakeRange(0, [s length])];
+
+        for (NSTextCheckingResult *match in matches)
+        {
+            NSRange matchRange = [match range];
+            // NSRange varNameRange = [match rangeAtIndex:1];
+            // NSRange defaultValueRange = [match rangeAtIndex:2];
+
+            NSString *varName = [s substringWithRange:matchRange];
+
+            // Dann noch eventuelle spezielle Wörter austauschen
+            varName = [self modifySomeExpressionsInJSCode:varName];
+
+            // Falls ganz vorne jetzt getTheParent() steht, dann muss ich unser aktuelles Element davorsetzen
+            // Weil jetzt nochmal extra mit with () {} zu arbeiten ist wohl nicht nötig, da wir ja auf Ebene der
+            // einzelnen Variable sind und individuell reagieren können
+            if ([varName hasPrefix:@"getTheParent()"])
+                varName = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,varName];
+
+            [vars addObject:varName];
+        }
+    }
+
+    return vars;
+}
+
+
+
+
 // Alle Aufrufe hier drin leitern weiter zu setAttribute_()
 // setAttribute_() wird zur absolutern PRIORITY-Function. Über die läuft alles!
 - (void) setTheConstraintValue:(NSString *)s ofAttribute:(NSString*)attr
@@ -495,48 +571,67 @@ void OLLog(xmlParser *self, NSString* s,...)
         s = [s substringFromIndex:12];
     }
 
+    BOOL keinConstraint = NO;
     if ([s hasPrefix:@"$once{"])
     {
-        nochVorDOMAusfuehren = YES;
+        keinConstraint = YES;
         s = [s substringFromIndex:5];
     }
 
     if ([s hasPrefix:@"$always{"])
     {
-        nochVorDOMAusfuehren = YES;
         s = [s substringFromIndex:7];
     }
 
+
+    // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...
+    NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s];
+
+
+    // ...jetzt erst s computable machen...
     s = [self makeTheComputedValueComputable:s];
 
 
-    if ([attr isEqualToString:@"text"])
-    {
-        [o appendFormat:@"  $('#%@').html(%@);\n",self.zuletztGesetzteID,s];
-    }
-
-    if ([attr isEqualToString:@"background-image"])
-    {
-        //[o appendFormat:@"  $('#%@').css('%@','url('+%@+')');\n",self.zuletztGesetzteID,attr,s];
-        // Neu:
-        [o appendFormat:@"  %@.setAttribute_('%@',%@);\n",self.zuletztGesetzteID,attr,s];
-    }
-
-    if ([attr isEqualToString:@"color"] ||
-        [attr isEqualToString:@"height"] ||
-        [attr isEqualToString:@"width"] ||
-        [attr isEqualToString:@"left"] ||
-        [attr isEqualToString:@"top"])
-    {
-        // [o appendFormat:@"  $('#%@').css('%@',%@);\n",self.zuletztGesetzteID,attr,s];
-        // Neu:
-        [o appendFormat:@"  %@.setAttribute_('%@',%@);\n",self.zuletztGesetzteID,attr,s];
-    }
-
     if (nochVorDOMAusfuehren)
-        [self.jQueryOutput appendString:o];
-    else
-        [self.jQueryOutput appendString:o];
+    {
+        // Dann muss ich undefined-Werte für alle gefunden Vars in den Code injecten.
+        // Denn eigentlich ist der DOM und alle Vars noch gar nicht initialisiert
+        // Den Code aber WIRKLICH vor dem DOM auszuführen würde jetzt zu weit führen
+        for (id object in vars)
+        {
+            // auf jedenfall mit vorangestellten var, damit nur lokal!
+            NSString *sToInsert = [NSString stringWithFormat:@" var %@ = undefined;", object];
+            NSMutableString *sToInject = [NSMutableString stringWithString:s];
+            [sToInject insertString:sToInsert atIndex:13];
+            s = [NSString stringWithString:sToInject];
+        }
+    }
+
+    // ...setAttribute_() aufrufen (gilt für alle Arten von Attributen - Keine Fallunterscheidung mehr)
+    [o appendFormat:@"  %@.setAttribute_('%@',%@);\n",self.zuletztGesetzteID,attr,s];
+
+
+
+    // Wenn die $once-Angabe erfolgt, ist es gar kein constraint und wir brauchen weder ein onchange noch ein watch
+    if (!keinConstraint && !nochVorDOMAusfuehren)
+    {
+        [o appendString:@"  // Zusätzlich bei change aktualisieren, da constraint-value\n"];
+        [o appendFormat:@"  // Der zu setzende Wert ist abhängig von %d woanders gesetzten Variable(n)\n",[vars count]];
+
+        for (id object in vars)
+        {
+            // Okay, folgendes:
+            // Wenn wir ein Objekt sind dann achten wir auf das onchange-Event
+            // Sind wir aber eine Variable, dann müssen wir watchen
+            [o appendFormat:@"  if (typeof %@ === 'object')\n",object];
+            [o appendFormat:@"    $(%@).on('change', function() { %@.setAttribute_('%@',%@); } );\n",object,self.zuletztGesetzteID,attr,s];
+            [o appendString:@"  else\n"];
+            [o appendFormat:@"    window.watch('%@', function() { %@.setAttribute_('%@',%@); } );\n",object,self.zuletztGesetzteID,attr,s];
+        }
+        
+    }
+
+    [self.jQueryOutput appendString:o];
 }
 
 
@@ -10079,6 +10174,11 @@ BOOL isJSArray(NSString *s)
     "        throw new Error('No element <canvas> found. The root must be <canvas>.');\n"
     "\n"
     "    canvas.lpsversion = '1.0';\n"
+    "\n"
+    "    canvas.getMouse = function(axis) {\n"
+    "        if (typeof axis !== 'string' || (axis !== 'x' && axis !== 'y'))\n"
+    "            throw new Error('canvas.getMouse() - No axis or wrong axis.');\n"
+    "    }\n"
     "\n"
     "\n"
     "    canvas.setDefaultContextMenu = function(a) {}; // ToDo\n"

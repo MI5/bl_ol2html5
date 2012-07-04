@@ -26,6 +26,9 @@
 // Als Optionen mit anbieten
 // - skip build-in-splash-Tag
 // - keep comments
+// - auswahl ob $swf8 usw. true oder false
+//
+//
 //
 //  Created by Matthias Blanquett on 13.04.12.
 //  Copyright (c) 2012 Buhl. All rights reserved.
@@ -79,6 +82,9 @@ BOOL legeDatasetsAlsXMLan = YES; // Noch der ganze Code ist auf NO ausgelegt, ab
 @property (strong, nonatomic) NSMutableString *jsHeadOutput;
 @property (strong, nonatomic) NSMutableString *jsHead2Output;   // die mit resource gesammelten globalen vars
                                                                 // (+ globale Funktionen + globales gefundenes JS)
+@property (strong, nonatomic) NSMutableString *jsComputedValuesOutput; // kommt DIREKT nach dem DOM
+@property (strong, nonatomic) NSMutableString *jsConstraintValuesOutput; // kommt ebenfalls direkt nach dem DOM
+
 
 @property (strong, nonatomic) NSMutableString *cssOutput; // CSS-Ausgaben, die gesammelt werden, derzeit @Font-Face
 
@@ -205,7 +211,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize enclosingElements = _enclosingElements, enclosingElementsIds = _enclosingElementsIds;
 
-@synthesize output = _output, jsOutput = _jsOutput, jsOLClassesOutput = _jsOLClassesOutput, jQueryOutput0 = _jQueryOutput0, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput, collectedContentOfClass = _collectedContentOfClass;
+@synthesize output = _output, jsOutput = _jsOutput, jsOLClassesOutput = _jsOLClassesOutput, jQueryOutput0 = _jQueryOutput0, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output, jsComputedValuesOutput = _jsComputedValuesOutput, jsConstraintValuesOutput = _jsConstraintValuesOutput, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput, collectedContentOfClass = _collectedContentOfClass;
 
 @synthesize errorParsing = _errorParsing, verschachtelungstiefe = _verschachtelungstiefe, rollUpDownVerschachtelungstiefe = _rollUpDownVerschachtelungstiefe;
 
@@ -325,6 +331,10 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.jQueryOutput = [[NSMutableString alloc] initWithString:@""];
         self.jsHeadOutput = [[NSMutableString alloc] initWithString:@""];
         self.jsHead2Output = [[NSMutableString alloc] initWithString:@""];
+
+        self.jsComputedValuesOutput = [[NSMutableString alloc] initWithString:@""];
+        self.jsConstraintValuesOutput = [[NSMutableString alloc] initWithString:@""];
+
         self.cssOutput = [[NSMutableString alloc] initWithString:@""];
         self.externalJSFilesOutput = [[NSMutableString alloc] initWithString:@""];
         self.collectedContentOfClass = [[NSMutableString alloc] initWithString:@""];
@@ -432,7 +442,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Zur Sicherheit mache ich von allem ne Copy.
         // Nicht, dass es beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInt:self.idZaehler] copy],[self.defaultplacement copy], nil];
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInt:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy], nil];
         return r;
     }
 }
@@ -642,7 +652,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
             // Bei width und height muss es ein resize-event werden... leider
-            if ([object  hasSuffix:@"myWidth"] || [object hasSuffix:@"myHeight"])
+            if ([object  hasSuffix:@"myWidth_NO_BrichtZuViel"] || [object hasSuffix:@"myHeight_NO_BrichtZuViel"])
             {
                 // Ganz hintern das myWidth oder das myHeight muss dann wegfallen
                 NSArray *array = [object componentsSeparatedByString: @"."];
@@ -671,7 +681,14 @@ void OLLog(xmlParser *self, NSString* s,...)
         
     }
 
-    [self.jQueryOutput appendString:o];
+    if (constraintValue)
+    {
+        [self.jsConstraintValuesOutput appendString:o];
+    }
+    else
+    {
+        [self.jsComputedValuesOutput appendString:o];
+    }
 }
 
 
@@ -811,12 +828,12 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Diese Sonderbehandlung ist wohl hinfällig: (ToDo - rausnehmen!)
         // Wir beobachten sonst ja nicht die Änderungen! ist ja ein Constraint!
-        //if ([s rangeOfString:@"${parent.height}"].location != NSNotFound ||
-            //[s rangeOfString:@"${immediateparent.height}"].location != NSNotFound)
-        //{
-          //  [style appendString:@"height:inherit;"];
-        //}
-        //else
+        if ([s rangeOfString:@"${parent.height}"].location != NSNotFound ||
+            [s rangeOfString:@"${immediateparent.height}"].location != NSNotFound)
+        {
+            [style appendString:@"height:inherit;"];
+        }
+        else
         if ([s hasPrefix:@"$"])
         {
             [self setTheValue:s ofAttribute:@"height"];
@@ -858,7 +875,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
     }
 
-    // speichern, falls width schon gesetz wurde (für Attribut resource)
+    // speichern, falls width schon gesetzt wurde (für Attribut resource)
     BOOL widthGesetzt = NO;
     if ([attributeDict valueForKey:@"width"])
     {
@@ -869,12 +886,12 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Diese Sonderbehandlung ist wohl hinfällig: (ToDo - rausnehmen!)
         // Wir beobachten sonst ja nicht die Änderungen! ist ja ein Constraint!
-        //if ([s rangeOfString:@"${parent.width}"].location != NSNotFound ||
-        //    [s rangeOfString:@"${immediateparent.width}"].location != NSNotFound)
-        //{
-        //    [style appendString:@"width:inherit;"];
-        //}
-        //else
+        if ([s rangeOfString:@"${parent.width}"].location != NSNotFound ||
+            [s rangeOfString:@"${immediateparent.width}"].location != NSNotFound)
+        {
+            [style appendString:@"width:inherit;"];
+        }
+        else
         if ([s hasPrefix:@"$"])
         {
             [self setTheValue:[attributeDict valueForKey:@"width"] ofAttribute:@"width"];
@@ -2749,6 +2766,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         // ka, ob wirklich nötig, aber schadet wohl auch nicht und ist Erinnerung,
         // dass Array im index 12 was zurückliefert.
         self.defaultplacement = [result objectAtIndex:12];
+
+        [self.jsComputedValuesOutput appendString:[result objectAtIndex:13]];
+        [self.jsConstraintValuesOutput appendString:[result objectAtIndex:14]];
     }
 
     NSLog(@"Leaving recursion");
@@ -2880,11 +2900,14 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 - (NSString*) korrigiereElemBeiWindow:(NSString*)s
 {
-    NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
-
-    if ([elemTyp isEqualToString:@"window"])
+    if ([self.enclosingElements count] > 1)
     {
-        s = [NSString stringWithFormat:@"%@_content",s];
+        NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
+
+        if ([elemTyp isEqualToString:@"window"])
+        {
+            s = [NSString stringWithFormat:@"%@_content",s];
+        }
     }
 
     return s;
@@ -4243,7 +4266,9 @@ didStartElement:(NSString *)elementName
 
 
             // War früher mal jsHeadOutput, aber die Elemente sind ja erst nach Instanzierung
-            // bekannt, deswegen jQueryOutput0.
+            // bekannt, deswegen jQueryOutput0
+            // (damit es noch vor den Computed Values und Constraint Values bekannt ist)
+            // canvas zu, die ja bereits bekannt sein müssen!
             // Wenn wir ein Attribut eines Datasets haben, dann direkt hinter das dataset schreiben
             if ([elemTyp isEqualToString:@"dataset"])
             {
@@ -6927,7 +6952,7 @@ didStartElement:(NSString *)elementName
         // UND an canvas binden.
         // Ansonsten 'method' als Methode an das umgebende Objekt koppeln.
 
-        // Hier drin sammle ich erstmal alle Ausgaben
+        // Hier drin sammle ich erstmal die Ausgabe
         NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
 
@@ -6989,6 +7014,8 @@ didStartElement:(NSString *)elementName
         [o appendString:@" "];
 
 
+        // jQueryOutput0, damit es noch vor den Computed Values und Constraint Values bekannt ist
+        // canvas zu, die ja bereits bekannt sein müssen!
         [self.jQueryOutput0 appendString:o];
 
 
@@ -7639,9 +7666,9 @@ didStartElement:(NSString *)elementName
 
 
         // Okay, jQuery-Code mache ich beim schließen, weil ich erst den eventuellen Text der
-        // zwischen den Tags steht aufsammeln muss, und dann als Parameter übergebe
+        // zwischen den Tags steht, aufsammeln muss, und dann als Parameter übergebe.
 
-        // Okay, das geht so nicht, habe den Code wieder nach vorne geholt, denn sonst würde bei in einander
+        // Okay, das geht so nicht, habe den Code wieder nach vorne geholt, denn sonst würde bei ineinander
         // verschschachtelten Klassen, erst die innere Klasse ausgeführt werden. Aber die innere Klasse muss
         // bereits die width vom parent wissen (für align)
         // Falls ich dann doch mal text zwischen den tags habe, dann füge ich ihn dadurch ein, dass ich wieder
@@ -7666,11 +7693,11 @@ didStartElement:(NSString *)elementName
 
         // in jQueryOutput0! Damit a) keine weiteren Elemente überschrieben werden, weil anhand der gesetzten
         // css wird erkannt, welche überschrieben werden dürfen und welche nicht.
-        // Verschlechtet und verbessert ansich noch zu gleich! (ToDo) Deswegen noch unsicher, ob so richtig.
+        // Verschlechtet und verbessert sich noch zu gleich! (ToDo) Deswegen noch unsicher, ob so richtig.
         // War früher jQueryOutput.
         // b) damit Simplelayout hiernach NICH EINMAL ausgeführt werden kann
         // analog auch beim beenden beachten. (Falls es hier geändert wird, dort mitändern!)
-        [self.jQueryOutput0 appendString:o];
+        [self.jQueryOutput appendString:o];
 
 
         // Hoffentlich ist das nicht zu lax, aber wir erlauben zwischen Klassen erstmal immer
@@ -8206,6 +8233,17 @@ BOOL isJSArray(NSString *s)
 
         self.defaultplacement = [result objectAtIndex:12];
 
+        NSString *rekursiveRueckgabeJsComputedValuesOutput = [result objectAtIndex:13];
+        if (![rekursiveRueckgabeJsComputedValuesOutput isEqualToString:@""])
+            NSLog(@"String 13 aus der Rekursion wird unser JS-Computed-Values-content für JS-Objekt");
+
+        NSString *rekursiveRueckgabeJsConstraintValuesOutput = [result objectAtIndex:14];
+        if (![rekursiveRueckgabeJsConstraintValuesOutput isEqualToString:@""])
+            NSLog(@"String 14 aus der Rekursion wird unser JS-Constraint-Values-content für JS-Objekt");
+
+
+
+
         // Falls im HTML-Code Text mit ' auftaucht, müssen wir das escapen.
         rekursiveRueckgabeOutput = [rekursiveRueckgabeOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
 
@@ -8248,6 +8286,9 @@ BOOL isJSArray(NSString *s)
         rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJsHeadOutput = [rekursiveRueckgabeJsHeadOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
+        rekursiveRueckgabeJsComputedValuesOutput = [rekursiveRueckgabeJsComputedValuesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
+        rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
+
 
         [self.jsOLClassesOutput appendString:@"  // Der Vollständigkeit halber. Wird derzeit noch vor dem Instanzieren ausgewertet und spielt hier drin keine Rolle\n"];
         [self.jsOLClassesOutput appendString:@"  // Bei text/textinput wird dieses Objekt auch schon intern ausgewertet! Eventuell folgt später noch mehr.\n"];
@@ -8328,6 +8369,7 @@ BOOL isJSArray(NSString *s)
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeOutput];
         [self.jsOLClassesOutput appendString:@"';\n\n"];
 
+
         [self.jsOLClassesOutput appendString:@"  this.contentLeadingJSHead = \""];
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsHeadOutput];
         [self.jsOLClassesOutput appendString:@"\";\n\n"];
@@ -8335,7 +8377,7 @@ BOOL isJSArray(NSString *s)
         [self.jsOLClassesOutput appendString:@"  this.contentJSHead = \""];
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsHead2Output];
         [self.jsOLClassesOutput appendString:@"\";\n\n"];
-
+        
         [self.jsOLClassesOutput appendString:@"  this.contentJS = \""];
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsOutput];
         [self.jsOLClassesOutput appendString:@"\";\n\n"];
@@ -8343,6 +8385,15 @@ BOOL isJSArray(NSString *s)
         [self.jsOLClassesOutput appendString:@"  this.contentLeadingJQuery = \""];
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJQueryOutput0];
         [self.jsOLClassesOutput appendString:@"\";\n\n"];
+
+        [self.jsOLClassesOutput appendString:@"  this.contentJSComputedValues = \""];
+        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsComputedValuesOutput];
+        [self.jsOLClassesOutput appendString:@"\";\n\n"];
+
+        [self.jsOLClassesOutput appendString:@"  this.contentJSConstraintValues = \""];
+        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsConstraintValuesOutput];
+        [self.jsOLClassesOutput appendString:@"\";\n\n"];
+
 
         [self.jsOLClassesOutput appendString:@"  this.contentJQuery = \""];
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJQueryOutput];
@@ -8947,12 +8998,8 @@ BOOL isJSArray(NSString *s)
 
         // super ist nicht erlaubt in JS und gibt es auch nicht.
         // Ich ersetze es erstmal durch this. ToDo
-        // Evtl. klappt das schon, weil ja eh alle Funktionen in parentKlasse stecken (To Check)
         s = [s stringByReplacingOccurrencesOfString:@"super" withString:@"this"];
 
-
-        // This ersetzen
-        // s = [s stringByReplacingOccurrencesOfString:@"this" withString:@"$(this)"];
 
         // Damit er in jeder Code-Zeile korrekt einrückt
         s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\n   "];
@@ -8960,8 +9007,12 @@ BOOL isJSArray(NSString *s)
         NSLog([NSString stringWithFormat:@"Modified code changed to in method: \n**********\n%@\n**********",s]);
 
 
-        [self.jQueryOutput0 appendString:@"   "];
-        [self.jQueryOutput0 appendString:s];
+        // Hier drin sammle ich erstmal die Ausgabe
+        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
+
+
+        [o appendString:@"   "];
+        [o appendString:s];
 
 
         // Falls wir in canvas/library sind, dann muss es nicht nur global verfügbar sein
@@ -8969,35 +9020,20 @@ BOOL isJSArray(NSString *s)
         if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"canvas"] ||
             [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"library"])
         {
-            [self.jQueryOutput0 appendString:@"\n  }\n"];
-            [self.jQueryOutput0 appendString:@"  // Diese Methode ebenfalls an canvas binden\n"];
-            [self.jQueryOutput0 appendFormat:@"  canvas.%@ = %@;\n",self.lastUsedNameAttributeOfMethod,self.lastUsedNameAttributeOfMethod];
+            [o appendString:@"\n  }\n"];
+            [o appendString:@"  // Diese Methode ebenfalls an canvas binden\n"];
+            [o appendFormat:@"  canvas.%@ = %@;\n",self.lastUsedNameAttributeOfMethod,self.lastUsedNameAttributeOfMethod];
         }
         else
         {
             // Dann hatten wir wegen anderem scope ein 'with (x) {' gesetzt.
             // Dieses müssen wir hier einmal extra schließen
-            [self.jQueryOutput0 appendString:@"\n    }"];
-            [self.jQueryOutput0 appendString:@"\n  }\n"];
+            [o appendString:@"\n    }"];
+            [o appendString:@"\n  }\n"];
         }
 
-
-
-        // Neu gelöst über die Methode getTheParent(), die an alle Objekte prototyped wird
-        /************************* Die Schummelei hier hat ein Ende *************************
-        // Alles was ich als Funktion in das Objekt gepackt habe auch erstmal in 'parent' packen
-        [self.jQueryOutput0 appendString:@"  // Hier nochmal etwas schummeln und ebenfalls zu parent hinzufügen, die eben definierte Funktion.\n"];
-        // Analoge Abfrage wie beim betreten des Tags:
-        if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"canvas"] ||
-            [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"library"])
-        {
-            [self.jQueryOutput0 appendFormat:@"  parentKlasse.prototype.%@ = %@.%@;\n",self.lastUsedNameAttribute,@"canvas",self.lastUsedNameAttribute];
-        }
-        else
-        {
-            [self.jQueryOutput0 appendFormat:@"  parentKlasse.prototype.%@ = %@.%@;\n",self.lastUsedNameAttribute,[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1],self.lastUsedNameAttribute];
-        }
-        ************************* Die Schummelei hier hat ein Ende *************************/
+        // jQueryOutput0 (Begründung siehe öffnendes Tag)
+        [self.jQueryOutput0 appendString:o];
     }
 
 
@@ -9031,7 +9067,7 @@ BOOL isJSArray(NSString *s)
         // Wenn wir einen String gefunden haben, dann IN den existierenden Output einfügen:
         if ([s length] > 0)
         {
-            [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-31];
+            [self.jQueryOutput insertString:s atIndex:[self.jQueryOutput length]-31];
         }
 
         self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
@@ -9227,6 +9263,8 @@ BOOL isJSArray(NSString *s)
     [self.output appendString:@"  var dlgsave = new dlg();\n\n"];
 
 
+    
+    
     // Normale Javascript-Anweisungen
     if (![self.jsOutput isEqualToString:@""])
     {
@@ -9240,12 +9278,11 @@ BOOL isJSArray(NSString *s)
     }
 
 
-
     // Vorgezogene jQuery-Ausgaben:
     if (![self.jQueryOutput0 isEqualToString:@""])
     {
         [self.output appendString:self.jQueryOutput0];
-
+        
         [self.output appendString:@"\n\n  /*******************************************************************/\n"];
         [self.output appendString:@"  /******************************Grenze ******************************/\n"];
         [self.output appendString:@"  /************ Vorgezogene JQuery-Ausgaben sind hier vor ************/\n"];
@@ -9254,9 +9291,37 @@ BOOL isJSArray(NSString *s)
     }
 
 
+    // Computed Values
+    if (![self.jsComputedValuesOutput isEqualToString:@""])
+    {
+        [self.output appendString:self.jsComputedValuesOutput];
+
+        [self.output appendString:@"\n\n  /*******************************************************************/\n"];
+        [self.output appendString:@"  /******************************Grenze ******************************/\n"];
+        [self.output appendString:@"  /********************* Computed sind hier vor **********************/\n"];
+        [self.output appendString:@"  /***Diese müssen zwingend vor folgenden JS/jQuery-Ausgaben kommen***/\n"];
+        [self.output appendString:@"  /*******************************************************************/\n\n\n"];
+    }
+
+
+    // Alle Constraint Values direkt hinterher
+    if (![self.jsConstraintValuesOutput isEqualToString:@""])
+    {
+        [self.output appendString:self.jsConstraintValuesOutput];
+
+        [self.output appendString:@"\n\n  /*******************************************************************/\n"];
+        [self.output appendString:@"  /******************************Grenze ******************************/\n"];
+        [self.output appendString:@"  /***************** Constraint Values sind hier vor *****************/\n"];
+        [self.output appendString:@"  /***Diese müssen zwingend vor folgenden JS/jQuery-Ausgaben kommen***/\n"];
+        [self.output appendString:@"  /*******************************************************************/\n\n\n"];
+    }
+
 
     // Normale jQuery-Ausgaben
     [self.output appendString:self.jQueryOutput];
+
+
+
 
     // Falls es mindestens einen TabSheetContainer gab, das Design hier noch anpassen (nur oben Ecken)
     if (![self.lastUsedTabSheetContainerID isEqualToString:@""])
@@ -10158,15 +10223,15 @@ BOOL isJSArray(NSString *s)
     "}"
     "\n"
     "\n"
-    "/*\n"
-    " * jQuery resize event - v1.1 - 3/14/2010\n"
-    " * http://benalman.com/projects/jquery-resize-plugin/\n"
-    " *\n"
-    " * Copyright (c) 2010 \"Cowboy\" Ben Alman\n"
-    " * Dual licensed under the MIT and GPL licenses.\n"
-    " * http://benalman.com/about/license/\n"
-    " */\n"
-    "(function($,h,c){var a=$([]),e=$.resize=$.extend($.resize,{}),i,k=\"setTimeout\",j=\"resize\",d=j+\"-special-event\",b=\"delay\",f=\"throttleWindow\";e[b]=250;e[f]=true;$.event.special[j]={setup:function(){if(!e[f]&&this[k]){return false}var l=$(this);a=a.add(l);$.data(this,d,{w:l.width(),h:l.height()});if(a.length===1){g()}},teardown:function(){if(!e[f]&&this[k]){return false}var l=$(this);a=a.not(l);l.removeData(d);if(!a.length){clearTimeout(i)}},add:function(l){if(!e[f]&&this[k]){return false}var n;function m(s,o,p){var q=$(this),r=$.data(this,d);r.w=o!==c?o:q.width();r.h=p!==c?p:q.height();n.apply(this,arguments)}if($.isFunction(l)){n=l;return m}else{n=l.handler;l.handler=m}}};function g(){i=h[k](function(){a.each(function(){var n=$(this),m=n.width(),l=n.height(),o=$.data(this,d);if(m!==o.w||l!==o.h){n.trigger(j,[o.w=m,o.h=l])}});g()},e[b])}})(jQuery,this);\n"
+    //"/*\n"
+    //" * jQuery resize event - v1.1 - 3/14/2010\n"
+    //" * http://benalman.com/projects/jquery-resize-plugin/\n"
+    //" *\n"
+    //" * Copyright (c) 2010 \"Cowboy\" Ben Alman\n"
+    //" * Dual licensed under the MIT and GPL licenses.\n"
+    //" * http://benalman.com/about/license/\n"
+    //" */\n"
+    //"(function($,h,c){var a=$([]),e=$.resize=$.extend($.resize,{}),i,k=\"setTimeout\",j=\"resize\",d=j+\"-special-event\",b=\"delay\",f=\"throttleWindow\";e[b]=250;e[f]=true;$.event.special[j]={setup:function(){if(!e[f]&&this[k]){return false}var l=$(this);a=a.add(l);$.data(this,d,{w:l.width(),h:l.height()});if(a.length===1){g()}},teardown:function(){if(!e[f]&&this[k]){return false}var l=$(this);a=a.not(l);l.removeData(d);if(!a.length){clearTimeout(i)}},add:function(l){if(!e[f]&&this[k]){return false}var n;function m(s,o,p){var q=$(this),r=$.data(this,d);r.w=o!==c?o:q.width();r.h=p!==c?p:q.height();n.apply(this,arguments)}if($.isFunction(l)){n=l;return m}else{n=l.handler;l.handler=m}}};function g(){i=h[k](function(){a.each(function(){var n=$(this),m=n.width(),l=n.height(),o=$.data(this,d);if(m!==o.w||l!==o.h){n.trigger(j,[o.w=m,o.h=l])}});g()},e[b])}})(jQuery,this);\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -10329,6 +10394,8 @@ BOOL isJSArray(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Sobald DOM aufgebaut, wird das 1. Element zu canvas //\n"
+    "// Alle Variablen und Methoden die zu canvas gehören,  //\n"
+    "// werden hier initialisiert.                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "function makeCanvasAccessible() {\n"
     "    // ohne var, damit global\n"
@@ -10337,16 +10404,22 @@ BOOL isJSArray(NSString *s)
     "    if (canvas === undefined)\n"
     "        throw new Error('No element <canvas> found. The root must be <canvas>.');\n"
     "\n"
+    "    canvas.lpsrelease = 'XML2HTML5 Converter';\n"
+    "    canvas.lpsbuilddate = '2012-07-01';\n"
     "    canvas.lpsversion = '1.0';\n"
+    "    canvas.version = '1.0';\n"
+    "    canvas.percentcreated = 1;\n"
+    "    canvas.runtime = 'html5';\n"
+    "    canvas.framerate = 30;\n"
+    "    canvas.versionInfoString = function() { return '1.0'; }\n"
     "\n"
     "    canvas.getMouse = function(axis) {\n"
     "        if (typeof axis !== 'string' || (axis !== 'x' && axis !== 'y'))\n"
     "            throw new Error('canvas.getMouse() - No axis or wrong axis.');\n"
+    "        return 1;\n"
     "    }\n"
     "\n"
-    "\n"
-    "    canvas.setDefaultContextMenu = function(a) {}; // ToDo\n"
-    "    canvas.SetPerson = function() {}; // ToDo\n"
+    "    canvas.setDefaultContextMenu = function(contextmenu) {};\n"
     "\n"
     "\n"
     "    // Anhand dieser Variable kann im Skript abgefragt werden, ob wir im Debugmode sind\n"
@@ -11202,9 +11275,9 @@ BOOL isJSArray(NSString *s)
     "    }\n"
     "\n"
     "    if (attributeName == undefined || attributeName == '')\n"
-    "        throw 'Error calling setAttribute, no argument attributeName given (this = '+this+').';\n"
+    "        throw 'Error1 calling setAttribute, no argument attributeName given (this = '+this+').';\n"
     "    if (value == undefined)\n"
-    "        throw 'Error calling setAttribute, no argument value given (this = '+this+').';\n"
+    "        throw 'Error2 calling setAttribute, no argument value given (attributeName = \"'+attributeName+'\" and this = '+this+').';\n"
     "\n"
     "\n"
     //"    var me = globalMe;\n"
@@ -12133,6 +12206,18 @@ BOOL isJSArray(NSString *s)
     "  // evalCode benötigt Referenz auf id, damit es Methoden direkt adden kann\n"
     "  if (s.length > 0)\n"
     "    evalCode(s,id);\n"
+    "\n"
+    "  // Replace-IDs von den Computed Values ersetzen\n"
+    "  var s = replaceID(obj.contentJSComputedValues, $(id).attr('id'));\n"
+    "  // Dann den ComputedValues-Content hinzufügen/auswerten\n"
+    "  if (s.length > 0)\n"
+    "    evalCode(s);\n"
+    "\n"
+    "  // Replace-IDs von den Constraint Values ersetzen\n"
+    "  var s = replaceID(obj.contentJSConstraintValues, $(id).attr('id'));\n"
+    "  // Dann den ConstraintValues-Content hinzufügen/auswerten\n"
+    "  if (s.length > 0)\n"
+    "    evalCode(s);\n"
     "\n"
     "  // Replace-IDs von contentJQuery ersetzen\n"
     "  var s = replaceID(obj.contentJQuery, $(id).attr('id'));\n"

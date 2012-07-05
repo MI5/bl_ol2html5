@@ -636,7 +636,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Wenn die $once-Angabe erfolgt, ist es gar kein constraint und wir brauchen weder ein onchange noch ein watch
     if (constraintValue && !nichtWatchen && !nochVorDOMAusfuehren)
     {
-        [o appendString:@"  // Zusätzlich bei change aktualisieren, falls constraint-value\n"];
+        [o appendString:@"  // Zusätzlich bei change aktualisieren bzw. watchen, da constraint-value\n"];
         [o appendFormat:@"  // Der zu setzende Wert ist abhängig von %d woanders gesetzten Variable(n)\n",[vars count]];
 
         // '__strong', damit ich object modifizieren kann
@@ -3194,7 +3194,6 @@ didStartElement:(NSString *)elementName
 
         // Derzeit werden <items>-Listen als Array behandelt.
         // Eventuell sollten das ebenfalls Objekte werden (To Think - ToDo)
-        // Ein Array mit dem Namen des gefundenen datasets und den dataset-items als Elementen
         NSLog(@"Using the datasets attribute 'name' as name for a new JS-Array().");
         [self.jsHead2Output appendString:@"// Ein Array mit dem Namen des gefundenen datasets und den dataset-items als Elementen\n"];
         [self.jsHead2Output appendString:@"var "];
@@ -3454,7 +3453,6 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
-        [elementName isEqualToString:@"buttonnextToDoTakeMeOut"] ||
         [elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDStext"] ||
         [elementName isEqualToString:@"statictext"] ||
@@ -4560,8 +4558,7 @@ didStartElement:(NSString *)elementName
 
 
     if ([elementName isEqualToString:@"basebutton"] ||
-        [elementName isEqualToString:@"imgbutton"] ||
-        [elementName isEqualToString:@"buttonnextToDoTakeMeOut"])
+        [elementName isEqualToString:@"imgbutton"])
     {
         element_bearbeitet = YES;
 
@@ -6366,11 +6363,12 @@ didStartElement:(NSString *)elementName
 
 
 
-    // Erfordert 3 Kind-Elemente. Das erste Element kommt links an die Wand, das 3. Element kommt rechts an die Wand,
+    // Erfordert 3 Kind-Elemente. Das erste Element kommt links an die Wand,
+    // das 3. Element kommt rechts an die Wand,
     // das mittlere nimmt den Platz in er Mitte ein, der übrig bleibt.
     // Wenn nur 1 Kind-Element vorhanden, kommt dieses einfach links an die Wand
     // Wenn nur 2 Kind-Elemente vorhanden, bekommt das 2. Element eine Breite von 0.
-    // Alles eben gesagt gilt für axis=x. Bei axis=y entsprechend analog, nur vertikal.
+    // Alles eben gesagte gilt für axis=x. Bei axis=y entsprechend analog, nur vertikal.
     if ([elementName isEqualToString:@"stableborderlayout"])
     {
         element_bearbeitet = YES;
@@ -6392,68 +6390,93 @@ didStartElement:(NSString *)elementName
             NSLog(@"Ignoring the attribute 'name' of 'stableborderlayout'.");
         }
 
+        // Hier drin sammle ich erstmal die Ausgabe
+        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
+
 
         if ([[attributeDict valueForKey:@"axis"] isEqualToString:@"x"])
         {
-            [self.jQueryOutput appendFormat:@"\n  // Setting a 'stableborderlayout' (axis:x) in '%@' with jQuery:\n",idUmgebendesElement];
+            [o appendFormat:@"\n  // Setting a 'stableborderlayout' (axis:x) in '%@' with jQuery:\n",idUmgebendesElement];
 
-            [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length == 1)\n    jQuery.noop(); /* no operation */\n",idUmgebendesElement];
+            [o appendFormat:@"  if ($('#%@').children().length == 1)\n    jQuery.noop(); /* no operation */\n",idUmgebendesElement];
 
-            [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length == 2) {\n",idUmgebendesElement];
-            [self.jQueryOutput appendFormat:@"    $('#%@').children().last().css('left',$('#%@').children().first().css('width'));\n",idUmgebendesElement,idUmgebendesElement];
-            [self.jQueryOutput appendFormat:@"    $('#%@').children().last().css('width','0');\n",idUmgebendesElement];
-            [self.jQueryOutput appendString:@"  }\n"];
+            [o appendFormat:@"  if ($('#%@').children().length == 2) {\n",idUmgebendesElement];
+            [o appendFormat:@"    $('#%@').children().last().css('left',$('#%@').children().first().css('width'));\n",idUmgebendesElement,idUmgebendesElement];
+            [o appendFormat:@"    $('#%@').children().last().css('width','0');\n",idUmgebendesElement];
+            [o appendString:@"  }\n"];
 
 
-            [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length > 2) {\n",idUmgebendesElement];
-            //[self.jQueryOutput appendFormat:@"    alert($('#%@').children().length);\n",idUmgebendesElement];
+            [o appendFormat:@"  if ($('#%@').children().length > 2) {\n",idUmgebendesElement];
+            //[o appendFormat:@"    alert($('#%@').children().length);\n",idUmgebendesElement];
 
-            //[self.jQueryOutput appendFormat:@"    $('#%@').children().eq(2).css('left','auto'); // sonst nimmt er 'right' nicht an.\n",idUmgebendesElement];
-            //[self.jQueryOutput appendFormat:@"    $('#%@').children().eq(2).css('right','0');\n",idUmgebendesElement];
+            //[o appendFormat:@"    $('#%@').children().eq(2).css('left','auto'); // sonst nimmt er 'right' nicht an.\n",idUmgebendesElement];
+            //[o appendFormat:@"    $('#%@').children().eq(2).css('right','0');\n",idUmgebendesElement];
             // Habe Angst, dass er mir so irgendwas zerhaut, weil ich left auf 'auto' setze, aber andere Stellen sich
             // darauf verlassen, dass in 'left' ein numerischer Wert ist. Deswegen lieber so:
-            if (positionAbsolute == YES)
+
+            if (positionAbsolute == NO)
             {
-                [self.jQueryOutput appendFormat:@"    $('#%@').children().eq(1).css('left',$('#%@').children().first().css('width'));\n",idUmgebendesElement,idUmgebendesElement];
+                [o appendFormat:@"    $('#%@').children().each(function() { $(this).css('position','absolute'); });\n",idUmgebendesElement];
             }
-            [self.jQueryOutput appendFormat:@"    $('#%@').children().eq(1).width($('#%@').width()-$('#%@').children().first().width()-$('#%@').children().eq(2).width());\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
-            if (positionAbsolute == YES)
+            if (YES)
             {
-                [self.jQueryOutput appendFormat:@"    $('#%@').children().eq(2).css('left',$('#%@').width()-$('#%@').children().eq(2).width()+'px');\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
+                [o appendFormat:@"    $('#%@').children().eq(1).css('left',$('#%@').children().first().css('width'));\n",idUmgebendesElement,idUmgebendesElement];
             }
-            [self.jQueryOutput appendString:@"  }\n\n"];
+            [o appendFormat:@"    $('#%@').children().eq(1).width($('#%@').width()-$('#%@').children().first().width()-$('#%@').children().eq(2).width());\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
+            if (YES)
+            {
+                [o appendFormat:@"    $('#%@').children().eq(2).css('left',$('#%@').width()-$('#%@').children().eq(2).width()+'px');\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
+            }
+
+            [o appendFormat:@"    // Noch die Height vom umgebenden anpassen, damit es so hoch ist, wie auch der Inhalt hoch ist\n"];
+            [o appendFormat:@"    $('#%@').height(getHeighestHeightOfChilds(%@));\n",idUmgebendesElement,idUmgebendesElement];
+
+            [o appendString:@"  }\n\n"];
 
             // So funktioniert es besser? (anstatt dem 4 Zeilen weiter oben)
-            // [self.jQueryOutput appendFormat:@"    $('#%@').children().eq(2).css('left',$('#%@').children().eq(0).width()+$('#%@').children().eq(1).width()+'px');\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
+            // [o appendFormat:@"    $('#%@').children().eq(2).css('left',$('#%@').children().eq(0).width()+$('#%@').children().eq(1).width()+'px');\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
         }
         else
         {
-            [self.jQueryOutput appendFormat:@"\n  // Setting a 'stableborderlayout' (axis:y) in '%@' with jQuery:\n",idUmgebendesElement];
+            [o appendFormat:@"\n  // Setting a 'stableborderlayout' (axis:y) in '%@' with jQuery:\n",idUmgebendesElement];
 
-            [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length == 1)\n    jQuery.noop(); /* no operation */\n",idUmgebendesElement];
+            [o appendFormat:@"  if ($('#%@').children().length == 1)\n    jQuery.noop(); /* no operation */\n",idUmgebendesElement];
 
-            [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length == 2) {\n",idUmgebendesElement];
-            [self.jQueryOutput appendFormat:@"    $('#%@').children().last().css('top',$('#%@').children().first().css('height'));\n",idUmgebendesElement,idUmgebendesElement];
-            [self.jQueryOutput appendFormat:@"    $('#%@').children().last().css('height','0');\n",idUmgebendesElement];
-            [self.jQueryOutput appendString:@"  }\n"];
+            [o appendFormat:@"  if ($('#%@').children().length == 2) {\n",idUmgebendesElement];
+            [o appendFormat:@"    $('#%@').children().last().css('top',$('#%@').children().first().css('height'));\n",idUmgebendesElement,idUmgebendesElement];
+            [o appendFormat:@"    $('#%@').children().last().css('height','0');\n",idUmgebendesElement];
+            [o appendString:@"  }\n"];
 
 
-            [self.jQueryOutput appendFormat:@"  if ($('#%@').children().length > 2) {\n",idUmgebendesElement];
-            //[self.jQueryOutput appendFormat:@"    $('#%@').children().eq(2).css('top',$('#%@').height()-$('#%@').children().eq(2).height()+'px');\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
+            [o appendFormat:@"  if ($('#%@').children().length > 2) {\n",idUmgebendesElement];
+            //[o appendFormat:@"    $('#%@').children().eq(2).css('top',$('#%@').height()-$('#%@').children().eq(2).height()+'px');\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
             // So funktioniert es besser:
-            if (positionAbsolute == YES)
+
+            // Er will die Y und Y- Werte auslesen. Wenn ich in position:relative bin, klappt
+            // das aber nicht, weil er ja automatisch nach rechts rutscht oder runter rutscht
+            // deswegen muss ich, auch bei 'relative', hier alle Kinder 'absolute' machen.
+            if (positionAbsolute == NO)
             {
-                [self.jQueryOutput appendFormat:@"    $('#%@').children().eq(1).css('top',$('#%@').children().first().css('height'));\n",idUmgebendesElement,idUmgebendesElement];
+                [o appendFormat:@"    $('#%@').children().each(function() { $(this).css('position','absolute'); });\n",idUmgebendesElement];
             }
-            [self.jQueryOutput appendFormat:@"    $('#%@').children().eq(1).height($('#%@').height()-$('#%@').children().first().height()-$('#%@').children().eq(2).height());\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
-            if (positionAbsolute == YES)
+            if (YES)
             {
-                [self.jQueryOutput appendFormat:@"    $('#%@').children().eq(2).css('top',$('#%@').children().eq(0).height()+$('#%@').children().eq(1).height()+'px');\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
+                [o appendFormat:@"    $('#%@').children().eq(1).css('top',$('#%@').children().first().css('height'));\n",idUmgebendesElement,idUmgebendesElement];
             }
-            [self.jQueryOutput appendFormat:@"    // Noch die Height vom umgebenden anpassen, damit es so hoch ist, wie auch der Inhalt hoch ist\n"];
-            [self.jQueryOutput appendFormat:@"    $('#%@').height($('#%@').children().eq(2).position().top+$('#%@').children().eq(2).height());\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
-            [self.jQueryOutput appendString:@"  }\n\n"];
+            [o appendFormat:@"    $('#%@').children().eq(1).height($('#%@').height()-$('#%@').children().first().height()-$('#%@').children().eq(2).height());\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
+            if (YES)
+            {
+                [o appendFormat:@"    $('#%@').children().eq(2).css('top',$('#%@').children().eq(0).height()+$('#%@').children().eq(1).height()+'px');\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
+            }
+
+            [o appendFormat:@"    // Noch die Height vom umgebenden anpassen, damit es so hoch ist, wie auch der Inhalt hoch ist\n"];
+            [o appendFormat:@"    $('#%@').height($('#%@').children().eq(2).position().top+$('#%@').children().eq(2).height());\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
+
+            [o appendString:@"  }\n\n"];
         }
+
+
+        [self.jQueryOutput appendString:o];
     }
 
 
@@ -6734,51 +6757,6 @@ didStartElement:(NSString *)elementName
     }
 
 
-
-    // Wohl Eine Art umgebende View für Check-Felder die eingeblendet werden, damit man für sie die
-    // Visibility z.B. nur einmal als ganzes ansprechen muss
-    // Neu: Gemäß BDSlib: Sie definiert 3 Methoden und eine Variable für Views, die von ihr erben.
-    // Es ist eine Art abstrakte View, die meist geerbt wird.
-    if ([elementName isEqualToString:@"checkviewToDoDeleteMe"])
-    {
-        element_bearbeitet = YES;
-
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
-        [self.output appendString:@"<!-- Check-view: -->\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
-        [self.output appendString:@"<div"];
-
-        [self addIdToElement:attributeDict];
-
-
-
-        [self.output appendString:@" style=\""];
-        [self.output appendString:[self addCSSAttributes:attributeDict]];
-        [self.output appendString:@"\">\n"];
-
-
-        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
-    }
-
-
-    // Eine View ohne ID, Attribute, ohne alles, Zweck ist mir noch nicht ganz klar
-    // Eine Art Verzögerungs-view?
-    if ([elementName isEqualToString:@"deferviewToDoDeleteMe"])
-    {
-        element_bearbeitet = YES;
-
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
-        [self.output appendString:@"<!-- Deferview: -->\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
-        [self.output appendString:@"<div>\n"];
-
-
-        if ([attributeDict valueForKey:@"name"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'name'.");
-        }
-    }
 
 
     // Eine BDSFinanzaemter-View... ToDo (evtl. eher eine Art input-Feld und dort zuzuordnen?)
@@ -8514,15 +8492,13 @@ BOOL isJSArray(NSString *s)
     if ([elementName isEqualToString:@"view"] ||
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
-        [elementName isEqualToString:@"deferviewToDoDeleteMe"] ||
         [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"baselist"] ||
-        [elementName isEqualToString:@"imgbutton"] ||
-        [elementName isEqualToString:@"buttonnextToDoTakeMeOut"])
+        [elementName isEqualToString:@"imgbutton"])
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
 
@@ -8655,12 +8631,9 @@ BOOL isJSArray(NSString *s)
         [elementName isEqualToString:@"view"] ||
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
-        [elementName isEqualToString:@"deferviewToDoDeleteMe"] ||
-        [elementName isEqualToString:@"checkviewToDoDeleteMe"] ||
         [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
-        [elementName isEqualToString:@"buttonnextToDoTakeMeOut"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"])
     {
@@ -9252,7 +9225,8 @@ BOOL isJSArray(NSString *s)
     [self.output appendString:@"$(window).load(function()\n{\n"];
 
 
-    [self.output appendString:@"  if (window['tabsMain']) tabsMain.selecttab = function() {} // ToDo\n"];
+    [self.output appendString:@"  if (window['tabsMain']) tabsMain.selecttab = function(index) { $(this).tabs('select', index ) } // ToDo\n"];
+    [self.output appendString:@"  if (window['tabsMain']) tabsMain.next = function() { $(this).tabs('select', 2 ) } // ToDo\n"];
     [self.output appendString:@"  if (window['rudStpfl']) rudStpfl.rolldown = function() {} // ToDo\n"];
     [self.output appendString:@"  var dlgsave = new dlg();"];
     [self.output appendString:@"  // dlgFamilienstandSingle heimlich als Objekt einführen (diesmal direkt im Objekt, ohne prototype)\n"];
@@ -9429,15 +9403,9 @@ BOOL isJSArray(NSString *s)
     "/* Enthaelt standard-Definitionen, die das Aussehen von OpenLaszlo simulieren */\n"
     "/*\n"
     "Known issues:\n"
-    "inherit => Not supported by IE6 & IE 7; hilft ersetzen durch auto?\n"
-    "- keine Unterstützung für Sound-Resourcen\n"
+    "inherit => Not supported by IE6 & IE 7\n"
     "\n"
     "\n"
-    "ToDo\n"
-    "- Kommentare gehen verloren (keep comments als Option mit anbieten)\n"
-    "- Von BDSeditdate und BDScombobox den Anfangscode zusammenfassen (ist gleich)\n"
-    "- 1000px großes bild soll nur bis zum Bildschirmrand gehen\n"
-    "- und zusätzlich sich selbst aktualisieren, wenn Bildschirmhöhe verändert wird\n"
     " */\n"
     "\n"
     "body, html\n"
@@ -10479,6 +10447,22 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Heighest height of all children of an element       //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function getHeighestHeightOfChilds(elem)\n"
+    "{\n"
+    "    var heighestHeight = 0;\n"
+    "    $(elem).children().each(function() {\n"
+    "        var heightOfChild = $(this).outerHeight(true);\n"
+    "        if (heightOfChild > heighestHeight)\n"
+    "            heighestHeight = heightOfChild;\n"
+    "    });\n"
+    "\n"
+    "    return heighestHeight;\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// true, wenn element2 element1 überlappt              //\n"
     "/////////////////////////////////////////////////////////\n"
     "function isOverlapping(element1, element2) {\n"
@@ -10666,6 +10650,16 @@ BOOL isJSArray(NSString *s)
     "            info += '<br />';\n"
     "  }\n"
     "  globalhelp.info.setAttribute_('text',info)\n"
+    "\n"
+    "\n"
+    "\n"
+    "  // Zusatz-Code -  Das hier muss noch zu ECHTEM generierten Code werden\n"
+    "  $(globalhelp_6).height(globalhelp._inner.myHeight+35-35);\n"
+    "  $(globalhelp_10).css('top',globalhelp._inner.myHeight+50-50+15);\n"
+    "  // Damit der eine blöde Effekt weggeht Hintergrundbild mit sich selbst aktualisieren\n"
+    "  $(globalhelp_7).css('background-image',$(globalhelp_7).css('background-image'))\n"
+    "  $(globalhelp_8).css('background-image',$(globalhelp_8).css('background-image'))\n"
+    "  $(globalhelp_9).css('background-image',$(globalhelp_9).css('background-image'))\n"
     "}\n"
     "\n"
     "\n"
@@ -10818,10 +10812,10 @@ BOOL isJSArray(NSString *s)
     "            $(a).focus();\n"
     "        }\n"
     "        this.getFocus = function() {\n"
-    "            alert('ToDo! (getFocus');\n"
+    "            return document.activeElement;\n"
     "        }\n"
     "        this.clearFocus = function() {\n"
-    "            alert('ToDo! (clearFocus)');\n"
+    "            this.getFocus().blur();\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -10870,8 +10864,6 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "    this.Formatter = function() {\n"
-    "        this.todo = function(scope,prop,val) {\n"
-    "        }\n"
     "    }\n"
     "    // Warum auch immer, hängt gemäß OL formatToString direkt im prototype...\n"
     "    this.Formatter.prototype.formatToString = function() { return sprintf.apply(null, arguments); }\n"
@@ -10886,7 +10878,7 @@ BOOL isJSArray(NSString *s)
     "    }\n"
     "\n"
     "\n"
-    "    // handlet intern irgendwie den Zugriff auf die XML-Datensätze (ToDo)\n"
+    "    // handlet den Zugriff auf die XML-Datensätze\n"
     "    this.datapointer = function(xpath,rerun) {\n"
     "\n"
     "        // Hardcore-Code..... Diese Funktion ist das Arbeitstier\n"
@@ -10928,9 +10920,13 @@ BOOL isJSArray(NSString *s)
     "\n"
     "                while(result)\n"
     "                {\n"
-    "                    node = result.childNodes[0].parentNode;\n"
-    "                    nodeValue = result.childNodes[0].nodeValue;\n"
-    "                    nodeName = result.childNodes[0].parentNode.nodeName;\n"
+    "                    // Wenn der Knoten leer ist, dann belass es bei den oben gesetzen undefined-Werten für node, nodeValue und nodeName.\n"
+    "                    if (result.childNodes[0] != undefined)\n"
+    "                    {\n"
+    "                        node = result.childNodes[0].parentNode;\n"
+    "                        nodeValue = result.childNodes[0].nodeValue;\n"
+    "                        nodeName = result.childNodes[0].parentNode.nodeName;\n"
+    "                    }\n"
     "\n"
     "                    result = nodes.iterateNext(); // Sonst infinite loop\n"
     "                }\n"
@@ -11118,7 +11114,6 @@ BOOL isJSArray(NSString *s)
     "swfso.getObject = function() { return swfso }; // ToDo\n"
     "swfso.data = new Object(); // ToDo\n"
     "swfso.data.savedstate = 'ToDo'; // ToDo\n"
-    // "swfso.data.internalid = ''; // ToDo\n"
     "swfso.flush = function() { }; // ToDo\n"
     "\n"
     "var dsEingaben = new Object(); // ToDo\n"
@@ -12212,6 +12207,18 @@ BOOL isJSArray(NSString *s)
     "  // Dann den ComputedValues-Content hinzufügen/auswerten\n"
     "  if (s.length > 0)\n"
     "    evalCode(s);\n"
+    "\n"
+    "\n"
+    "\n"
+    "  // Solange constraint values bei width/height nicht funktionieren, muss ich es hier auch ausführen\n"
+    "  // (doppelt ausgeführter Code...weiter unten wird er ebenfalls ausgeführt...)\n"
+    "  // Replace-IDs von contentJQuery ersetzen\n"
+    "  var s = replaceID(obj.contentJQuery, $(id).attr('id'));\n"
+    "  // Dann den jQuery-Content hinzufügen/auswerten\n"
+    "  if (s.length > 0)\n"
+    "    evalCode(s);\n"
+    "\n"
+    "\n"
     "\n"
     "  // Replace-IDs von den Constraint Values ersetzen\n"
     "  var s = replaceID(obj.contentJSConstraintValues, $(id).attr('id'));\n"

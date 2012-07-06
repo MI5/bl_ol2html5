@@ -43,8 +43,6 @@ BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber 
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
-BOOL legeDatasetsAlsXMLan = YES; // Noch der ganze Code ist auf NO ausgelegt, aber wohl YES richtig.
-
 
 #import "xmlParser.h"
 
@@ -177,8 +175,9 @@ BOOL legeDatasetsAlsXMLan = YES; // Noch der ganze Code ist auf NO ausgelegt, ab
 
 @property (nonatomic) BOOL weAreCollectingTheCompleteContentInClass;
 //auch ein 2. und 3., sonst gibt es Interferenzen wenn ein zu skippendes Element in einem anderen zu skippenden liegt
-@property (nonatomic) BOOL weAreSkippingTheCompleteContentInThisElement2;
-@property (nonatomic) BOOL weAreSkippingTheCompleteContentInThisElement3;
+
+@property (nonatomic) BOOL weAreSkippingTheCompleteContentInThisElement;
+
 
 // Wenn wir <class> auswerten dann haben wir generelle Klassen und dürfen keine
 // festen IDs vergeben!
@@ -244,8 +243,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize weAreInDatasetAndNeedToCollectTheFollowingTags = _weAreInDatasetAndNeedToCollectTheFollowingTags;
 @synthesize weAreInRollUpDownWithoutSurroundingRUDContainer = _weAreInRollUpDownWithoutSurroundingRUDContainer;
 @synthesize weAreCollectingTheCompleteContentInClass = _weAreCollectingTheCompleteContentInClass;
-@synthesize weAreSkippingTheCompleteContentInThisElement2 = _weAreSkippingTheCompleteContentInThisElement2;
-@synthesize weAreSkippingTheCompleteContentInThisElement3 = _weAreSkippingTheCompleteContentInThisElement3;
+@synthesize weAreSkippingTheCompleteContentInThisElement = _weAreSkippingTheCompleteContentInThisElement;
 
 @synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler;
 
@@ -380,8 +378,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
         self.weAreInRollUpDownWithoutSurroundingRUDContainer = NO;
         self.weAreCollectingTheCompleteContentInClass = NO;
-        self.weAreSkippingTheCompleteContentInThisElement2 = NO;
-        self.weAreSkippingTheCompleteContentInThisElement3 = NO;
+        self.weAreSkippingTheCompleteContentInThisElement = NO;
         self.ignoreAddingIDsBecauseWeAreInClass = NO;
         self.onInitInHandler = NO;
 
@@ -939,7 +936,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         if ([s hasPrefix:@"$"])
         {
-            [self setTheValue:s ofAttribute:@"left"];
+            [self setTheValue:s ofAttribute:@"x"];
         }
         else
         {
@@ -963,7 +960,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         if ([s hasPrefix:@"$"])
         {
-            [self setTheValue:s ofAttribute:@"top"];
+            [self setTheValue:s ofAttribute:@"y"];
         }
         else
         {
@@ -1420,6 +1417,14 @@ void OLLog(xmlParser *self, NSString* s,...)
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'proxied'.");
+        }
+        if (![attributeDict valueForKey:@"width"])
+        {
+            [self setTheValue:@"'100%'" ofAttribute:@"width"];
+        }
+        if (![attributeDict valueForKey:@"height"])
+        {
+            [self setTheValue:@"'100%'" ofAttribute:@"height"];
         }
     }
 
@@ -3111,6 +3116,16 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+// Gibt es 2 mal im Code, deswegen als eigene Methode
+- (void) legeDatasetAnUndInitMitOeffnendemTag
+{
+    [self.jsHead2Output appendString:@"\n// Dieses Dataset wird als XML-Struktur angelegt und in einem JS-String gespeichert.\n"];
+    [self.jsHead2Output appendFormat:@"var %@",self.lastUsedDataset];
+    [self.jsHead2Output appendFormat:@" = '<%@>';\n",self.lastUsedDataset];
+}
+
+
+
 #pragma mark Delegate calls
 
 - (void) parser:(NSXMLParser *)parser
@@ -3195,7 +3210,7 @@ didStartElement:(NSString *)elementName
         // Derzeit werden <items>-Listen als Array behandelt.
         // Eventuell sollten das ebenfalls Objekte werden (To Think - ToDo)
         NSLog(@"Using the datasets attribute 'name' as name for a new JS-Array().");
-        [self.jsHead2Output appendString:@"// Ein Array mit dem Namen des gefundenen datasets und den dataset-items als Elementen\n"];
+        [self.jsHead2Output appendString:@"\n// Überschreiben der eben gesetzten var:\n// Ein Array mit dem Namen des gefundenen datasets und den dataset-items als Elementen\n"];
         [self.jsHead2Output appendString:@"var "];
         [self.jsHead2Output appendString:self.lastUsedDataset];
         [self.jsHead2Output appendString:@" = new Array();\n"];
@@ -3209,7 +3224,7 @@ didStartElement:(NSString *)elementName
 
     // Alle Elemente in dataset, die nicht 'items' sind, werden in Objekt-Propertys des zugehörigen
     // Objektes umgewandelt (Der Objektname kommt aus dem dataset-'name'-Attribut)
-    // Neu: Sie werden alternativ in eine XML-Struktur überführt
+    // Neu: Sie werden in eine XML-Struktur überführt
     if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
     {
 
@@ -3221,118 +3236,80 @@ didStartElement:(NSString *)elementName
         gesammelterText = [gesammelterText stringByReplacingOccurrencesOfString:@"\n" withString:@"\\\n"];
 
 
-        // Was ist das schon wieder für eine scheiße? Jetzt können in Datasets sogar Attribute und Methoden auftauchen... WTF???? ToDo ToDo ToDo ToDo ToDo
-        // Gleiche Liste beim schließenden Tag
-        if ([self.lastUsedDataset isEqualToString:@"dsEingabenOnline"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelSingle"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittel"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaFahrtenSingle"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExtSingle"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaUnterkunftskosten"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaLohnersatz"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaLohnersatzSingle"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaFahrten"] ||
-            [self.lastUsedDataset isEqualToString:@"dsElsterSend"] ||
-            [self.lastUsedDataset isEqualToString:@"dsElsterError"] ||
-            [self.lastUsedDataset isEqualToString:@"dsPaymentPaypal"] ||
-            [self.lastUsedDataset isEqualToString:@"dsPayment"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExt"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaBelege"] ||
-            [self.lastUsedDataset isEqualToString:@"dsCalcedData"] ||
-            [self.lastUsedDataset isEqualToString:@"dsFinanzaemter"] ||
-            [self.lastUsedDataset isEqualToString:@"dsEingaben"] ||
-            [self.lastUsedDataset isEqualToString:@"dsEingabenElster"] ||
-            [self.lastUsedDataset isEqualToString:@"dsOrte"] ||
-            [self.lastUsedDataset isEqualToString:@"dsPaymentRequest"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelGWG"])
-            return;
-
-
-        // elementNamen können auch  ein Minus (-) enthalten.
-        // Aber natürlich ist ein - im Objektnamen nicht möglich
-        // Deswegen in _ umwandeln
-        // ToDo -  Gilt das nachwievor???
-        elementName = [elementName stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
-
+        // Galt nur für die alte JS-Objekte-Logik
+        // elementName = [elementName stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
 
         // Ganz am Anfang erstmal das Objekt an sich anlegen
         if (self.datasetItemsCounter == 0)
         {
-            if (legeDatasetsAlsXMLan)
-            {
-                [self.jsHead2Output appendString:@"\n// Dieses Dataset wird als XML-Struktur angelegt und in einem JS-String gespeichert.\n"];
-                [self.jsHead2Output appendFormat:@"var %@",self.lastUsedDataset];
-                [self.jsHead2Output appendFormat:@" = '<%@>';\n",self.lastUsedDataset];
-            }
-            else
-            {
-                [self.jsHead2Output appendString:@"\n// Dieses Dataset wird als Objekt angelegt und bekommt alle Elemente als neue Objekt-Propertys mit\n"];
-                [self.jsHead2Output appendString:@"var "];
-                [self.jsHead2Output appendString:self.lastUsedDataset];
-                [self.jsHead2Output appendString:@" = new lz.dataset();\n"];
-            }
+            //[self.jsHead2Output appendString:@"\n// Dieses Dataset wird als Objekt angelegt und bekommt alle Elemente als neue Objekt-Propertys mit\n"];
+            //[self.jsHead2Output appendString:@"var "];
+            //[self.jsHead2Output appendString:self.lastUsedDataset];
+            //[self.jsHead2Output appendString:@" = new lz.dataset();\n"];
         }
 
 
-        if (legeDatasetsAlsXMLan)
+
+        [self.jsHead2Output appendFormat:@"%@ += '%@<%@", self.lastUsedDataset, gesammelterText, elementName];
+
+        NSArray *keys = [attributeDict allKeys];
+        if ([keys count] > 0)
         {
-                [self.jsHead2Output appendFormat:@"%@ += '%@<%@", self.lastUsedDataset, gesammelterText, elementName];
+            for (NSString *key in keys)
+            {
+                [self.jsHead2Output appendFormat:@" %@=\"",key];
+                
+                NSString *s = [attributeDict valueForKey:key];
+                
+                s = [self escapeSomeCharsInAttributeValues:s];
+                
+                [self.jsHead2Output appendFormat:@"%@\"",s];
+            }
+        }
+        
+        [self.jsHead2Output appendString:@">';\n"];
 
-                NSArray *keys = [attributeDict allKeys];
-                if ([keys count] > 0)
-                {
-                    for (NSString *key in keys)
-                    {
-                        [self.jsHead2Output appendFormat:@" %@=\"",key];
 
-                        NSString *s = [attributeDict valueForKey:key];
 
-                        s = [self escapeSomeCharsInAttributeValues:s];
+        /* Wirklich schade um den schönen Code, aber ein Dataset wird
+        nur als XML-Struktur benötigt, nicht mehr als JS-Objekt
 
-                        [self.jsHead2Output appendFormat:@"%@\"",s];
-                    }
-                }
-
-                [self.jsHead2Output appendString:@">';\n"];
+        // Jetzt alle <tags> dem Objekt als Property, welches wieder ein Objekt ist, hinzufügen
+        // Wenn das <tag> jedoch ein Attribut 'id' hat, dann mach doch ein Array.
+        if ([attributeDict valueForKey:@"id"])
+        {
+            [self.jsHead2Output appendString:self.lastUsedDataset];
+            [self addEnclosingElementsToDatasetProperty];
+            [self.jsHead2Output appendFormat:@".%@ = ['%@'];\n",elementName,[attributeDict valueForKey:@"id"]];
         }
         else
         {
-            // Jetzt alle <tags> dem Objekt als Property, welches wieder ein Objekt ist, hinzufügen
-            // Wenn das <tag> jedoch ein Attribut 'id' hat, dann mach doch ein Array.
-            if ([attributeDict valueForKey:@"id"])
-            {
-                [self.jsHead2Output appendString:self.lastUsedDataset];
-                [self addEnclosingElementsToDatasetProperty];
-                [self.jsHead2Output appendFormat:@".%@ = ['%@'];\n",elementName,[attributeDict valueForKey:@"id"]];
-            }
-            else
-            {
-                [self.jsHead2Output appendString:self.lastUsedDataset];
-                [self addEnclosingElementsToDatasetProperty];
-                [self.jsHead2Output appendFormat:@".%@ = {};\n",elementName];
-            }
+            [self.jsHead2Output appendString:self.lastUsedDataset];
+            [self addEnclosingElementsToDatasetProperty];
+            [self.jsHead2Output appendFormat:@".%@ = {};\n",elementName];
+        }
 
 
-            // Dann bekommen die internen Objekt-Propertys die Attribute als Propertys mit
-            NSArray *keys = [attributeDict allKeys];
-            if ([keys count] > 0)
+        // Dann bekommen die internen Objekt-Propertys die Attribute als Propertys mit
+        NSArray *keys = [attributeDict allKeys];
+        if ([keys count] > 0)
+        {
+            for (NSString *key in keys)
             {
-                for (NSString *key in keys)
+                NSString *s = [attributeDict valueForKey:key];
+
+                s = [self escapeSomeCharsInAttributeValues:s];
+
+                // Weil wir 'id' ja weiter oben berücksichtigt haben
+                if (![key isEqualToString:@"id"])
                 {
-                    NSString *s = [attributeDict valueForKey:key];
-
-                    s = [self escapeSomeCharsInAttributeValues:s];
-                    
-                    // Weil wir 'id' ja weiter oben berücksichtigt haben
-                    if (![key isEqualToString:@"id"])
-                    {
-                        [self.jsHead2Output appendString:self.lastUsedDataset];
-                        [self addEnclosingElementsToDatasetProperty];
-                        [self.jsHead2Output appendFormat:@".%@.%@ = \"%@\";\n",elementName,key,s];
-                    }
+                    [self.jsHead2Output appendString:self.lastUsedDataset];
+                    [self addEnclosingElementsToDatasetProperty];
+                    [self.jsHead2Output appendFormat:@".%@.%@ = \"%@\";\n",elementName,key,s];
                 }
             }
         }
+        */
 
 
 
@@ -3415,18 +3392,12 @@ didStartElement:(NSString *)elementName
 
     // skipping All Elements in BDSreplicator (ToDo)
     // skipping all Elements in BDSinputgrid (ToDo)
-    if (self.weAreSkippingTheCompleteContentInThisElement2)
+    if (self.weAreSkippingTheCompleteContentInThisElement)
     {
         NSLog([NSString stringWithFormat:@"\nSkipping the Element %@", elementName]);
         return;
     }
 
-    // skipping All Elements in nicebox (ToDo)
-    if (self.weAreSkippingTheCompleteContentInThisElement3)
-    {
-        NSLog([NSString stringWithFormat:@"\nSkipping the Element %@", elementName]);
-        return;
-    }
 
     // Skipping the elements in all when-truncs, except the first one
     if (self.weAreInTheTagSwitchAndNotInTheFirstWhen)
@@ -3484,8 +3455,7 @@ didStartElement:(NSString *)elementName
 
             if ([spacing hasPrefix:@"$"])
             {
-                spacing = [self removeOccurrencesOfDollarAndCurlyBracketsIn:spacing];
-                spacing = [NSString stringWithFormat:@"(%@)",spacing]; // ToDo, sollte das nicht eher makeComputable sein, anstatt nur der Klammer? Bitte testen
+                spacing = [self makeTheComputedValueComputable:spacing];
             }
         }
 
@@ -3497,7 +3467,7 @@ didStartElement:(NSString *)elementName
             NSLog(@"Skipping the attribute 'name'.");
         }
 
-        // Falls kein Wert für axis gesetzt, ist es immer y
+        // Falls kein Wert für axis gesetzt ist, ist es immer y
 
         // Simplelayout mit Achse Y berücksichtigen
         if ([[attributeDict valueForKey:@"axis"] hasSuffix:@"y"] || ![attributeDict valueForKey:@"axis"])
@@ -3870,12 +3840,14 @@ didStartElement:(NSString *)elementName
                     NSLog(@"I will ignore this src-file for now (it's a GET-Request).");
 
                 // Trotzdem anlegen, damit das Programm nicht laufend abstürzt.
-                [self.jsHead2Output appendString:@"// Ein Dataset, welches noch ausgewertet werden muss. Aber ich lege trotzdem schonmal ein Objekt an, damit Attribute und Methoden erfolgreich daran gebunden werden können.\n"];
+                [self.jsHead2Output appendString:@"\n// Ein Dataset, welches noch ausgewertet werden muss (ToDo). Aber ich lege trotzdem schonmal ein Objekt an, damit Attribute und Methoden erfolgreich daran gebunden werden können.\n"];
                 [self.jsHead2Output appendFormat:@"%@ = new lz.dataset(); // muss vom Typ dataset sein, damit er auf die Methode 'setQueryParam' z. B. zugreifen kann\n",self.lastUsedDataset, self.lastUsedDataset];
             }
             else
             {
                 NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! So I am calling myself recursive with the file %@",[attributeDict valueForKey:@"src"]]);
+
+                [self legeDatasetAnUndInitMitOeffnendemTag];
 
                 [self callMyselfRecursive:[attributeDict valueForKey:@"src"]];
             }
@@ -3885,7 +3857,10 @@ didStartElement:(NSString *)elementName
         }
         else
         {
-            // Die in <items> enthaltenen <item>-Elemente werden ausgelesen.
+            [self legeDatasetAnUndInitMitOeffnendemTag];
+
+            // Legacy-Code: Falls ich auf <items> stoße, wird die Var noch überschrieben
+            // Und ich speichere es weiter als Array. (ToDo - Muss auch wohl XML werden!)
         }
     }
 
@@ -6210,7 +6185,7 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContentInThisElement2 = YES;
+        self.weAreSkippingTheCompleteContentInThisElement = YES;
     }
     // ToDo
     if ([elementName isEqualToString:@"BDSreplicator"])
@@ -6229,38 +6204,9 @@ didStartElement:(NSString *)elementName
 
         // ToDo
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContentInThisElement2 = YES;
+        self.weAreSkippingTheCompleteContentInThisElement = YES;
     }
-    // ToDo
-    if ([elementName isEqualToString:@"niceboxToDo"])
-    {
-        element_bearbeitet = YES;
 
-
-        if ([attributeDict valueForKey:@"height"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"width"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"id"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"visible"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"layout"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"ignoreplacement"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"y"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"x"])
-            self.attributeCount++;
-
-
-        // ToDo
-        // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContentInThisElement3 = YES;
-    }
     // ToDo
     if ([elementName isEqualToString:@"infobox_notsupported"] ||
         [elementName isEqualToString:@"infobox_euerhinweis"] ||
@@ -7265,14 +7211,20 @@ didStartElement:(NSString *)elementName
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"oninfotext"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"onnodes"] ||
                 [[attributeDict valueForKey:@"name"] isEqualToString:@"oncontext"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"ontabselected"])
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"ontabselected"] ||
+                [[attributeDict valueForKey:@"name"] isEqualToString:@"customevent"])
             {
                 self.attributeCount++;
                 NSLog(@"Binding the method in this handler to a custom jQuery-event (has to be triggered).");
 
                 [self.jQueryOutput appendFormat:@"\n  // 'custom'-Handler für %@\n",enclosingElem];
 
-                [self.jQueryOutput appendFormat:@"  $('#%@').bind('%@',function(e)\n  {\n    ",enclosingElem,[attributeDict valueForKey:@"name"]];
+                // event = 2. Parameter, weil lz.Event diesen über triggerHandler als 2. übergibt
+                // Der erste ist immer automatisch das event-Objekt. Aber Argument heißt 'event'
+                // Deswegen ist e das eigentliche event-objekt, heißt aber nicht so.
+                // Und beim 2. Parameter ist es umgekehrt
+                // Siehe Beispiel <event>, Example 28 
+                [self.jQueryOutput appendFormat:@"  $('#%@').bind('%@',function(e,event)\n  {\n    ",enclosingElem,[attributeDict valueForKey:@"name"]];
 
                 // Okay, jetzt Text sammeln und beim schließen einfügen
             }
@@ -7292,17 +7244,25 @@ didStartElement:(NSString *)elementName
 
         // Wenn args gesetzt ist, wird derzeit nur der Wert 'oldvalue' unterstützt
         // und auch nur wenn als event 'onnewvalue' gesetzt wurde
-        // Dazu wird der 'onnewvalue' oder 'onvalue'-Handler um Code ergänz der stets
+        // Dazu wird der 'onnewvalue' oder 'onvalue'-Handler um Code ergänzt der stets
         // den alten Wert in der Variable 'oldvalue' speichert
         if ([attributeDict valueForKey:@"args"])
         {
+            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"event"])
+            {
+                // ich denke bei event muss ich nichts machen. 'event' steht sowieso immer
+                // zur Verfügung als Objekt
+                self.attributeCount++;
+            }
+
+
             if ([[attributeDict valueForKey:@"args"] isEqualToString:@"oldvalue"])
             {
                 if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onnewvalue"] ||
                     [[attributeDict valueForKey:@"name"] isEqualToString:@"onvalue"])
                 {
                     self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'oldvalue'.");
+                    NSLog(@"Found the attribute 'args' with value 'oldvalue'.");
                     NSLog(@"Setting extra-code in the handler to retrieve the oldvalue");
                 }
             }
@@ -7440,17 +7400,27 @@ didStartElement:(NSString *)elementName
         }
     }
 
-    // ToDo - events sind wohl sehr ähnlich <handler>
+
     // s. http://www.openlaszlo.org/lps4.9/docs/developers/methods-events-attributes.html
-    // Überhaupt alles da drin ToDo
+    // Alles da drin ToDo
+
     if ([elementName isEqualToString:@"event"])
     {
         element_bearbeitet = YES;
 
+        NSString *enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
         if ([attributeDict valueForKey:@"name"])
         {
             self.attributeCount++;
-            NSLog(@"Skipping the attribute 'name' now (ToDo)");
+            NSLog(@"Declaring an event with the given name.");
+
+            [self.jQueryOutput appendFormat:@"\n  // <event> für %@\n",enclosingElem];
+            [self.jQueryOutput appendFormat:@"  %@.%@ = new lz.event(null,'%@');\n",enclosingElem, [attributeDict valueForKey:@"name"], [attributeDict valueForKey:@"name"]];
+        }
+        else
+        {
+            [self instableXML:@"Ein event ohne Name-Attribut. Das geht so nicht!"];
         }
     }
 
@@ -7984,39 +7954,8 @@ BOOL isJSArray(NSString *s)
 
         if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
         {
-            if (legeDatasetsAlsXMLan)
-            {
-                // Die Liste gibt es insgesamt 3 mal
-                if ([self.lastUsedDataset isEqualToString:@"dsEingabenOnline"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelSingle"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittel"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsmetaFahrtenSingle"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExtSingle"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsmetaUnterkunftskosten"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsmetaLohnersatz"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsmetaLohnersatzSingle"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsmetaFahrten"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsElsterSend"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsElsterError"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsPaymentPaypal"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsPayment"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExt"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsmetaBelege"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsCalcedData"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsFinanzaemter"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsEingaben"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsEingabenElster"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsOrte"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsPaymentRequest"] ||
-                    [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelGWG"])
-                {
-                    // Nothing To Do
-                }
-                else
-                {
-                    [self.jsHead2Output appendFormat:@"%@ += '</%@>';\n",self.lastUsedDataset, self.lastUsedDataset];
-                }
-            }
+            [self.jsHead2Output appendFormat:@"%@ += '</%@>';\n",self.lastUsedDataset, self.lastUsedDataset];
+
             self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
         }
         else
@@ -8040,54 +7979,22 @@ BOOL isJSArray(NSString *s)
         gesammelterText = [gesammelterText stringByReplacingOccurrencesOfString:@"\n" withString:@"\\\n"];
 
 
-        // Was ist das schon wieder für eine scheiße? Jetzt können in Datasets sogar Attribute und Methoden auftauchen... WTF???? ToDo ToDo ToDo ToDo ToDo
-        // Gleiche Liste beim öffnenden Tag
-        // Die Liste gibt es noch ein 3. mal
-        if ([self.lastUsedDataset isEqualToString:@"dsEingabenOnline"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelSingle"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittel"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaFahrtenSingle"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExtSingle"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaUnterkunftskosten"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaLohnersatz"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaLohnersatzSingle"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaFahrten"] ||
-            [self.lastUsedDataset isEqualToString:@"dsElsterSend"] ||
-            [self.lastUsedDataset isEqualToString:@"dsElsterError"] ||
-            [self.lastUsedDataset isEqualToString:@"dsPaymentPaypal"] ||
-            [self.lastUsedDataset isEqualToString:@"dsPayment"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaBelegeExt"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaBelege"] ||
-            [self.lastUsedDataset isEqualToString:@"dsCalcedData"] ||
-            [self.lastUsedDataset isEqualToString:@"dsFinanzaemter"] ||
-            [self.lastUsedDataset isEqualToString:@"dsEingaben"] ||
-            [self.lastUsedDataset isEqualToString:@"dsEingabenElster"] ||
-            [self.lastUsedDataset isEqualToString:@"dsOrte"] ||
-            [self.lastUsedDataset isEqualToString:@"dsPaymentRequest"] ||
-            [self.lastUsedDataset isEqualToString:@"dsmetaArbeitsmittelGWG"])
-            return;
+        [self.jsHead2Output appendFormat:@"%@ += '%@</%@>';\n",self.lastUsedDataset, gesammelterText, elementName];
 
 
-
-
-        if (legeDatasetsAlsXMLan)
+        /* Seit Umstieg auf XML-Struktur (und kein JS-Objekt mehr) nicht mehr nötig
+        if ([gesammelterText length] > 0)
         {
-            [self.jsHead2Output appendFormat:@"%@ += '%@</%@>';\n",self.lastUsedDataset, gesammelterText, elementName];
-        }
-        else
-        {
-            if ([gesammelterText length] > 0)
+            // Dann ist es doch kein Objekt... sondern es wird ein Inhalt erfasst.
+            if ([self.jsHead2Output length] > 0)
             {
-                // Dann ist es doch kein Objekt... sondern es wird ein Inhalt erfasst.
-                if ([self.jsHead2Output length] > 0)
-                {
-                    // self.jsHead2Output = [NSMutableString stringWithFormat:[self.jsHead2Output substringToIndex:[self.jsHead2Output length] - 4]];
-                }
-
-                // Und hinzufügen von gesammelten Text, falls er zwischen den tags gesetzt wurde.
-                //[self.jsHead2Output appendFormat:@"%@;\n",gesammelterText];
+                // self.jsHead2Output = [NSMutableString stringWithFormat:[self.jsHead2Output substringToIndex:[self.jsHead2Output length] - 4]];
             }
+            
+            // Und hinzufügen von gesammelten Text, falls er zwischen den tags gesetzt wurde.
+            //[self.jsHead2Output appendFormat:@"%@;\n",gesammelterText];
         }
+        */
 
 
 
@@ -8430,21 +8337,12 @@ BOOL isJSArray(NSString *s)
     {
         element_geschlossen = YES;
 
-        self.weAreSkippingTheCompleteContentInThisElement2 = NO;
+        self.weAreSkippingTheCompleteContentInThisElement = NO;
     }
     // If we are still skipping All Elements, let's return here
-    if (self.weAreSkippingTheCompleteContentInThisElement2)
+    if (self.weAreSkippingTheCompleteContentInThisElement)
         return;
 
-    if ([elementName isEqualToString:@"niceboxToDo"])
-    {
-        element_geschlossen = YES;
-
-        self.weAreSkippingTheCompleteContentInThisElement3 = NO;
-    }
-    // If we are still skipping All Elements, let's return here
-    if (self.weAreSkippingTheCompleteContentInThisElement3)
-        return;
 
 
 
@@ -8617,6 +8515,7 @@ BOOL isJSArray(NSString *s)
         [elementName isEqualToString:@"calcButton"] ||
         [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"debug"] ||
+        [elementName isEqualToString:@"event"] ||
         [elementName isEqualToString:@"slider"] ||
         [elementName isEqualToString:@"evaluateclass"])
     {
@@ -8792,11 +8691,11 @@ BOOL isJSArray(NSString *s)
         NSString *s = [self holDenGesammeltenTextUndLeereIhn];
 
 
-        // Natürlich auch hier setAttribute durch setAttribute_ ersetzen
+        // Natürlich auch hier setAttribute durch setAttribute_ ersetzen usw.
         s = [self modifySomeExpressionsInJSCode:s];
 
 
-        // ToDo, DIESES DUMME REGEXP --- Statt dessen einfach return bei function..asdf.sd.fas.afgwe.
+        // ToDo, DIESES DUMME REGEXP --- Statt dessen einfach return bei function..asdf.sd.fasgwe.
         if ([s rangeOfString:@"function"].location != NSNotFound)
             return;
 
@@ -8936,11 +8835,6 @@ BOOL isJSArray(NSString *s)
 
         // Erkennungszeichen für oninit in jedem Fall zurücksetzen
         self.onInitInHandler = NO;
-    }
-    // ToDo - Analog <handler>? siehe auch bei öffnendem Element von <event>
-    if ([elementName isEqualToString:@"event"])
-    {
-        element_geschlossen = YES;
     }
 
 
@@ -9123,7 +9017,7 @@ BOOL isJSArray(NSString *s)
 
     // Viewport für mobile Devices anpassen...
     // ...width=device-width funktioniert nicht im Portrait-Modus.
-    // initial-scale baut links und rechts einen kleinen Abstand ein. Wollen wir das? ToDo
+    // initial-scale baut links und rechts einen kleinen Abstand ein. Wollen wir das?
     // Er springt dann etwas immer wegen adjustOffsetOnBrowserResize - To Check
      [pre appendString:@"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n"];
     //      [pre appendString:@"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.024\" />\n"]; // => Dann perfekte Breite, aber Grafiken wirken etwas verwaschen.ToDo@End
@@ -9322,7 +9216,7 @@ BOOL isJSArray(NSString *s)
     // NSString *dlDirectory = [paths objectAtIndex:0];
     // NSString * path = [[NSString alloc] initWithString:dlDirectory];
     //... deswegen ab jetzt immer im gleichen Verzeichnis wie das OpenLaszlo-input-File
-    // Die Dateien dürfen dann nur nicht zufälligerweise genau so heißen wie welche im Verzeischnis
+    // Die Dateien dürfen dann nur nicht zufälligerweise genau so heißen wie welche im Verzeichnis
     // (ToDo bei Public Release)
     NSString *path = [[self.pathToFile URLByDeletingLastPathComponent] relativePath];
 
@@ -10566,7 +10460,7 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "function toggleVisibility(id, idAbhaengig, bedingungAlsString)\n"
     "{\n"
-    "  var isvalid = typeof isvalid !== 'undefined' ? isvalid : new Object(); // (ToDo - hat was mit DataPointern zu tun)\n"
+    "  var isvalid = typeof isvalid !== 'undefined' ? isvalid : true; // (ToDo - ist ein Attribut von rud-Container)\n"
     "  var closeable = typeof closeable !== 'undefined' ? closeable : true; // (ToDo - hat was mit nicedialog zu tun)\n"
     "\n"
     "\n"
@@ -10822,7 +10716,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "    this.CursorService = function() {\n"
     "        this.restoreCursor = function() {\n"
-    "            alert('ToDo! (restoreCursor)');\n"
+    "            $('body').css('cursor', 'default');\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -10859,6 +10753,17 @@ BOOL isJSArray(NSString *s)
     "        this.save = function(scope,prop,val) {\n"
     "        }\n"
     "        this.next = function() {\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "    // It is fine to define an event for which no handler exists\n"
+    "    this.event = function(eventValue,handler) {\n"
+    "        this.eventType = handler;\n"
+    "\n"
+    "        this.sendEvent = function(ev) {\n"
+    "            //alert(this.name);\n"
+    "            $('#element3').trigger(this.eventType, ev);\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -11013,6 +10918,13 @@ BOOL isJSArray(NSString *s)
     "            return returnValue;\n"
     "        }\n"
     "        this.setNodeText = function(text) {\n"
+    "            // ToDo\n"
+    "        }\n"
+    "        this.isValid = function() {\n"
+    "            if (this.lastNode === undefined && this.lastNodeText === undefined && this.lastNodename === undefined)\n"
+    "                return false;\n"
+    "            else\n"
+    "                return true;\n"
     "        }\n"
     "        this.setNodeAttribute = function(attr) {\n"
     "        }\n"
@@ -11094,6 +11006,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "// Viele Objekte können auch mit vorangestellten Lz aufgerufen werden\n"
     "LzBrowser = lz.Browser;\n"
+    "LzEvent = lz.event;\n"
     "LzFormatter = lz.Formatter;\n"
     "LzView = lz.view;\n"
     "LzText = lz.text;\n"
@@ -11116,8 +11029,11 @@ BOOL isJSArray(NSString *s)
     "swfso.data.savedstate = 'ToDo'; // ToDo\n"
     "swfso.flush = function() { }; // ToDo\n"
     "\n"
-    "var dsEingaben = new Object(); // ToDo\n"
-    "dsEingaben.serialize = function() {}; // ToDo\n"
+    "// Meiner Meinung nach macht das keinen Sinn, dass ein Dataset die Methode serialize()\n"
+    "// aufrufen kann. Diese Methode haben nur Datapointer!\n"
+    "// Aber GFlender ruft serialize bei Datasets auf. Da Datasets bei mir Strings sind, die\n"
+    "// das komplett XML enthalten, diese Methode per prototype an String binden.\n"
+    "String.prototype.serialize = function() { return this; };\n"
     "\n"
     "\n"
     "\n"
@@ -11299,21 +11215,21 @@ BOOL isJSArray(NSString *s)
     "        }\n"
     "        $(me).css('background-color',value);\n"
     "    }\n"
-    "    else if (attributeName == 'x' || attributeName == 'left')\n"
+    "    else if (attributeName == 'x')\n"
     "    {\n"
     "        $(me).css('left',value);\n"
     "    }\n"
-    "    else if (attributeName == 'y' || attributeName == 'top')\n"
+    "    else if (attributeName == 'y')\n"
     "    {\n"
     "        $(me).css('top',value);\n"
     "    }\n"
-    "    else if (attributeName == 'width' || attributeName == 'myWidth')\n"
+    "    else if (attributeName == 'width' /* || attributeName == 'myWidth' */)\n"
     "    {\n"
     "        $(me).css('width',value);\n"
     "        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
     "        $(me).get(0).myWidth = value;\n"
     "    }\n"
-    "    else if (attributeName == 'height' || attributeName == 'myHeight')\n"
+    "    else if (attributeName == 'height' /* || attributeName == 'myHeight' */)\n"
     "    {\n"
     "        $(me).css('height',value);\n"
     "        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
@@ -11583,6 +11499,8 @@ BOOL isJSArray(NSString *s)
     "//////////////////////////////////////////////////////////\n"
     "HTMLDivElement.prototype.addText = function(s) {\n"
     "    warnOnWrongClass(this);\n"
+    "\n"
+    "    s = s.replace(/\\n/,'<br />');\n"
     "    $(this).append(s);\n"
     "}\n"
     "\n"
@@ -11640,6 +11558,8 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "var setTextFunction = function (s) {\n"
     "    warnOnWrongClass(this);\n"
+    "\n"
+    "    s = s.replace(/\\n/,'<br />');\n"
     "    this.setAttribute_('text', s);\n"
     "}\n"
     "\n"

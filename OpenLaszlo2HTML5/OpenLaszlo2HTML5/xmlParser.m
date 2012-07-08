@@ -39,8 +39,11 @@ BOOL alternativeFuerSimplelayout = YES; // Bei YES kann <simplelayout> an belieb
                                         // Es scheint sehr zuverlässig zu funktionieren inzwischen.
                                         // Kann wohl dauerhaft auf YES bleiben!
 
-BOOL positionAbsolute = NO; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
+BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
                              // noch an zu vielen Stellen auf position: relative ausgerichtet.
+
+
+BOOL kompiliereSpeziellFuerTaxango = NO;
 
 
 
@@ -2311,12 +2314,86 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    // Skipping this attribute // ToDo...
     if ([attributeDict valueForKey:@"datapath"])
     {
         self.attributeCount++;
-        NSLog(@"ToDo: Implement later the attribute 'datapath'.");
+
+        NSString *dp = [attributeDict valueForKey:@"datapath"];
+
+        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
+
+        // if (![dp hasPrefix:@"@"])
+        if ([dp rangeOfString:@":"].location != NSNotFound)
+        {
+            [o appendString:@"\n  // datapath-Attribut mit : im String (also ein absoluter XPath). Ich werte die XPath-Angabe über einen temporär angelegten Datapointer aus.\n"];
+            [o appendString:@"  // Das Ergebnis des XPath-Requests wird als text des Elements gesetzt\n"];
+            [o appendString:@"  // Aber nur, wenn es eine Text-Node ist. Denn es kann auch nur ein Pfad angegeben sein, auf den sich dann tiefer verschachtelte Elemente beziehen.\n"];
+            [o appendString:@"  // Liefert der XPath-Request mehrere Ergebnisse zurück, muss ich hingegen das Div entsprechend oft duplizieren.\n"];
+            [o appendString:@"  // Außerdem XPath speichern, damit Kinder darauf zugreifen können.\n"];
+            [o appendFormat:@"  $('#%@').data('XPath','%@');\n",idName,dp];
+            [o appendFormat:@"  var tempDP = new lz.datapointer('%@',false);\n",dp];
+            [o appendString:@"  if (tempDP.getXPathIndex() > 1)\n"];
+            [o appendString:@"  {\n"];
+            [o appendString:@"    // Die existierende View wird der Parent für alle neu anzulegenden Views\n"];
+            [o appendString:@"    // Counter\n"];
+            [o appendString:@"    var c = 0;\n"];
+            [o appendString:@"    // Klon erzeugen inklusive Kinder\n"];
+            [o appendFormat:@"    var clone = $('#%@').clone();\n",idName];
+            [o appendString:@"    // Alle Kinder im Orignal-Element löschen\n"];
+            [o appendFormat:@"    $('#%@').empty();\n",idName];
+            [o appendString:@"\n"];
+            [o appendString:@"    // Markieren, weil dies Auswirkungen auf viele Dinge hat...\n"];
+            [o appendFormat:@"    $('#%@').data('IAmAReplicator',true);\n",idName];
+            [o appendString:@"\n"];
+            [o appendString:@"    for (var i=0;i<tempDP.getXPathIndex();i++)\n"];
+            [o appendString:@"    {\n"];
+            [o appendString:@"      c++;\n"];
+            [o appendString:@"      // Muss es jedes mal nochmal klonen, sonst wäre der Klon-Vorgang nur 1x erfolgreich\n"];
+            [o appendString:@"      var clone2 = clone.clone();\n"];
+            [o appendString:@"      // Alle id's austauschen, damit es diese nicht doppelt gibt\n"];
+            [o appendString:@"      clone2.attr('id',clone2.attr('id')+'_repl'+c);\n"];
+            [o appendString:@"      // Ab dem 2. mal auch die der Kinder austauschen, damit ich später geklonte Zwillinge erkennen kann und damit es id's nicht doppelt gibt\n"];
+            [o appendFormat:@"      if (i >= 1)\n",idName];
+            [o appendString:@"        clone2.find('*').each(function() { $(this).attr('id',$(this).attr('id')+'_repl'+c);  });\n"];
+            [o appendString:@"      // Den Klon an das Original-Element anfügen\n"];
+            [o appendFormat:@"      clone2.appendTo('#%@');\n",idName];
+            [o appendString:@"    }\n"];
+            [o appendString:@"  }\n"];
+            [o appendString:@"  else\n"];
+            [o appendString:@"  {\n"];
+            [o appendFormat:@"    if (tempDP.getNodeType() == 3)\n",idName];
+            [o appendFormat:@"      $('#%@').html(tempDP.getNodeText());\n",idName];
+            [o appendString:@"  }\n"];
+        }
+        else
+        {
+            if (!kompiliereSpeziellFuerTaxango)
+            {
+                [o appendString:@"\n  // Okay, ein relativer Pfad! Dann nehme ich Bezug zum letzten tempDP und dem dort gesetzten Pfad.\n"];
+                [o appendFormat:@"  if ($('#%@').parent().parent().data('IAmAReplicator'))\n",idName];
+                [o appendString:@"  {\n"];
+                [o appendFormat:@"    var zusammengesetzterXPath = $('#element4').parent().parent().data('XPath') + '[1]/' + '%@';\n",dp];
+                [o appendFormat:@"    $('#%@').html(tempDP.xpathQuery(zusammengesetzterXPath));\n",idName];
+                [o appendString:@"    // Und alle geklonten Geschwister berücksichtigen\n"];
+                [o appendString:@"    var c = 2;\n"];
+                [o appendFormat:@"    while ($('#%@_repl'+c).length)\n",idName];
+                [o appendString:@"    {\n"];
+                [o appendFormat:@"        zusammengesetzterXPath = $('#%@').parent().parent().data('XPath') + '['+c+']/' + '%@';\n",idName,dp];
+                [o appendFormat:@"        $('#%@_repl'+c).html(tempDP.xpathQuery(zusammengesetzterXPath));\n",idName];
+                [o appendString:@"        c++;\n"];
+                [o appendString:@"    }\n"];
+                [o appendString:@"  }\n"];
+                [o appendString:@"  else\n"];
+                [o appendString:@"  {\n"];
+                [o appendFormat:@"    $('#%@').html(tempDP.xpathQuery('%@'));\n",idName,dp];
+                [o appendString:@"  }\n"];
+            }
+        }
+
+
+        [self.jsComputedValuesOutput appendString:o];
     }
+
 
 
     // <splash view> -> Nur <view>'s innerhalb von <splash> haben dieses Attribute
@@ -2960,7 +3037,8 @@ void OLLog(xmlParser *self, NSString* s,...)
     [self.jsOutput appendString:o];
     // Anscheinend doch nicht, es muss in jQuery (ans Ende), weil erst dann die width und height von selbst
     // definierten Klassen bekannt ist (Example 28.9. Extending the built-in text classes)
-    //[self.jQueryOutput appendString:o];
+    // puh, puh, muss es derzeit wirklich doppelt setzen, auch wegen Bsp. 11.2
+    [self.jQueryOutput appendString:o];
 }
 
 
@@ -9011,7 +9089,10 @@ BOOL isJSArray(NSString *s)
     NSMutableString *pre = [[NSMutableString alloc] initWithString:@""];
 
     [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n"];
-    
+
+    // Damit IE 9 auf jeden Fall im IE 9-Modus lädt und nicht irgendeinen Kompatibilitäts-modus
+    [pre appendString:@"<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge,chrome=1\">\n"];
+
     // Nicht HTML5-Konform, aber zum testen um sicherzustellen, dass wir nichts aus dem Cache laden
     [pre appendString:@"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />\n<meta http-equiv=\"pragma\" content=\"no-cache\" />\n<meta http-equiv=\"cache-control\" content=\"no-cache\" />\n<meta http-equiv=\"expires\" content=\"0\" />\n"];
 
@@ -10204,11 +10285,21 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Beginnt ein String mit einer bestimmten Zeichenfolge?\n"
+    "//Beginnt ein String mit einer bestimmten Zeichenfolge?//\n"
     "/////////////////////////////////////////////////////////\n"
     "if (typeof String.prototype.startsWith != 'function') {\n"
-    "    String.prototype.startsWith = function (str) {\n"
+    "    String.prototype.startsWith = function(str) {\n"
     "        return this.lastIndexOf(str,0) === 0;\n"
+    "    };\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Endet ein String mit einer bestimmten Zeichenfolge? //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "if (typeof String.prototype.endsWith != 'function') {\n"
+    "    String.prototype.endsWith = function(suffix) {\n"
+    "         return this.indexOf(suffix, this.length - suffix.length) !== -1;\n"
     "    };\n"
     "}\n"
     "\n"
@@ -10217,7 +10308,7 @@ BOOL isJSArray(NSString *s)
     "// Enthält ein String eine bestimmte Zeichenfolge?     //\n"
     "/////////////////////////////////////////////////////////\n"
     "if (typeof String.prototype.contains != 'function') {\n"
-    "    String.prototype.contains = function (str) {\n"
+    "    String.prototype.contains = function(str) {\n"
     "        return this.indexOf(str) != -1;\n"
     "    };\n"
     "}\n"
@@ -10237,8 +10328,18 @@ BOOL isJSArray(NSString *s)
     "// better parseFloat()                                 //\n"
     "/////////////////////////////////////////////////////////\n"
     "if (typeof String.prototype.betterParseFloat != 'function') {\n"
-    "    String.prototype.betterParseFloat = function () {\n"
+    "    String.prototype.betterParseFloat = function() {\n"
     "        return this.replace(/[^\\d.]/g, '');\n"
+    "    };\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// insertAt() position in string                       //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "if (typeof String.prototype.insertAt != 'function') {\n"
+    "    String.prototype.insertAt = function(index, s) {\n"
+    "        return this.substring(0, index) + s + this.substring(index);\n"
     "    };\n"
     "}\n"
     "\n"
@@ -10659,16 +10760,18 @@ BOOL isJSArray(NSString *s)
     "function getXMLDocumentFromString(s) {\n"
     "    var xmlDoc = null;\n"
     "\n"
-    "    if (window.DOMParser)\n"
-    "    {\n"
-    "        var parser = new DOMParser();\n"
-    "        xmlDoc = parser.parseFromString(s,'text/xml');\n"
-    "    }\n"
-    "    else // Internet Explorer\n"
+    // Es MUSS so rum sein, erst die Abfrage nach dem window.ActiveXObject
+    // Sonst würde IE 9 unten rein rutschen und das Dokumentformat wäre nicht mehr kompatibel mit dem auslesen
+    "    if (window.ActiveXObject) // IE 6 to IE 9 ...\n"
     "    {\n"
     "        xmlDoc = new ActiveXObject('Microsoft.XMLDOM');\n"
     "        xmlDoc.async = false;\n"
     "        xmlDoc.loadXML(s);\n"
+    "    }\n"
+    "    else if (window.DOMParser) // W3C (Mozilla, Firefox, Safari)\n"
+    "    {\n"
+    "        var parser = new DOMParser();\n"
+    "        xmlDoc = parser.parseFromString(s,'text/xml');\n"
     "    }\n"
     "\n"
     "    return xmlDoc;\n"
@@ -10683,6 +10786,9 @@ BOOL isJSArray(NSString *s)
     "    else\n"
     "    { // code for IE6, IE5\n"
     "        var xmlhttp = new ActiveXObject('Microsoft.XMLHTTP');\n"
+    "        xmlhttp.async = false;\n"
+    //       doc.load(url); <-- Im Internet gefundene Alternative
+    //       return doc; <-- "
     "    }\n"
     "    xmlhttp.open('GET',file,false);\n"
     "    xmlhttp.send();\n"
@@ -10800,37 +10906,126 @@ BOOL isJSArray(NSString *s)
     "            if (pfad.charAt(pfad.length-1) == '/')\n"
     "                pfad = pfad.substring(0, pfad.length-1);\n"
     "            var xpath = '/' + this.datasetName + pfad;\n"
+    "            // '/text()' kann/muss entfernt werden. Es würde auch mit klappen, nur beim counter nicht.\n"
+    "            if (xpath.endsWith('/text()'))\n"
+    "                xpath = xpath.substr(0,xpath.length-7);\n"
     "\n"
     "            // Gets all nodes: var xpath = '/' + this.datasetName + '//*';\n"
     "\n"
+    "            var node = undefined;\n"
     "            var nodeValue = undefined;\n"
     "            var nodeName = undefined;\n"
-    "            var node = undefined;\n"
+    "            var nodeType = undefined;\n"
+    "            var childrenCounter = 0;\n"
+    "            var numberOfNodesPointingTo = 0;\n"
     "\n"
-    "            if (window.ActiveXObject)\n"
+    "            if (window.ActiveXObject /* && typeof this.xml.selectNodes !== 'undefined' */)\n"
     "            {\n"
+    "                // IE hat die DOM-Beschreibung nicht genau gelesen...\n"
+    "                // xpath arbeitet bei index-Zugriffen 1-basiert! IE hat es aber 0-basiert implementiert\n"
+    "                // Deswegen falls ein Index auftritt, immer um eins reduzieren\n"
+    "                // That's not that simple as it seems...\n"
+    "                var rgx = /\\[(\\d+)\\]/g;\n"
+    "                var m = xpath.match(rgx); // Um die Matches an sich zu finden\n"
+    "                if (m)\n"
+    "                {\n"
+    "                    var extraPos = 0; // Wenn er z. B. von [10] auf [9] wechselt\n"
+    "                    for (var j=0;j<m.length;j++)\n"
+    "                    {\n"
+    "                        // Für jeden gefundenen Match...\n"
+    "                        var match = m[j];\n"
+    "                        // ...finde die Zahl...\n"
+    "                        match = match.betterParseInt();\n"
+    "                        // ...wandle sie in einen Integer um...\n"
+    "                        match = parseInt(match);\n"
+    "                        // ...reduziere sie um 1...\n"
+    "                        match--;\n"
+    "                        // ...mach wieder die eckigen Klammern drum herum...\n"
+    "                        match = '['+match+']';\n"
+    "                        // ..finde den index... (exec nimmt das jeweils nächste Vorkommen bei erneutem Aufruf, falls mehrere Schleifendurchgänge)\n"
+    "                        var m2 = rgx.exec(xpath) // Der Index steckt jetzt in m2.index\n"
+    "                        var ind = m2.index - extraPos;\n"
+    "                        // ...delete old phrase...\n"
+    "                        xpath = xpath.substring(0,ind) + xpath.substring(ind + m[j].length);\n"
+    "                        // ...insert new phrase...\n"
+    "                        xpath = xpath.insertAt(ind,match);\n"
+    "                        // ...done\n"
+    "                        // Berücksichtige für die nachfolgenden Elemente einen Abstand weniger, wenn nötig...\n"
+    "                        if (match == '[9]' || match == '[99]' || match == '[999]' || match == '[9999]' || match == '[99999]' || match == '[999999]' || match == '[9999999]')\n"
+    "                          extraPos++;\n"
+    "\n"
+    "                        // alert(xpath);\n"
+    "                    }\n"
+    "                }\n"
+    "\n"
     "                var nodes = this.xml.selectNodes(xpath);\n"
     "\n"
-    "                for (var i = 0;i < nodes.length;i++)\n"
+    "                // for (var i = 0;i < nodes.length;i++) // No! Immer der erste Match zählt.\n"
+    "                numberOfNodesPointingTo = nodes.length;\n"
+    "\n"
+    "                var i = 0;\n"
     "                {\n"
-    "                    node = nodes[i].childNodes[0].parentNode;\n"
-    "                    nodeValue = nodes[i].childNodes[0].nodeValue;\n"
-    "                    nodeName = nodes[i].childNodes[0].parentNode.nodeName;\n"
+    "                    if (nodes[i].childNodes[0] != undefined)\n"
+    "                    {\n"
+    "                        node = nodes[i].childNodes[0].parentNode;\n"
+    "                        nodeValue = nodes[i].childNodes[0].nodeValue;\n"
+    "                        nodeName = nodes[i].childNodes[0].parentNode.nodeName;\n"
+    "                        nodeType = nodes[i].childNodes[0].nodeType;\n"
+    "                        childrenCounter = nodes[i].childNodes.length;\n"
+    "                    }\n"
+    "                    // Eventuell ist es auch eine Abfrage nach einer Textnode\n"
+    "                    else if (nodes[i] && nodes[i].nodeName == '#text')\n"
+    "                    {\n"
+    "                        node = nodes[i].parentNode;\n"
+    "                        // Dann brauche ich doch wieder die Schleife:\n"
+    "                        for (var j = 0;j < nodes[i].length;j++)\n"
+    "                        {\n"
+    "                            if (nodes[i].parentNode.childNodes[j] != undefined && nodes[i].parentNode.childNodes[j].nodeName == '#text')\n"
+    "                            {\n"
+    "                                if (nodeValue == undefined)\n"
+    "                                    nodeValue = nodes[i].parentNode.childNodes[j].nodeValue;\n"
+    "                                else\n"
+    "                                    nodeValue += nodes[i].parentNode.childNodes[j].nodeValue;\n"
+    "\n"
+    "                                childrenCounter++;\n"
+    "                            }\n"
+    "                        }\n"
+    "                        nodeName = nodes[i].parentNode.nodeName;\n"
+    "                        nodeType = nodes[i].nodeType;\n"
+    "                    }\n"
     "                }\n"
     "            }\n"
-    "            else if (document.implementation && document.implementation.createDocument) // code for Mozilla, Firefox, Opera, etc.\n"
+    "            else if (document.implementation && document.implementation.createDocument) // code for IE9, Mozilla, Firefox, Opera, etc.\n"
     "            {\n"
     "                var nodes = this.xml.evaluate(xpath, this.xml, null, XPathResult.ANY_TYPE, null);\n"
     "                var result = nodes.iterateNext();\n"
     "\n"
-    "                while(result)\n"
+    "                while (result)\n"
     "                {\n"
+    "                    numberOfNodesPointingTo++;\n"
+    "\n"
     "                    // Wenn der Knoten leer ist, dann belass es bei den oben gesetzen undefined-Werten für node, nodeValue und nodeName.\n"
     "                    if (result.childNodes[0] != undefined)\n"
     "                    {\n"
     "                        node = result.childNodes[0].parentNode;\n"
     "                        nodeValue = result.childNodes[0].nodeValue;\n"
     "                        nodeName = result.childNodes[0].parentNode.nodeName;\n"
+    "                        nodeType = result.childNodes[0].nodeType;\n"
+    "                        childrenCounter = result.childNodes.length;\n"
+    "                    }\n"
+    "                    // Eventuell ist es auch eine Abfrage nach einer Textnode\n"
+    "                    else if (result.nodeName && result.nodeName == '#text')\n"
+    "                    {\n"
+    "                        node = result.parentNode;\n"
+    "\n"
+    "                        if (nodeValue == undefined)\n"
+    "                            nodeValue = result.nodeValue;\n"
+    "                        else\n"
+    "                            nodeValue += result.nodeValue;\n"
+    "\n"
+    "                        nodeName = result.parentNode.nodeName;\n"
+    "                        nodeType = result.nodeType;\n"
+    "                        childrenCounter++;\n"
     "                    }\n"
     "\n"
     "                    result = nodes.iterateNext(); // Sonst infinite loop\n"
@@ -10840,6 +11035,9 @@ BOOL isJSArray(NSString *s)
     "            this.lastNode = node;\n"
     "            this.lastNodeText = nodeValue;\n"
     "            this.lastNodeName = nodeName;\n"
+    "            this.lastNodeType = nodeType;\n"
+    "            this.lastQueryChildrenCounter = childrenCounter;\n"
+    "            this.lastQueryNumberOfNodesPointingTo = numberOfNodesPointingTo;\n"
     "        }\n"
     "\n"
     "\n"
@@ -10869,6 +11067,7 @@ BOOL isJSArray(NSString *s)
     "        this.lastNode = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
     "        this.lastNodeText = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
     "        this.lastNodeName = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
+    "        this.lastNodeType = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
     "\n"
     "        // Wenn dieses blöde Objekt kommt, dann keine Initialisierung\n"
     "        if (typeof xpath !== 'object')\n"
@@ -10896,8 +11095,11 @@ BOOL isJSArray(NSString *s)
     "\n"
     "            var originalQuery = query;\n"
     "            // Folgende Logik: Er scheint grundsätzlich immer vom letzten xpath auszugehen\n"
-    "            // taucht jedoch im string ein '/' auf, dann ist es ein komplett neuer xpath.\n"
-    "            if (!query.contains('/'))\n"
+    //"            // taucht jedoch im string ein '/' auf, dann ist es ein komplett neuer xpath.\n"
+    //"            if (!query.contains('/'))\n"
+    // Dies bricht Beispiel 11.2, deswegen neue Logik über Doppelpunkt
+    "            // taucht jedoch im string kein ':' auf, dann ist es ein relativer XPath!\n"
+    "            if (!query.contains(':'))\n"
     "              query = this.xpath + '/' + query;\n"
     "            this.setXPath(query);\n"
     "\n"
@@ -10907,11 +11109,12 @@ BOOL isJSArray(NSString *s)
     "            var returnValue = null;\n"
     "            if (this.lastNode) \n"
     "                returnValue = this.lastNode;\n"
-    "            if (this.lastNodeText && originalQuery.startsWith('@')) \n"
+    "            // Wenn Text da ist und es eine Textnode ist\n"
+    "            if (this.lastNodeText && this.lastNodeType == 3) \n"
     "                returnValue = this.lastNodeText;\n"
     "\n"
     "            // alte 'pointer' wiederherstellen\n"
-    "            this.lastNode =  lastNode;\n"
+    "            this.lastNode = lastNode;\n"
     "            this.lastNodeText = lastNodeText;\n"
     "            this.lastNodeName = lastNodeName;\n"
     "\n"
@@ -10934,15 +11137,20 @@ BOOL isJSArray(NSString *s)
     "            else\n"
     "                return '';\n"
     "        }\n"
+    "        this.getNodeType = function() {\n"
+    "            return this.lastNodeType;\n"
+    "        }\n"
     "        this.getNodeName = function() {\n"
     "            return this.lastNodeName;\n"
+    "        }\n"
+    "        this.getDataset = function() {\n"
+    "            return window[this.xpath.substring(0,this.xpath.indexOf(':'))];\n"
     "        }\n"
     "        this.getNodeAttribute = function() {\n"
     "            return '';\n"
     "        }\n"
     "        this.selectNext = function() {\n"
     "            // Node aktualisieren in dem ich eins weiter wandere\n"
-    "            // Aber der 'Zeiger' bleibt unverändert, oder??  hmmm\n"
     "            if (this.lastNode)\n"
     "                this.lastNode = this.lastNode.nextSibling;\n"
     "            else\n"
@@ -10954,13 +11162,22 @@ BOOL isJSArray(NSString *s)
     "            }\n"
     "            else\n"
     "            {\n"
-    "                this.lastNodeText = '';\n"
-    "                this.lastNodeName = '';\n"
+    "                // this.lastNodeText = ''; // <-- auskommentiert\n"
+    "                // this.lastNodeName = ''; // bricht sonst Beispiel 12 bei <datapointer>\n"
     "            }\n"
     "            return this.lastNode != null;\n"
     "        }\n"
     "        this.getNodeCount = function() {\n"
-    "            return 0;\n"
+    "            return this.lastQueryChildrenCounter;\n"
+    "        }\n"
+    "        this.getNodeOffset = function() {\n"
+    "            if (this.lastQueryNumberOfNodesPointingTo == 0)\n"
+    "                return undefined;\n"
+    "            else\n"
+    "                return this.lastQueryNumberOfNodesPointingTo;\n"
+    "        }\n"
+    "        this.getXPathIndex = function() {\n"
+    "            return this.lastQueryNumberOfNodesPointingTo;\n"
     "        }\n"
     "        // Return a new datapointer that points to the same node, has a null xpath and a false rerunxpath attribute\n"
     "        this.dupePointer = function() {\n"
@@ -10970,6 +11187,13 @@ BOOL isJSArray(NSString *s)
     "            dupe.lastNodeName = this.lastNodeName;\n"
     "            dupe.xpath = null;\n"
     "            return dupe;\n"
+    "        }\n"
+    "        this.serialize = function() {\n"
+    "            if (this.xml && this.xml.xml) { // IE 6 - IE 8\n"
+    "                return this.xml.xml;\n"
+    "            } else { // W3C (Mozilla Firefox, Safari) or IE 9 (standard mode)\n"
+    "                return (new XMLSerializer()).serializeToString(this.xml);\n"
+    "            }\n"
     "        }\n"
     "        this.selectChild = function() {\n"
     "        }\n"
@@ -11190,6 +11414,15 @@ BOOL isJSArray(NSString *s)
     "    if (value == undefined)\n"
     "        throw 'Error2 calling setAttribute, no argument value given (attributeName = \"'+attributeName+'\" and this = '+this+').';\n"
     "\n"
+    // Kann auch im Skript aufgetaucht sein und dort geändert worden sein, z. B. Beispiel 28.16
+    // Hier richtig setzen, nicht unten darauf reagieren, damit der getriggerte Handler der richtige ist.
+    "    if (attributeName === 'myWidth') \n"
+    "        attributeName = 'width';\n"
+    "    if (attributeName === 'myHeight') \n"
+    "        attributeName = 'height';\n"
+    "\n"
+    "\n"
+    "\n"
     "\n"
     //"    var me = globalMe;\n"
     "    var me = this;\n"
@@ -11223,13 +11456,13 @@ BOOL isJSArray(NSString *s)
     "    {\n"
     "        $(me).css('top',value);\n"
     "    }\n"
-    "    else if (attributeName == 'width' /* || attributeName == 'myWidth' */)\n"
+    "    else if (attributeName == 'width')\n"
     "    {\n"
     "        $(me).css('width',value);\n"
     "        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
     "        $(me).get(0).myWidth = value;\n"
     "    }\n"
-    "    else if (attributeName == 'height' /* || attributeName == 'myHeight' */)\n"
+    "    else if (attributeName == 'height')\n"
     "    {\n"
     "        $(me).css('height',value);\n"
     "        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
@@ -11500,6 +11733,10 @@ BOOL isJSArray(NSString *s)
     "HTMLDivElement.prototype.addText = function(s) {\n"
     "    warnOnWrongClass(this);\n"
     "\n"
+    "    if (s === undefined)\n"
+    "        throw new Error('addText() - argument should not be undefined');\n"
+    "    s = String(s); // Damit s.replace keinen Error wirft bei übergebenen numbers\n"
+    "\n"
     "    s = s.replace(/\\n/,'<br />');\n"
     "    $(this).append(s);\n"
     "}\n"
@@ -11558,6 +11795,10 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "var setTextFunction = function (s) {\n"
     "    warnOnWrongClass(this);\n"
+    "\n"
+    "    if (s === undefined)\n"
+    "        throw new Error('setText() - argument should not be undefined');\n"
+    "    s = String(s); // Damit s.replace keinen Error wirft bei übergebenen numbers\n"
     "\n"
     "    s = s.replace(/\\n/,'<br />');\n"
     "    this.setAttribute_('text', s);\n"

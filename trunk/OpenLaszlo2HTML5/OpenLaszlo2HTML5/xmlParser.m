@@ -39,11 +39,11 @@ BOOL alternativeFuerSimplelayout = YES; // Bei YES kann <simplelayout> an belieb
                                         // Es scheint sehr zuverlässig zu funktionieren inzwischen.
                                         // Kann wohl dauerhaft auf YES bleiben!
 
-BOOL positionAbsolute = YES; // Yes ist gemäß OL-Code-Inspektion richtig, aber leider ist der Code
-                             // noch an zu vielen Stellen auf position: relative ausgerichtet.
+BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+                             // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
-BOOL kompiliereSpeziellFuerTaxango = NO;
+BOOL kompiliereSpeziellFuerTaxango = YES;
 
 
 
@@ -188,6 +188,8 @@ BOOL kompiliereSpeziellFuerTaxango = NO;
 
 // oninit-Code in einem Handler wird direkt ausgeführt (load-Handler ist unpassend)
 @property (nonatomic) BOOL onInitInHandler;
+// 'reference'-Variable in einem Handler muss an das korrekte Element gebunden werden
+@property (nonatomic) BOOL referenceAttributeInHandler;
 
 @end
 
@@ -248,7 +250,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize weAreCollectingTheCompleteContentInClass = _weAreCollectingTheCompleteContentInClass;
 @synthesize weAreSkippingTheCompleteContentInThisElement = _weAreSkippingTheCompleteContentInThisElement;
 
-@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler;
+@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, referenceAttributeInHandler = _referenceAttributeInHandler;
 
 
 
@@ -384,6 +386,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.weAreSkippingTheCompleteContentInThisElement = NO;
         self.ignoreAddingIDsBecauseWeAreInClass = NO;
         self.onInitInHandler = NO;
+        self.referenceAttributeInHandler = NO;
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
         self.allFoundClasses = [[NSMutableDictionary alloc] initWithCapacity:200];
@@ -1449,9 +1452,11 @@ void OLLog(xmlParser *self, NSString* s,...)
         // dann setz als height die des (höchsten Kindes + top-wert).
         // Jedoch wird nie das umgebende canvas verändert und bei rudElement bleibt es bei auto, damit es scrollt
 
-        // Erst collecten...
         NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
+        [s appendString:@"\n  // Höhe/Breite des umgebenden Elements u. U. vergrößern\n"];
+        [s appendFormat:@"  adjustHeightAndWidth(%@);\n",self.zuletztGesetzteID];
 
+/*
         [s appendString:@"\n  // Falls ein Kind eine x, y, width oder height-Angabe hat: Wir müssen dann die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n  // Wir überschreiben jedoch keinen explizit vorher gesetzten Wert,\n  // deswegen test auf '' (nur mit JS möglich, nicht mit jQuery) \n"];
         // position().top klappt nicht, weil das Elemente versteckt sein kann,
         // aber mit css('top') klappt es (gleiches gilt für position().left).
@@ -1469,7 +1474,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         [s appendFormat:@"  var widths = $('#%@').children().map(function () { return $(this).outerWidth('true')+$(this).position().left; }).get();",self.zuletztGesetzteID];
         [s appendFormat:@"\n    if (!($('#%@').hasClass('canvas_standard')))\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
         [s appendFormat:@"\n        $('#%@').css('width',getMaxOfArray(widths))\n  }\n\n",self.zuletztGesetzteID];
-
+*/
 
         // ... dann ganz am Anfang adden (damit die Kinder immer vorher bekannt sind)
         [self.jQueryOutput insertString:s atIndex:0];
@@ -1697,7 +1702,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         /*************** Für die Debug-Ausgabe ***************/
         NSUInteger numberOfMatches = [regexp numberOfMatchesInString:s options:0 range:NSMakeRange(0, [s length])];
         if (numberOfMatches > 0)
-            NSLog([NSString stringWithFormat:@"%d mal hat ein RegExp gematcht und hat parent ausgetauscht.",numberOfMatches]);
+            NSLog([NSString stringWithFormat:@"%d mal hat ein RegExp gematcht und hat %@ ausgetauscht.",numberOfMatches,f]);
         /*************** Für die Debug-Ausgabe ***************/
 
         if (numberOfMatches > 0)
@@ -4165,6 +4170,8 @@ didStartElement:(NSString *)elementName
         // Es gibt auch attributes ohne type, dann mit 'number' initialisieren...
         // ... das klappt leider nicht. Weil es auch Nichtzahlen gibt ohne 'type'
         // Deswegen doch lieber als 'string' initialisieren.
+        // Das klappt auch nicht...
+        // ich muss dann das Element direkt untersuchen und entscheiden
         NSString *type_;
         if ([attributeDict valueForKey:@"type"])
         {
@@ -4173,7 +4180,12 @@ didStartElement:(NSString *)elementName
             type_ = [attributeDict valueForKey:@"type"];
         }
         else
-            type_ = @"string";
+        {
+            if (isNumeric([attributeDict valueForKey:@"value"]))
+                type_ = @"number";
+            else
+                type_ = @"string";
+        }
 
 
         // Es gibt auch attributes ohne Startvalue, dann mit einem leeren String initialisieren
@@ -7036,286 +7048,356 @@ didStartElement:(NSString *)elementName
         [self.jQueryOutput appendString:@"\n  // pointer-events zulassen, da ein Handler an dieses Element gebunden ist."];
         [self.jQueryOutput appendFormat:@"\n  $('#%@').css('pointer-events','auto');\n",enclosingElem];
 
-        if ([attributeDict valueForKey:@"name"])
+        if (![attributeDict valueForKey:@"name"])
+            [self instableXML:@"Ein Handler ohne name-Attribut. Das geht so nicht!"];
+
+        NSLog(@"Using the 'name'-attribute as the name for the handler.");
+
+
+        NSString *name = [attributeDict valueForKey:@"name"];
+
+        NSString *args = @"";
+
+        BOOL alsBuildInEventBearbeitet = NO;
+
+
+        if ([name isEqualToString:@"onclick"])
         {
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onclick"])
-            {
-                // Muss ganz am Anfang stehen, damit sich die Codezeilen nicht gegenseitig beeinflussen
-                [self changeMouseCursorOnHoverOverElement:enclosingElem];
+            // Muss ganz am Anfang stehen, damit sich die Codezeilen nicht gegenseitig beeinflussen
+            [self changeMouseCursorOnHoverOverElement:enclosingElem];
 
-                self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-click-event.");
+            self.attributeCount++;
+            NSLog(@"Binding the method in this handler to a jQuery-click-event.");
 
-                [self.jQueryOutput appendFormat:@"\n  // onclick-Handler für %@\n",enclosingElem];
+            [self.jQueryOutput appendFormat:@"\n  // onclick-Handler für %@\n",enclosingElem];
 
-                // 'e', weil 'event' würde wohl das event-Objekt zugreifen. Auf dieses kann man so und so zugreifen.
-                [self.jQueryOutput appendFormat:@"  $('#%@').click(function(e)\n  {\n    ",enclosingElem];
+            // 'e', weil 'event' würde wohl das event-Objekt zugreifen. Auf dieses kann man so und so zugreifen.
+            [self.jQueryOutput appendFormat:@"  $('#%@').click(function(e)\n  {\n    ",enclosingElem];
 
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
+            alsBuildInEventBearbeitet = YES;
 
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"ondblclick"])
-            {
-                self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-dblclick-event.");
-
-                [self.jQueryOutput appendFormat:@"\n  // ondblclick-Handler für %@\n",enclosingElem];
-
-                // 'e', weil 'event' würde wohl das event-Objekt zugreifen. Auf dieses kann man so und so zugreifen.
-                [self.jQueryOutput appendFormat:@"  $('#%@').dblclick(function(e)\n  {\n    ",enclosingElem];
-
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
-
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onchanged"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onvalue"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onnewvalue"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"ontext"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"ondata"]) // ToDo: Ist wirklich ondata = change-event?
-            {
-                self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-change-event.");
-
-                [self.jQueryOutput appendFormat:@"\n  // change-Handler für %@\n",enclosingElem];
-
-                [self.jQueryOutput appendFormat:@"  $('#%@').change(function(e)\n  {\n    ",enclosingElem];
-
-
-                // Extra Code, um den alten Value speichern zu können (s. als Erklärung auch
-                // unten bei gegebenenem Attribut args)
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onnewvalue"] ||
-                    [[attributeDict valueForKey:@"name"] isEqualToString:@"onvalue"])
-                {
-                    [self.jQueryOutput appendString:@"var oldvalue = $(this).data('oldvalue') || '';\n"];
-                    [self.jQueryOutput appendString:@"    $(this).data('oldvalue', $(this).val());\n\n    "];
-                }
-
-
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
-
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onerror"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"ontimeout"])
-            {
-                self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-error-event.");
-
-                [self.jQueryOutput appendFormat:@"\n  // error-Handler für %@\n",enclosingElem];
-
-                [self.jQueryOutput appendFormat:@"  $('#%@').error(function(e)\n  {\n    ",enclosingElem];
-
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
-
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"oninit"])
-            {
-                self.attributeCount++;
-                // NSLog(@"Binding the method in this handler to a jQuery-load-event.");
-                // Nein, load-event gibt es nur bei window (also body und frameset)
-                // alles was in init ist einfach direkt ausführen
-                // Falls es doch mal das init eines windows (canvas) sein sollte, nicht schlimm,
-                // denn wir führen schon von vorne herein den gesamten Code in
-                // $(window).load(function() aus!
-                NSLog(@"NOT Binding the method in this handler. Direct execution of code.");
-
-                [self.jQueryOutput appendFormat:@"\n  // oninit-Handler für %@ (wir führen den Code direkt aus)\n  // Aber korrekten Scope berücksichtigen! Deswegen in einer Funktion mit bind() ausführen\n  // Zusätzlich ist auch noch with (this) {} erforderlich, puh...\n",enclosingElem];
-
-                // [self.jQueryOutput appendFormat:@"  $('#%@').load(function()\n  {\n    ",self.zuletztGesetzteID];
-                [self.jQueryOutput appendFormat:@"  var bindMeToCorrectScope = function () {\n    with (this) {\n      "];
-
-                self.onInitInHandler = YES;
-
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
-
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onfocus"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onisfocused"])
-            {
-                self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-focus-event.");
-
-                [self.jQueryOutput appendFormat:@"\n  // focus-Handler für %@\n",enclosingElem];
-
-                [self.jQueryOutput appendFormat:@"  $('#%@').focus(function(e)\n  {\n    ",enclosingElem];
-
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
-
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onselect"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onitemselected"])
-            {
-                self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-select-event.");
-    
-                [self.jQueryOutput appendFormat:@"\n  // select-Handler für %@\n",enclosingElem];
-
-                [self.jQueryOutput appendFormat:@"  $('#%@').select(function(e)\n  {\n    ",enclosingElem];
-
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
-
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onblur"])
-            {
-                self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-blur-event.");
-
-                [self.jQueryOutput appendFormat:@"\n  // blur-Handler für %@\n",enclosingElem];
-
-                [self.jQueryOutput appendFormat:@"  $('#%@').blur(function(e)\n  {\n    ",enclosingElem];
-
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
-
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onmousedown"])
-            {
-                [self changeMouseCursorOnHoverOverElement:enclosingElem];
-
-                self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-mousedown-event.");
-
-                [self.jQueryOutput appendFormat:@"\n  // mousedown-Handler für %@\n",enclosingElem];
-
-                [self.jQueryOutput appendFormat:@"  $('#%@').mousedown(function(e)\n  {\n    ",enclosingElem];
-
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
-
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onmouseup"])
-            {
-                [self changeMouseCursorOnHoverOverElement:enclosingElem];
-
-                self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-mouseup-event.");
-
-                [self.jQueryOutput appendFormat:@"\n  // mouseup-Handler für %@\n",enclosingElem];
-
-                [self.jQueryOutput appendFormat:@"  $('#%@').mouseup(function(e)\n  {\n    ",enclosingElem];
-
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
-
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onmouseover"])
-            {
-                [self changeMouseCursorOnHoverOverElement:enclosingElem];
-
-                self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-mouseover-event.");
-
-                [self.jQueryOutput appendFormat:@"\n  // mouseover-Handler für %@\n",enclosingElem];
-
-                [self.jQueryOutput appendFormat:@"  $('#%@').mouseover(function(e)\n  {\n    ",enclosingElem];
-
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
-
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onmouseout"])
-            {
-                [self changeMouseCursorOnHoverOverElement:enclosingElem];
-
-                self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-mouseout-event.");
-
-                [self.jQueryOutput appendFormat:@"\n  // mouseout-Handler für %@\n",enclosingElem];
-
-                [self.jQueryOutput appendFormat:@"  $('#%@').mouseout(function(e)\n  {\n    ",enclosingElem];
-
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
-
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onkeyup"])
-            {
-                self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-keyup-event.");
-
-                [self.jQueryOutput appendFormat:@"\n  // keyup-Handler für %@\n",enclosingElem];
-
-                // die Variable k wird von OpenLaszlo einfach so benutzt. Das muss der keycode sein.
-                [self.jQueryOutput appendFormat:@"  $('#%@').keyup(function(e)\n  {\n    var k = e.keyCode;\n\n    ",enclosingElem];
-
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
-
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onkeydown"])
-            {
-                self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a jQuery-keydown-event.");
-
-                [self.jQueryOutput appendFormat:@"\n  // keydown-Handler für %@\n",enclosingElem];
-
-                [self.jQueryOutput appendFormat:@"  $('#%@').keydown(function(e)\n  {\n    ",enclosingElem];
-
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
-
-
-            // ToDo - ich binde es an den unbekannten Handler
-            // Klappt laut jQuery-Doku, irgend jemand anderes muss das event dann z. B. per trigger() aufrufen
-            if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onsavestate"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onpaypalclose"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"oninternalstate"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onrolldown"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onfirstdown"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"ondatedays"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onchecked"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onhasdefault"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onrolleddown"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onvisible"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onstop"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onmask"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onheight"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"ontitlewidth"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"oncontrolpos"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onblurintextfield"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onxxx"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onpattern"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onmaxlength"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onminvalue"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"ondomain"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onyes"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onno"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onclose"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onlistwidth"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onmousewheeldelta"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onisopen"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"ontextclick"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"ondataset"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onboxheight"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onactual"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onanimation"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"ondown"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onstart"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"ondigitcolor"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onselectedtab"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"oninfotext"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"onnodes"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"oncontext"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"ontabselected"] ||
-                [[attributeDict valueForKey:@"name"] isEqualToString:@"customevent"])
-            {
-                self.attributeCount++;
-                NSLog(@"Binding the method in this handler to a custom jQuery-event (has to be triggered).");
-
-                [self.jQueryOutput appendFormat:@"\n  // 'custom'-Handler für %@\n",enclosingElem];
-
-                // event = 2. Parameter, weil lz.Event diesen über triggerHandler als 2. übergibt
-                // Der erste ist immer automatisch das event-Objekt. Aber Argument heißt 'event'
-                // Deswegen ist e das eigentliche event-objekt, heißt aber nicht so.
-                // Und beim 2. Parameter ist es umgekehrt
-                // Siehe Beispiel <event>, Example 28 
-                [self.jQueryOutput appendFormat:@"  $('#%@').bind('%@',function(e,event)\n  {\n    ",enclosingElem,[attributeDict valueForKey:@"name"]];
-
-                // Okay, jetzt Text sammeln und beim schließen einfügen
-            }
+            // Okay, jetzt Text sammeln und beim schließen einfügen
         }
 
-
-
-        // ToDo
-        if ([attributeDict valueForKey:@"reference"]) // ToDo
+        if ([name isEqualToString:@"ondblclick"])
         {
             self.attributeCount++;
-            NSLog(@"Skipping the attribute 'reference'.");
+            NSLog(@"Binding the method in this handler to a jQuery-dblclick-event.");
+
+            [self.jQueryOutput appendFormat:@"\n  // ondblclick-Handler für %@\n",enclosingElem];
+
+            // 'e', weil 'event' würde wohl das event-Objekt zugreifen. Auf dieses kann man so und so zugreifen.
+            [self.jQueryOutput appendFormat:@"  $('#%@').dblclick(function(e)\n  {\n    ",enclosingElem];
+
+            alsBuildInEventBearbeitet = YES;
+
+            // Okay, jetzt Text sammeln und beim schließen einfügen
         }
+
+        if ([name isEqualToString:@"onchanged"] ||
+            [name isEqualToString:@"onvalue"] ||
+            [name isEqualToString:@"onnewvalue"] ||
+            [name isEqualToString:@"ondata"]) // ToDo: Ist wirklich ondata = change-event?
+        {
+            self.attributeCount++;
+            NSLog(@"Binding the method in this handler to a jQuery-change-event.");
+
+            [self.jQueryOutput appendFormat:@"\n  // change-Handler für %@\n",enclosingElem];
+
+            [self.jQueryOutput appendFormat:@"  $('#%@').change(function(e)\n  {\n    ",enclosingElem];
+
+
+            // Extra Code, um den alten Value speichern zu können (s. als Erklärung auch
+            // unten bei gegebenenem Attribut args)
+            if ([name isEqualToString:@"onnewvalue"] ||
+                [name isEqualToString:@"onvalue"])
+            {
+                [self.jQueryOutput appendString:@"var oldvalue = $(this).data('oldvalue') || '';\n"];
+                [self.jQueryOutput appendString:@"    $(this).data('oldvalue', $(this).val());\n\n    "];
+            }
+
+            alsBuildInEventBearbeitet = YES;
+
+            // Okay, jetzt Text sammeln und beim schließen einfügen
+        }
+
+        if ([name isEqualToString:@"onerror"] ||
+            [name isEqualToString:@"ontimeout"])
+        {
+            self.attributeCount++;
+            NSLog(@"Binding the method in this handler to a jQuery-error-event.");
+
+            [self.jQueryOutput appendFormat:@"\n  // error-Handler für %@\n",enclosingElem];
+
+            [self.jQueryOutput appendFormat:@"  $('#%@').error(function(e)\n  {\n    ",enclosingElem];
+
+            alsBuildInEventBearbeitet = YES;
+
+            // Okay, jetzt Text sammeln und beim schließen einfügen
+        }
+
+        if ([name isEqualToString:@"oninit"])
+        {
+            self.attributeCount++;
+            // NSLog(@"Binding the method in this handler to a jQuery-load-event.");
+            // Nein, load-event gibt es nur bei window (also body und frameset)
+            // alles was in init ist einfach direkt ausführen
+            // Falls es doch mal das init eines windows (canvas) sein sollte, nicht schlimm,
+            // denn wir führen schon von vorne herein den gesamten Code in
+            // $(window).load(function() aus!
+            NSLog(@"NOT Binding the method in this handler. Direct execution of code.");
+
+            [self.jQueryOutput appendFormat:@"\n  // oninit-Handler für %@ (wir führen den Code direkt aus)\n  // Aber korrekten Scope berücksichtigen! Deswegen in einer Funktion mit bind() ausführen\n  // Zusätzlich ist auch noch with (this) {} erforderlich, puh...\n",enclosingElem];
+
+            // [self.jQueryOutput appendFormat:@"  $('#%@').load(function()\n  {\n    ",self.zuletztGesetzteID];
+            [self.jQueryOutput appendFormat:@"  var bindMeToCorrectScope = function () {\n    with (this) {\n      "];
+
+
+            if ([attributeDict valueForKey:@"args"])
+            {
+                self.attributeCount++;
+
+                [self.jQueryOutput appendFormat:@"var %@ = this;\n\n      ",[attributeDict valueForKey:@"args"]];
+            }
+
+
+            self.onInitInHandler = YES;
+
+            alsBuildInEventBearbeitet = YES;
+
+            // Okay, jetzt Text sammeln und beim schließen einfügen
+        }
+
+        if ([name isEqualToString:@"onfocus"] ||
+            [name isEqualToString:@"onisfocused"])
+        {
+            self.attributeCount++;
+            NSLog(@"Binding the method in this handler to a jQuery-focus-event.");
+
+            [self.jQueryOutput appendFormat:@"\n  // focus-Handler für %@\n",enclosingElem];
+
+            [self.jQueryOutput appendFormat:@"  $('#%@').focus(function(e)\n  {\n    ",enclosingElem];
+
+            alsBuildInEventBearbeitet = YES;
+
+            // Okay, jetzt Text sammeln und beim schließen einfügen
+        }
+
+        if ([name isEqualToString:@"onselect"] ||
+            [name isEqualToString:@"onitemselected"])
+        {
+            if ([attributeDict valueForKey:@"args"])
+            {
+                self.attributeCount++;
+                args = [NSString stringWithFormat:@",%@",[attributeDict valueForKey:@"args"]];
+            }
+
+
+            self.attributeCount++;
+            NSLog(@"Binding the method in this handler to a jQuery-select-event.");
+
+            [self.jQueryOutput appendFormat:@"\n  // select-Handler für %@\n",enclosingElem];
+
+            [self.jQueryOutput appendFormat:@"  $('#%@').select(function(e%@)\n  {\n    ",enclosingElem,args];
+
+            alsBuildInEventBearbeitet = YES;
+
+            // Okay, jetzt Text sammeln und beim schließen einfügen
+        }
+
+        if ([name isEqualToString:@"onblur"])
+        {
+            if ([attributeDict valueForKey:@"args"])
+            {
+                self.attributeCount++;
+                args = [NSString stringWithFormat:@",%@",[attributeDict valueForKey:@"args"]];
+            }
+
+
+            self.attributeCount++;
+            NSLog(@"Binding the method in this handler to a jQuery-blur-event.");
+
+            [self.jQueryOutput appendFormat:@"\n  // blur-Handler für %@\n",enclosingElem];
+
+            [self.jQueryOutput appendFormat:@"  $('#%@').blur(function(e%@)\n  {\n    ",enclosingElem,args];
+
+            alsBuildInEventBearbeitet = YES;
+
+            // Okay, jetzt Text sammeln und beim schließen einfügen
+        }
+
+        if ([name isEqualToString:@"onmousedown"])
+        {
+            [self changeMouseCursorOnHoverOverElement:enclosingElem];
+
+            self.attributeCount++;
+            NSLog(@"Binding the method in this handler to a jQuery-mousedown-event.");
+
+            [self.jQueryOutput appendFormat:@"\n  // mousedown-Handler für %@\n",enclosingElem];
+
+            [self.jQueryOutput appendFormat:@"  $('#%@').mousedown(function(e)\n  {\n    ",enclosingElem];
+
+            alsBuildInEventBearbeitet = YES;
+
+            // Okay, jetzt Text sammeln und beim schließen einfügen
+        }
+
+        if ([name isEqualToString:@"onmouseup"])
+        {
+            [self changeMouseCursorOnHoverOverElement:enclosingElem];
+
+            self.attributeCount++;
+            NSLog(@"Binding the method in this handler to a jQuery-mouseup-event.");
+
+            [self.jQueryOutput appendFormat:@"\n  // mouseup-Handler für %@\n",enclosingElem];
+
+            [self.jQueryOutput appendFormat:@"  $('#%@').mouseup(function(e)\n  {\n    ",enclosingElem];
+
+            alsBuildInEventBearbeitet = YES;
+
+            // Okay, jetzt Text sammeln und beim schließen einfügen
+        }
+
+        if ([name isEqualToString:@"onmouseover"])
+        {
+            [self changeMouseCursorOnHoverOverElement:enclosingElem];
+
+            self.attributeCount++;
+            NSLog(@"Binding the method in this handler to a jQuery-mouseover-event.");
+
+            [self.jQueryOutput appendFormat:@"\n  // mouseover-Handler für %@\n",enclosingElem];
+
+            [self.jQueryOutput appendFormat:@"  $('#%@').mouseover(function(e)\n  {\n    ",enclosingElem];
+
+            alsBuildInEventBearbeitet = YES;
+
+            // Okay, jetzt Text sammeln und beim schließen einfügen
+        }
+
+        if ([name isEqualToString:@"onmouseout"])
+        {
+            [self changeMouseCursorOnHoverOverElement:enclosingElem];
+
+            self.attributeCount++;
+            NSLog(@"Binding the method in this handler to a jQuery-mouseout-event.");
+
+            [self.jQueryOutput appendFormat:@"\n  // mouseout-Handler für %@\n",enclosingElem];
+
+            [self.jQueryOutput appendFormat:@"  $('#%@').mouseout(function(e)\n  {\n    ",enclosingElem];
+
+            alsBuildInEventBearbeitet = YES;
+
+            // Okay, jetzt Text sammeln und beim schließen einfügen
+        }
+
+        if ([name isEqualToString:@"onkeyup"])
+        {
+            if ([attributeDict valueForKey:@"args"] &&
+                ([[attributeDict valueForKey:@"args"] isEqualToString:@"k"]))
+            {
+                self.attributeCount++;
+                NSLog(@"Considering the argument 'k' as 'var k = e.keyCode;'.");
+            }
+            if ([attributeDict valueForKey:@"args"] &&
+                ([[attributeDict valueForKey:@"args"] isEqualToString:@"key"]))
+            {
+                self.attributeCount++;
+                NSLog(@"Considering the argument 'key' as 'var key = e.keyCode;'.");
+            }
+
+
+            self.attributeCount++;
+            NSLog(@"Binding the method in this handler to a jQuery-keyup-event.");
+
+            [self.jQueryOutput appendFormat:@"\n  // keyup-Handler für %@\n",enclosingElem];
+
+            // die Variable k wird von OpenLaszlo einfach so benutzt. Das muss der keycode sein.
+            [self.jQueryOutput appendFormat:@"  $('#%@').keyup(function(e)\n  {\n    var k = e.keyCode;\n    var key = e.keyCode;\n\n    ",enclosingElem];
+
+            alsBuildInEventBearbeitet = YES;
+
+            // Okay, jetzt Text sammeln und beim schließen einfügen
+        }
+
+
+
+        if ([name isEqualToString:@"onkeydown"])
+        {
+            if ([attributeDict valueForKey:@"args"] &&
+                ([[attributeDict valueForKey:@"args"] isEqualToString:@"k"]))
+            {
+                self.attributeCount++;
+                NSLog(@"Considering the argument 'k' as 'var k = e.keyCode;'.");
+            }
+            if ([attributeDict valueForKey:@"args"] &&
+                ([[attributeDict valueForKey:@"args"] isEqualToString:@"key"]))
+            {
+                self.attributeCount++;
+                NSLog(@"Considering the argument 'key' as 'var key = e.keyCode;'.");
+            }
+
+            self.attributeCount++;
+            NSLog(@"Binding the method in this handler to a jQuery-keydown-event.");
+
+            [self.jQueryOutput appendFormat:@"\n  // keydown-Handler für %@\n",enclosingElem];
+
+            [self.jQueryOutput appendFormat:@"  $('#%@').keydown(function(e)\n  {\n    var k = e.keyCode;\n    var key = e.keyCode;\n\n    ",enclosingElem];
+
+            alsBuildInEventBearbeitet = YES;
+
+            // Okay, jetzt Text sammeln und beim schließen einfügen
+        }
+
+
+
+        // Wenn 'reference' gesetzt, dann Bezug nehmen und DARAN binden
+        // Aber gleichzeitig muss das this beim alten bleiben, deswegen mit bind() arbeiten
+        if ([attributeDict valueForKey:@"reference"])
+        {
+            self.attributeCount++;
+
+            self.referenceAttributeInHandler = YES;
+
+            //[self.jQueryOutput appendFormat:@"\n  // 'reference'-Attribut, deswegen addEventListener\n"];
+            //[self.jQueryOutput appendFormat:@"  %@.addEventListener('%@',function() { alert('Hmmm'); }, false);\n",[attributeDict valueForKey:@"reference"],name];
+
+            NSLog(@"Using the referenced element to bind the handler, not the enclosing Element.");
+        }
+
+
+
+        // Wenn es vorher nicht gematcht hat, dann ist es wohl ein self-defined event.
+        // Irgend jemand anderes muss das event dann per triggerHandler() aufrufen
+        if (!alsBuildInEventBearbeitet)
+        {
+            self.attributeCount++;
+            NSLog(@"Binding the method in this handler to a custom jQuery-event (has to be triggered).");
+
+            if ([attributeDict valueForKey:@"args"])
+            {
+                self.attributeCount++;
+                args = [NSString stringWithFormat:@",%@",[attributeDict valueForKey:@"args"]];
+            }
+
+            // args = IMMER 2. Argument, weil lz.Event diesen über triggerHandler als 2. übergibt
+            // ebenso 'setAttribute_'.
+            // Das erste Argument (e) ist immer automatisch das event-Objekt.
+            // (Siehe Beispiel <event>, Example 28)
+            if ([attributeDict valueForKey:@"reference"])
+            {
+                [self.jQueryOutput appendFormat:@"\n  // 'custom'-Handler für %@\n",[attributeDict valueForKey:@"reference"]];
+                [self.jQueryOutput appendFormat:@"  $(%@).on('%@',function(e%@)\n  {\n    ",[attributeDict valueForKey:@"reference"],name,args];
+            }
+            else
+            {
+                [self.jQueryOutput appendFormat:@"\n  // 'custom'-Handler für %@\n",enclosingElem];
+                [self.jQueryOutput appendFormat:@"  $('#%@').on('%@',function(e%@)\n  {\n    ",enclosingElem,name,args];
+            }
+
+
+            // Okay, jetzt Text sammeln und beim schließen einfügen
+        }
+
 
 
 
@@ -7326,153 +7408,15 @@ didStartElement:(NSString *)elementName
         // den alten Wert in der Variable 'oldvalue' speichert
         if ([attributeDict valueForKey:@"args"])
         {
-            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"event"])
-            {
-                // ich denke bei event muss ich nichts machen. 'event' steht sowieso immer
-                // zur Verfügung als Objekt
-                self.attributeCount++;
-            }
-
 
             if ([[attributeDict valueForKey:@"args"] isEqualToString:@"oldvalue"])
             {
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onnewvalue"] ||
-                    [[attributeDict valueForKey:@"name"] isEqualToString:@"onvalue"])
+                if ([name isEqualToString:@"onnewvalue"] ||
+                    [name isEqualToString:@"onvalue"])
                 {
                     self.attributeCount++;
                     NSLog(@"Found the attribute 'args' with value 'oldvalue'.");
                     NSLog(@"Setting extra-code in the handler to retrieve the oldvalue");
-                }
-            }
-
-            // ToDo:
-            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"k"])
-            {
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onkeyup"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'k'.");
-                    NSLog(@"Skipping for now (ToDo)");
-                }
-            }
-            // ToDo:
-            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"newp"])
-            {
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onblur"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'newp'.");
-                    NSLog(@"Skipping for now (ToDo)");
-                }
-            }
-            // ToDo:
-            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"d"])
-            {
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onmousewheeldelta"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'd'.");
-                    NSLog(@"Skipping for now (ToDo)");
-                }
-            }
-            // ToDo:
-            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"invoker"])
-            {
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"oninit"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'invoker'.");
-                    NSLog(@"Skipping for now (ToDo)");
-                }
-            }
-            // ToDo:
-            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"rowdp"])
-            {
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onblurintextfield"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'rowdp'.");
-                    NSLog(@"Skipping for now (ToDo)");
-                }
-            }
-            // ToDo:
-            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"key"])
-            {
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onkeydown"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'key'.");
-                    NSLog(@"Skipping for now (ToDo)");
-                }
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onkeyup"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'key'.");
-                    NSLog(@"Skipping for now (ToDo)");
-                }
-            }
-            // ToDo:
-            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"val"])
-            {
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"oninit"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'val'.");
-                    NSLog(@"Skipping for now (ToDo)");
-                }
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"ontext"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'val'.");
-                    NSLog(@"Skipping for now (ToDo)");
-                }
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onisopen"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'val'.");
-                    NSLog(@"Skipping for now (ToDo)");
-                }
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onyes"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'val'.");
-                    NSLog(@"Skipping for now (ToDo)");
-                }
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onno"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'val'.");
-                    NSLog(@"Skipping for now (ToDo)");
-                }
-            }
-            // ToDo:
-            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"leave"])
-            {
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onblur"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'leave'.");
-                    NSLog(@"Skipping for now (ToDo)");
-                }
-            }
-            // ToDo:
-            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"dpdata"])
-            {
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onitemselected"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'dpdata'.");
-                    NSLog(@"Skipping for now (ToDo)");
-                }
-            }
-            // ToDo:
-            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"item"])
-            {
-                if ([[attributeDict valueForKey:@"name"] isEqualToString:@"onselect"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attrubute 'args' with value 'item'.");
-                    NSLog(@"Skipping for now (ToDo)");
                 }
             }
         }
@@ -7494,7 +7438,7 @@ didStartElement:(NSString *)elementName
             NSLog(@"Declaring an event with the given name.");
 
             [self.jQueryOutput appendFormat:@"\n  // <event> für %@\n",enclosingElem];
-            [self.jQueryOutput appendFormat:@"  %@.%@ = new lz.event(null,'%@');\n",enclosingElem, [attributeDict valueForKey:@"name"], [attributeDict valueForKey:@"name"]];
+            [self.jQueryOutput appendFormat:@"  %@.%@ = new lz.event(null,%@,'%@');\n",enclosingElem, [attributeDict valueForKey:@"name"], enclosingElem, [attributeDict valueForKey:@"name"]];
         }
         else
         {
@@ -7872,7 +7816,12 @@ BOOL isJSArray(NSString *s)
             // trotzdem passieren (Example 28.16.):
             // z.B.: <button>Make window red <handler name="onclick">code</handler></button>
             // wenn so etwas passiert, einfach Text ausgeben... Hoffe das geht in allen Fällen gut
-            [self.output appendString:s];
+            //[self.output appendString:s];
+            // Nein, geht es nicht. Z. B. nicht in Example 27 - der mißglückte comment)
+            // Deswegen nur ausgeben, wenn ein Button vorliegt
+            NSString *enclosingElem = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
+            if ([enclosingElem isEqualToString:@"button"])
+                [self.output appendString:s];
         }
     }
 
@@ -8896,23 +8845,35 @@ BOOL isJSArray(NSString *s)
             // außenstehenden Element appende, anstatt es zu ersetzen. (2. Beispiel von <text> in der OL-Doku)
             // Ich denke es klappt jetzt auch so, seitdem ich das äußerste Elemente bei <class extends="text">
             // ersetze, anstatt zu appenden. Dadurch spreche ich automatisch das richtige Element an!
-            //if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-            if (NO)
-                [self.jQueryOutput appendString:@"  with (this) {\n        "];
+
+            // bei reference ist es ein anderes this, und gleichzeitig kann ich dann nicht auf
+            // e.target testen. Der Witz ist ja gerade, dass es wo anders dran gebunden wurde.
+            if (self.referenceAttributeInHandler)
+            {
+                [self.jQueryOutput appendString:@"  // Wegen 'reference'-Attribut falsches this. Dieses korrigieren mit selbst ausführender Funktion und bind()\n"];                
+                [self.jQueryOutput appendString:@"      (function() {\n      with (this) {\n        "];
+            }
             else
+            {
                 [self.jQueryOutput appendString:@"if (this == e.target) {\n      with (this) {\n        "];
+            }
 
             [self.jQueryOutput appendString:s];
 
             [self.jQueryOutput appendString:@"\n      }\n"];
-            //if (![[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-            if (YES)
+
+            if (self.referenceAttributeInHandler)
+                [self.jQueryOutput appendFormat:@"    }).bind(%@)();\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1]];
+            else
                 [self.jQueryOutput appendString:@"    }\n"];
+
             [self.jQueryOutput appendString:@"  });\n"];
         }
 
         // Erkennungszeichen für oninit in jedem Fall zurücksetzen
         self.onInitInHandler = NO;
+        // Erkennungszeichen für 'reference'-Attribut auf jeden Fall zurücksetzen
+        self.referenceAttributeInHandler = NO;
     }
 
 
@@ -10864,12 +10825,13 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "    // It is fine to define an event for which no handler exists\n"
-    "    this.event = function(eventValue,handler) {\n"
-    "        this.eventType = handler;\n"
+    "    this.event = function(eventValue,handler,eventType) {\n"
+    "        this.eventHandler = handler;\n"
+    "        this.eventType = eventType;\n"
     "\n"
     "        this.sendEvent = function(ev) {\n"
-    "            //alert(this.name);\n"
-    "            $('#element3').trigger(this.eventType, ev);\n"
+    "            // triggerHandler, weil Point-To-Point-Logik, und kein bubblen stattfinden soll\n"
+    "            $(this.eventHandler).triggerHandler(this.eventType, ev);\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -11572,10 +11534,10 @@ BOOL isJSArray(NSString *s)
     "      // Wenn es vorher nicht matcht, dann einfach die Property setzen, dann ist es eine selbst definierte Variable\n"
     "      // Aber erstmal noch sammeln der Vars, die gesetzt werden sollen. Später lockern\n"
     "      // Vorher aber Test ob die Property auch vorher definiert wurde! Sonst läuft wohl etwas schief\n"
-    "      if (attributeName === 'zusammenveranlagung')\n"
+    "      if (attributeName === 'zusammenveranlagung' || attributeName === 'avalue')\n"
     "      {\n"
-    "         if (this.zusammenveranlagung !== undefined)\n"
-    "             this.zusammenveranlagung = value;\n"
+    "         if (this[attributeName] !== undefined)\n"
+    "             this[attributeName] = value;\n"
     "         else\n"
     "             alert('Trying to set a property that never was declared!');\n"
     "      }\n"
@@ -11586,7 +11548,9 @@ BOOL isJSArray(NSString *s)
     "    }\n"
     "\n"
     "    // In jedem Fall: triggern! Das sieht OL so vor\n"
-    "    $(me).trigger('on'+attributeName);\n"
+    "    // Kein bubblen, sondern Point-2-Point-Logik in OL, deswegen triggerHandler\n"
+    "    // der getzte Wert (value) wird als Extra-Parameter mit gesendet\n"
+    "    $(me).triggerHandler('on'+attributeName,value);\n"
     "}\n"
     "\n"
     "// Object.prototype ist verboten und bricht jQuery und z.B. JS .split()! Deswegen über defineProperty\n"
@@ -11724,6 +11688,7 @@ BOOL isJSArray(NSString *s)
     "HTMLDivElement.prototype.addFormat = function() {\n"
     "    warnOnWrongClass(this);\n"
     "    $(this).append(sprintf.apply(null, arguments));\n"
+    "    $(this).triggerHandler('ontext',sprintf.apply(null, arguments));\n"
     "}\n"
     "\n"
     "\n"
@@ -11739,6 +11704,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "    s = s.replace(/\\n/,'<br />');\n"
     "    $(this).append(s);\n"
+    "    $(this).triggerHandler('ontext',s);\n"
     "}\n"
     "\n"
     "\n"
@@ -11747,7 +11713,7 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "var clearTextFunction = function () {\n"
     "    warnOnWrongClass(this);\n"
-    "    $(this).html('');\n"
+    "    this.setAttribute_('text', '');\n"
     "}\n"
     "\n"
     "// Nur für div! Da es die Methode nur bei <div class=\"div_text\"> gibt\n"
@@ -12013,6 +11979,46 @@ BOOL isJSArray(NSString *s)
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hilfsfunktion, um height/width von Div's anzupassen //\n"
+    "// adjustHeightAndWidth()                              //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Falls ein Kind eine x, y, width oder height-Angabe hat: Wir müssen dann die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n"
+    "// nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n"
+    "// Wir überschreiben jedoch keinen explizit vorher gesetzten Wert,\n"
+    "// deswegen test auf '' (nur mit JS möglich, nicht mit jQuery)\n"
+    // position().top klappt nicht, weil das Elemente versteckt sein kann,
+    // aber mit css('top') klappt es (gleiches gilt für position().left).
+    // '0'+ als Schutz gegen 'auto', so, dass parseInt() auf jeden Fall ne Nummer findet.
+    "var adjustHeightAndWidth = function (el) {\n"
+    "    var sumXYHW = 0;\n"
+    "    $(el).children().map(function ()\n"
+    "    {\n"
+    "        var n = this.nodeName.toLowerCase();\n"
+    "        if (n === 'b' || n === 'i' || n === 'u' || n === 'br' || n === 'font')\n"
+    "            return;\n"
+    "        sumXYHW += parseInt('0'+$(this).css('top'));\n"
+    "        sumXYHW += parseInt('0'+$(this).css('left'));\n"
+    "        sumXYHW += $(this).height();\n"
+    "        sumXYHW += $(this).width();\n"
+    "    });\n"
+    "    if (sumXYHW > 0 && $(el).children().length > 0 && $(el).get(0).style.height == '')\n"
+    "    {\n"
+    "        var heights = $(el).children().map(function () { return $(this).outerHeight('true')+$(this).position().top; }).get();\n"
+    "        if (!($(el).hasClass('div_rudElement')) && !($(el).hasClass('canvas_standard')))\n"
+    "            el.setAttribute_('height',getMaxOfArray(heights))\n"
+    "    }\n"
+    "    // Analog muss die Breite gesetzt werden\n"
+    "    if (sumXYHW > 0 && $(el).children().length > 0 && $(el).get(0).style.width == '')\n"
+    "    {\n"
+    "        var widths = $(el).children().map(function () { return $(this).outerWidth('true')+$(this).position().left; }).get();\n"
+    "        if (!($(el).hasClass('canvas_standard')))\n"
+    "            el.setAttribute_('width',getMaxOfArray(widths))\n"
+    "    }\n"
+    "}"
     "\n";
 
 

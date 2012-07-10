@@ -39,7 +39,7 @@ BOOL alternativeFuerSimplelayout = YES; // Bei YES kann <simplelayout> an belieb
                                         // Es scheint sehr zuverlässig zu funktionieren inzwischen.
                                         // Kann wohl dauerhaft auf YES bleiben!
 
-BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -2868,21 +2868,27 @@ void OLLog(xmlParser *self, NSString* s,...)
 {
     NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
+    /*
     [s appendString:@"\n  // Eventuell nachfolgende Simplelayouts müssen entsprechend der Höhe des vorherigen umgebenden Divs aufrücken.\n  // Deswegen wird hier explizit die Höhe gesetzt (ermittelt anhand des höchsten Kindes).\n  // Eventuelle Kinder wurden vorher gesetzt.\n"];
 
     // Schutz gegen unbekannte Elemente oder wenn simplelayout nicht das
     // erste Element mehrerer Geschwister ist, was nicht unterstützt wird
-    [s appendFormat:@"  if (document.getElementById('%@').lastElementChild",self.zuletztGesetzteID];
+    // Ich denke das ist nicht mehr nötig
+    //[s appendFormat:@"  if (document.getElementById('%@').lastElementChild)\n  {\n",self.zuletztGesetzteID];
 
-    [s appendFormat:@")\n  {\n    var heights = $('#%@').children().map(function () { return $(this).outerHeight(); }).get();\n",self.zuletztGesetzteID];
+    [s appendFormat:@"  var heights = $('#%@').children().map(function () { return $(this).outerHeight(); }).get();\n",self.zuletztGesetzteID];
 
     // [s appendString:@"  alert(heights);\n"];
     // [s appendString:@"  alert(getMaxOfArray(heights));\n"];
 
-    [s appendString:@"    // nur wenn Höhe vorher nicht explizit gesetzt wurde, dann korrigieren\n"];
-    [s appendFormat:@"    if (%@.style.height == '')\n",self.zuletztGesetzteID];
-    [s appendFormat:@"      $('#%@').css('height',getMaxOfArray(heights));\n  }\n\n",self.zuletztGesetzteID];
+    [s appendString:@"  // nur wenn Höhe vorher nicht explizit gesetzt wurde, dann korrigieren\n"];
+    [s appendFormat:@"  if (%@.style.height == '')\n",self.zuletztGesetzteID];
+    [s appendFormat:@"    $('#%@').css('height',getMaxOfArray(heights));\n",self.zuletztGesetzteID];
+    //[s appendString:@"  }\n\n"]; <- raus, weil oben die Abfrage nach lastElementChild raus ist.
+    */
 
+    [s appendString:@"\n  // Höhe anpassen, wegen Simplelayout\n"];
+    [s appendFormat:@"  adjustHeightOfEnclosingDivOnSimpleLayout(%@);\n",self.zuletztGesetzteID];
 
     // An den Anfang des Strings setzen!
     // War mal jQueryOutput0, aber die Höhe muss bekannt sein, bevor das Simplelayout als solches ausgeführt wird!
@@ -2896,20 +2902,27 @@ void OLLog(xmlParser *self, NSString* s,...)
 {
     NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
+    /*
     [s appendString:@"\n  // Eventuell nachfolgende Simplelayouts müssen entsprechend der Breite des vorherigen umgebenden Divs aufrücken.\n  // Deswegen wird hier explizit die Breite gesetzt (ermittelt anhand des breitesten Kindes).\n  // Eventuelle Kinder wurden vorher gesetzt.\n"];
 
     // Schutz gegen unbekannte Elemente oder wenn simplelayout nicht das
     // erste Element mehrerer Geschwister ist, was nicht unterstützt wird
-    [s appendFormat:@"  if (document.getElementById('%@').lastElementChild",self.zuletztGesetzteID];
+    // Ich denke das ist nicht mehr nötig
+    //[s appendFormat:@"  if (document.getElementById('%@').lastElementChild)\n  {\n",self.zuletztGesetzteID];
 
-    [s appendFormat:@")\n  {\n    var widths = $('#%@').children().map(function () { return $(this).outerWidth(); }).get();\n",self.zuletztGesetzteID];
+    [s appendFormat:@"  var widths = $('#%@').children().map(function () { return $(this).outerWidth(); }).get();\n",self.zuletztGesetzteID];
 
     // [s appendString:@"  alert(widths);\n"];
     // [s appendString:@"  alert(getMaxOfArray(widths));\n"];
 
     [s appendString:@"    // nur wenn Breite vorher nicht explizit gesetzt wurde, dann korrigieren\n"];
     [s appendFormat:@"    if (%@.style.width == '')\n",self.zuletztGesetzteID];
-    [s appendFormat:@"      $('#%@').css('width',getMaxOfArray(widths));\n  }\n\n",self.zuletztGesetzteID];
+    [s appendFormat:@"      $('#%@').css('width',getMaxOfArray(widths));\n",self.zuletztGesetzteID];
+    // [s appendString:@"  }\n\n"]; <- raus, weil oben die Abfrage nach lastElementChild raus ist.
+     */
+
+    [s appendString:@"\n  // Breite anpassen, wegen Simplelayout\n"];
+    [s appendFormat:@"  adjustWidthOfEnclosingDivOnSimpleLayout(%@);\n",self.zuletztGesetzteID];
 
     // An den Anfang des Strings setzen!
     // War mal jQueryOutput0, aber die Breite muss bekannt sein, bevor das Simplelayout als solches ausgeführt wird!
@@ -3607,7 +3620,7 @@ didStartElement:(NSString *)elementName
             [s appendString:@";\n"];
 
             [s appendFormat:@"  if (!($('#%@').hasClass('div_rudElement')))\n",self.zuletztGesetzteID];
-            [s appendFormat:@"    if ($('#%@').get(0).style.height == '')\n      $('#%@').height(sumH);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+            [s appendFormat:@"    if (%@.style.height == '')\n      $('#%@').height(sumH);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
 
             // An den Anfang des Strings setzen!
             // War mal jQueryOutput0, aber die Höhe muss bekannt sein,
@@ -3684,7 +3697,7 @@ didStartElement:(NSString *)elementName
             // [s appendString:@"').css('position') == 'relative'"];
             // [s appendString:@")\n"];
 
-            [s appendFormat:@"  if ($('#%@').get(0).style.width == '')\n    $('#%@').width(sumW);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+            [s appendFormat:@"  if (%@.style.width == '')\n    $('#%@').width(sumW);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
 
             // An den Anfang des Strings setzen!
             // War mal jQueryOutput0, aber die Breite muss bekannt sein,
@@ -12019,6 +12032,38 @@ BOOL isJSArray(NSString *s)
     "            el.setAttribute_('width',getMaxOfArray(widths))\n"
     "    }\n"
     "}"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hilfsfunktion, um width von Div's anzupassen        //\n"
+    "// adjustWidthOfEnclosingDivOnSimpleLayout()           //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Eventuell nachfolgende Simplelayouts müssen entsprechend der Breite des vorherigen umgebenden Divs aufrücken.\n"
+    "// Deswegen wird hier explizit die Breite gesetzt (ermittelt anhand des breitesten Kindes).\n"
+    "// Eventuelle Kinder wurden vorher gesetzt.\n"
+    "// jedoch nur wenn Breite vorher nicht explizit gesetzt wurde, dann korrigieren.\n"
+    "var adjustWidthOfEnclosingDivOnSimpleLayout = function (el) {\n"
+    "    var widths = $(el).children().map(function () { return $(this).outerWidth(); }).get();\n"
+    "    if (el.style.width == '')\n"
+    "        $(el).css('width',getMaxOfArray(widths));\n"
+    "}"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hilfsfunktion, um height von Div's anzupassen       //\n"
+    "// adjustHeightOfEnclosingDivOnSimpleLayout()          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Eventuell nachfolgende Simplelayouts müssen entsprechend der Höhe des vorherigen umgebenden Divs aufrücken.\n"
+    "// Deswegen wird hier explizit die Höhe gesetzt (ermittelt anhand des höchsten Kindes).\n"
+    "// Eventuelle Kinder wurden vorher gesetzt.\n"
+    "// jedoch nur wenn Höhe vorher nicht explizit gesetzt wurde, dann korrigieren.\n"
+    "var adjustHeightOfEnclosingDivOnSimpleLayout = function (el) {\n"
+    "    var heights = $(el).children().map(function () { return $(this).outerHeight(); }).get();\n"
+    "    if (el.style.height == '')\n"
+    "        $(el).css('height',getMaxOfArray(heights));\n"
+    "}"
+    "\n"
+    "\n"
     "\n";
 
 
@@ -12037,11 +12082,11 @@ BOOL isJSArray(NSString *s)
 {
     NSString *js = @"/* FILE: collectedClasses.js */\n"
     "\n"
-    "////////////////////////////////////////////////////////////////////////////////////////////////////\n"
+    "//////////////////////////////////////////////////////////////////////////////////////////\n"
     "// Beinhaltet alle von OpenLaszlo mittels <class> definierte Klassen. Es werden korrespondierende //\n"
     "// 'Constructor Functions' angelegt, welche später von jQuery verarbeitet werden. Sobald          //\n"
     "// der Converter auf die Klasse dann stößt, legt er ein hier definiertes Objekt per new() an.     //\n"
-    "////////////////////////////////////////////////////////////////////////////////////////////////////\n"
+    "//////////////////////////////////////////////////////////////////////////////////////////\n"
     "\n"
     "\n"
     "\n"

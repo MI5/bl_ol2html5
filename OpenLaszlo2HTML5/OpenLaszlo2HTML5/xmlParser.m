@@ -35,9 +35,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL alternativeFuerSimplelayout = YES; // Bei YES kann <simplelayout> an beliebiger stelle stehen,
-                                        // Es scheint sehr zuverlässig zu funktionieren inzwischen.
-                                        // Kann wohl dauerhaft auf YES bleiben!
+
 
 BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
@@ -575,13 +573,16 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
-    [o appendFormat:@"\n  // Setting the Attribute '%@' of '#%@' with the value %@\n",attr,self.zuletztGesetzteID,s];
+    [o appendFormat:@"\n  // Setting the Attribute '%@' of '%@' with the value %@\n",attr,self.zuletztGesetzteID,s];
 
     BOOL nochVorDOMAusfuehren = NO;
     if ([s hasPrefix:@"$immediately{"])
     {
         nochVorDOMAusfuehren = YES;
         s = [s substringFromIndex:12];
+
+        // Damit er unten richtig reingeht
+        s = [NSString stringWithFormat:@"$%@",s];
     }
 
     BOOL nichtWatchen = NO;
@@ -589,11 +590,17 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         nichtWatchen = YES;
         s = [s substringFromIndex:5];
+
+        // Damit er unten richtig reingeht
+        s = [NSString stringWithFormat:@"$%@",s];
     }
 
     if ([s hasPrefix:@"$always{"])
     {
         s = [s substringFromIndex:7];
+
+        // Damit er unten richtig reingeht
+        s = [NSString stringWithFormat:@"$%@",s];
     }
 
 
@@ -639,7 +646,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Wenn die $once-Angabe erfolgt, ist es gar kein constraint und wir brauchen weder ein onchange noch ein watch
     if (constraintValue && !nichtWatchen && !nochVorDOMAusfuehren)
     {
-        [o appendString:@"  // Zusätzlich bei change aktualisieren bzw. watchen, da constraint-value\n"];
+        [o appendString:@"  // Zusätzlich bei change aktualisieren bzw. auf ein event horchen, da constraint-value\n"];
         [o appendFormat:@"  // Der zu setzende Wert ist abhängig von %d woanders gesetzten Variable(n)\n",[vars count]];
 
         // '__strong', damit ich object modifizieren kann
@@ -651,13 +658,15 @@ void OLLog(xmlParser *self, NSString* s,...)
             [o appendFormat:@"  if (typeof %@ === 'object')\n",object];
 
             [o appendFormat:@"    $(%@).on('change', function() { %@.setAttribute_('%@',%@); } );\n",object,self.zuletztGesetzteID,attr,s];
-            [o appendString:@"  else\n"];
 
 
+            // ToDo:
             // Bei width und height muss es ein resize-event werden... leider
             if ([object  hasSuffix:@"myWidth_NO_BrichtZuViel"] || [object hasSuffix:@"myHeight_NO_BrichtZuViel"])
             {
-                // Ganz hintern das myWidth oder das myHeight muss dann wegfallen
+                [o appendString:@"  else\n"];
+
+                // Ganz hinten das myWidth oder das myHeight muss dann wegfallen
                 NSArray *array = [object componentsSeparatedByString: @"."];
                 object = @"";
                 for (int i=0;i<[array count]-1;i++)
@@ -678,7 +687,45 @@ void OLLog(xmlParser *self, NSString* s,...)
             }
             else
             {
-                [o appendFormat:@"    window.watch('%@', function() { %@.setAttribute_('%@',%@); } );\n",object,self.zuletztGesetzteID,attr,s];
+                //[o appendFormat:@"    window.watch('%@', function() { %@.setAttribute_('%@',%@); } );\n",object,self.zuletztGesetzteID,attr,s];
+                // Das mit dem watchen klappt nicht wirklich...
+                // Neuer Code, indem ich auf die von setAttribute_ abgeschickten Events horche:
+
+                // Erstmal Property von Objekt isolieren
+                NSArray *tempArray = [object componentsSeparatedByString: @"."];
+
+                // wenn es gar keinen . gibt, ist es wohl ein vergessenes this vor der Property z.B.
+                // Wir brauchen also mindestens ein Objekt und eine Property
+                if ([tempArray count] > 1)
+                {
+                    NSString *theObject = [tempArray objectAtIndex:0];
+                    NSString *theProperty = [tempArray objectAtIndex:[tempArray count]-1];
+
+                    // Falls es mehr als 2 Element im Array gibt, alle mittleren Elemente
+                    // dem objekt hinzufügen.
+                    if ([tempArray count] > 2)
+                    {
+                        for (int i=1;i<[tempArray count]-1;i++)
+                        {
+                            theObject = [NSString stringWithFormat:@"%@.%@",theObject,[tempArray objectAtIndex:i]];
+                        }
+                    }
+
+
+                    // setAttribute_ verschickt events nur an 'onheight' oder an 'onwidth'
+                    if ([theProperty isEqualToString:@"myWidth"])
+                        theProperty = @"width";
+                    if ([theProperty isEqualToString:@"myHeight"])
+                        theProperty = @"height";
+
+                    // Wenn wir selber wir sind, dann nicht. Darauf brauche ich nicht reagieren
+                    // Das dient dann wohl nur der Berechnung. z. B. "irgendwas - this.height".
+                    if (![theObject isEqualToString:@"this"])
+                    {
+                        [o appendString:@"  else\n"];
+                        [o appendFormat:@"    $(%@).on('on%@', function() { %@.setAttribute_('%@',%@); } );\n",theObject,theProperty,self.zuletztGesetzteID,attr,s];
+                    }
+                }
             }
         }
         
@@ -785,7 +832,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             // 1) [style appendString:@"position:absolute; top:50%; margin-top:-12px;"];
             // 2) [style appendString:@"line-height:4em;"];
             // Ich setze also über jQuery direkt ausgehend von der Höhe des Eltern-Elements
-            [self.jQueryOutput appendString:@"\n  // valign wurde als Attribut gefunden: Richte das Element entsprechend mittig (vertikal) aus\n"];
+            [self.jQueryOutput appendString:@"\n  // 'valign=middle' wurde als Attribut gefunden: Richte das Element entsprechend mittig (vertikal) aus\n"];
 
             // [self.jQueryOutput appendFormat:@"  $('#%@').css('top',toInt((parseInt($('#%@').parent().css('height'))-parseInt($('#%@').css('height')))/3));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
             // So wohl korrekter:
@@ -803,7 +850,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             // 1) [style appendString:@"position:absolute; top:50%; margin-top:-12px;"];
             // 2) [style appendString:@"line-height:4em;"];
             // Ich setze also über jQuery direkt ausgehend von der Höhe des Eltern-Elements
-            [self.jQueryOutput appendString:@"\n  // valign wurde als Attribut gefunden: Richte das Element entsprechend mittig (vertikal) aus\n"];
+            [self.jQueryOutput appendString:@"\n  // 'valign=bottom' wurde als Attribut gefunden: Richte das Element entsprechend am Boden aus\n"];
             [self.jQueryOutput appendFormat:@"  $('#%@').css('top',toInt((parseInt($('#%@').parent().css('height'))-parseInt($('#%@').outerHeight()))));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
         }
 
@@ -1647,13 +1694,16 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jsOutput appendFormat:@"  %@ = document.getElementById('%@');\n",name, self.zuletztGesetzteID];
 
 
-        [self.jsOutput appendString:@"  // All 'name'-attributes, can be referenced by its parent Element\n"];
+        [self.jsOutput appendString:@"  // All 'name'-attributes, can be referenced by its parent Element...\n"];
         // So nicht: !!!!!
         // [self.jsOutput appendFormat:@"  $('#%@').parent().get(0).%@ = %@;\n",self.zuletztGesetzteID,name, name];
         // Denn das jQuery-Parent berücksichtigt ja nicht den Doppelsprung bei <input> und <select>
         // Deswegen getTheParent benutzen. (Was ja intern auch jQuery-parent nimmt, aber notfalls
         // auch doppelt!)
         [self.jsOutput appendFormat:@"  document.getElementById('%@').getTheParent().%@ = %@;\n",self.zuletztGesetzteID, name, name];
+
+        [self.jsOutput appendString:@"  // ...save 'name'-attribute internally, so it can be retrieved by the getter.\n"];
+        [self.jsOutput appendFormat:@"  $(%@).data('name','%@');\n",self.zuletztGesetzteID, name];
 
         //[self.jsOutput appendString:@"  // ...and all 'name'-attributes, can be referenced by canvas.*\n"];
         //[self.jsOutput appendFormat:@"  canvas.%@ = %@;\n",name, name];
@@ -1749,7 +1799,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     if (s == nil)
         [self instableXML:@"Sag mal, so kannst du mich nicht aufrufen. Brauche schon nen String!"];
 
-    // Diese Methode kann nicht überschrieben werden, da intern bentutz von jQuery
+    // Diese Methode kann nicht überschrieben werden, da intern benutzt von jQuery
     // Hatte ich mal als 'setAttribute(', aber die Klamemr bricht natürlich den RegExp
     s = [self inString:s searchFor:@"setAttribute" andReplaceWith:@"setAttribute_" ignoringTextInQuotes:YES];
 
@@ -1767,13 +1817,18 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Das OpenLaszlo-'height' muss ersetzt werden (über getter klappt nicht)
     // Der getter muss neu benannt werden, da intern von jQuery benutzt
     // und wenn ich den getter probiere zu überschreiben, gibt es eine Rekursion.
-    s = [s stringByReplacingOccurrencesOfString:@"height" withString:@"myHeight"];
+    s = [self inString:s searchFor:@"height" andReplaceWith:@"myHeight" ignoringTextInQuotes:YES];
 
     // Das OpenLaszlo-'width' muss ersetzt werden (über getter klappt nicht)
     // Der getter muss neu benannt werden, da intern von jQuery benutzt
     // und wenn ich den getter probiere zu überschreiben, gibt es eine Rekursion.
-    s = [s stringByReplacingOccurrencesOfString:@"width" withString:@"myWidth"];
+    s = [self inString:s searchFor:@"width" andReplaceWith:@"myWidth" ignoringTextInQuotes:YES];
 
+    // Das OpenLaszlo-'name' muss ersetzt werden (über getter klappt nicht)
+    // Der getter muss neu benannt werden, da intern von jQuery benutzt
+    // und wenn ich den getter probiere zu überschreiben, gibt es eine Rekursion.
+    //s = [self inString:s searchFor:@".name" andReplaceWith:@".myName" ignoringTextInQuotes:YES];
+    // Ne, neu wird in $(el).data('name') gespeichert;
 
     // classroot taucht nur in Klassen auf und bezeichnet die Wurzel der Klasse
     if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
@@ -1782,6 +1837,22 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     // Remove leading and ending Whitespaces and NewlineCharacters
     s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+    return s;
+}
+
+
+
+- (NSString *) somePropertysNeedToBeRenamed:(NSString*)s
+{
+    if ([s isEqualToString:@"height"])
+        s = @"myHeight";
+
+    if ([s isEqualToString:@"width"])
+        s = @"myWidth";
+
+    //if ([s isEqualToString:@"name"])
+    //    s = @"myName";
 
     return s;
 }
@@ -2316,6 +2387,22 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
 
+    if ([attributeDict valueForKey:@"oninit"])
+    {
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'oninit' as self-invoking function.");
+
+        NSString *s = [attributeDict valueForKey:@"oninit"];
+
+        s = [self modifySomeExpressionsInJSCode:s];
+
+        [self.jQueryOutput appendString:@"\n  // self-invoking function with with and with bind (anstelle des Attributs oninit)\n"];
+        [self.jQueryOutput appendFormat:@"  (function(){ with (this) { %@ } }).bind(%@)();\n",s,idName];
+    }
+
+
+
+
 
 
 
@@ -2518,12 +2605,6 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
 
-
-
-    // Und Simplelayout-Check von hier aus aufrufen, da alle Elemente mit gesetzter ID
-    // überprüft werden sollen // ToDo - Kann wohl raus dieser Aufruf
-    [self check4Simplelayout:attributeDict];
-
     return self.zuletztGesetzteID;
 }
 
@@ -2536,8 +2617,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 // => Dann muss ich diesen Wert überschreiben, da er keine Auswirkung haben darf.
 - (void) check4Simplelayout:(NSDictionary*) attributeDict
 {
-    if (alternativeFuerSimplelayout)
-        return;
+    // Tote Funktion
+    return;
 
 
     // simplelayout verlassen, alsbald das letzte Geschwisterchen erreicht ist
@@ -2888,7 +2969,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     */
 
     [s appendString:@"\n  // Höhe anpassen, wegen Simplelayout\n"];
-    [s appendFormat:@"  adjustHeightOfEnclosingDivOnSimpleLayout(%@);\n",self.zuletztGesetzteID];
+    [s appendFormat:@"  adjustHeightOfEnclosingDivWithHeighestChildOnSimpleLayout(%@);\n",self.zuletztGesetzteID];
 
     // An den Anfang des Strings setzen!
     // War mal jQueryOutput0, aber die Höhe muss bekannt sein, bevor das Simplelayout als solches ausgeführt wird!
@@ -2922,7 +3003,7 @@ void OLLog(xmlParser *self, NSString* s,...)
      */
 
     [s appendString:@"\n  // Breite anpassen, wegen Simplelayout\n"];
-    [s appendFormat:@"  adjustWidthOfEnclosingDivOnSimpleLayout(%@);\n",self.zuletztGesetzteID];
+    [s appendFormat:@"  adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayout(%@);\n",self.zuletztGesetzteID];
 
     // An den Anfang des Strings setzen!
     // War mal jQueryOutput0, aber die Breite muss bekannt sein, bevor das Simplelayout als solches ausgeführt wird!
@@ -3031,25 +3112,10 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
 
-    if (alternativeFuerSimplelayout)
-    {
-        [o appendFormat:@"\n  // Setting a 'simplelayout' (axis:x) without need 4 check4Simplelayout in '%@':\n",elem];
 
-        [o appendString:@"  // Es soll wirklich erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"];
-        [o appendFormat:@"  for (var i = 1; i < $('#%@').children().length; i++)\n  {\n",elem];
-        [o appendFormat:@"    var kind = $('#%@').children().eq(i);\n",elem];
-        if (positionAbsolute == YES)
-        {
-            [o appendFormat:@"    var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + %@;\n",spacing];
-        }
-        else
-        {
-            [o appendFormat:@"    var leftValue = %@ * i;\n",spacing];
-        }
-        [o appendString:@"    kind.css('left',leftValue+'px');\n"];
+    [o appendFormat:@"\n  // Setting a 'simplelayout' (axis:x) in '%@':\n",elem];
+    [o appendFormat:@"  setSimpleLayoutXIn(%@,%@);\n",elem,spacing];
 
-        [o appendString:@"  }\n\n"];
-    }
 
     // Das MUSS in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
     [self.jsOutput appendString:o];
@@ -3078,47 +3144,16 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
 
-    if (alternativeFuerSimplelayout)
-    {
-        [o appendFormat:@"\n  // Setting a 'simplelayout' (axis:y) without need 4 check4Simplelayout in '%@':\n",elem];
 
-        [o appendString:@"  // Es soll wirklich erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"];
-        [o appendFormat:@"  for (var i = 1; i < $('#%@').children().length; i++)\n  {\n",elem];
-        [o appendFormat:@"    var kind = $('#%@').children().eq(i);\n",elem];
-        if (positionAbsolute == YES)
-        {
-            [o appendFormat:@"    var topValue = kind.prev().get(0).offsetTop + kind.prev().outerHeight() + %@;\n",spacing];
-        }
-        else
-        {
-            [o appendFormat:@"    var topValue = i * %@;\n",spacing];
-            [o appendFormat:@"    if (kind.css('position') === 'relative')\n",elem];
-            [o appendString:@"    {\n"];
-            [o appendString:@"      // Wenn wir hinten nicht runter gefallen sind\n"];
-            [o appendFormat:@"      if ($('#%@').children().eq(0).position().left != kind.position().left)\n",elem];
-            [o appendString:@"      {\n"];
-            [o appendFormat:@"        // topValue = i * %@ + kind.prev().outerHeight()/* + kind.prev().position().top*/;\n",spacing];
-            [o appendFormat:@"        // Nur so klappt es bei Beispiel <basebutton>:\n",spacing];
-            [o appendFormat:@"        topValue = %@ + kind.prev().outerHeight() + kind.prev().position().top;\n",spacing];
-            [o appendString:@"        // var leftValue = kind.prev().position().left-kind.prev().outerWidth();\n"];
-            [o appendString:@"        // leftValue = leftValue * i;\n"];
-            [o appendString:@"        // nur so klappt es bei Bsp. 27.1 (Constraints in tags):\n"];
-            [o appendString:@"        var width = 0;\n"];
-            [o appendString:@"        kind.prevAll().each(function() { width += $(this).outerWidth(); });\n"];
-            [o appendString:@"        var leftValue = width * -1;\n"];
-            [o appendString:@"        kind.css('left',leftValue+'px');\n"];
-            [o appendString:@"      }\n"];
-            [o appendString:@"    }\n"];
-        }
-        [o appendString:@"    kind.css('top',topValue+'px');\n"];
+    [o appendFormat:@"\n  // Setting a 'simplelayout' (axis:y) in '%@':\n",elem];
+    [o appendFormat:@"  setSimpleLayoutYIn(%@,%@);\n",elem,spacing];
 
-        [o appendString:@"  }\n\n"];
-    }
+
 
     // Das MUSS in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
     //[self.jsOutput appendString:o];
-    // Anscheinend doch nicht, es muss in jQuery (ans Ende), weil erst dann die width und height von selbst
-    // definierten Klassen bekannt ist (Example 28.9. Extending the built-in text classes)
+    // Anscheinend doch nicht, es muss in jQuery (ans Ende), weil erst dann die width und height von
+    // selbst definierten Klassen bekannt ist (Example 28.9. Extending the built-in text classes)
     [self.jQueryOutput appendString:o];
 }
 
@@ -3603,30 +3638,13 @@ didStartElement:(NSString *)elementName
             // Erst sammeln:
             NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
-            [s appendString:@"\n  // Y-Simplelayout: Deswegen die Höhe aller beinhaltenden Elemente erster Ebene ermitteln und dem umgebenden div die Summe als\n  // Höhe mitgeben (aber nur wenn es NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery)\n  // (Jedoch bei rudElement MUSS es auto bleiben)\n"];
-            [s appendString:@"  var sumH = 0;\n"];
-            [s appendString:@"  var zaehler = 0;\n"];
-            [s appendString:@"  $('#"];
-            [s appendString:self.zuletztGesetzteID];
-            [s appendString:@"').children().each(function() {\n    sumH += $(this).outerHeight(true);\n"];
-            [s appendString:@"    zaehler++;\n"];
-            [s appendString:@"  });\n"];
-
-            // Muss natürlich auch den y-spacing-Abstand zwischen den Elementen mit berücksichtigen
-            // und auf die Höhe aufaddieren.
-            // Keine Ahnung, aber wenn ich es auskommentiere, stimmt es mit dem Original eher überein.
-            [s appendString:@"  sumH += (zaehler-1) * "];
-            [s appendString:[self.simplelayout_y_spacing lastObject]];
-            [s appendString:@";\n"];
-
-            [s appendFormat:@"  if (!($('#%@').hasClass('div_rudElement')))\n",self.zuletztGesetzteID];
-            [s appendFormat:@"    if (%@.style.height == '')\n      $('#%@').height(sumH);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+            [s appendString:@"\n  // SA Y:\n"];
+            [s appendFormat:@"  adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY(%@,%@);\n",self.zuletztGesetzteID,[self.simplelayout_y_spacing lastObject]];
 
             // An den Anfang des Strings setzen!
             // War mal jQueryOutput0, aber die Höhe muss bekannt sein,
             // bevor das Simplelayout als solches ausgeführt wird!
             [self.jsOutput insertString:s atIndex:0];
-
 
 
 
@@ -3676,34 +3694,14 @@ didStartElement:(NSString *)elementName
             // Erst sammeln:
             NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
-            [s appendString:@"\n  // X-Simplelayout: Deswegen die Breite aller beinhaltenden Elemente erster Ebene ermitteln und dem umgebenden div die Summe als\n  // Breite mitgeben (aber nur wenn es NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery)\n"];
-            [s appendString:@"  var sumW = 0;\n"];
-            [s appendString:@"  var zaehler = 0;\n"];
-            [s appendString:@"  $('#"];
-            [s appendString:self.zuletztGesetzteID];
-            [s appendString:@"').children().each(function() {\n    sumW += $(this).outerWidth(true);\n"];
-            [s appendString:@"    zaehler++;\n"];
-            [s appendString:@"  });\n"];
+            [s appendString:@"\n  // SA X:\n"];
+            [s appendFormat:@"  adjustWidthOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutX(%@,%@);\n",self.zuletztGesetzteID,[self.simplelayout_x_spacing lastObject]];
 
-            // Muss natürlich auch den x-spacing-Abstand zwischen den Elementen mit berücksichtigen
-            // und auf die Breite aufaddieren.
-            [s appendString:@"  sumW += (zaehler-1) * "];
-            [s appendString:[self.simplelayout_x_spacing lastObject]];
-            [s appendString:@";\n"];
-
-            // Keine Einschränkung mehr auf position:relative
-            // [s appendString:@"  if ($('#"];
-            // [s appendString:self.zuletztGesetzteID];
-            // [s appendString:@"').css('position') == 'relative'"];
-            // [s appendString:@")\n"];
-
-            [s appendFormat:@"  if (%@.style.width == '')\n    $('#%@').width(sumW);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
 
             // An den Anfang des Strings setzen!
             // War mal jQueryOutput0, aber die Breite muss bekannt sein,
             // bevor das Simplelayout als solches ausgeführt wird!
             [self.jsOutput insertString:s atIndex:0];
-
 
 
 
@@ -4171,13 +4169,10 @@ didStartElement:(NSString *)elementName
         NSString* a = [attributeDict valueForKey:@"name"];
 
         // Es gibt 2 Attribute, die ich ja austausche, 'height' und 'width', sonst bricht soooo viel
-        // irgendwie nutzt auch jQuery intern diese Werte.
+        // irgendwie greift auch jQuery intern auf diese Werte zu.
         // Deswegen ersetzen, falls sie per Attribute gesetzt werden.
         // (wenn sie direkt im tag stehen (<tag width="20">), ist es natürlich okay, wird ja dann direkt verarbeitet)
-        if ([a isEqualToString:@"height"])
-            a = @"myHeight";
-        if ([a isEqualToString:@"width"])
-            a = @"myWidth";
+        a = [self somePropertysNeedToBeRenamed:a];
 
 
         // Es gibt auch attributes ohne type, dann mit 'number' initialisieren...
@@ -4208,6 +4203,21 @@ didStartElement:(NSString *)elementName
             NSLog(@"Setting the attribute 'value' as value of the class-member (see next line).");
             self.attributeCount++;
             value = [attributeDict valueForKey:@"value"];
+
+            // Bei width und height muss ich es anpassen, wegen Beispiel 12 - Using getAttribute
+            // to retrieve an attribute value:
+            // <canvas height="40" debug="false">
+            // <simplelayout/>
+            // <view name="myView" width="20" height="20" bgcolor="red"/>
+            // <attribute name="whatAttr" type="string" value="height"/>
+            // <text oninit="this.format('myView.%s = %d', canvas.whatAttr, myView[canvas.whatAttr])"/>
+            // </canvas>
+            // Das Beispiel zeigt, dass auf height und width auch per Objekt-Property zugegriffen
+            // werden kann per String-Access (die eckigen Klammern)
+            // Deswegen müssen alle Variablennamen  die den String-Wert 'height' oder 'width'
+            // haben, angepasst werden
+            if ([type_ isEqualToString:@"string"])
+                value = [self somePropertysNeedToBeRenamed:value];
         }
         else
         {
@@ -4463,6 +4473,8 @@ didStartElement:(NSString *)elementName
 
         [self.jQueryOutput appendFormat:@"\n  // Window is draggable\n"];
         [self.jQueryOutput appendFormat:@"  $('#%@').draggable();\n",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  $('#%@').on('drag', function() {\n      $(this).triggerHandler('ony');\n      $(this).triggerHandler('onx');\n  });\n",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  $('#%@').on('dragstop', function() {\n      $(this).triggerHandler('ony');\n      $(this).triggerHandler('onx');\n  });\n",self.zuletztGesetzteID];
 
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
@@ -7833,7 +7845,7 @@ BOOL isJSArray(NSString *s)
             // Nein, geht es nicht. Z. B. nicht in Example 27 - der mißglückte comment)
             // Deswegen nur ausgeben, wenn ein Button vorliegt
             NSString *enclosingElem = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
-            if ([enclosingElem isEqualToString:@"button"])
+            if ([enclosingElem isEqualToString:@"button"] || [enclosingElem isEqualToString:@"text"] || [enclosingElem isEqualToString:@"inputtext"])
                 [self.output appendString:s];
         }
     }
@@ -9194,7 +9206,7 @@ BOOL isJSArray(NSString *s)
         [self.output appendString:self.jsOutput];
 
         [self.output appendString:@"\n\n  /*******************************************************************/\n"];
-        [self.output appendString:@"  /******************************Grenze ******************************/\n"];
+        [self.output appendString:@"  /***************************** Grenze ******************************/\n"];
         [self.output appendString:@"  /********* Grundlagen legende JS-Anweisungen sind hier vor *********/\n"];
         [self.output appendString:@"  /***Diese müssen zwingend vor folgenden JS/jQuery-Ausgaben kommen***/\n"];
         [self.output appendString:@"  /*******************************************************************/\n\n\n"];
@@ -9207,7 +9219,7 @@ BOOL isJSArray(NSString *s)
         [self.output appendString:self.jQueryOutput0];
         
         [self.output appendString:@"\n\n  /*******************************************************************/\n"];
-        [self.output appendString:@"  /******************************Grenze ******************************/\n"];
+        [self.output appendString:@"  /***************************** Grenze ******************************/\n"];
         [self.output appendString:@"  /************ Vorgezogene JQuery-Ausgaben sind hier vor ************/\n"];
         [self.output appendString:@"  /***Diese müssen zwingend vor folgenden JS/jQuery-Ausgaben kommen***/\n"];
         [self.output appendString:@"  /*******************************************************************/\n\n\n"];
@@ -9220,7 +9232,7 @@ BOOL isJSArray(NSString *s)
         [self.output appendString:self.jsComputedValuesOutput];
 
         [self.output appendString:@"\n\n  /*******************************************************************/\n"];
-        [self.output appendString:@"  /******************************Grenze ******************************/\n"];
+        [self.output appendString:@"  /***************************** Grenze ******************************/\n"];
         [self.output appendString:@"  /********************* Computed sind hier vor **********************/\n"];
         [self.output appendString:@"  /***Diese müssen zwingend vor folgenden JS/jQuery-Ausgaben kommen***/\n"];
         [self.output appendString:@"  /*******************************************************************/\n\n\n"];
@@ -9233,7 +9245,7 @@ BOOL isJSArray(NSString *s)
         [self.output appendString:self.jsConstraintValuesOutput];
 
         [self.output appendString:@"\n\n  /*******************************************************************/\n"];
-        [self.output appendString:@"  /******************************Grenze ******************************/\n"];
+        [self.output appendString:@"  /***************************** Grenze ******************************/\n"];
         [self.output appendString:@"  /***************** Constraint Values sind hier vor *****************/\n"];
         [self.output appendString:@"  /***Diese müssen zwingend vor folgenden JS/jQuery-Ausgaben kommen***/\n"];
         [self.output appendString:@"  /*******************************************************************/\n\n\n"];
@@ -9970,6 +9982,11 @@ BOOL isJSArray(NSString *s)
     "    }\n"
     "\n"
     "    var str_format = function() {\n"
+    "\n"
+    "        /******** ADDED - %w durch %s ersetzen, wird noch nicht unterstützt ********/\n"
+    "        arguments[0] = arguments[0].replace(/%w/g,'%s');\n"
+    "        /******** ADDED - %w durch %s ersetzen, wird noch nicht unterstützt ********/\n"
+    "\n"
     "        if (!str_format.cache.hasOwnProperty(arguments[0])) {\n"
     "            str_format.cache[arguments[0]] = str_format.parse(arguments[0]);\n"
     "        }\n"
@@ -10697,7 +10714,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "        Object.keys(attributes).forEach(function(key) {\n"
-    "            $('#'+id).setAttribute_(key,attributes[key]);\n"
+    "            $('#'+id).get(0).setAttribute_(key,attributes[key]);\n"
     "        });\n"
     "    }\n"
     "/*\n"
@@ -11212,9 +11229,23 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// LzDelegate scheint es zu ermöglichen eine Methode an einen scope zu binden\n"
+    "// LzDelegate scheint es zu ermöglichen eine Methode an einen scope zu binden...\n"
+    "// ...und dann über register auf ein event zu horchen.\n"
     "/////////////////////////////////////////////////////////\n"
-    "LzDelegate = function(scope,method) { var fn = window[method]; return fn.bind(scope); }\n"
+    //"LzDelegate = function(scope,method) { var fn = window[method]; return fn.bind(scope); }\n"
+    // Beispiel 2.3 in Chapter 27 klappt nur so:
+    "LzDelegate = function(scope,method) {\n"
+    "    var fn = scope[method];\n"
+    "    var boundFn = fn.bind(scope)\n"
+    "\n"
+    "    // Durch das binden geht die Funktion register sonst verloren\n"
+    "    // Deswegen erst nach dem binden anfügen\n"
+    "    boundFn.register = function(v,ev) {\n"
+    "        $(v).on(ev, this);\n"
+    "    }\n"
+    "\n"
+    "    return boundFn;\n"
+    "}\n"
     "\n"
     "\n"
     "document.exitpage = {}; // <-- Taucht in general.js in 'setid' auf\n"
@@ -11261,7 +11292,10 @@ BOOL isJSArray(NSString *s)
     "    //alert(s)\n"
     "};\n"
     "Debug.write = function(s1,v) {\n"
-    "    var s = s1 + ' ' + v\n"
+    "    if (v === undefined)\n"
+    "        v = '';\n"
+    "\n"
+    "    var s = s1 + ' ' + v;\n"
     "    if ($('#debugInnerWindow').length)\n"
     "        $('#debugInnerWindow').append(s + '<br />')\n"
     "    else\n"
@@ -11295,9 +11329,12 @@ BOOL isJSArray(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Zentriere Anzeige beim resizen der Seite            //\n"
+    "// + aktualisiere Canvas                               //\n"
     "/////////////////////////////////////////////////////////\n"
     "$(window).resize(function()\n"
     "{\n"
+    "    canvas.myHeight = $(window).height();\n"
+    "\n"
     "    adjustOffsetOnBrowserResize();\n"
     "});\n"
     "\n"
@@ -11387,10 +11424,10 @@ BOOL isJSArray(NSString *s)
     "    if (attributeName == undefined || attributeName == '')\n"
     "        throw 'Error1 calling setAttribute, no argument attributeName given (this = '+this+').';\n"
     "    if (value == undefined)\n"
-    "        throw 'Error2 calling setAttribute, no argument value given (attributeName = \"'+attributeName+'\" and this = '+this+').';\n"
+    "        throw 'Error2 calling setAttribute, no argument value given or undefined (attributeName = \"'+attributeName+'\" and this = '+this+').';\n"
     "\n"
     // Kann auch im Skript aufgetaucht sein und dort geändert worden sein, z. B. Beispiel 28.16
-    // Hier richtig setzen, nicht unten darauf reagieren, damit der getriggerte Handler der richtige ist.
+    // Hier richtig setzen, nicht unten reagieren, damit der getriggerte Handler der richtige ist.
     "    if (attributeName === 'myWidth') \n"
     "        attributeName = 'width';\n"
     "    if (attributeName === 'myHeight') \n"
@@ -11434,14 +11471,14 @@ BOOL isJSArray(NSString *s)
     "    else if (attributeName == 'width')\n"
     "    {\n"
     "        $(me).css('width',value);\n"
-    "        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
-    "        $(me).get(0).myWidth = value;\n"
+    //"        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
+    //"        $(me).get(0).myWidth = value;\n"
     "    }\n"
     "    else if (attributeName == 'height')\n"
     "    {\n"
     "        $(me).css('height',value);\n"
-    "        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
-    "        $(me).get(0).myHeight = value;\n"
+    //"        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
+    //"        $(me).get(0).myHeight = value;\n"
     "    }\n"
     "    else if (attributeName == 'focustrap')\n"
     "    {\n"
@@ -11881,7 +11918,7 @@ BOOL isJSArray(NSString *s)
     "// wird trotzdem mal gespeichert. Aber er sollte nie über 'mask' accessible sein.\n"
     "Object.defineProperty(Object.prototype, 'mask', {\n"
     "    get : function(){ return findNextMaskedElement(this).get(0); },\n"
-    "    set : function(newValue){ this._mask = 2; $(this).triggerHandler('onmask'); },\n"
+    "    set : function(newValue){ this._mask = 2; $(this).triggerHandler('onmask',newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -11891,8 +11928,19 @@ BOOL isJSArray(NSString *s)
     "// Getter for 'subviews'                               //\n"
     "// READ-ONLY                                           //\n"
     "/////////////////////////////////////////////////////////\n"
-    "Object.defineProperty(Object.prototype, 'subviews', {\n"
+    "Object.defineProperty(HTMLElement.prototype, 'subviews', {\n"
     "    get : function(){ return $(this).find('*').get(); },\n"
+    "    /* READ-ONLY set : , */\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter for 'name'                                   //\n"
+    "// initialize-only (READ-ONLY AFTER INIT)              //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(HTMLElement.prototype, 'name', {\n"
+    "    get : function(){ return $(this).data('name'); },\n"
     "    /* READ-ONLY set : , */\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -11904,7 +11952,7 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'y', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('top')); },\n"
-    "    set: function(newValue){ $(this).css('top', newValue); $(this).trigger('ony'); },\n"
+    "    set: function(newValue){ $(this).css('top', newValue); $(this).triggerHandler('ony', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -11915,7 +11963,7 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'x', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('left')); },\n"
-    "    set: function(newValue){ $(this).css('left', newValue); $(this).trigger('onx'); },\n"
+    "    set: function(newValue){ $(this).css('left', newValue); $(this).triggerHandler('onx', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -11926,7 +11974,22 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'bgcolor', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('background-color')); },\n"
-    "    set: function(newValue){ $(this).css('background-color', newValue); $(this).trigger('onbgcolor'); },\n"
+    "    set: function(newValue){ $(this).css('background-color', newValue); $(this).triggerHandler('onbgcolor', newValue); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'opacity'                         //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "//// Nicht Object prototypen. Sonst wird auch das 'style'-Objekt prototgetypet und damit\n"
+    "//// dort die opacity-Property kaputt gemacht und damit bricht jQuery.\n"
+    "//// Statt dessen an HTMLElement prototypen.\n"
+    "//// ToDo: Im Prinzip können dann alle Propertys hier im 'HTMLElement' definiert werden.\n"
+    "Object.defineProperty(HTMLElement.prototype, 'opacity', {\n"
+    "    get : function(){ if (!isDOM(this)) return undefined; return $(this).css('opacity'); },\n"
+    "    set: function(newValue){ this.setAttribute_('opacity', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -11938,7 +12001,7 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'myHeight', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('height'));  },\n"
-    "    set : function(newValue){ if (isDOM(this)) $(this).css('height',newValue); $(this).trigger('onheight'); },\n"
+    "    set : function(newValue){ if (isDOM(this)) $(this).css('height',newValue); $(this).triggerHandler('onheight', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -11950,7 +12013,7 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'myWidth', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('width'));  },\n"
-    "    set : function(newValue){ if (isDOM(this)) $(this).css('width',newValue); $(this).trigger('onwidth'); },\n"
+    "    set : function(newValue){ if (isDOM(this)) $(this).css('width',newValue); $(this).triggerHandler('onwidth', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -11988,6 +12051,7 @@ BOOL isJSArray(NSString *s)
     "            throw new Error('Unsupported value for textalign.');\n"
     "\n"
     "        $(this).css('text-align', newValue);\n"
+    "        $(this).triggerHandler('textalign', newValue);\n"
     "    },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -12031,41 +12095,163 @@ BOOL isJSArray(NSString *s)
     "        if (!($(el).hasClass('canvas_standard')))\n"
     "            el.setAttribute_('width',getMaxOfArray(widths))\n"
     "    }\n"
-    "}"
+    "}\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Hilfsfunktion, um width von Div's anzupassen        //\n"
-    "// adjustWidthOfEnclosingDivOnSimpleLayout()           //\n"
+    "// adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayout()\n"
     "/////////////////////////////////////////////////////////\n"
     "// Eventuell nachfolgende Simplelayouts müssen entsprechend der Breite des vorherigen umgebenden Divs aufrücken.\n"
     "// Deswegen wird hier explizit die Breite gesetzt (ermittelt anhand des breitesten Kindes).\n"
     "// Eventuelle Kinder wurden vorher gesetzt.\n"
-    "// jedoch nur wenn Breite vorher nicht explizit gesetzt wurde, dann korrigieren.\n"
-    "var adjustWidthOfEnclosingDivOnSimpleLayout = function (el) {\n"
+    "// Aber nur wenn Breite NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery.\n"
+    "var adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayout = function (el) {\n"
     "    var widths = $(el).children().map(function () { return $(this).outerWidth(); }).get();\n"
-    "    if (el.style.width == '')\n"
-    "        $(el).css('width',getMaxOfArray(widths));\n"
-    "}"
+    "    if (el.style.width == '') {\n"
+    "        el.setAttribute_('width',getMaxOfArray(widths));\n"
+    "    }\n"
+    "}\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Hilfsfunktion, um height von Div's anzupassen       //\n"
-    "// adjustHeightOfEnclosingDivOnSimpleLayout()          //\n"
+    "// adjustHeightOfEnclosingDivWithHeighestChildOnSimpleLayout()\n"
     "/////////////////////////////////////////////////////////\n"
     "// Eventuell nachfolgende Simplelayouts müssen entsprechend der Höhe des vorherigen umgebenden Divs aufrücken.\n"
     "// Deswegen wird hier explizit die Höhe gesetzt (ermittelt anhand des höchsten Kindes).\n"
     "// Eventuelle Kinder wurden vorher gesetzt.\n"
-    "// jedoch nur wenn Höhe vorher nicht explizit gesetzt wurde, dann korrigieren.\n"
-    "var adjustHeightOfEnclosingDivOnSimpleLayout = function (el) {\n"
+    "// Aber nur wenn Höhe NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery.\n"
+    "// (Jedoch bei rudElement MUSS es auto bleiben)\n"
+    "var adjustHeightOfEnclosingDivWithHeighestChildOnSimpleLayout = function (el) {\n"
     "    var heights = $(el).children().map(function () { return $(this).outerHeight(); }).get();\n"
-    "    if (el.style.height == '')\n"
-    "        $(el).css('height',getMaxOfArray(heights));\n"
-    "}"
+    "    if (el.style.height == '') {\n"
+    "        el.setAttribute_('height',getMaxOfArray(heights));\n"
+    "    }\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hilfsfunktion, um height von Div's anzupassen (SA Y)//\n"
+    "// adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY()\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Y-Simplelayout: Deswegen die Höhe aller beinhaltenden Elemente erster Ebene ermitteln und dem umgebenden div die Summe als\n"
+    "// Höhe mitgeben (aber nur wenn es NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery)\n"
+    "// (Jedoch bei rudElement MUSS es auto bleiben)\n"
+    "var adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY = function (el,spacing) {\n"
+    "    var sumH = 0;\n"
+    "    $(el).children().each(function() {\n"
+    "        sumH += $(this).outerHeight(true);\n"
+    "    });\n"
+    // Muss natürlich auch den y-spacing-Abstand zwischen den Elementen mit berücksichtigen
+    // und auf die Höhe aufaddieren.
+    // Keine Ahnung, aber wenn ich es auskommentiere, stimmt es mit dem Original eher überein.
+    "    sumH += ($(el).children().length-1) * spacing;\n"
+    "    if (!($(el).hasClass('div_rudElement')))\n"
+    "        if (el.style.height == '')\n"
+    "            el.setAttribute_('height',sumH);\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hilfsfunktion, um Width von Div's anzupassen (SA X) //\n"
+    "// adjustWidthOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutX()\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// X-Simplelayout: Deswegen die Breite aller beinhaltenden Elemente erster Ebene ermitteln und dem umgebenden div die Summe als\n"
+    "// Breite mitgeben (aber nur wenn es NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery)\n"
+    "var adjustWidthOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutX = function (el,spacing) {\n"
+    "    var sumW = 0;\n"
+    "    $(el).children().each(function() {\n"
+    "        sumW += $(this).outerWidth(true);\n"
+    "    });\n"
+    // Muss natürlich auch den x-spacing-Abstand zwischen den Elementen mit berücksichtigen
+    // und auf die Breite aufaddieren.
+    "    sumW += ($(el).children().length-1) * spacing;\n"
+    // Keine Einschränkung mehr auf position:relative
+    // [s appendString:@"  if ($('#"];
+    // [s appendString:self.zuletztGesetzteID];
+    // [s appendString:@"').css('position') == 'relative'"];
+    // [s appendString:@")\n"];
+    "    if (el.style.width == '')\n"
+    "        el.setAttribute_('width',sumW);\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hilfsfunktion, um ein SimpleLayout Y zu setzen      //\n"
+    "// setSimpleLayoutYIn()                                //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var setSimpleLayoutYIn = function (el,spacing) {\n"
+    "    // Es soll wirklich erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"
+    "    for (var i = 1; i < $(el).children().length; i++)\n"
+    "    {\n"
+    "        var kind = $(el).children().eq(i);\n"
+    "\n"
+    "        if (@@positionAbsoluteReplaceMe@@)\n"
+    "        {\n"
+    "            var topValue = kind.prev().get(0).offsetTop + kind.prev().outerHeight() + spacing;\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "            var topValue = i * spacing;\n"
+    "            if (kind.css('position') === 'relative')\n"
+    "            {\n"
+    "                // Wenn wir hinten nicht runter gefallen sind\n"
+    "                if ($(el).children().eq(0).position().left != kind.position().left)\n"
+    "                {\n"
+    "                    // topValue = i * spacing + kind.prev().outerHeight()/* + kind.prev().position().top*/;\n"
+    "                    // Nur so klappt es bei Beispiel <basebutton>:\n"
+    "                    topValue = spacing + kind.prev().outerHeight() + kind.prev().position().top;\n"
+    "                    // var leftValue = kind.prev().position().left-kind.prev().outerWidth();\n"
+    "                    // leftValue = leftValue * i;\n"
+    "                    // nur so klappt es bei Bsp. 27.1 (Constraints in tags):\n"
+    "                    var width = 0;\n"
+    "                    kind.prevAll().each(function() { width += $(this).outerWidth(); });\n"
+    "                    var leftValue = width * -1;\n"
+    "                    kind.get(0).setAttribute_('x',leftValue+'px');\n"
+    "                }\n"
+    "            }\n"
+    "        }\n"
+    "        kind.get(0).setAttribute_('y',topValue+'px');\n"
+    "    }\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hilfsfunktion, um ein SimpleLayout X zu setzen      //\n"
+    "// setSimpleLayoutXIn()                                //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var setSimpleLayoutXIn = function (el,spacing) {\n"
+    "    // Es soll wirklich erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"
+    "    for (var i = 1; i < $(el).children().length; i++)\n"
+    "    {\n"
+    "        var kind = $(el).children().eq(i);\n"
+    "        if (@@positionAbsoluteReplaceMe@@)\n"
+    "        {\n"
+    "            var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + spacing;\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "            var leftValue = spacing * i;\n"
+    "        }\n"
+    "        kind.get(0).setAttribute_('x',leftValue+'px');\n"
+    "    }\n"
+    "}\n"
+    "\n"
     "\n"
     "\n"
     "\n";
 
+
+
+    if (positionAbsolute == YES)
+    {
+        js = [js stringByReplacingOccurrencesOfString:@"@@positionAbsoluteReplaceMe@@" withString:@"true"];
+    }
+    else
+    {
+        js = [js stringByReplacingOccurrencesOfString:@"@@positionAbsoluteReplaceMe@@" withString:@"false"];
+    }
 
     bool success = [js writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
 
@@ -12565,7 +12751,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_window ui-corner-all\" />';\n"
     "\n"
-    "  this.contentJQuery = \"$('#@@@P-L,A#TZHALTER@@@').draggable();\";\n"
+    "  this.contentJQuery = \"$('#@@@P-L,A#TZHALTER@@@').draggable(); $('#m').on('drag', function() { $(this).triggerHandler('ony'); $(this).triggerHandler('onx'); }); $('#m').on('dragstop', function() { $(this).triggerHandler('ony'); $(this).triggerHandler('onx'); });\";\n"
     "}\n"
     "\n"
     "\n"

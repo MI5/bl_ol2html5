@@ -37,11 +37,11 @@
 BOOL debugmode = YES;
 
 
-BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
-BOOL kompiliereSpeziellFuerTaxango = YES;
+BOOL kompiliereSpeziellFuerTaxango = NO;
 
 
 
@@ -2426,29 +2426,50 @@ void OLLog(xmlParser *self, NSString* s,...)
             [o appendFormat:@"  var tempDP = new lz.datapointer('%@',false);\n",dp];
             [o appendString:@"  if (tempDP.getXPathIndex() > 1)\n"];
             [o appendString:@"  {\n"];
-            [o appendString:@"    // Die existierende View wird der Parent für alle neu anzulegenden Views\n"];
+            [o appendString:@"    // Markieren, weil dies Auswirkungen auf viele Dinge hat...\n"];
+            [o appendFormat:@"    $('#%@').data('IAmAReplicator',true);\n",idName];
+            [o appendString:@"\n"];
             [o appendString:@"    // Counter\n"];
             [o appendString:@"    var c = 0;\n"];
             [o appendString:@"    // Klon erzeugen inklusive Kinder\n"];
-            [o appendFormat:@"    var clone = $('#%@').clone();\n",idName];
-            [o appendString:@"    // Alle Kinder im Orignal-Element löschen\n"];
-            [o appendFormat:@"    $('#%@').empty();\n",idName];
-            [o appendString:@"\n"];
-            [o appendString:@"    // Markieren, weil dies Auswirkungen auf viele Dinge hat...\n"];
-            [o appendFormat:@"    $('#%@').data('IAmAReplicator',true);\n",idName];
+            [o appendFormat:@"    var clone = $('#%@').clone(true);\n",idName];
+            //[o appendString:@"    // Alle Kinder im Orignal-Element löschen\n"];
+            //[o appendFormat:@"    $('#%@').empty();\n",idName];
+            //Neu:
+            [o appendString:@"    // Das komplette Element löschen,vorher parent sichern\n"];
+            [o appendFormat:@"    var p = $('#%@').parent();\n",idName];
+            [o appendFormat:@"    $('#%@').remove();\n",idName];
             [o appendString:@"\n"];
             [o appendString:@"    for (var i=0;i<tempDP.getXPathIndex();i++)\n"];
             [o appendString:@"    {\n"];
             [o appendString:@"      c++;\n"];
             [o appendString:@"      // Muss es jedes mal nochmal klonen, sonst wäre der Klon-Vorgang nur 1x erfolgreich\n"];
-            [o appendString:@"      var clone2 = clone.clone();\n"];
-            [o appendString:@"      // Alle id's austauschen, damit es diese nicht doppelt gibt\n"];
-            [o appendString:@"      clone2.attr('id',clone2.attr('id')+'_repl'+c);\n"];
-            [o appendString:@"      // Ab dem 2. mal auch die der Kinder austauschen, damit ich später geklonte Zwillinge erkennen kann und damit es id's nicht doppelt gibt\n"];
+            [o appendString:@"      var clone2 = clone.clone(true);\n"];
+            //[o appendString:@"      // Alle id's austauschen, damit es diese nicht doppelt gibt\n"];
+            //[o appendString:@"      clone2.attr('id',clone2.attr('id')+'_repl'+c);\n"];
+            //[o appendString:@"      // Ab dem 2. mal auch die der Kinder austauschen, damit ich später geklonte Zwillinge erkennen kann und damit es id's nicht doppelt gibt\n"];
+            [o appendString:@"      // Ab dem 2. mal alle id's austauschen, damit ich später geklonte Zwillinge erkennen kann und damit es id's nicht doppelt gibt\n"];
             [o appendFormat:@"      if (i >= 1)\n",idName];
-            [o appendString:@"        clone2.find('*').each(function() { $(this).attr('id',$(this).attr('id')+'_repl'+c);  });\n"];
-            [o appendString:@"      // Den Klon an das Original-Element anfügen\n"];
-            [o appendFormat:@"      clone2.appendTo('#%@');\n",idName];
+            [o appendString:@"      {\n"];
+            [o appendString:@"          clone2.find('*').andSelf().each(function() {\n"];
+            [o appendString:@"              $(this).attr('id',$(this).attr('id')+'_repl'+c);\n"];
+            [o appendString:@"              // Die neu geschaffene id noch global bekannt machen\n"];
+            [o appendString:@"              window[$(this).attr('id')] = this;\n"];
+            [o appendString:@"          });\n"];
+            [o appendString:@"      }\n"];
+            [o appendString:@"      else\n"];
+            [o appendString:@"      {\n"];
+            [o appendString:@"          // Ansonsten nur die Elemente neu bekannt geben (ohne var, damit global)\n"];
+            [o appendString:@"          clone2.find('*').andSelf().each(function() {\n"];
+            [o appendString:@"              window[$(this).attr('id')] = this;\n"];
+            [o appendString:@"          });\n"];
+            [o appendString:@"\n"];
+            [o appendString:@"      }\n"];
+            //[o appendString:@"      // Den Klon an das Original-Element anfügen\n"];
+            [o appendString:@"      // Den Klon an das parent-Element anfügen\n"];
+            //[o appendFormat:@"      clone2.appendTo('#%@');\n",idName];
+            // Neu:
+            [o appendFormat:@"      clone2.appendTo(p);\n",idName];
             [o appendString:@"    }\n"];
             [o appendString:@"  }\n"];
             [o appendString:@"  else\n"];
@@ -2461,16 +2482,16 @@ void OLLog(xmlParser *self, NSString* s,...)
         {
             if (!kompiliereSpeziellFuerTaxango)
             {
-                [o appendString:@"\n  // Okay, ein relativer Pfad! Dann nehme ich Bezug zum letzten tempDP und dem dort gesetzten Pfad.\n"];
-                [o appendFormat:@"  if ($('#%@').parent().parent().data('IAmAReplicator'))\n",idName];
+                [o appendString:@"\n  // Ein relativer Pfad! Dann nehme ich Bezug zum letzten tempDP und dem dort gesetzten Pfad.\n"];
+                [o appendFormat:@"  if ($('#%@').parent().data('IAmAReplicator'))\n",idName];
                 [o appendString:@"  {\n"];
-                [o appendFormat:@"    var zusammengesetzterXPath = $('#element4').parent().parent().data('XPath') + '[1]/' + '%@';\n",dp];
+                [o appendFormat:@"    var zusammengesetzterXPath = $('#element4').parent().data('XPath') + '[1]/' + '%@';\n",dp];
                 [o appendFormat:@"    $('#%@').html(tempDP.xpathQuery(zusammengesetzterXPath));\n",idName];
                 [o appendString:@"    // Und alle geklonten Geschwister berücksichtigen\n"];
                 [o appendString:@"    var c = 2;\n"];
                 [o appendFormat:@"    while ($('#%@_repl'+c).length)\n",idName];
                 [o appendString:@"    {\n"];
-                [o appendFormat:@"        zusammengesetzterXPath = $('#%@').parent().parent().data('XPath') + '['+c+']/' + '%@';\n",idName,dp];
+                [o appendFormat:@"        zusammengesetzterXPath = $('#%@').parent().data('XPath') + '['+c+']/' + '%@';\n",idName,dp];
                 [o appendFormat:@"        $('#%@_repl'+c).html(tempDP.xpathQuery(zusammengesetzterXPath));\n",idName];
                 [o appendString:@"        c++;\n"];
                 [o appendString:@"    }\n"];
@@ -3108,7 +3129,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSLog(@"Using the attribute 'inset' as spacing for the first element.");
 
         [o appendString:@"\n  // 'inset' for the first element of this 'simplelayout' (axis:x)\n"];
-        [o appendFormat:@"  $('#%@').children().first().css('left','%@px');\n",elem,[attributeDict valueForKey:@"inset"]];
+        [o appendFormat:@"  $('#%@').children().first().get(0).setAttribute_('left','%@px');\n",elem,[attributeDict valueForKey:@"inset"]];
     }
 
 
@@ -3117,11 +3138,13 @@ void OLLog(xmlParser *self, NSString* s,...)
     [o appendFormat:@"  setSimpleLayoutXIn(%@,%@);\n",elem,spacing];
 
 
-    // Das MUSS in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
-    [self.jsOutput appendString:o];
+    // Das war in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
+    // [self.jsOutput appendString:o];
     // Anscheinend doch nicht, es muss in jQuery (ans Ende), weil erst dann die width und height von selbst
     // definierten Klassen bekannt ist (Example 28.9. Extending the built-in text classes)
     // puh, puh, muss es derzeit wirklich doppelt setzen, auch wegen Bsp. 11.2
+    // Neu: nein, wegen Bsp. 11.3 darf ich es NICHT doppelt setzen, sonst klappt beim 2. mal die Abfrage
+    // die nur in JS möglich ist, ob Wert schon gesetzt ist, nicht. (weil ist ja schon gesetzt)
     [self.jQueryOutput appendString:o];
 }
 
@@ -3140,7 +3163,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSLog(@"Using the attribute 'inset' as spacing for the first element.");
 
         [o appendString:@"\n  // 'inset' for the first element of this 'simplelayout' (axis:y)\n"];
-        [o appendFormat:@"  $('#%@').children().first().css('top','%@px');\n",elem,[attributeDict valueForKey:@"inset"]];
+        [o appendFormat:@"  $('#%@').children().first().get(0).setAttribute_('top','%@px');\n",elem,[attributeDict valueForKey:@"inset"]];
     }
 
 
@@ -3150,8 +3173,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    // Das MUSS in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
-    //[self.jsOutput appendString:o];
+    // Das war in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
+    // [self.jsOutput appendString:o];
     // Anscheinend doch nicht, es muss in jQuery (ans Ende), weil erst dann die width und height von
     // selbst definierten Klassen bekannt ist (Example 28.9. Extending the built-in text classes)
     [self.jQueryOutput appendString:o];
@@ -6457,83 +6480,13 @@ didStartElement:(NSString *)elementName
 
         if ([[attributeDict valueForKey:@"axis"] isEqualToString:@"x"])
         {
-            [o appendFormat:@"\n  // Setting a 'stableborderlayout' (axis:x) in '%@' with jQuery:\n",idUmgebendesElement];
-
-            [o appendFormat:@"  if ($('#%@').children().length == 1)\n    jQuery.noop(); /* no operation */\n",idUmgebendesElement];
-
-            [o appendFormat:@"  if ($('#%@').children().length == 2) {\n",idUmgebendesElement];
-            [o appendFormat:@"    $('#%@').children().last().css('left',$('#%@').children().first().css('width'));\n",idUmgebendesElement,idUmgebendesElement];
-            [o appendFormat:@"    $('#%@').children().last().css('width','0');\n",idUmgebendesElement];
-            [o appendString:@"  }\n"];
-
-
-            [o appendFormat:@"  if ($('#%@').children().length > 2) {\n",idUmgebendesElement];
-            //[o appendFormat:@"    alert($('#%@').children().length);\n",idUmgebendesElement];
-
-            //[o appendFormat:@"    $('#%@').children().eq(2).css('left','auto'); // sonst nimmt er 'right' nicht an.\n",idUmgebendesElement];
-            //[o appendFormat:@"    $('#%@').children().eq(2).css('right','0');\n",idUmgebendesElement];
-            // Habe Angst, dass er mir so irgendwas zerhaut, weil ich left auf 'auto' setze, aber andere Stellen sich
-            // darauf verlassen, dass in 'left' ein numerischer Wert ist. Deswegen lieber so:
-
-            if (positionAbsolute == NO)
-            {
-                [o appendFormat:@"    $('#%@').children().each(function() { $(this).css('position','absolute'); });\n",idUmgebendesElement];
-            }
-            if (YES)
-            {
-                [o appendFormat:@"    $('#%@').children().eq(1).css('left',$('#%@').children().first().css('width'));\n",idUmgebendesElement,idUmgebendesElement];
-            }
-            [o appendFormat:@"    $('#%@').children().eq(1).width($('#%@').width()-$('#%@').children().first().width()-$('#%@').children().eq(2).width());\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
-            if (YES)
-            {
-                [o appendFormat:@"    $('#%@').children().eq(2).css('left',$('#%@').width()-$('#%@').children().eq(2).width()+'px');\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
-            }
-
-            [o appendFormat:@"    // Noch die Height vom umgebenden anpassen, damit es so hoch ist, wie auch der Inhalt hoch ist\n"];
-            [o appendFormat:@"    $('#%@').height(getHeighestHeightOfChilds(%@));\n",idUmgebendesElement,idUmgebendesElement];
-
-            [o appendString:@"  }\n\n"];
-
-            // So funktioniert es besser? (anstatt dem 4 Zeilen weiter oben)
-            // [o appendFormat:@"    $('#%@').children().eq(2).css('left',$('#%@').children().eq(0).width()+$('#%@').children().eq(1).width()+'px');\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
+            [o appendFormat:@"\n  // Setting a 'stableborderlayout' (axis:x) in '%@':\n",idUmgebendesElement];
+            [o appendFormat:@"  setStableBorderLayoutXIn(%@);\n",idUmgebendesElement];
         }
         else
         {
-            [o appendFormat:@"\n  // Setting a 'stableborderlayout' (axis:y) in '%@' with jQuery:\n",idUmgebendesElement];
-
-            [o appendFormat:@"  if ($('#%@').children().length == 1)\n    jQuery.noop(); /* no operation */\n",idUmgebendesElement];
-
-            [o appendFormat:@"  if ($('#%@').children().length == 2) {\n",idUmgebendesElement];
-            [o appendFormat:@"    $('#%@').children().last().css('top',$('#%@').children().first().css('height'));\n",idUmgebendesElement,idUmgebendesElement];
-            [o appendFormat:@"    $('#%@').children().last().css('height','0');\n",idUmgebendesElement];
-            [o appendString:@"  }\n"];
-
-
-            [o appendFormat:@"  if ($('#%@').children().length > 2) {\n",idUmgebendesElement];
-            //[o appendFormat:@"    $('#%@').children().eq(2).css('top',$('#%@').height()-$('#%@').children().eq(2).height()+'px');\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
-            // So funktioniert es besser:
-
-            // Er will die Y und Y- Werte auslesen. Wenn ich in position:relative bin, klappt
-            // das aber nicht, weil er ja automatisch nach rechts rutscht oder runter rutscht
-            // deswegen muss ich, auch bei 'relative', hier alle Kinder 'absolute' machen.
-            if (positionAbsolute == NO)
-            {
-                [o appendFormat:@"    $('#%@').children().each(function() { $(this).css('position','absolute'); });\n",idUmgebendesElement];
-            }
-            if (YES)
-            {
-                [o appendFormat:@"    $('#%@').children().eq(1).css('top',$('#%@').children().first().css('height'));\n",idUmgebendesElement,idUmgebendesElement];
-            }
-            [o appendFormat:@"    $('#%@').children().eq(1).height($('#%@').height()-$('#%@').children().first().height()-$('#%@').children().eq(2).height());\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
-            if (YES)
-            {
-                [o appendFormat:@"    $('#%@').children().eq(2).css('top',$('#%@').children().eq(0).height()+$('#%@').children().eq(1).height()+'px');\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
-            }
-
-            [o appendFormat:@"    // Noch die Height vom umgebenden anpassen, damit es so hoch ist, wie auch der Inhalt hoch ist\n"];
-            [o appendFormat:@"    $('#%@').height($('#%@').children().eq(2).position().top+$('#%@').children().eq(2).height());\n",idUmgebendesElement,idUmgebendesElement,idUmgebendesElement,idUmgebendesElement];
-
-            [o appendString:@"  }\n\n"];
+            [o appendFormat:@"\n  // Setting a 'stableborderlayout' (axis:y) in '%@':\n",idUmgebendesElement];
+            [o appendFormat:@"  setStableBorderLayoutYIn(%@);\n",idUmgebendesElement];
         }
 
 
@@ -12226,18 +12179,88 @@ BOOL isJSArray(NSString *s)
     "    for (var i = 1; i < $(el).children().length; i++)\n"
     "    {\n"
     "        var kind = $(el).children().eq(i);\n"
-    "        if (@@positionAbsoluteReplaceMe@@)\n"
-    "        {\n"
+    "        if (@@positionAbsoluteReplaceMe@@) {\n"
     "            var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + spacing;\n"
     "        }\n"
-    "        else\n"
-    "        {\n"
+    "        else {\n"
     "            var leftValue = spacing * i;\n"
     "        }\n"
     "        kind.get(0).setAttribute_('x',leftValue+'px');\n"
+    "\n"
+    "        // Falls es geklonte Geschwister gibt:\n"
+    "        var c = 2;\n"
+    "        while ($('#'+el.id+'_repl'+c).length)\n"
+    "        {\n"
+    "            setSimpleLayoutXIn($('#'+el.id+'_repl'+c).get(0),spacing);\n"
+    "            c++;\n"
+    "        }\n"
     "    }\n"
     "}\n"
     "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hilfsfunktion, um ein StableBorderLayout Y zu setzen//\n"
+    "// setStableBorderLayoutYIn()                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var setStableBorderLayoutYIn = function (el) {\n"
+    "    if ($(el).children().length == 1)\n"
+    "        jQuery.noop(); /* no operation */\n"
+    "\n"
+    "    if ($(el).children().length == 2) {\n"
+    "        $(el).children().last().get(0).setAttribute_('y',$(el).children().first().css('height'));\n"
+    "        $(el).children().last().get(0).setAttribute_('height','0');\n"
+    "    }\n"
+    "\n"
+    "    if ($(el).children().length > 2) {\n"
+    // @"    $(el).children().eq(2).css('top',$(el).height()-$(el).children().eq(2).height()+'px');\n"
+    // So funktioniert es besser:
+    // Er will die Y und Y- Werte auslesen. Wenn ich in position:relative bin, klappt
+    // das aber nicht, weil er ja automatisch nach rechts rutscht oder runter rutscht
+    // deswegen muss ich, auch bei 'relative', hier alle Kinder 'absolute' machen.
+    "        if (!@@positionAbsoluteReplaceMe@@)\n"
+    "            $(el).children().each(function() { $(this).css('position','absolute'); });\n"
+    "\n"
+    "        $(el).children().eq(1).get(0).setAttribute_('y',$(el).children().first().css('height'));\n"
+    "        $(el).children().eq(1).get(0).setAttribute_('height',$(el).height()-$(el).children().first().height()-$(el).children().eq(2).height());\n"
+    "        $(el).children().eq(2).get(0).setAttribute_('y',$(el).children().eq(0).height()+$(el).children().eq(1).height()+'px');\n"
+    "        // Noch die Height vom umgebenden anpassen, damit es so hoch ist, wie auch der Inhalt hoch ist\n"
+    "        $(el).get(0).setAttribute_('height',$(el).children().eq(2).position().top+$(el).children().eq(2).height());\n"
+    "  }\n"
+    "}"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hilfsfunktion, um ein StableBorderLayout X zu setzen//\n"
+    "// setStableBorderLayoutXIn()                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var setStableBorderLayoutXIn = function (el) {\n"
+    "    if ($(el).children().length == 1)\n"
+    "        jQuery.noop(); /* no operation */\n"
+    "\n"
+    "    if ($(el).children().length == 2) {\n"
+    "        $(el).children().last().get(0).setAttribute_('x',$(el).children().first().css('width'));\n"
+    "        $(el).children().last().get(0).setAttribute_('width','0');\n"
+    "    }\n"
+    "\n"
+    "    if ($(el).children().length > 2) {\n"
+    //[o appendFormat:@"    alert($('#%@').children().length);\n",idUmgebendesElement];
+
+    //[o appendFormat:@"    $('#%@').children().eq(2).css('left','auto'); // sonst nimmt er 'right' nicht an.\n",idUmgebendesElement];
+    //[o appendFormat:@"    $('#%@').children().eq(2).css('right','0');\n",idUmgebendesElement];
+    // Habe Angst, dass er mir so irgendwas zerhaut, weil ich left auf 'auto' setze, aber andere Stellen sich
+    // darauf verlassen, dass in 'left' ein numerischer Wert ist. Deswegen lieber so:
+    "    if (!@@positionAbsoluteReplaceMe@@)\n"
+    "        $(el).children().each(function() { $(this).css('position','absolute'); });\n"
+    "\n"
+    // So funktioniert es besser?
+    // "  $(el).children().eq(2).css('left',$(el).children().eq(0).width()+$(el).children().eq(1).width()+'px');\n"
+    "    $(el).children().eq(1).get(0).setAttribute_('x',$(el).children().first().css('width'));\n"
+    "    $(el).children().eq(1).get(0).setAttribute_('width',$(el).width()-$(el).children().first().width()-$(el).children().eq(2).width());\n"
+    "    $(el).children().eq(2).get(0).setAttribute_('x',$(el).width()-$(el).children().eq(2).width()+'px');\n"
+    "    // Noch die Height vom umgebenden anpassen, damit es so hoch ist, wie auch der Inhalt hoch ist\n"
+    "    $(el).get(0).setAttribute_('height',getHeighestHeightOfChilds(el));\n"
+    "  }\n"
+    "}\n"
     "\n"
     "\n"
     "\n";
@@ -12608,7 +12631,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "\n"
-    "  // Solange constraint values bei width/height nicht funktionieren, muss ich es hier auch ausführen\n"
+    "  // Muss noch drin bleiben, sonst bricht 'Und hier das Ergebnis der Steuerberechnung' (ToDo)\n"
     "  // (doppelt ausgeführter Code...weiter unten wird er ebenfalls ausgeführt...)\n"
     "  // Replace-IDs von contentJQuery ersetzen\n"
     "  var s = replaceID(obj.contentJQuery, $(id).attr('id'));\n"

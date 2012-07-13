@@ -35,13 +35,13 @@
 //
 
 BOOL debugmode = YES;
-
-
-BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
-BOOL kompiliereSpeziellFuerTaxango = NO;
+BOOL kompiliereSpeziellFuerTaxango = YES;
+
+
 
 
 
@@ -569,7 +569,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // setAttribute_() wird zur absolutern PRIORITY-Function. Über die läuft alles!
 - (void) setTheValue:(NSString *)s ofAttribute:(NSString*)attr
 {
-    NSLog(@"We are setting the attribute with jQuery + we watch it, if necessary!");
+    NSLog(@"Setting the attribute with jQuery + we watch it, if necessary!");
 
     NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
@@ -611,6 +611,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
     BOOL constraintValue = NO;
+    BOOL weNeedQuotes = YES;
     if ([s hasPrefix:@"$"])
     {
         constraintValue = YES;
@@ -635,15 +636,18 @@ void OLLog(xmlParser *self, NSString* s,...)
                 s = [NSString stringWithString:sToInject];
             }
         }
+
+        weNeedQuotes = NO;
     }
 
+    // ...setAttribute_() aufrufen (gilt für alle Arten von Attributen - Keine Fallunterscheidung)
+    if (weNeedQuotes)
+        [o appendFormat:@"  %@.setAttribute_('%@','%@');\n",self.zuletztGesetzteID,attr,s];
+    else
+        [o appendFormat:@"  %@.setAttribute_('%@',%@);\n",self.zuletztGesetzteID,attr,s];
 
-    // ...setAttribute_() aufrufen (gilt für alle Arten von Attributen - Keine Fallunterscheidung mehr)
-    [o appendFormat:@"  %@.setAttribute_('%@',%@);\n",self.zuletztGesetzteID,attr,s];
 
-
-
-    // Wenn die $once-Angabe erfolgt, ist es gar kein constraint und wir brauchen weder ein onchange noch ein watch
+    // Wenn die $once-Angabe erfolgt, ist es gar kein constraint
     if (constraintValue && !nichtWatchen && !nochVorDOMAusfuehren)
     {
         [o appendString:@"  // Zusätzlich bei change aktualisieren bzw. auf ein event horchen, da constraint-value\n"];
@@ -660,8 +664,10 @@ void OLLog(xmlParser *self, NSString* s,...)
             [o appendFormat:@"    $(%@).on('change', function() { %@.setAttribute_('%@',%@); } );\n",object,self.zuletztGesetzteID,attr,s];
 
 
-            // ToDo:
-            // Bei width und height muss es ein resize-event werden... leider
+
+
+            // resize sendet doch bei drag ein event, hmmm. Deswegen das hier großer Unsinn:
+            /*
             if ([object  hasSuffix:@"myWidth_NO_BrichtZuViel"] || [object hasSuffix:@"myHeight_NO_BrichtZuViel"])
             {
                 [o appendString:@"  else\n"];
@@ -676,55 +682,50 @@ void OLLog(xmlParser *self, NSString* s,...)
                     else // dann erster Durchlauf und deswegen ohne altes s und ohne Punkt
                         object = [NSString stringWithFormat:@"%@", [array objectAtIndex:i]];
                 }
-
-                // Puh, keine Ahnung why, aber es muss beim resize-Event wohl immer der normale
-                // parent gelten, und nicht der immediate
                 object = [object stringByReplacingOccurrencesOfString:@"getTheParent(true)" withString:@"getTheParent()"];
                 s = [s stringByReplacingOccurrencesOfString:@"getTheParent(true)" withString:@"getTheParent()"];
-
-
                 [o appendFormat:@"    $(%@).resize(function() { %@.setAttribute_('%@',%@); } );\n",object,self.zuletztGesetzteID,attr,s];
             }
             else
+             */
+
+            //[o appendFormat:@"    window.watch('%@', function() { %@.setAttribute_('%@',%@); } );\n",object,self.zuletztGesetzteID,attr,s];
+            // Das mit dem watchen klappt nicht wirklich...
+            // Neuer Code, indem ich auf die von setAttribute_ abgeschickten Events horche:
+
+            // Erstmal Property von Objekt isolieren
+            NSArray *tempArray = [object componentsSeparatedByString: @"."];
+
+            // wenn es gar keinen . gibt, ist es wohl ein vergessenes this vor der Property z.B.
+            // Wir brauchen also mindestens ein Objekt und eine Property
+            if ([tempArray count] > 1)
             {
-                //[o appendFormat:@"    window.watch('%@', function() { %@.setAttribute_('%@',%@); } );\n",object,self.zuletztGesetzteID,attr,s];
-                // Das mit dem watchen klappt nicht wirklich...
-                // Neuer Code, indem ich auf die von setAttribute_ abgeschickten Events horche:
+                NSString *theObject = [tempArray objectAtIndex:0];
+                NSString *theProperty = [tempArray objectAtIndex:[tempArray count]-1];
 
-                // Erstmal Property von Objekt isolieren
-                NSArray *tempArray = [object componentsSeparatedByString: @"."];
-
-                // wenn es gar keinen . gibt, ist es wohl ein vergessenes this vor der Property z.B.
-                // Wir brauchen also mindestens ein Objekt und eine Property
-                if ([tempArray count] > 1)
+                // Falls es mehr als 2 Element im Array gibt, alle mittleren Elemente
+                // dem objekt hinzufügen.
+                if ([tempArray count] > 2)
                 {
-                    NSString *theObject = [tempArray objectAtIndex:0];
-                    NSString *theProperty = [tempArray objectAtIndex:[tempArray count]-1];
-
-                    // Falls es mehr als 2 Element im Array gibt, alle mittleren Elemente
-                    // dem objekt hinzufügen.
-                    if ([tempArray count] > 2)
+                    for (int i=1;i<[tempArray count]-1;i++)
                     {
-                        for (int i=1;i<[tempArray count]-1;i++)
-                        {
-                            theObject = [NSString stringWithFormat:@"%@.%@",theObject,[tempArray objectAtIndex:i]];
-                        }
+                        theObject = [NSString stringWithFormat:@"%@.%@",theObject,[tempArray objectAtIndex:i]];
                     }
+                }
 
 
-                    // setAttribute_ verschickt events nur an 'onheight' oder an 'onwidth'
-                    if ([theProperty isEqualToString:@"myWidth"])
-                        theProperty = @"width";
-                    if ([theProperty isEqualToString:@"myHeight"])
-                        theProperty = @"height";
+                // setAttribute_ verschickt events nur an 'onheight' oder an 'onwidth'
+                if ([theProperty isEqualToString:@"myWidth"])
+                    theProperty = @"width";
+                if ([theProperty isEqualToString:@"myHeight"])
+                    theProperty = @"height";
 
-                    // Wenn wir selber wir sind, dann nicht. Darauf brauche ich nicht reagieren
-                    // Das dient dann wohl nur der Berechnung. z. B. "irgendwas - this.height".
-                    if (![theObject isEqualToString:@"this"])
-                    {
-                        [o appendString:@"  else\n"];
-                        [o appendFormat:@"    $(%@).on('on%@', function() { %@.setAttribute_('%@',%@); } );\n",theObject,theProperty,self.zuletztGesetzteID,attr,s];
-                    }
+                // Wenn wir selber wir sind, dann nicht. Darauf brauche ich nicht reagieren
+                // Das dient dann wohl nur der Berechnung. z. B. "irgendwas - this.height".
+                if (![theObject isEqualToString:@"this"])
+                {
+                    [o appendString:@"  else\n"];
+                    [o appendFormat:@"    $(%@).on('on%@', function() { %@.setAttribute_('%@',%@); } );\n",theObject,theProperty,self.zuletztGesetzteID,attr,s];
                 }
             }
         }
@@ -775,10 +776,15 @@ void OLLog(xmlParser *self, NSString* s,...)
     if ([attributeDict valueForKey:@"bgcolor"])
     {
         self.attributeCount++;
-        NSLog(@"Setting the attribute 'bgcolor' as CSS 'background-color'.");
-        [style appendString:@"background-color:"];
-        [style appendString:[attributeDict valueForKey:@"bgcolor"]];
-        [style appendString:@";"];
+
+        //NSLog(@"Setting the attribute 'bgcolor' as CSS 'background-color'.");
+        //[style appendString:@"background-color:"];
+        //[style appendString:[attributeDict valueForKey:@"bgcolor"]];
+        //[style appendString:@";"];
+
+        // Lieber so, weil nicht immer sind die übergebenen Farbwerte kompatibles CSS
+        // Und setAttribute_ biegt alle Farbwerte vorher richtig um
+        [self setTheValue:[attributeDict valueForKey:@"bgcolor"] ofAttribute:@"bgcolor"];
     }
     
     if ([attributeDict valueForKey:@"opacity"])
@@ -1883,7 +1889,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Weil Zugriff auf die Variable von Anfang an sicher gestellt sein muss.
     [self convertNameAttributeToGlobalJSVar:attributeDict];
 
-
+    if (kompiliereSpeziellFuerTaxango)
     if ([attributeDict valueForKey:@"visible"])
     {
         self.attributeCount++;
@@ -2075,24 +2081,6 @@ void OLLog(xmlParser *self, NSString* s,...)
                     [self.jQueryOutput appendString:bedingung];
                     [self.jQueryOutput appendString:@"\");\n"];
 
-                    /* Alte Lösung ohne externe Funktion (Nachteil war, dass ich die initiale
-                     // Visibility nicht setzen konnte):
-                     [self.jQueryOutput appendString:@"    var value = $(this).val();\n"];
-                     [self.jQueryOutput appendString:@"    $('#"];
-                     [self.jQueryOutput appendString:idName];
-                     [self.jQueryOutput appendString:@"').toggle("];
-                     [self.jQueryOutput appendString:bedingung];
-                     [self.jQueryOutput appendString:@");\n"];
-                     [self.jQueryOutput appendString:@"    // Dazu gehörigen Text auch mit entfernen\n"];
-                     [self.jQueryOutput appendString:@"    if ($('#"];
-                     [self.jQueryOutput appendString:idName];
-                     [self.jQueryOutput appendString:@"').prev().is('span'))\n"];
-                     [self.jQueryOutput appendString:@"      $('#"];
-                     [self.jQueryOutput appendString:idName];
-                     [self.jQueryOutput appendString:@"').prev().toggle("];
-                     [self.jQueryOutput appendString:bedingung];
-                     [self.jQueryOutput appendString:@");\n"];
-                     */
                     [self.jQueryOutput appendString:@"  });\n"];
 
                     [self.jQueryOutput appendString:@"  // Und einmal sofort die Visibility anpassen\n"];
@@ -2107,6 +2095,25 @@ void OLLog(xmlParser *self, NSString* s,...)
             }
         }
         }
+    }
+
+    if (!kompiliereSpeziellFuerTaxango)
+    if ([attributeDict valueForKey:@"visible"])
+    {
+        self.attributeCount++;
+
+        // ToDo - Diese werden noch nicht unterstützt:
+        // Beim Abarbeiten vorne anfangen, da Abhängigkeiten nach hinten
+        if (![self.zuletztGesetzteID isEqualToString:@"element65"] &&
+            ![self.zuletztGesetzteID isEqualToString:@"element66"] &&
+            ![self.zuletztGesetzteID isEqualToString:@"element106"] &&
+            ![self.zuletztGesetzteID isEqualToString:@"element107"] &&
+            ![self.zuletztGesetzteID isEqualToString:@"element252"] &&
+            ![self.zuletztGesetzteID isEqualToString:@"element303"] &&
+            ![self.zuletztGesetzteID isEqualToString:@"element333"] &&
+            ![self.zuletztGesetzteID isEqualToString:@"element375"] &&
+            ![self.zuletztGesetzteID isEqualToString:@"element376"])
+            [self setTheValue:[attributeDict valueForKey:@"visible"] ofAttribute:@"visible"];
     }
 
 
@@ -3119,7 +3126,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 - (void) becauseOfSimpleLayoutXMoveTheChildrenOfElement:(NSString*)elem withSpacing:(NSString*)spacing andAttributes:(NSDictionary*)attributeDict
 {
-    elem = [self korrigiereElemBeiWindow:elem];
+    // Bricht Beispiel 27.6
+    //elem = [self korrigiereElemBeiWindow:elem];
 
     NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
@@ -3153,7 +3161,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 - (void) becauseOfSimpleLayoutYMoveTheChildrenOfElement:(NSString*)elem withSpacing:(NSString*)spacing andAttributes:(NSDictionary*)attributeDict
 {
-    elem = [self korrigiereElemBeiWindow:elem];
+    // Bricht Beispiel 27.6
+    //elem = [self korrigiereElemBeiWindow:elem];
 
     NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
@@ -4363,13 +4372,31 @@ didStartElement:(NSString *)elementName
 
                 // ToDo ToDo ToDo
                 // Wenn ein '+' enthalten ist, das wird noch nicht unterstützt
+                // Mögliches Vorgehen: Methode auslagern bei ConstraintValue und hier auch aufrufen
                 if ([orignalValueString rangeOfString:@"+"].location == NSNotFound)
                 {
+                    /*
                     NSRange positionDesPunktes = [orignalValueString rangeOfString:@"."];
                     NSString *zuWatchendeVar = [orignalValueString substringFromIndex:positionDesPunktes.location+1];
 
                     [o appendString:@"  // Zusätzlich watchen der Variable, da es ein berechneter Wert ist\n"];
                     [o appendFormat:@"  %@.watch('%@', function(prop, oldval, newval) { %@.%@ = newval; })\n",elem,zuWatchendeVar,elem,a];
+                    */
+                    // Neu:
+                    NSArray *tempArray = [orignalValueString componentsSeparatedByString: @"."];
+                    NSString *theObject = [tempArray objectAtIndex:0];
+                    NSString *theProperty = [tempArray objectAtIndex:[tempArray count]-1];
+                    // Falls es mehr als 2 Element im Array gibt, alle mittleren Elemente
+                    // dem objekt hinzufügen.
+                    if ([tempArray count] > 2)
+                    {
+                        for (int i=1;i<[tempArray count]-1;i++)
+                        {
+                            theObject = [NSString stringWithFormat:@"%@.%@",theObject,[tempArray objectAtIndex:i]];
+                        }
+                    }
+                    [o appendString:@"  // Zusätzlich auf event horchen, da es ein berechneter Wert ist und triggern, falls jemand auf UNS horcht\n"];
+                    [o appendFormat:@"  $(%@.%@).on('on%@', function(prop, newval) { %@.%@ = newval; $(%@).triggerHandler('on%@',newval); });\n",elem,theObject,theProperty,elem,a,elem,a];
                 }
             }
 
@@ -4492,12 +4519,14 @@ didStartElement:(NSString *)elementName
 
             [self.jQueryOutput appendFormat:@"\n  // Window is resizable\n"];
             [self.jQueryOutput appendFormat:@"  $('#%@').resizable();\n",self.zuletztGesetzteID];
+            [self.jQueryOutput appendFormat:@"  $('#%@').on('resize', function(event,ui) {\n    %@_content.setAttribute_('width',ui.size.width);\n    %@_content.setAttribute_('height',ui.size.height);\n    $(this).triggerHandler('onwidth',ui.size.width);\n    $(this).triggerHandler('onheight',ui.size.height);\n  });\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
+            [self.jQueryOutput appendFormat:@"  $('#%@').on('resizestop', function(event,ui) {\n    %@_content.setAttribute_('width',ui.size.width);\n    %@_content.setAttribute_('height',ui.size.height);\n    $(this).triggerHandler('onwidth',ui.size.width);\n    $(this).triggerHandler('onheight',ui.size.height);\n  });\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
         }
 
         [self.jQueryOutput appendFormat:@"\n  // Window is draggable\n"];
         [self.jQueryOutput appendFormat:@"  $('#%@').draggable();\n",self.zuletztGesetzteID];
-        [self.jQueryOutput appendFormat:@"  $('#%@').on('drag', function() {\n      $(this).triggerHandler('ony');\n      $(this).triggerHandler('onx');\n  });\n",self.zuletztGesetzteID];
-        [self.jQueryOutput appendFormat:@"  $('#%@').on('dragstop', function() {\n      $(this).triggerHandler('ony');\n      $(this).triggerHandler('onx');\n  });\n",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  $('#%@').on('drag', function(event,ui) {\n    $(this).triggerHandler('ony',ui.position.top);\n    $(this).triggerHandler('onx',ui.position.left);\n  });\n",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  $('#%@').on('dragstop', function(event,ui) {\n    $(this).triggerHandler('ony',ui.position.top);\n    $(this).triggerHandler('onx',ui.position.left);\n  });\n",self.zuletztGesetzteID];
 
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
@@ -5042,7 +5071,7 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"<input class=\"input_checkbox\" type=\"checkbox\""];
 
-        NSString *id =[self addIdToElement:attributeDict];
+        NSString *theId =[self addIdToElement:attributeDict];
 
 
 
@@ -5055,10 +5084,9 @@ didStartElement:(NSString *)elementName
 
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
-        [self.output appendString:@"<span"];
+        [self.output appendString:@"<span class=\"div_text\" onclick=\"$(this).prev().trigger('click');\""];
         [self.output appendString:[self addTitlewidth:attributeDict]];
         [self.output appendString:@">"];
-
 
 
 
@@ -5104,7 +5132,7 @@ didStartElement:(NSString *)elementName
             code = [self makeTheComputedValueComputable:code];
 
             [self.jQueryOutput appendString:@"\n  // checkbox-Text wird hier dynamisch gesetzt\n"];
-            [self.jQueryOutput appendFormat:@"  $('#%@').next().text(%@);\n",id,code];
+            [self.jQueryOutput appendFormat:@"  $('#%@').next().text(%@);\n",theId,code];
         }
 
 
@@ -5137,7 +5165,7 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"</div>\n\n"];
 
         // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw.
-        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]];
+        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
     }
 
 
@@ -5415,10 +5443,10 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
         [self.output appendString:@"<div class=\"div_slider\">\n"];
 
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
         [self.output appendString:@"<input type=\"range\""];
 
@@ -5456,11 +5484,11 @@ didStartElement:(NSString *)elementName
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
         [self.output appendFormat:@"\" onchange=\"%@_output.value=parseInt(this.value)\" value=\"%@\" min=\"%@\" max=\"%@\" step=\"1\" />\n",self.zuletztGesetzteID,value,minvalue,maxvalue];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         // id ist Fallback für alte Browser
         [self.output appendFormat:@"<output name=\"%@_output\" id=\"%@_output\" for=\"%@\" style=\"position:absolute;left:150px;top:0px;\"></output>\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"</div>\n\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+        [self.output appendString:@"</div>\n"];
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
     }
@@ -8967,7 +8995,7 @@ BOOL isJSArray(NSString *s)
     // da ich den Text ja weiter ergänze. Erst ganz am Ende beim Schließen von BDSText mache ich das
     if (!self.weAreCollectingTextAndThereMayBeHTMLTags)
     {
-        if (self.textInProgress != nil && [self.textInProgress length] > 0)
+        if (self.textInProgress != nil && [[self.textInProgress stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]] length] > 0)
         {
             // Von den hier genannten Tags wird der Text zwischen den Tags noch nichts ausgewertet
             if (![self.keyInProgress isEqualToString:@"BDSinputgrid"] &&
@@ -9130,7 +9158,7 @@ BOOL isJSArray(NSString *s)
     [self.output appendString:@"\n<script type=\"text/javascript\">\n"];
 
     [self.output appendString:@"// Make all id's global (For Firefox) and init 'canvas'\n"];
-    [self.output appendString:@"makeIDsGlobalAndInitCanvas();\n\n\n"];
+    [self.output appendString:@"makeIDsGlobalAndInitStuff();\n\n\n"];
 
 
     // Die jQuery-Anweisungen:
@@ -9142,6 +9170,9 @@ BOOL isJSArray(NSString *s)
     [self.output appendString:@"  if (window['tabsMain']) tabsMain.selecttab = function(index) { $(this).tabs('select', index ) } // ToDo\n"];
     [self.output appendString:@"  if (window['tabsMain']) tabsMain.next = function() { $(this).tabs('select', 2 ) } // ToDo\n"];
     [self.output appendString:@"  if (window['rudStpfl']) rudStpfl.rolldown = function() {} // ToDo\n"];
+    [self.output appendString:@"  if (window['rudWeitereInfos']) rudWeitereInfos.isvalid = true; // ToDo\n"];
+    [self.output appendString:@"  var globalcalendar = {}; // ToDo\n\n"];
+
     [self.output appendString:@"  var dlgsave = new dlg();"];
     [self.output appendString:@"  // dlgFamilienstandSingle heimlich als Objekt einführen (diesmal direkt im Objekt, ohne prototype)\n"];
     [self.output appendString:@"  function dlg()\n  {\n    // Extern definiert\n    this.open = open;\n    // Intern definiert (beides möglich)\n"];
@@ -9750,15 +9781,15 @@ BOOL isJSArray(NSString *s)
     else
     {
         NSString *css2 = @"\n\n"
-        "/* Ziemlich dirty Trick um '<input>', '<select>' und 'Text' innerhalb der TabSheets besser */\n"
-        "/* ausrichten zu können. So, dass sie nicht umbrechen, weil Sie position: absolute sind. */\n"
-        "/* div > div > div > div > div > div > div > div > input, */\n"
-        "/* div > div > div > div > div > div > div > div > select,*/\n"
-        "/* div > div > div > div > div > div > div > div[class=\"div_text\"] */\n"
-        ".div_rudPanel .div_text /* wenn ein div_text in einem div_rudPanel ist */\n"
-        "{\n"
-        "    width:100%;\n"
-        "}\n"
+        //"/* Ziemlich dirty Trick um '<input>', '<select>' und 'Text' innerhalb der TabSheets besser */\n"
+        //"/* ausrichten zu können. So, dass sie nicht umbrechen, weil Sie position: absolute sind. */\n"
+        //"/* div > div > div > div > div > div > div > div > input, */\n"
+        //"/* div > div > div > div > div > div > div > div > select,*/\n"
+        //"/* div > div > div > div > div > div > div > div[class=\"div_text\"] */\n"
+        //".div_rudPanel .div_text /* wenn ein div_text in einem div_rudPanel ist */\n"
+        //"{\n"
+        //"    width:100%;\n"
+        //"}\n"
         "/* Übergangsweise, damit der Kalender die Überschrift mittig anzeigt, */\n"
         "/* für alle Elemente im Kalender die float-Angabe aufheben */\n"
         ".ui-datepicker *\n"
@@ -10259,7 +10290,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// better parseInt()                                   //\n"
+    "// better parseInt() in String                         //\n"
     "/////////////////////////////////////////////////////////\n"
     "if (typeof String.prototype.betterParseInt != 'function') {\n"
     "    String.prototype.betterParseInt = function () {\n"
@@ -10269,7 +10300,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// better parseFloat()                                 //\n"
+    "// better parseFloat() in String                       //\n"
     "/////////////////////////////////////////////////////////\n"
     "if (typeof String.prototype.betterParseFloat != 'function') {\n"
     "    String.prototype.betterParseFloat = function() {\n"
@@ -10279,11 +10310,31 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// insertAt() position in string                       //\n"
+    "// insertAt() position in String                       //\n"
     "/////////////////////////////////////////////////////////\n"
     "if (typeof String.prototype.insertAt != 'function') {\n"
     "    String.prototype.insertAt = function(index, s) {\n"
     "        return this.substring(0, index) + s + this.substring(index);\n"
+    "    };\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// isEven() in Number                                  //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "if (typeof Number.prototype.isEven != 'function') {\n"
+    "    Number.prototype.isEven = function() {\n"
+    "        return (this%2)==0;\n"
+    "    };\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// isOdd() in Number                                   //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "if (typeof Number.prototype.isOdd != 'function') {\n"
+    "    Number.prototype.isOdd = function() {\n"
+    "        return !this.isEven();\n"
     "    };\n"
     "}\n"
     "\n"
@@ -10339,7 +10390,7 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// Führt die beiden oben genannten Methoden aus (init) //\n"
     "/////////////////////////////////////////////////////////\n"
-    "function makeIDsGlobalAndInitCanvas(all) {\n"
+    "function makeIDsGlobalAndInitStuff(all) {\n"
     "    // Make all id's from <div>'s global (Firefox)\n"
     "    makeElementsGlobal(document.getElementsByTagName('div'));\n"
     "    // Make all id's from <input>'s global (Firefox)\n"
@@ -10348,8 +10399,36 @@ BOOL isJSArray(NSString *s)
     "    makeElementsGlobal(document.getElementsByTagName('select'));\n"
     "    // Make all id's from <button>'s global (Firefox)\n"
     "    makeElementsGlobal(document.getElementsByTagName('button'));\n"
+    "\n"
     "    // Make canvas accessible\n"
     "    makeCanvasAccessible();\n"
+    "\n"
+    "\n"
+    "    // Bei OL hat value von checkboxen eine andere Bedeutung als bei HTML\n"
+    "    // Bedeutung HTML: submit-Wert\n"
+    "    // Bedeutung OL: Ob checkbox gesetzt oder nicht (true oder false)\n"
+    "    // Deswegen bei jeder Änderung des Wertes einfach value auf true oder false setzen\n"
+    "    $('input[type=checkbox]').each( function() {\n"
+    "        // Einmal jetzt den aktuellen Wert setzen\n"
+    "        this.value = $(this).is(':checked');\n"
+    "        // und bei jeder Änderung\n"
+    "        $(this).on('change',function() {\n"
+    "            this.value = $(this).is(':checked');\n"
+    "            // Davon unabhängig: Triggern, damit da dran hängende Constraints die Änderung mitbekommen\n"
+    "            $(this).triggerHandler('onvalue');\n"
+    "        });\n"
+    "\n"
+    "        // Den Mousecursor ändern vom benachbarten span\n"
+    "        $(this).next().css('cursor','pointer');\n"
+    "    });\n"
+    "\n"
+    "    // Davon unabhängig: Triggern, damit da dran hängende Constraints die Änderung mitbekommen\n"
+    "    // Dies gilt sogar für jedes input!\n"
+    "    $('input').each( function() {\n"
+    "        $(this).on('change',function() {\n"
+    "            $(this).triggerHandler('onvalue',$(this).val());\n"
+    "        });\n"
+    "    });\n"
     "}\n"
     "\n"
     "\n"
@@ -11411,24 +11490,44 @@ BOOL isJSArray(NSString *s)
     "            while (value.length < 6) value = '0' + value;\n"
     "            value = '#'+ value;\n"
     "        }\n"
+    "        if (typeof value === 'string' && value.startsWith('0x'))\n"
+    "        {\n"
+    "            value = '#'+value.substr(2);\n"
+    "        }\n"
     "        $(me).css('background-color',value);\n"
     "    }\n"
     "    else if (attributeName == 'x')\n"
     "    {\n"
+    "        // jQuery doesn't like plain strings containing a number\n"
+    "        if (typeof value === 'string' && !value.endsWith('px') && !value.endsWith('%'))\n"
+    "            value = value + 'px';\n"
+    "\n"
     "        $(me).css('left',value);\n"
     "    }\n"
     "    else if (attributeName == 'y')\n"
     "    {\n"
+    "        // jQuery doesn't like plain strings containing a number\n"
+    "        if (typeof value === 'string' && !value.endsWith('px') && !value.endsWith('%'))\n"
+    "            value = value + 'px';\n"
+    "\n"
     "        $(me).css('top',value);\n"
     "    }\n"
     "    else if (attributeName == 'width')\n"
     "    {\n"
+    "        // jQuery doesn't like plain strings containing a number\n"
+    "        if (typeof value === 'string' && !value.endsWith('px') && !value.endsWith('%'))\n"
+    "            value = value + 'px';\n"
+    "\n"
     "        $(me).css('width',value);\n"
     //"        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
     //"        $(me).get(0).myWidth = value;\n"
     "    }\n"
     "    else if (attributeName == 'height')\n"
     "    {\n"
+    "        // jQuery doesn't like plain strings containing a number\n"
+    "        if (typeof value === 'string' && !value.endsWith('px') && !value.endsWith('%'))\n"
+    "            value = value + 'px';\n"
+    "\n"
     "        $(me).css('height',value);\n"
     //"        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
     //"        $(me).get(0).myHeight = value;\n"
@@ -11628,6 +11727,39 @@ BOOL isJSArray(NSString *s)
     "HTMLInputElement.prototype.destroy = destroyFunction;\n"
     "HTMLSelectElement.prototype.destroy = destroyFunction;\n"
     "HTMLButtonElement.prototype.destroy = destroyFunction;\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// applyConstraintMethod() - nachimplementiert         //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var applyConstraintMethodFunction = function (constraintMethod,dependencies) {\n"
+    "    if (constraintMethod === undefined)\n"
+    "        throw new Error('applyConstraintMethod() - First argument should not be undefined');\n"
+    "    if (dependencies === undefined)\n"
+    "        throw new Error('applyConstraintMethod() - Second argument should not be undefined');\n"
+    "    if (typeof constraintMethod !== 'string')\n"
+    "        throw new Error('applyConstraintMethod() - First argument should be a string');\n"
+    "    if (typeof dependencies !== 'object' || !$.isArray(dependencies))\n"
+    "        throw new Error('applyConstraintMethod() - Second argument should be an array');\n"
+    "    if (dependencies.length.isOdd())\n"
+    "        throw new Error('applyConstraintMethod() - Array length of Second argument should be an even number');\n"
+    "\n"
+    "    var tempDel = new LzDelegate(this, constraintMethod);\n"
+    "\n"
+    "    for (var i=0;i<dependencies.length;i++)\n"
+    "    {\n"
+    "        if (i.isEven())\n"
+    "        {\n"
+    "            tempDel.register(dependencies[i], 'on'+dependencies[i+1]);\n"
+    "        }\n"
+    "    }\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
+    "HTMLInputElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
+    "HTMLSelectElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
+    "HTMLButtonElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
     "\n"
     "\n"
     "\n"
@@ -12024,6 +12156,8 @@ BOOL isJSArray(NSString *s)
     // aber mit css('top') klappt es (gleiches gilt für position().left).
     // '0'+ als Schutz gegen 'auto', so, dass parseInt() auf jeden Fall ne Nummer findet.
     "var adjustHeightAndWidth = function (el) {\n"
+    "    if ($(el).is('input')) // Dann Sprung, weil inputs aus mehreren Elementen bestehen\n"
+    "        el = $(el).parent().get(0);\n"
     "    var sumXYHW = 0;\n"
     "    $(el).children().map(function ()\n"
     "    {\n"

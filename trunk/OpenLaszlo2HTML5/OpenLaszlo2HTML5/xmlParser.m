@@ -7120,7 +7120,9 @@ didStartElement:(NSString *)elementName
 
         if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
         {
-            [o appendFormat:@"  if (window.%@ == undefined)\n  ",[attributeDict valueForKey:@"name"]];
+            //[o appendFormat:@"  if (window.%@ == undefined)\n  ",[attributeDict valueForKey:@"name"]];
+            // Neue Logik: Methoden werden erst nach ausgewerteten Klassen gesetzt. Deswegen MUSS jetzt
+            // sogar überschrieben werden
         }
         else
         {
@@ -7145,13 +7147,15 @@ didStartElement:(NSString *)elementName
                 else
                     benutzMich = self.lastUsedNameAttributeOfDataPointer;
 
-                [o appendFormat:@"  if (%@.%@ == undefined)",benutzMich,[attributeDict valueForKey:@"name"]];
-                [o appendFormat:@"\n  %@.",benutzMich];
+                if ([elemTyp isEqualToString:@"evaluateclass"]) // Weil ich dort rückwärts auswerte
+                    [o appendFormat:@"  if (%@.%@ == undefined)\n",benutzMich,[attributeDict valueForKey:@"name"]];
+                [o appendFormat:@"  %@.",benutzMich];
             }
             else
             {
-                [o appendFormat:@"  if (%@.%@ == undefined)",elem,[attributeDict valueForKey:@"name"]];
-                [o appendFormat:@"\n  %@.",elem];
+                if ([elemTyp isEqualToString:@"evaluateclass"]) // Weil ich dort rückwärts auswerte
+                    [o appendFormat:@"  if (%@.%@ == undefined)\n",elem,[attributeDict valueForKey:@"name"]];
+                [o appendFormat:@"  %@.",elem];
             }
         }
 
@@ -7821,9 +7825,9 @@ didStartElement:(NSString *)elementName
         // css wird erkannt, welche überschrieben werden dürfen und welche nicht.
         // Verschlechtet und verbessert sich noch zu gleich! (ToDo) Deswegen noch unsicher, ob so richtig.
         // War früher jQueryOutput.
-        // b) damit Simplelayout hiernach NICH EINMAL ausgeführt werden kann
+        // b) damit Simplelayout hiernach NICHT EINMAL ausgeführt werden kann
         // analog auch beim beenden beachten. (Falls es hier geändert wird, dort mitändern!)
-        [self.jQueryOutput appendString:o];
+        [self.jQueryOutput0 appendString:o];
 
 
         // Hoffentlich ist das nicht zu lax, aber wir erlauben zwischen Klassen erstmal immer
@@ -7986,7 +7990,7 @@ BOOL isJSArray(NSString *s)
             if ([self.allFoundClasses objectForKey:enclosingElem] != nil)
             {
                 // Dann IN den jQueryOutput hinein injecten
-                [self.jQueryOutput insertString:s atIndex:[self.jQueryOutput length]-31];
+                [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-31];
             }
         }
     }
@@ -9213,7 +9217,7 @@ BOOL isJSArray(NSString *s)
         // Wenn wir einen String gefunden haben, dann IN den existierenden Output injecten:
         if ([s length] > 0)
         {
-            [self.jQueryOutput insertString:s atIndex:[self.jQueryOutput length]-31];
+            [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-31];
         }
 
         self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
@@ -11885,6 +11889,11 @@ BOOL isJSArray(NSString *s)
     "    {\n"
     "        // ToDo When 'true' dann wird der Focus-Bereich z. B. auf ein bestimmtes Fenster beschränkt\n"
     "    }\n"
+    "    else if (attributeName == 'doesenter')\n"
+    "    {\n"
+    "        // if set to true, the component manager will call this component with doEnterDown\n"
+    "        // and doEnterUp when the enter key goes up or down if it is focussed\n"
+    "    }\n"
     "    else if (attributeName == 'align')\n"
     "    {\n"
     "        if (value === 'center')\n"
@@ -12689,6 +12698,9 @@ BOOL isJSArray(NSString *s)
     "// Eventuelle Kinder wurden vorher gesetzt.\n"
     "// Aber nur wenn Breite NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery.\n"
     "var adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayout = function (el) {\n"
+    "    if (el.defaultplacement && el.defaultplacement != '')\n"
+    "       el = el[el.defaultplacement];\n"
+    "\n"
     "    if ($(el).hasClass('div_window'))\n"
     "        el = $('#'+el.id+'_content').get(0);\n"
     "\n"
@@ -12717,6 +12729,9 @@ BOOL isJSArray(NSString *s)
     "// Aber nur wenn Höhe NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery.\n"
     "// (Jedoch bei rudElement MUSS es auto bleiben)\n"
     "var adjustHeightOfEnclosingDivWithHeighestChildOnSimpleLayout = function (el) {\n"
+    "    if (el.defaultplacement && el.defaultplacement != '')\n"
+    "       el = el[el.defaultplacement];\n"
+    "\n"
     "    if ($(el).hasClass('div_window'))\n"
     "        el = $('#'+el.id+'_content').get(0);\n"
     "\n"
@@ -12743,6 +12758,9 @@ BOOL isJSArray(NSString *s)
     "// Höhe mitgeben (aber nur wenn es NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery)\n"
     "// (Jedoch bei rudElement MUSS es auto bleiben)\n"
     "var adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY = function (el,spacing) {\n"
+    "    if (el.defaultplacement && el.defaultplacement != '')\n"
+    "       el = el[el.defaultplacement];\n"
+    "\n"
     "    if ($(el).hasClass('div_window'))\n"
     "        el = $('#'+el.id+'_content').get(0);\n"
     "\n"
@@ -12775,6 +12793,9 @@ BOOL isJSArray(NSString *s)
     "// X-Simplelayout: Deswegen die Breite aller beinhaltenden Elemente erster Ebene ermitteln und dem umgebenden div die Summe als\n"
     "// Breite mitgeben (aber nur wenn es NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery)\n"
     "var adjustWidthOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutX = function (el,spacing) {\n"
+    "    if (el.defaultplacement && el.defaultplacement != '')\n"
+    "       el = el[el.defaultplacement];\n"
+    "\n"
     "    if ($(el).hasClass('div_window'))\n"
     "        el = $('#'+el.id+'_content').get(0);\n"
     "\n"
@@ -12808,6 +12829,9 @@ BOOL isJSArray(NSString *s)
     "// setSimpleLayoutYIn()                                //\n"
     "/////////////////////////////////////////////////////////\n"
     "var setSimpleLayoutYIn = function (el,spacing) {\n"
+    "    if (el.defaultplacement && el.defaultplacement != '')\n"
+    "       el = el[el.defaultplacement];\n"
+    "\n"
     "    if ($(el).hasClass('div_window'))\n"
     "        el = $('#'+el.id+'_content').get(0);\n"
     "\n"
@@ -12859,6 +12883,9 @@ BOOL isJSArray(NSString *s)
     "// setSimpleLayoutXIn()                                //\n"
     "/////////////////////////////////////////////////////////\n"
     "var setSimpleLayoutXIn = function (el,spacing) {\n"
+    "    if (el.defaultplacement && el.defaultplacement != '')\n"
+    "       el = el[el.defaultplacement];\n"
+    "\n"
     "    if ($(el).hasClass('div_window'))\n"
     "        el = $('#'+el.id+'_content').get(0);\n"
     "\n"
@@ -13111,6 +13138,12 @@ BOOL isJSArray(NSString *s)
     "    // Derzeitige Lösung: Bei Text nicht appenden, sondern ersetzen... (und die Attribute übernehmen)\n"
     "    if (obj.parent.name === 'text' || obj.parent.name === 'inputtext' || obj.parent.name === 'basewindow' || obj.parent.name === 'button')\n"
     "    {\n"
+    "        var gesicherteAttribute = {};\n"
+    "        Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
+    "        {\n"
+    "            gesicherteAttribute[key] = id[key];\n"
+    "        });\n"
+    "\n"
     "        // Da wir ersetzen, bekommt dieses Element den Universal-id-Namen\n"
     "        obj.parent.contentHTML = replaceID(obj.parent.contentHTML,''+$(id).attr('id'));\n"
     "        var theSavedCSSFromRemovedElement = $(id).replaceWith(obj.parent.contentHTML).attr('style');\n"
@@ -13120,10 +13153,13 @@ BOOL isJSArray(NSString *s)
     "        window[id.id] = id; // Falls es irgendwo als parent gesetzt wurde, puh... überlegen, wie ich da dran käme\n"
     "        // Und das gerettete CSS wieder einsetzen\n"
     "        $(id).attr('style',theSavedCSSFromRemovedElement);\n"
+    "\n"
     "        // Und die Original-Propertys wieder herstellen mit Default-Werten (Wie käme ich an die Nicht-Default-Werte ... ?)\n"
+    "        // Jupp. Gelöst! In dem ich alle selbst gesetzten Attribute vorher sichere und nun setze\n"
     "        Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
     "        {\n"
-    "            id[key] = obj.selfDefinedAttributes[key];\n"
+    //"            id[key] = obj.selfDefinedAttributes[key];\n"
+    "            id[key] = gesicherteAttribute[key];\n"
     "        });\n"
     "    }\n"
     "    else\n"
@@ -13230,6 +13266,12 @@ BOOL isJSArray(NSString *s)
     "        // 'on' entfernen\n"
     "        an[i] = an[i].substr(2);\n"
     "\n"
+    "        if ($(id).hasClass('noPointerEvents'))\n"
+    "          $(id).removeClass('noPointerEvents');\n"
+    "        // Auch noch von der umgebenden view (Container der Klasse) die pointerEvents entfernen\n"
+    "        if ($(id).parent().hasClass('noPointerEvents'))\n"
+    "          $(id).parent().removeClass('noPointerEvents');\n"
+    "\n"
     "        // Array-Variable in diesen Scope holen, damit ich sie in die Funktion einfügen kann\n"
     "        var executeInOnFunction = av[i];\n"
     "\n"
@@ -13254,22 +13296,13 @@ BOOL isJSArray(NSString *s)
     "      {\n"
     "        // ToDo\n"
     "      }\n"
-    "      else if (an[i] === 'doesenter')\n"
-    "      {\n"
-    "        // if set to true, the component manager will call this component with doEnterDown\n"
-    "        // and doEnterUp when the enter key goes up or down if it is focussed\n"
-    "      }\n"
     "      else if (an[i] === 'initstage' && av[i] === 'defer')\n"
     "      {\n"
     "        //$(id).hide() // ToDo: Bricht Anzeige Kinder;\n"
     "      }\n"
-    "      else if (an[i] === 'resource' || an[i] === 'focustrap' || an[i] === 'visible' || an[i] === 'resizable')\n"
+    "      else if (an[i] === 'resource' || an[i] === 'focustrap' || an[i] === 'visible' || an[i] === 'resizable' || an[i] === 'align' || an[i] === 'doesenter')\n"
     "      {\n"
-    "          id.setAttribute_(an[i],av[i]);\n"
-    "      }\n"
-    "      else if (an[i] === 'align' && av[i] === 'right')\n"
-    "      {\n"
-    "        $(id).css('left',$(id).parent().width()-$(id).width());\n"
+    "        id.setAttribute_(an[i],av[i]);\n"
     "      }\n"
     "      else if (an[i] === 'layout' && !av[i].contains('class') &&  av[i].replace(/\\s/g,'').contains('axis:x'))\n"
     "      {\n"
@@ -13298,7 +13331,7 @@ BOOL isJSArray(NSString *s)
     "        // JEDE Klasse hat das Attribut 'text', weil es den Text zwischen öffnendem und schließendem Tag darstellt\n"
     "        // Deswegen nur dann setzen, wenn auch Text zwischen den Tags war. Sonst werden eventuell andere Tags überschrieben\n"
     "        if (av[i] != '')\n"
-    "            $(id).html(av[i]);\n"
+    "            id.setAttribute_(an[i],av[i]);\n"
     "      }\n"
     "      else { alert('Hoppala, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() als jsAttribute ausgewertet werden.'); }\n"
     "    }\n"
@@ -13482,6 +13515,7 @@ BOOL isJSArray(NSString *s)
     "  this.attributeValues = [];\n"
     "\n"
     "  this.contentHTML = '';\n"
+    //"  this.contentHTML = '<div id=\"@!JS,PLZ!REPLACE!ME!@\" class=\"div_standard\" />';\n"
     "}\n"
     "\n"
     "\n"

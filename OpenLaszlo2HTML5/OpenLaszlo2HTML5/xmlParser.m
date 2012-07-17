@@ -45,6 +45,8 @@ BOOL kompiliereSpeziellFuerTaxango = YES;
 
 
 
+BOOL werteItemUndItemsAlsArrayAus = YES; // Muss ich noch in eine XML-Struktur überführen
+
 
 
 #import "xmlParser.h"
@@ -1895,6 +1897,9 @@ void OLLog(xmlParser *self, NSString* s,...)
     // und wenn ich den getter probiere zu überschreiben, gibt es eine Rekursion.
     s = [self inString:s searchFor:@".width" andReplaceWith:@".myWidth" ignoringTextInQuotes:YES];
 
+    // dataset ist eine interne Property von ECMAScript 5. Keine Property darf so heißen.
+    s = [self inString:s searchFor:@".dataset" andReplaceWith:@".myDataset" ignoringTextInQuotes:YES];
+
     // Das OpenLaszlo-'name' muss ersetzt werden (über getter klappt nicht)
     // Der getter muss neu benannt werden, da intern von jQuery benutzt
     // und wenn ich den getter probiere zu überschreiben, gibt es eine Rekursion.
@@ -1922,8 +1927,8 @@ void OLLog(xmlParser *self, NSString* s,...)
     if ([s isEqualToString:@"width"])
         s = @"myWidth";
 
-    //if ([s isEqualToString:@"name"])
-    //    s = @"myName";
+    if ([s isEqualToString:@"dataset"])
+        s = @"myDataset";
 
     return s;
 }
@@ -2164,7 +2169,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
     }
 
-    if (!kompiliereSpeziellFuerTaxango)
+    else
+
     if ([attributeDict valueForKey:@"visible"])
     {
         self.attributeCount++;
@@ -2486,7 +2492,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         [self.jQueryOutput appendString:@"\n  // self-invoking function with with and with bind (anstelle des Attributs ondata)\n"];
         // asbfnalbjfas WARUM AUCH IMMER, muss da nochmal ein ready drum herum. Irgendwas ist
-        // da out of sync. Problem trat auf bei Beispiel 11.4 (mit embeded dataset aber...)!
+        // da was out of sync. Problem trat auf bei Beispiel 11.4 (mit embeded dataset aber...)!
         [self.jQueryOutput appendString:@"  $(window).ready(function() {\n"];
         [self.jQueryOutput appendFormat:@"    (function(){ with (this) { %@ } }).bind(%@)();\n",s,idName];
         [self.jQueryOutput appendString:@"  });\n"];
@@ -2503,10 +2509,14 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSLog(@"Setting the attribute 'datapath' by accessing a temporary datapointer.");
 
         NSString *dp = [attributeDict valueForKey:@"datapath"];
+        if ([dp hasPrefix:@"$"])
+            dp = [self makeTheComputedValueComputable:dp];
+        else
+            dp = [NSString stringWithFormat:@"'%@'",dp];
 
         NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
-        // if (![dp hasPrefix:@"@"])
+
         if ([dp rangeOfString:@":"].location != NSNotFound)
         {
             [o appendString:@"\n  // datapath-Attribut mit : im String (also ein absoluter XPath). Ich werte die XPath-Angabe über einen temporär angelegten Datapointer aus.\n"];
@@ -2514,8 +2524,8 @@ void OLLog(xmlParser *self, NSString* s,...)
             [o appendString:@"  // Aber nur, wenn es eine Text-Node ist. Denn es kann auch nur ein Pfad angegeben sein, auf den sich dann tiefer verschachtelte Elemente beziehen.\n"];
             [o appendString:@"  // Liefert der XPath-Request mehrere Ergebnisse zurück, muss ich hingegen das Div entsprechend oft duplizieren.\n"];
             [o appendString:@"  // Außerdem XPath speichern, damit Kinder darauf zugreifen können.\n"];
-            [o appendFormat:@"  $('#%@').data('XPath','%@');\n",idName,dp];
-            [o appendFormat:@"  var lastDP = new lz.datapointer('%@',false);\n",dp];
+            [o appendFormat:@"  $('#%@').data('XPath',%@);\n",idName,dp];
+            [o appendFormat:@"  var lastDP = new lz.datapointer(%@,false);\n",dp];
             [o appendString:@"  if (lastDP.getXPathIndex() > 1)\n"];
             [o appendString:@"  {\n"];
             [o appendString:@"    // Markieren, weil dies Auswirkungen auf viele Dinge hat...\n"];
@@ -2575,7 +2585,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             if (!kompiliereSpeziellFuerTaxango)
             {
                 [o appendString:@"\n  // Ein relativer Pfad! Dann nehme ich Bezug zum letzten lastDP und dem dort gesetzten Pfad.\n"];
-                [o appendFormat:@"  setRelativeDataPathIn(%@,'%@',lastDP,'text');\n",idName,dp];
+                [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP,'text');\n",idName,dp];
             }
         }
 
@@ -3386,7 +3396,7 @@ didStartElement:(NSString *)elementName
     }
 
 
-
+    if (werteItemUndItemsAlsArrayAus)
     if ([elementName isEqualToString:@"items"])
     {
         element_bearbeitet = YES;
@@ -4104,6 +4114,7 @@ didStartElement:(NSString *)elementName
 
     // ToDo falls kommerziell: Die gefunden Attribute automatisch hinzufügen zur Klasse und
     // nicht wie hier, weil wir wissen welche Attribute es alles gibt bei 'item'
+    if (werteItemUndItemsAlsArrayAus)
     if ([elementName isEqualToString:@"item"])
     {
         element_bearbeitet = YES;
@@ -5026,7 +5037,8 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"BDScombobox"]) // ToDo -  als Klasse auslesen
+    if ([elementName isEqualToString:@"BDScombobox"] ||
+        [elementName isEqualToString:@"comboboxXXX"]) // ToDo -  als Klasse auslesen
     {
         element_bearbeitet = YES;
 
@@ -5101,7 +5113,8 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"\">\n"];
 
-
+if (![elementName isEqualToString:@"combobox"])
+{
         if (![attributeDict valueForKey:@"dataset"])
         {
             [self instableXML:@"ERROR: No attribute 'dataset' given in BDScombobox-tag"];
@@ -5158,6 +5171,9 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"<!-- Inhalt wird per jQuery von folgender Anweisung gesetzt: "];
         [self.output appendString:theId];
         [self.output appendString:@"__CodeMarker -->\n"];
+}
+
+
 
         // Select auch wieder schließen
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
@@ -7699,7 +7715,7 @@ didStartElement:(NSString *)elementName
                 if (isNumeric(value) || isJSArray(value))
                     weNeedQuotes = NO;
 
-                // Falls es ein berechneter Wert war, erkenne wir es an der Markierung
+                // Falls es ein berechneter Wert war, erkennen wir es an der Markierung
                 // Dann Markierung raushauen und wir brauchen dann keine Quotes
                 // Außerdem das korrekte Element für this ersetzen
                 if ([value hasPrefix:@"@§.BERECHNETERWERT.§@"])
@@ -7798,7 +7814,8 @@ didStartElement:(NSString *)elementName
         {
             [o appendString:@"\n  // Nach dem setzen der Defaultwerte nun setzen der Klassen-Variablen, die diese Angaben überschreiben"];
 
-            for (NSString *key in d)
+            // '__strong', damit ich object modifizieren kann
+            for (NSString __strong *key in d)
             {
                 self.attributeCount++;
 
@@ -7814,6 +7831,8 @@ didStartElement:(NSString *)elementName
                     s = [self makeTheComputedValueComputable:s];
                     weNeedQuotes = NO;
                 }
+
+                key = [self somePropertysNeedToBeRenamed:key];
 
                 if (weNeedQuotes)
                 {
@@ -8205,12 +8224,9 @@ BOOL isJSArray(NSString *s)
     // Dataset nicht das schließende Tag der XML-Struktur auch bei Arrays anlegt
     // Langfristig eh überdenken, ob es noch sinnvoll ist Arrays anzulegen.
     // Am besten IMMER xml-struktur, wenn möglich.
+    if (werteItemUndItemsAlsArrayAus)
     if ([elementName isEqualToString:@"items"])
-    //{
         element_geschlossen = YES;
-
-    //    self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;        
-    //}
     
 
 
@@ -8481,14 +8497,34 @@ BOOL isJSArray(NSString *s)
             {
                 NSString *value = [keys valueForKey:key];
 
-                // Falls Bedingung zutrifft, dann ohne Anführungszeichen, ansonsten mit
+
+                BOOL weNeedQuotes = YES;
+
                 if (isNumeric([keys valueForKey:key]) || isJSArray([keys valueForKey:key]))
+                    weNeedQuotes = NO;
+
+
+                // Falls es ein berechneter Wert war, erkennen wir es an der Markierung
+                // Dann Markierung raushauen und wir brauchen dann keine Quotes
+                // Außerdem das korrekte Element für this ersetzen
+                if ([value hasPrefix:@"@§.BERECHNETERWERT.§@"])
+                {
+                    value = [value substringFromIndex:21];
+
+                    // Wieder zurück an 'this' binden. Ka. Alternative wäre es zu lassen und zur Laufzeit auszuwerten
+                    value = [value stringByReplacingOccurrencesOfString:ID_REPLACE_STRING withString:@"this"];
+
+                    weNeedQuotes = NO;
+                }
+
+
+                if (!weNeedQuotes)
                 {
                     [self.jsOLClassesOutput appendFormat:@" %@ : %@,", key, value];
                 }
                 else
                 {
-                    // ' und Newlines escapen:
+                    // ' und Newlines escapen bei Strings:
                     value = [value stringByReplacingOccurrencesOfString:@"\'" withString:@"\\'"];
                     value = [value stringByReplacingOccurrencesOfString:@"\n" withString:@"\\\n"];
 
@@ -8930,6 +8966,7 @@ BOOL isJSArray(NSString *s)
 
 
     // Schließen von item
+    if (werteItemUndItemsAlsArrayAus)
     if ([elementName isEqualToString:@"item"])
     {
         element_geschlossen = YES;
@@ -12117,6 +12154,8 @@ BOOL isJSArray(NSString *s)
     "          attributeName === 'spacing' ||\n"
     "          attributeName === 'controlwidth' ||\n"
     "          attributeName === 'inset_y' ||\n"
+    "          attributeName === 'focused' ||\n"
+    "          attributeName === 'isopen' ||\n"
     "          attributeName === 'avalue')\n"
     "      {\n"
     "         if (this[attributeName] !== undefined)\n"
@@ -12467,9 +12506,34 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "////////////////////////INCOMPLETE///////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
-    "// cb ist der undokumentierte Zugriff auf das Checkbox-Feld\n"
+    "// cb ist der undokumentierte Zugriff auf das eigentliche Checkbox-Feld\n"
     "// Zugriff darauf wird derzeit nicht unterstützt\n"
     "HTMLInputElement.prototype.cb = { setAttribute_ : function(){} }\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Methoden von <select> (OL: <basecombobox>)          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "////////////////////////INCOMPLETE///////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "HTMLSelectElement.prototype.isopen = false;\n"
+    "\n"
+    "// cblist ist der undokumentierte Zugriff auf die <option>-Elemente der Liste\n"
+    "// bzw. auf das Element da drum herum. Also auf uns selber?\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter for 'cblist'                                 //\n"
+    "// READ-ONLY                                           //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(HTMLSelectElement.prototype, 'cblist', {\n"
+    "    get : function(){ return this; /* $(this).find('select').get(0); */ },\n"
+    "    /* READ-ONLY set : , */\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
@@ -13199,21 +13263,30 @@ BOOL isJSArray(NSString *s)
     "{\n"
     "  // Neu Durchlauf 1: Alle selbst definierten Attribute werden direkt an das Element gebunden\n"
     "  // Dies muss als allererstes passieren, da in Unterklassen definierte Methoden oder Attrbute bereits darauf zugreifen können\n"
+    "  // Muss deswegen auch rückwärts ausgewertet werden\n"
     "  var currentObj = obj; // Zwischenspeichern\n"
+    "  var rueckwaertsArray = [];\n"
     "  while (obj.parent !== undefined)\n"
     "  {\n"
-    "    if (obj.selfDefinedAttributes)\n"
-    "    {\n"
-    "        Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
-    "        {\n"
-    "            // Bitte nichts überschreiben, was ich gerade erst beim instanzieren der Klasse gesetzt haben\n"
-    "            if (id[key] === undefined)\n"
-    "                id[key] = obj.selfDefinedAttributes[key];\n"
-    "        });\n"
-    "    }\n"
+    "    rueckwaertsArray.push(obj);\n"
     "    obj = obj.parent;\n"
     "  }\n"
     "  obj = currentObj; // Wieder unser Original-Objekt setzen\n"
+    "  rueckwaertsArray.reverse();\n"
+    "\n"
+    "  for (var i = 0;i<rueckwaertsArray.length;i++)\n"
+    "  {\n"
+    "    var obj = rueckwaertsArray[i];\n"
+    "    if (obj.selfDefinedAttributes)\n"
+    "    {\n"
+    "      Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
+    "      {\n"
+    "        // Bitte nichts überschreiben, was ich gerade erst beim instanzieren der Klasse gesetzt haben\n"
+    "        if (id[key] === undefined)\n"
+    "          id[key] = obj.selfDefinedAttributes[key];\n"
+    "      });\n"
+    "    }\n"
+    "  }\n"
     "\n"
     "\n"
     "\n"

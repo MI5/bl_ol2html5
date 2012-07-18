@@ -37,7 +37,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -199,6 +199,8 @@ BOOL werteItemUndItemsAlsArrayAus = YES; // Muss ich noch in eine XML-Struktur �
 @property (nonatomic) BOOL onInitInHandler;
 // 'reference'-Variable in einem Handler muss an das korrekte Element gebunden werden
 @property (nonatomic) BOOL referenceAttributeInHandler;
+// 'method'-Variable in einem Handler
+@property (strong, nonatomic) NSString *methodAttributeInHandler;
 
 @end
 
@@ -259,7 +261,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize weAreCollectingTheCompleteContentInClass = _weAreCollectingTheCompleteContentInClass;
 @synthesize weAreSkippingTheCompleteContentInThisElement = _weAreSkippingTheCompleteContentInThisElement;
 
-@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, referenceAttributeInHandler = _referenceAttributeInHandler;
+@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler;
 
 
 
@@ -398,6 +400,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.ignoreAddingIDsBecauseWeAreInClass = NO;
         self.onInitInHandler = NO;
         self.referenceAttributeInHandler = NO;
+        self.methodAttributeInHandler = @"";
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
         self.allFoundClasses = [[NSMutableDictionary alloc] initWithCapacity:200];
@@ -3267,24 +3270,16 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Defaults to true.
     // Falls sich der Textinhalt ändert, soll sich bei true, die Größe also mitändern
     // true = default, und auch in HTML default
+    NSString *resize = @"true";
     if ([attributeDict valueForKey:@"resize"])
     {
-        if ([[attributeDict valueForKey:@"resize"] isEqualToString:@"true"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'resize=true', because this behaviour is default.");
-        }
+        self.attributeCount++;
+        NSLog(@"Setting the attribute 'resize' as the property of this text-element.");
 
-        if ([[attributeDict valueForKey:@"resize"] isEqualToString:@"false"])
-        {
-            self.attributeCount++;
-            // Einmal die Width mit sich selber setzen, damit sie fix wird
-            NSLog(@"Setting the attribute 'resize=false' as fixed width.");
-
-            [self.jQueryOutput appendFormat:@"\n  // Setting the width with myself, because resize=false, so I won't resize\n"];
-            [self.jQueryOutput appendFormat:@"  $('#%@').width($('#%@').width());\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-        }
+        resize = [attributeDict valueForKey:@"resize"];
     }
+    [self.jQueryOutput appendFormat:@"\n  // All <text>'s have the 'property' resize\n"];
+    [self.jQueryOutput appendFormat:@"  %@.setAttribute_('resize',%@);\n",self.zuletztGesetzteID,resize];
 
 
     if ([attributeDict valueForKey:@"text"])
@@ -4846,8 +4841,8 @@ didStartElement:(NSString *)elementName
 
 
 
-    // ToDo: Eigentlich sollte das hier selbständig hinzugefügt werden und anhand der definierten Klasse
-    // erkannt werden.
+    // ToDo: Eigentlich sollte das hier selbständig hinzugefügt werden und anhand
+    // der definierten Klasse erkannt werden.
     if ([elementName isEqualToString:@"BDStext"] || [elementName isEqualToString:@"statictext"])
     {
         element_bearbeitet = YES;
@@ -5038,7 +5033,7 @@ didStartElement:(NSString *)elementName
 
 
     if ([elementName isEqualToString:@"BDScombobox"] ||
-        [elementName isEqualToString:@"comboboxXXX"]) // ToDo -  als Klasse auslesen
+        [elementName isEqualToString:@"comboboxxxx"]) // ToDo -  als Klasse auslesen
     {
         element_bearbeitet = YES;
 
@@ -5048,8 +5043,7 @@ didStartElement:(NSString *)elementName
 
         // Umgebendes <Div> für die komplette Combobox inklusive Text
         // WOW, dieses vorangehende <br /> als Lösung zu setzen, hat mich 3 Stunden Zeit gekostet...
-        // ToDo: Eigentlich muss ich per jQuery immer entsprechend der Höhe und der X-Koordinate
-        // des vorherigen Elements hier aufrücken <--- Alles Quatsch jetzt, nach der neuen Lösung.
+        // Quatsch, jetzt nach der neuen Lösung.
         [self.output appendString:@"<div class=\"div_combobox\">\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
@@ -6155,8 +6149,7 @@ if (![elementName isEqualToString:@"combobox"])
 
 
 
-    // Wohl nichts zu tun (ist eine eigens definierte class - ToDo, falls wir class-Tags auslesen wollen)
-    // Unsinn! Das sind Flash-Cookies
+    // Das sind Flash-Cookies (ToDo)
     if ([elementName isEqualToString:@"SharedObject"])
     {
         element_bearbeitet = YES;
@@ -7253,6 +7246,19 @@ if (![elementName isEqualToString:@"combobox"])
         BOOL alsBuildInEventBearbeitet = NO;
 
 
+        if ([attributeDict valueForKey:@"method"])
+        {
+            self.attributeCount++;
+            NSLog(@"Using the attribute 'method' as method to call in this handler.");
+
+            self.methodAttributeInHandler = [attributeDict valueForKey:@"method"];
+        }
+        else
+        {
+            self.methodAttributeInHandler = @"";
+        }
+
+
         if ([name isEqualToString:@"onclick"])
         {
             // Muss ganz am Anfang stehen, damit sich die Codezeilen nicht gegenseitig beeinflussen
@@ -7705,6 +7711,8 @@ if (![elementName isEqualToString:@"combobox"])
         if ([keys count] > 0)
         {
             [o appendString:@"\n  // Setzen aller Attribute der Klasse mit den Defaultwerten"];
+            [o appendString:@"\n  // Falls er hier schon auf eine Var zugreift, die erst in einer parent-Klasse definiert wird, nicht schlimm. Dann ist es undefined"];
+            [o appendString:@"\n  // Und da undefined, wird es in interpretObject() dann 'überschrieben'"];
 
             for (NSString *key in keys)
             {
@@ -7823,7 +7831,7 @@ if (![elementName isEqualToString:@"combobox"])
 
                 BOOL weNeedQuotes = YES;
 
-                if (isNumeric([keys valueForKey:key]) || isJSArray([keys valueForKey:key]))
+                if (isNumeric(s) || isJSArray(s))
                     weNeedQuotes = NO;
 
                 if ([s hasPrefix:@"$"])
@@ -7886,11 +7894,11 @@ if (![elementName isEqualToString:@"combobox"])
 
 
 
-        // in jQueryOutput0! Damit a) keine weiteren Elemente überschrieben werden, weil anhand der gesetzten
-        // css wird erkannt, welche überschrieben werden dürfen und welche nicht.
-        // Verschlechtet und verbessert sich noch zu gleich! (ToDo) Deswegen noch unsicher, ob so richtig.
-        // War früher jQueryOutput.
+        // in jQueryOutput0! Damit a) keine weiteren Elemente überschrieben werden,
+        // weil anhand der gesetzten css wird erkannt, welche überschrieben werden dürfen
+        // und welche nicht.
         // b) damit Simplelayout hiernach NICHT EINMAL ausgeführt werden kann
+        // War früher jQueryOutput.
         // analog auch beim beenden beachten. (Falls es hier geändert wird, dort mitändern!)
         [self.jQueryOutput0 appendString:o];
 
@@ -8509,12 +8517,14 @@ BOOL isJSArray(NSString *s)
                 // Außerdem das korrekte Element für this ersetzen
                 if ([value hasPrefix:@"@§.BERECHNETERWERT.§@"])
                 {
-                    value = [value substringFromIndex:21];
+                    //value = [value substringFromIndex:21];
 
                     // Wieder zurück an 'this' binden. Ka. Alternative wäre es zu lassen und zur Laufzeit auszuwerten
-                    value = [value stringByReplacingOccurrencesOfString:ID_REPLACE_STRING withString:@"this"];
+                    //value = [value stringByReplacingOccurrencesOfString:ID_REPLACE_STRING withString:@"this"];
 
-                    weNeedQuotes = NO;
+                    //weNeedQuotes = NO;
+                    // Neu: Nichts machen. Wir müssen es erst zur Laufzeit auswerten, weil wir erst
+                    // dann this korrekt setzen können (this == das aktuelle Objekt)
                 }
 
 
@@ -9145,65 +9155,77 @@ BOOL isJSArray(NSString *s)
     {
         element_geschlossen = YES;
 
-        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
-
-        NSLog([NSString stringWithFormat:@"Original code defined in handler: \n**********\n%@\n**********",s]);
-
-
-        s = [self indentTheCode:s];
-
-
-        s = [self modifySomeExpressionsInJSCode:s];
-
-
-        // OL benutzt 'classroot' als Variable für den Zugriff auf das erste in einer Klasse
-        // definierte Elemente. Deswegen, falls wir eine Klasse auswerten, einfach die Var setzen
-        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-            [self.jQueryOutput appendFormat:@"var classroot = %@;\n    ",ID_REPLACE_STRING];
-
-
-        if (self.onInitInHandler)
+        if ([self.methodAttributeInHandler length] > 0)
         {
-            [self.jQueryOutput appendString:s];
-            [self.jQueryOutput appendFormat:@"\n    }\n  }\n  bindMeToCorrectScope.bind(%@)();\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1]];
+            [self.jQueryOutput appendString:@"if (this == e.target) {\n      "];
+
+            [self.jQueryOutput appendFormat:@"this.%@();\n    }\n",self.methodAttributeInHandler];
+
+            [self.jQueryOutput appendString:@"  });\n"];
         }
         else
         {
-            // Gemäß OpenLaszlo reagieren, entgegen JS, eventuelle Kinder nicht auf das Ereignis!
-            // Deswegen diese Zeile davorschalten. Variable 'e' wurde vorher als Argument gesetzt
-            // Wenn ich innerhalb einer Klasse bin, kann ich nicht so restriktiv sein, weil ich derzeit ja zu dem
-            // außenstehenden Element appende, anstatt es zu ersetzen. (2. Beispiel von <text> in der OL-Doku)
-            // Ich denke es klappt jetzt auch so, seitdem ich das äußerste Elemente bei <class extends="text">
-            // ersetze, anstatt zu appenden. Dadurch spreche ich automatisch das richtige Element an!
+            NSString *s = [self holDenGesammeltenTextUndLeereIhn];
 
-            // bei reference ist es ein anderes this, und gleichzeitig kann ich dann nicht auf
-            // e.target testen. Der Witz ist ja gerade, dass es wo anders dran gebunden wurde.
-            if (self.referenceAttributeInHandler)
+            NSLog([NSString stringWithFormat:@"Original code defined in handler: \n**********\n%@\n**********",s]);
+
+
+            s = [self indentTheCode:s];
+
+
+            s = [self modifySomeExpressionsInJSCode:s];
+
+
+            // OL benutzt 'classroot' als Variable für den Zugriff auf das erste in einer Klasse
+            // definierte Element. Deswegen, falls wir eine Klasse auswerten, einfach diese Var setzen
+            if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+                [self.jQueryOutput appendFormat:@"var classroot = %@;\n    ",ID_REPLACE_STRING];
+
+            if (self.onInitInHandler)
             {
-                [self.jQueryOutput appendString:@"  // Wegen 'reference'-Attribut falsches this. Dieses korrigieren mit selbst ausführender Funktion und bind()\n"];                
-                [self.jQueryOutput appendString:@"      (function() {\n      with (this) {\n        "];
+                [self.jQueryOutput appendString:s];
+                [self.jQueryOutput appendFormat:@"\n    }\n  }\n  bindMeToCorrectScope.bind(%@)();\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1]];
             }
             else
             {
-                [self.jQueryOutput appendString:@"if (this == e.target) {\n      with (this) {\n        "];
+                // Gemäß OpenLaszlo reagieren, entgegen JS, eventuelle Kinder nicht auf das Ereignis
+                // Deswegen diese Zeile davorschalten. Variable 'e' wurde vorher als Argument gesetzt
+                // Wenn ich innerhalb einer Klasse bin, kann ich nicht so restriktiv sein, weil ich derzeit ja zu dem
+                // außenstehenden Element appende, anstatt es zu ersetzen. (2. Beispiel von <text> in der OL-Doku)
+                // Ich denke es klappt jetzt auch so, seitdem ich das äußerste Elemente bei <class extends="text">
+                // ersetze, anstatt zu appenden. Dadurch spreche ich automatisch das richtige Element an!
+
+                // bei reference ist es ein anderes this, und gleichzeitig kann ich dann nicht auf
+                // e.target testen. Der Witz ist ja gerade, dass es wo anders dran gebunden wurde.
+                if (self.referenceAttributeInHandler)
+                {
+                    [self.jQueryOutput appendString:@"  // Wegen 'reference'-Attribut falsches this. Dieses korrigieren mit selbst ausführender Funktion und bind()\n"];                
+                    [self.jQueryOutput appendString:@"      (function() {\n      with (this) {\n        "];
+                }
+                else
+                {
+                    [self.jQueryOutput appendString:@"if (this == e.target) {\n      with (this) {\n        "];
+                }
+
+                [self.jQueryOutput appendString:s];
+
+                [self.jQueryOutput appendString:@"\n      }\n"];
+
+                if (self.referenceAttributeInHandler)
+                    [self.jQueryOutput appendFormat:@"    }).bind(%@)();\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1]];
+                else
+                    [self.jQueryOutput appendString:@"    }\n"];
+
+                [self.jQueryOutput appendString:@"  });\n"];
             }
-
-            [self.jQueryOutput appendString:s];
-
-            [self.jQueryOutput appendString:@"\n      }\n"];
-
-            if (self.referenceAttributeInHandler)
-                [self.jQueryOutput appendFormat:@"    }).bind(%@)();\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1]];
-            else
-                [self.jQueryOutput appendString:@"    }\n"];
-
-            [self.jQueryOutput appendString:@"  });\n"];
         }
 
         // Erkennungszeichen für oninit in jedem Fall zurücksetzen
         self.onInitInHandler = NO;
         // Erkennungszeichen für 'reference'-Attribut auf jeden Fall zurücksetzen
         self.referenceAttributeInHandler = NO;
+        // Erkennungszeichen für 'method'-Attribut auf jeden Fall zurücksetzen
+        self.methodAttributeInHandler = @"";
     }
 
 
@@ -9231,9 +9253,11 @@ BOOL isJSArray(NSString *s)
         }
 
         s = [self modifySomeExpressionsInJSCode:s];
+        // In String auftauchende '\n' müssen ersetzt werden, sonst JS-Error. Gilt das sogar global?
+        s = [s stringByReplacingOccurrencesOfString:@"\\n" withString:@"\\\\n"];
 
         // super ist nicht erlaubt in JS und gibt es auch nicht.
-        // Ich ersetze es erstmal durch this.getTheParent(). Sollte funktionieren
+        // Ich ersetze es erstmal durch this.getTheParent(). Sollte funktionieren.
         s = [s stringByReplacingOccurrencesOfString:@"super" withString:@"this.getTheParent()"];
 
 
@@ -11080,6 +11104,12 @@ BOOL isJSArray(NSString *s)
     //"            text: 'Go to Google!'\n"
     "        }).appendTo(scope);\n"
     "    }\n"
+    "    else if (name === 'rotateDigit') { /*ToDo - Warum matcht er das nicht automatisch? */\n"
+    "        jQuery('<div/>', {\n"
+    "            id: id,\n"
+    "            class: 'div_standard noPointerEvents',\n"
+    "        }).appendTo(scope);\n"
+    "    }\n"
     "    else\n"
     "    {\n"
     "        alert('Das muss ich noch unterstützen: '+name);\n"
@@ -12114,6 +12144,27 @@ BOOL isJSArray(NSString *s)
     "              throw 'setAttribute_ - Error trying to set reource. (value = '+value+', me.id = '+me.id+').';\n"
     "        }\n"
     "    }\n"
+    "    else if ($(me).hasClass('div_text') && (attributeName == 'thickness' || attributeName == 'sharpness')) // Nur vom Element 'text' von Haus aus gesetztes Attribut\n"
+    "    {\n"
+    "        // Flash-Only Attributes, that will be ignored\n"
+    "    }\n"
+    "    else if ($(me).hasClass('div_text') && (attributeName == 'resize')) // Nur vom Element 'text' von Haus aus gesetztes Attribut\n"
+    "    {\n"
+    "        // In jedem Falle speichern. Es wird von addText()/setText() berücksichtigt.\n"
+    "        me.resize = value;\n"
+    "\n"
+    "        if (value === false)\n"
+    "        {\n"
+    "            // Setting the width with myself, because resize=false, so I won't resize accidently\n"
+    "            $(me).width($(me).width());\n"
+    "        \n"
+    "        }\n"
+    "        if (value === true)\n"
+    "        {\n"
+    "            $(me).css('height','auto');\n"
+    "        \n"
+    "        }\n"
+    "    }\n"
     "    else if ($(me).hasClass('iframe_standard') && attributeName == 'src') // Nur vom Element 'html' von Haus aus gesetztes Attribut\n"
     "    {\n"
     "        // src-Attribut des iframe setzen\n"
@@ -12156,6 +12207,8 @@ BOOL isJSArray(NSString *s)
     "          attributeName === 'inset_y' ||\n"
     "          attributeName === 'focused' ||\n"
     "          attributeName === 'isopen' ||\n"
+    "          attributeName === 'parentnumber' ||\n"
+    "          attributeName === 'index' ||\n"
     "          attributeName === 'avalue')\n"
     "      {\n"
     "         if (this[attributeName] !== undefined)\n"
@@ -12201,23 +12254,6 @@ BOOL isJSArray(NSString *s)
     "// Aber HTMLDivElement... wtf Firefox??\n"
     "// HTMLDivElement.prototype.setAttribute = setAttributeFunc; // <- Nicht mehr nötig seit setAttribute_\n"
     "// HTMLInputElement.prototype.setAttribute = setAttributeFunc; // <- Nicht mehr nötig seit setAttribute_\n"
-    //"\n"
-    //"\n"
-    //"/////////////////////////////////////////////////////////\n"
-    //"// Damit setAttribute zwischen indirekten (window) und direkten Aufrufen unterscheiden kann//\n"
-    //"/////////////////////////////////////////////////////////\n"
-    //"// Globaler Zugriff auf letztes this\n"
-    //"var globalMe = undefined;\n"
-    //"function setGlobalMe(me_)\n"
-    //"{\n"
-    //"    globalMe = me_;\n"
-    //"}\n"
-    //"// Wird nach jedem this wieder aufgerufen, damit ich unterscheiden kann ob ich in\n"
-    //"// setAttribute this oder me verwenden muss\n"
-    //"/* ----wohl doch nicht nötig. ToDo (Delete)---- function unsetGlobalMe()\n"
-    //"{\n"
-    //"    globalMe = undefined;\n"
-    //"} */\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -13283,7 +13319,23 @@ BOOL isJSArray(NSString *s)
     "      {\n"
     "        // Bitte nichts überschreiben, was ich gerade erst beim instanzieren der Klasse gesetzt haben\n"
     "        if (id[key] === undefined)\n"
-    "          id[key] = obj.selfDefinedAttributes[key];\n"
+    "        {\n"
+    "          var value = obj.selfDefinedAttributes[key]\n"
+    "\n"
+    "          if (typeof value === 'string' && value.startsWith('@§.BERECHNETERWERT.§@'))\n"
+    "          {\n"
+    "            value = value.substr(21);\n"
+    "            value = replaceID(value,''+$(id).attr('id'));\n"
+    "\n"
+    "            var evalString = 'id[key] = ' + value + ';'\n"
+    "            //alert(evalString);\n"
+    "            eval(evalString);\n"
+    "          }\n"
+    "          else\n"
+    "          {\n"
+    "            id[key] = value;\n"
+    "          }\n"
+    "        }\n"
     "      });\n"
     "    }\n"
     "  }\n"
@@ -13413,7 +13465,7 @@ BOOL isJSArray(NSString *s)
     //"    alert(an[i]);\n"
     //"    alert(av[i]);\n"
     "    var cssAttributes = ['bgcolor','x','y','width','height'];\n"
-    "    var jsAttributes = ['onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown','focusable','styleable','layout','initstage','doesenter','align','resource','focustrap','visible','resizable','text'];\n"
+    "    var jsAttributes = ['onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown','focusable','styleable','layout','initstage','text'];\n"
     "    if (jQuery.inArray(an[i],cssAttributes) != -1)\n"
     "    {\n"
     "        if (an[i] === 'bgcolor')\n"
@@ -13491,10 +13543,6 @@ BOOL isJSArray(NSString *s)
     "      {\n"
     "        //$(id).hide() // ToDo: Bricht Anzeige Kinder;\n"
     "      }\n"
-    "      else if (an[i] === 'resource' || an[i] === 'focustrap' || an[i] === 'visible' || an[i] === 'resizable' || an[i] === 'align' || an[i] === 'doesenter')\n"
-    "      {\n"
-    "        id.setAttribute_(an[i],av[i]);\n"
-    "      }\n"
     "      else if (an[i] === 'layout' && !av[i].contains('class') &&  av[i].replace(/\\s/g,'').contains('axis:x'))\n"
     "      {\n"
     "        var spacing = parseInt(av[i].betterParseInt());\n"
@@ -13533,7 +13581,7 @@ BOOL isJSArray(NSString *s)
     "        if (id.text !== undefined)\n"
     "            id.text = av[i];\n"
     "    }\n"
-    "    else { alert('Whoops, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() ausgewertet werden.'); }\n"
+    "    else { id.setAttribute_(an[i],av[i]); /* alert('Whoops, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() ausgewertet werden.'); */ }\n"
     "  }\n"
     // "  $(id).css('background-color','black').css('width','200').css('height','5');\n"
     // "  $(id).attr('style',obj.style);\n"
@@ -13660,6 +13708,8 @@ BOOL isJSArray(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "function evalCode(code,element)\n"
     "{\n"
+    "    if (code.length == 0)\n"
+    "        return;\n"
     "    // Möglichkeit 1: als eval, aber eval is evil (angeblich)\n"
     "    // Nur so klappt derzeit das Auswerten von Methoden, weil nur so der Scope erhalten bleibt\n"
     "    eval(code);\n"

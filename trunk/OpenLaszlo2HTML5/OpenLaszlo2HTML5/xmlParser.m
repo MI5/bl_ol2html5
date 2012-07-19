@@ -37,7 +37,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -132,10 +132,10 @@ BOOL werteItemUndItemsAlsArrayAus = YES; // Muss ich noch in eine XML-Struktur �
 // Für das Element RollUpDownContainer
 @property (strong, nonatomic) NSString *animDuration;
 
-// jQuery UI braucht bei jedem auftauchen eines neuen Tabsheets-elements den Namen des aktuellen Tabsheets,
-// um dieses per add einfügen zu können
-// Außerdem wird, wenn diese Variable gesetzt wurde, und somit im Quellcode ein TabSheetContainer aufgetaucht ist
-// eine entsprechende Anpassung der dafür von jQueri UI benutzten Klassen vorgenommen
+// jQuery UI braucht bei jedem auftauchen eines neuen Tabsheets-elements den Namen des
+// aktuellen Tabsheets, um dieses per add einfügen zu können.
+// Außerdem wird, wenn diese Variable gesetzt wurde, und somit im Quellcode ein TabSheetContainer
+// auftaucht, eine entsprechende Anpassung der dafür von jQueri UI benutzten Klassen vorgenommen
 @property (strong, nonatomic) NSString *lastUsedTabSheetContainerID;
 
 @property (strong, nonatomic) NSMutableArray *rememberedID4closingSelfDefinedClass;
@@ -3322,8 +3322,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 - (void) legeDatasetAnUndInitMitOeffnendemTag
 {
     [self.jsHead2Output appendString:@"\n// Dieses Dataset wird als XML-Struktur angelegt und in einem JS-String gespeichert.\n"];
-    [self.jsHead2Output appendFormat:@"var %@",self.lastUsedDataset];
-    [self.jsHead2Output appendFormat:@" = '<%@>';\n",self.lastUsedDataset];
+    [self.jsHead2Output appendFormat:@"var %@ = new lz.dataset('%@');\n",self.lastUsedDataset,self.lastUsedDataset];
+
+    [self.jsHead2Output appendFormat:@"%@.rawdata = '<%@>';\n",self.lastUsedDataset,self.lastUsedDataset];
 }
 
 
@@ -3444,7 +3445,7 @@ didStartElement:(NSString *)elementName
 
 
 
-        [self.jsHead2Output appendFormat:@"%@ += '%@<%@", self.lastUsedDataset, gesammelterText, elementName];
+        [self.jsHead2Output appendFormat:@"%@.rawdata += '%@<%@", self.lastUsedDataset, gesammelterText, elementName];
 
         NSArray *keys = [attributeDict allKeys];
         if ([keys count] > 0)
@@ -8248,7 +8249,7 @@ BOOL isJSArray(NSString *s)
 
         if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
         {
-            [self.jsHead2Output appendFormat:@"%@ += '</%@>';\n",self.lastUsedDataset, self.lastUsedDataset];
+            [self.jsHead2Output appendFormat:@"%@.rawdata += '</%@>';\n",self.lastUsedDataset, self.lastUsedDataset];
 
             self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
         }
@@ -8273,7 +8274,7 @@ BOOL isJSArray(NSString *s)
         gesammelterText = [gesammelterText stringByReplacingOccurrencesOfString:@"\n" withString:@"\\\n"];
 
 
-        [self.jsHead2Output appendFormat:@"%@ += '%@</%@>';\n",self.lastUsedDataset, gesammelterText, elementName];
+        [self.jsHead2Output appendFormat:@"%@.rawdata += '%@</%@>';\n",self.lastUsedDataset, gesammelterText, elementName];
 
 
         /* Seit Umstieg auf XML-Struktur (und kein JS-Objekt mehr) nicht mehr nötig
@@ -11174,6 +11175,11 @@ BOOL isJSArray(NSString *s)
     "// XML-Funktionen, die zu <datapointer> gehören        //\n"
     "/////////////////////////////////////////////////////////\n"
     "function getXMLDocumentFromString(s) {\n"
+    //"    if (s === undefined) return undefined;\n" <-- Bricht zu viel. Muss immer ein [Object Document] rurückliefern
+    "\n"
+    "    if (typeof s !== 'string')\n"
+    "        throw new TypeError('function getXMLDocumentFromString - first argument is supposed to be a string.');\n"
+    "\n"
     "    var xmlDoc = null;\n"
     "\n"
     // Es MUSS so rum sein, erst die Abfrage nach dem window.ActiveXObject
@@ -11299,7 +11305,8 @@ BOOL isJSArray(NSString *s)
     "\n"
     "    // A <dataset> tag defines a local dataset. The name of the dataset is used in the datapath attribute of a view.\n"
     "    this.dataset = function(name) {\n"
-    "        this.name = name\n"
+    "        this.rawdata = '';\n"
+    "        this.name = name;\n"
     "        this.queryParamKeys = [];\n"
     "        this.queryParamVals = [];\n"
     "\n"
@@ -11312,6 +11319,13 @@ BOOL isJSArray(NSString *s)
     "            return pointer;\n"
     "        }\n"
     "        this.doRequest = function() {\n"
+    "            $(this).triggerHandler('ondata');\n"
+    "        }\n"
+    "        // Meiner Meinung nach macht das keinen Sinn, dass ein Dataset die Methode\n"
+    "        // serialize() aufrufen kann. Diese Methode haben nur Datapointer!\n"
+    "        // Aber GFlender ruft serialize bei Datasets auf.\n"
+    "        this.serialize = function() {\n"
+    "           return this.rawdata;\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -11424,35 +11438,34 @@ BOOL isJSArray(NSString *s)
     "                numberOfNodesPointingTo = nodes.length;\n"
     "\n"
     "                var i = 0;\n"
-    "                {\n"
-    "                    if (nodes[i].childNodes[0] != undefined)\n"
-    "                    {\n"
-    "                        node = nodes[i].childNodes[0].parentNode;\n"
-    "                        nodeValue = nodes[i].childNodes[0].nodeValue;\n"
-    "                        nodeName = nodes[i].childNodes[0].parentNode.nodeName;\n"
-    "                        nodeType = nodes[i].childNodes[0].nodeType;\n"
-    "                        childrenCounter = nodes[i].childNodes.length;\n"
-    "                    }\n"
-    "                    // Eventuell ist es auch eine Abfrage nach einer Textnode\n"
-    "                    else if (nodes[i] && nodes[i].nodeName == '#text')\n"
-    "                    {\n"
-    "                        node = nodes[i].parentNode;\n"
-    "                        // Dann brauche ich doch wieder die Schleife:\n"
-    "                        for (var j = 0;j < nodes[i].length;j++)\n"
-    "                        {\n"
-    "                            if (nodes[i].parentNode.childNodes[j] != undefined && nodes[i].parentNode.childNodes[j].nodeName == '#text')\n"
-    "                            {\n"
-    "                                if (nodeValue == undefined)\n"
-    "                                    nodeValue = nodes[i].parentNode.childNodes[j].nodeValue;\n"
-    "                                else\n"
-    "                                    nodeValue += nodes[i].parentNode.childNodes[j].nodeValue;\n"
     "\n"
-    "                                childrenCounter++;\n"
-    "                            }\n"
+    "                if (nodes[i] && nodes[i].childNodes[0] != undefined)\n"
+    "                {\n"
+    "                    node = nodes[i].childNodes[0].parentNode;\n"
+    "                    nodeValue = nodes[i].childNodes[0].nodeValue;\n"
+    "                    nodeName = nodes[i].childNodes[0].parentNode.nodeName;\n"
+    "                    nodeType = nodes[i].childNodes[0].nodeType;\n"
+    "                    childrenCounter = nodes[i].childNodes.length;\n"
+    "                }\n"
+    "                // Eventuell ist es auch eine Abfrage nach einer Textnode\n"
+    "                else if (nodes[i] && nodes[i].nodeName == '#text')\n"
+    "                {\n"
+    "                    node = nodes[i].parentNode;\n"
+    "                    // Dann brauche ich doch wieder die Schleife:\n"
+    "                    for (var j = 0;j < nodes[i].length;j++)\n"
+    "                    {\n"
+    "                        if (nodes[i].parentNode.childNodes[j] != undefined && nodes[i].parentNode.childNodes[j].nodeName == '#text')\n"
+    "                        {\n"
+    "                            if (nodeValue == undefined)\n"
+    "                                nodeValue = nodes[i].parentNode.childNodes[j].nodeValue;\n"
+    "                            else\n"
+    "                                nodeValue += nodes[i].parentNode.childNodes[j].nodeValue;\n"
+    "\n"
+    "                            childrenCounter++;\n"
     "                        }\n"
-    "                        nodeName = nodes[i].parentNode.nodeName;\n"
-    "                        nodeType = nodes[i].nodeType;\n"
     "                    }\n"
+    "                    nodeName = nodes[i].parentNode.nodeName;\n"
+    "                    nodeType = nodes[i].nodeType;\n"
     "                }\n"
     "            }\n"
     "            else if (document.implementation && document.implementation.createDocument) // code for IE9, Mozilla, Firefox, Opera, etc.\n"
@@ -11512,11 +11525,14 @@ BOOL isJSArray(NSString *s)
     "\n"
     "            this.dataset = window[this.datasetName];\n"
     "\n"
-    "            this.xml = getXMLDocumentFromString(this.dataset);\n"
+    "            if (this.dataset && this.dataset.rawdata) // Legacy-Code solange es noch als Array ausgewertete Datasets gibt\n"
+    "                this.xml = getXMLDocumentFromString(this.dataset.rawdata);\n"
+    "            else\n"
+    "                this.xml = getXMLDocumentFromString(''); // Damit auf jeden Fall ein [Object Document] zurückkommt\n"
     "        }\n"
     "\n"
     "\n"
-    "        // Das 'object' (DOMWindow), welches GFlender einmal übergibt lass ich passieren\n"
+    "        // Das 'object' (DOMWindow), welches GFlender einmal übergibt, lass ich passieren\n"
     "        if (typeof xpath !== 'string' && typeof xpath !== 'object')\n"
     "            throw new TypeError('Constructor function datapointer - first argument is no string.');\n"
     "        if (xpath === '')\n"
@@ -11583,7 +11599,12 @@ BOOL isJSArray(NSString *s)
     "            return returnValue;\n"
     "        }\n"
     "        this.setNodeText = function(text) {\n"
-    "            // ToDo\n"
+    "            // Lieber ohne jQuery, da kein HTML-Dokument, sondern eine Node\n"
+    "            if (this.lastNode)\n"
+    "            {\n"
+    "                this.lastNodeText = text; // Intern aktualisieren\n"
+    "                this.lastNode.childNodes[0].nodeValue = text;   // Extern aktualisieren\n"
+    "            }\n"
     "        }\n"
     "        this.isValid = function() {\n"
     "            if (this.lastNode === undefined && this.lastNodeText === undefined && this.lastNodename === undefined)\n"
@@ -11756,11 +11777,6 @@ BOOL isJSArray(NSString *s)
     "swfso.data.savedstate = 'ToDo'; // ToDo\n"
     "swfso.flush = function() { }; // ToDo\n"
     "\n"
-    "// Meiner Meinung nach macht das keinen Sinn, dass ein Dataset die Methode serialize()\n"
-    "// aufrufen kann. Diese Methode haben nur Datapointer!\n"
-    "// Aber GFlender ruft serialize bei Datasets auf. Da Datasets bei mir Strings sind, die\n"
-    "// das komplett XML enthalten, diese Methode per prototype an String binden.\n"
-    "String.prototype.serialize = function() { return this; };\n"
     "\n"
     "\n"
     "\n"
@@ -11830,7 +11846,8 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "$(window).resize(function()\n"
     "{\n"
-    "    canvas.myHeight = $(window).height();\n"
+    "    if (canvas) // falls DOM schon initialisiert\n"
+    "      canvas.myHeight = $(window).height();\n"
     "\n"
     "    adjustOffsetOnBrowserResize();\n"
     "});\n"

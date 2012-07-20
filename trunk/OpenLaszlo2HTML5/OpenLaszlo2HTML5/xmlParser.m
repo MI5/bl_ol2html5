@@ -6149,19 +6149,6 @@ if (![elementName isEqualToString:@"combobox"])
     }
 
 
-
-    // Das sind Flash-Cookies (ToDo)
-    if ([elementName isEqualToString:@"SharedObject"])
-    {
-        element_bearbeitet = YES;
-
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"soid"])
-            self.attributeCount++;
-    }
-
-
     // ToDo Audio (ist wohl sehr ähnlich aufgebaut wie ressource. Trotzdem erstmal checken
     if ([elementName isEqualToString:@"audio"])
     {
@@ -6215,7 +6202,7 @@ if (![elementName isEqualToString:@"combobox"])
 
             // Wir sammeln alle gefundenen 'name'-Attribute von class in einem eigenen Dictionary.
             // Weil die names können später eigene <tags> werden! Ich muss dann später darauf testen
-            // , ob das ELement vorher definiert wurde.
+            // ob das ELement vorher definiert wurde.
             // Als Objekt setzen wir ein NSDictionary, in dem alle Attribute der Klasse gesammelt
             // werden. Dies ist wichtig, weil ich beim instanzieren einer Klasse, alle Attribute
             // mit ihren Initial-Werten setzen muss.
@@ -6228,11 +6215,10 @@ if (![elementName isEqualToString:@"combobox"])
             self.lastUsedNameAttributeOfClass = name;
 
 
-            // Auserdem speichere ich die gefunden Klasse als JS-Objekt und schreibe es nach collectedClasses.js
-            // Die Attribute speichere ich einzeln ab und lese sie durch jQuery aus, sobald sie instanziert wird.
-            // (Wenn die Klasse instanziert wird auf eventuell überschriebene Attribute checken??)
-            // (=> Eher nein, class-Attribute kommen einfach nur in ein umgebendes Div) -> ToDo To Check
-
+            // Auserdem speichere ich die gefunden Klasse als JS-Objekt und schreibe es nach
+            // collectedClasses.js
+            // Die Attribute speichere ich einzeln ab und lese sie durch jQuery aus, sobald sie
+            // instanziert wird.
 
 
             NSArray *keys_ = [attributeDict allKeys];
@@ -6250,7 +6236,7 @@ if (![elementName isEqualToString:@"combobox"])
 
             [self.jsOLClassesOutput appendFormat:@"//\n"];
             [self.jsOLClassesOutput appendString:@"///////////////////////////////////////////////////////////////\n"];
-            [self.jsOLClassesOutput appendFormat:@"var %@ = function(textBetweenTags) {\n",name];
+            [self.jsOLClassesOutput appendFormat:@"oo.%@ = function(textBetweenTags) {\n",name];
 
 
             [self.jsOLClassesOutput appendFormat:@"  this.name = '%@';\n",name];
@@ -6265,7 +6251,7 @@ if (![elementName isEqualToString:@"combobox"])
             NSString *parent = [attributeDict valueForKey:@"extends"];
             if (parent == nil || parent.length == 0)
             {
-                [self.jsOLClassesOutput appendString:@"  this.parent = new view();\n\n"];
+                [self.jsOLClassesOutput appendString:@"  this.parent = new oo.view();\n\n"];
             }
             else
             {
@@ -6273,7 +6259,7 @@ if (![elementName isEqualToString:@"combobox"])
 
                 if ([parent isEqualToString:@"window"])
                     parent = @"basewindow";
-                [self.jsOLClassesOutput appendFormat:@"  this.parent = new %@(textBetweenTags);\n\n",parent];
+                [self.jsOLClassesOutput appendFormat:@"  this.parent = new oo.%@(textBetweenTags);\n\n",parent];
             }
             [keys removeObject:@"extends"];
 
@@ -7889,7 +7875,7 @@ if (![elementName isEqualToString:@"combobox"])
         //[o appendFormat:@"\n  // Klasse '%@' wurde instanziert in '%@' (Fortsetzung - tatsächliche Instanzierung - vorher wurden nur die Attribute gesetzt)",elementName,idUmgebendesElement];
         [o appendFormat:@"\n  // Instanz erzeugen, id holen, Objekt auswerten"];
         [o appendFormat:@"\n  var id = document.getElementById('%@');",idUmgebendesElement];
-        [o appendFormat:@"\n  var obj = new %@('');",elementName];
+        [o appendFormat:@"\n  var obj = new oo.%@('');",elementName];
         [o appendString:@"\n  interpretObject(obj,id);\n"];
 
 
@@ -8815,7 +8801,6 @@ BOOL isJSArray(NSString *s)
         [elementName isEqualToString:@"include"] ||
         [elementName isEqualToString:@"datapointer"] ||
         [elementName isEqualToString:@"attribute"] ||
-        [elementName isEqualToString:@"SharedObject"] ||
         [elementName isEqualToString:@"infobox_notsupported"] ||
         [elementName isEqualToString:@"infobox_euerhinweis"] ||
         [elementName isEqualToString:@"infobox_stnr"] ||
@@ -11323,9 +11308,19 @@ BOOL isJSArray(NSString *s)
     "        }\n"
     "        // Meiner Meinung nach macht das keinen Sinn, dass ein Dataset die Methode\n"
     "        // serialize() aufrufen kann. Diese Methode haben nur Datapointer!\n"
-    "        // Aber GFlender ruft serialize bei Datasets auf.\n"
+    "        // Aber GFlender ruft serialize() bei Datasets auf.\n"
     "        this.serialize = function() {\n"
     "           return this.rawdata;\n"
+    "        }\n"
+    "        // Meiner Meinung nach macht das keinen Sinn, dass ein Dataset die Methode\n"
+    "        // setAttr() aufrufen kann. Diese Methode gibt es gemäß OL-Doku nicht\n"
+    "        // Aber GFlender ruft setAttr() bei Datasets auf.\n"
+    "        this.setAttr = function(a,v) {\n"
+    "            // this.setAttribute_(a,v);\n"
+    "        }\n"
+    "        // Analoges gilt für removeAttr():\n"
+    "        this.removeAttr = function(a,v) {\n"
+    "            //\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -11511,6 +11506,8 @@ BOOL isJSArray(NSString *s)
     "            this.lastNodeType = nodeType;\n"
     "            this.lastQueryChildrenCounter = childrenCounter;\n"
     "            this.lastQueryNumberOfNodesPointingTo = numberOfNodesPointingTo;\n"
+    "\n"
+    "            return (this.lastNode !== undefined); // ToDo, kann auch undefined zurückliefern\n"
     "        }\n"
     "\n"
     "\n"
@@ -11538,7 +11535,7 @@ BOOL isJSArray(NSString *s)
     "        if (xpath === '')\n"
     "            throw new TypeError('Constructor function datapointer - first argument should not be empty.');\n"
     "\n"
-    "        this.rerun = rerun; // Noch ziemlich oft 'undefined', aber das ist Absicht\n"
+    "        this.rerunxpath = rerun; // Noch ziemlich oft 'undefined', aber das ist Absicht\n"
     "\n"
     "        this.lastNode = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
     "        this.lastNodeText = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
@@ -11704,6 +11701,33 @@ BOOL isJSArray(NSString *s)
     "            return this.lastNode != null;\n"
     "        }\n"
     "        this.deleteNode = function() {\n"
+    "            if (this.lastNode)\n"
+    "            {\n"
+    "                // Zwischenspeichern\n"
+    "                var toDelete = this.lastNode;\n"
+    "                // Auf Grundlage der zu löschenden Node eins vor\n"
+    "                // selectNext() aktualisiert gleichzeitig auch die internen Variablen\n"
+    "                var result = this.selectNext();\n"
+    "                // Jetzt kann ich die Node löschen\n"
+    "                toDelete.parentNode.removeChild(toDelete);\n"
+    "\n"
+    "                // selectNext() aktualisiert gleichzeitig auch die internen Variablen\n"
+    "                if (result)\n"
+    "                    return this.lastNode;\n"
+    "                else\n"
+    "                    return null;\n"
+    "            }\n"
+    "            return undefined;\n"
+    "        }\n"
+    "        this.addNodeFromPointer = function(pointer) {\n"
+    "            // alert(pointer.serialize());\n"
+    "            if (pointer && pointer.lastNode)\n"
+    "            {\n"
+    "                var newNode = pointer.lastNode.cloneNode(true);\n"
+    "\n"
+    "                return newNode;\n"
+    "            }\n"
+    "            return undefined;\n"
     "        }\n"
     "        this.p = {\n"
     "            appendChild : function() {}\n"
@@ -11771,12 +11795,6 @@ BOOL isJSArray(NSString *s)
     "\n"
     "function LzContextMenu() { }\n"
     "\n"
-    "var swfso = new Object();\n"
-    "swfso.getObject = function() { return swfso }; // ToDo\n"
-    "swfso.data = new Object(); // ToDo\n"
-    "swfso.data.savedstate = 'ToDo'; // ToDo\n"
-    "swfso.flush = function() { }; // ToDo\n"
-    "\n"
     "\n"
     "\n"
     "\n"
@@ -11785,8 +11803,88 @@ BOOL isJSArray(NSString *s)
     //"function canvasKlasse() {\n}\nvar canvas = new canvasKlasse();\n"
     "var SonstigeAusgaben = null; //function() {}; //ToDo <-- id von BDSinputgrid, welches noch nicht ausgewertet wird, deswegen muss ich die Var noch manuell bekannt machen\n"
     "\n"
-    "var LzDataElement = {};\n"
+    "var LzDataElement = {} // ToDo;\n"
     "LzDataElement.stringToLzData = function() {};\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Opposite of jQuerys param() - um Cookies auf ein Objekt zu mappen\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function stringToObject(query) {\n"
+    "    if (query == '') return null;\n"
+    "    var hash = {};\n"
+    "    var vars = query.split('&');\n"
+    "    for (var i = 0; i < vars.length; i++) {\n"
+    "        var pair = vars[i].split('=');\n"
+    "        var k = decodeURIComponent(pair[0]);\n"
+    "        var v = decodeURIComponent(pair[1]);\n"
+    "        // If it is the first entry with this name\n"
+    "        if (typeof hash[k] === 'undefined') {\n"
+    "            if (k.substr(k.length-2) != '[]')  // not end with []. cannot use negative index as IE doesn't understand it\n"
+    "                hash[k] = v;\n"
+    "            else\n"
+    "                hash[k] = [v];\n"
+    "            // If subsequent entry with this name and not array\n"
+    "        } else if (typeof hash[k] === 'string') {\n"
+    "            hash[k] = v;  // replace it\n"
+    "            // If subsequent entry with this name and is array\n"
+    "        } else {\n"
+    "            hash[k].push(v);\n"
+    "        }\n"
+    "    }\n"
+    "    return hash;\n"
+    "};\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Simulation der Flash-Cookies über Browser-Cookies\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// So heißt das Flash-Cookie-Zugriffs-Objekt\n"
+    "var SharedObject = {}\n"
+    "// Liefert einen Cookie-Context zurück, in welchem die tatsächlichen Cookies stecken\n"
+    "// Meist gibt es nur einen Context je Applikation, muss aber nicht.\n"
+    "SharedObject.getLocal = function(name, path) {\n"
+    "    var SharedObjectInstance = function() {\n"
+    "        /* In dem Data-Objekt stecken die Werte */\n"
+    "        this.data = {}\n"
+    "        /* Das Cookie tatsächlich im Browser speichern */\n"
+    "        this.flush = function() {\n"
+    "            // Das Objekt als String serialisieren\n"
+    "            var serializedObject = jQuery.param(this.data)\n"
+    "\n"
+    "            var expires = new Date();\n"
+    "            expires.setTime(expires.getTime() + 1000*60*60*24*365*2); // 2 years\n"
+    "            document.cookie = serializedObject + ';expires=' + expires.toUTCString();\n"
+    "            \n"
+    "        }\n"
+    "    };\n"
+    "\n"
+    "\n"
+    "    if (name === undefined && path === undefined)\n"
+    "        throw new TypeError('function SharedObject.getLocal - I need a context');\n"
+    "    if (path === undefined)\n"
+    "        path = '';\n"
+    "    // '__cookie__' davor, um nicht ausversehen, auf irgendeine globale Variable zu testen\n"
+    "    var context = '__cookie__'+name+path;\n"
+    "\n"
+    "    // Wenn es die instanz noch nicht gibt, dann anlegen\n"
+    "    if (!window[context])\n"
+    "    {\n"
+    "        var cookiedaten = document.cookie;\n"
+    "        // Cookie-Einträge sind wohl durch ';' getrennt, für 'stringToObject müssen es jedoch '&' sein\n"
+    "        cookiedaten = cookiedaten.replace(/;/,'&');\n"
+    "        window[context] = new SharedObjectInstance();\n"
+    "        // Cookie auslesen und auf das Objekt mappen\n"
+    "        \n"
+    "        window[context].data = stringToObject(cookiedaten);\n"
+    "    }\n"
+    "\n"
+    "    // context zurückgeben\n"
+    "    return window[context];\n"
+    "};\n"
+    "\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -13278,11 +13376,18 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
-    "//  Placeholder-ID, that ist replaced in all objects         //\n"
+    "// Globales Objekt, in dem alle Klassen stecken              //\n"
+    "// Damit es keine Name-Conflicts gibt, z. B. bei SharedObject//\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "var oo = {};\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "// Placeholder-ID, that ist replaced in all objects          //\n"
     "///////////////////////////////////////////////////////////////\n"
     "var placeholderID = '@@@P-L,A#TZHALTER@@@';\n"
     "///////////////////////////////////////////////////////////////\n"
-    "//  replace placeholder-id with real id                      //\n"
+    "// replace placeholder-id with real id                       //\n"
     "///////////////////////////////////////////////////////////////\n"
     "function replaceID(inString,to,to2)\n"
     "{\n"
@@ -13308,7 +13413,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
-    "//  Mit dieser Funktion werden alle Objekte ausgewertet      //\n"
+    "// Mit dieser Funktion werden alle Objekte ausgewertet       //\n"
     "///////////////////////////////////////////////////////////////\n"
     "// Aus obj ziehen wir den ganzen Inhalt raus, wie das Objekt aussehen muss\n"
     "// und id wird dem entsprechend mit allen Attributen und Methoden erweitert.\n"
@@ -13767,7 +13872,7 @@ BOOL isJSArray(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "//  class = view (native class)                              //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "var view = function() {\n"
+    "oo.view = function() {\n"
     "  this.name = 'view';\n"
     "  this.parent = undefined;\n"
     "\n"
@@ -13783,12 +13888,12 @@ BOOL isJSArray(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "//  class = text (native class)                              //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "var text = function(textBetweenTags) {\n"
+    "oo.text = function(textBetweenTags) {\n"
     "  if(typeof(textBetweenTags) === 'undefined')\n"
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'text';\n"
-    "  this.parent = new view();\n"
+    "  this.parent = new oo.view();\n"
     "\n"
     "  // Text kann entweder als Attribut übergeben werden, oder als Text zwischen den Tags\n"
     "  // Deswegen kein direktes einfügen in contentHTML, sondern als Attribut auswerten lassen\n"
@@ -13805,12 +13910,12 @@ BOOL isJSArray(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "//  class = inputtext (native class)                         //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "var inputtext = function(textBetweenTags) {\n"
+    "oo.inputtext = function(textBetweenTags) {\n"
     "  if(typeof(textBetweenTags) === 'undefined')\n"
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'inputtext';\n"
-    "  this.parent = new view();\n"
+    "  this.parent = new oo.view();\n"
     "\n"
     "  // Text kann entweder als Attribut übergeben werden, oder als Text zwischen den Tags\n"
     "  // Deswegen kein direktes einfügen in contentHTML, sondern als Attribut auswerten lassen\n"
@@ -13827,12 +13932,12 @@ BOOL isJSArray(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "//  class = basewindow (native class)                        //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "var basewindow = function(textBetweenTags) {\n"
+    "oo.basewindow = function(textBetweenTags) {\n"
     "  if(typeof(textBetweenTags) === 'undefined')\n"
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'basewindow';\n"
-    "  this.parent = new view();\n"
+    "  this.parent = new oo.view();\n"
     "\n"
     "  this.attributeNames = [\"text\"];\n"
     "  this.attributeValues = [textBetweenTags];\n"
@@ -13884,12 +13989,12 @@ BOOL isJSArray(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "//  class = button (native class)                            //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "var button = function(textBetweenTags) {\n"
+    "oo.button = function(textBetweenTags) {\n"
     "  if(typeof(textBetweenTags) === 'undefined')\n"
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'button';\n"
-    "  this.parent = new view();\n"
+    "  this.parent = new oo.view();\n"
     "\n"
     "  this.attributeNames = [\"text\"];\n"
     "  this.attributeValues = [textBetweenTags];\n"
@@ -13912,22 +14017,22 @@ BOOL isJSArray(NSString *s)
     "    return 'I am ' + this.name;\n"
     "  };\n"
     "};\n"
-    "button.prototype.test2 = function() {}; // extern definierte Methode\n"
-    "button.prototype.test3 = 2; // extern definierte Variable\n"
-    "button.test4 = function() {}; // extern definierte Methode - Geht wohl auch\n"
-    "button.test5 = 2; // extern definierte Variable - Geht wohl auch\n"
+    "oo.button.prototype.test2 = function() {}; // extern definierte Methode\n"
+    "oo.button.prototype.test3 = 2; // extern definierte Variable\n"
+    "oo.button.test4 = function() {}; // extern definierte Methode an einzelnes Objekt\n"
+    "oo.button.test5 = 2; // extern definierte Variable an einzelnes Objekt\n"
     "\n"
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
     "//  class = basebutton (native class)                        //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "var basebutton = function(textBetweenTags) {\n"
+    "oo.basebutton = function(textBetweenTags) {\n"
     "  if(typeof(textBetweenTags) === 'undefined')\n"
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'basebutton';\n"
-    "  this.parent = new view();\n" // nicht new button(). verträgt sich nicht mit dem Weiter-Button
+    "  this.parent = new oo.basecomponent();\n"
     "\n"
     "  this.attributeNames = [];\n"
     "  this.attributeValues = [];\n"
@@ -13952,12 +14057,12 @@ BOOL isJSArray(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "//  class = baselistitem (native class)                      //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "var baselistitem = function(textBetweenTags) {\n"
+    "oo.baselistitem = function(textBetweenTags) {\n"
     "  if(typeof(textBetweenTags) === 'undefined')\n"
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'baselistitem';\n"
-    "  this.parent = new view();\n"
+    "  this.parent = new oo.view();\n"
     "\n"
     "  this.attributeNames = [];\n"
     "  this.attributeValues = [];\n"
@@ -13970,12 +14075,12 @@ BOOL isJSArray(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "//  class = basevaluecomponent (native class)                //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "var basevaluecomponent = function(textBetweenTags) {\n"
+    "oo.basevaluecomponent = function(textBetweenTags) {\n"
     "  if(typeof(textBetweenTags) === 'undefined')\n"
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'basevaluecomponent';\n"
-    "  this.parent = new basecomponent();\n"
+    "  this.parent = new oo.basecomponent();\n"
     "\n"
     //"  // Ob dann das hier raus kann? Dafür unten die selfdefinedAttributes ja\n"
     //"  //  -> Es MUSS sogar raus, sonst wird es doppelt ausgewertet\n
@@ -13994,12 +14099,12 @@ BOOL isJSArray(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "//  class = basecomponent (native class)                     //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "var basecomponent = function(textBetweenTags) {\n"
+    "oo.basecomponent = function(textBetweenTags) {\n"
     "  if(typeof(textBetweenTags) === 'undefined')\n"
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'basecomponent';\n"
-    "  this.parent = new view();\n"
+    "  this.parent = new oo.view();\n"
     "\n"
     //"  // Ob dann das hier raus kann? Dafür unten die selfdefinedAttributes ja\n"
     //"  //  -> Es MUSS sogar raus, sonst wird es doppelt ausgewertet\n

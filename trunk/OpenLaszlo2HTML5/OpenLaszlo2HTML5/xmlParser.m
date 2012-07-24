@@ -1317,7 +1317,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-
         NSString *src = @"";
         if ([attributeDict valueForKey:@"resource"])
         {
@@ -1345,7 +1344,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSString *s = @"";
 
 
-        if ([src rangeOfString:@"classroot"].location != NSNotFound)
+        //if ([src rangeOfString:@"classroot"].location != NSNotFound)
+        if ([src hasPrefix:@"$"])
         {
             // Dann wurde es per <attribute> gesetzt -
             // Nur dafür speichere ich alle <attribute>'s intern mit...
@@ -1360,7 +1360,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             }
         }
 
-        // Im 2. Fall (resource) erfolgt ein Zugriff auf die interne resource-Var, aber puh...
+        // Dann erfolgt ein Zugriff auf die interne resource-Var, aber puh...
         // ... to think about. ToDo
         if ([src isEqualToString:@"resource"])
         {
@@ -1430,28 +1430,29 @@ void OLLog(xmlParser *self, NSString* s,...)
                 // Release: Rausnehmen, es entspricht der OL-Logik, keinen Fehler zu werfen.
                 // [self instableXML:[NSString stringWithFormat:@"ERROR: The image-path '%@' isn't valid.",src]];
             }
- 
- 
-            NSLog(@"Checking the image-size directly on file-system:");
-            // Dann erstmal width und height von dem Image auf Dateiebene ermitteln
-            NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
+            else
+            {
+                NSLog(@"Checking the image-size directly on file-system:");
+                // Dann erstmal width und height von dem Image auf Dateiebene ermitteln
+                NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
 
-            NSURL *pathToImg = [NSURL URLWithString:s relativeToURL:path];
+                NSURL *pathToImg = [NSURL URLWithString:s relativeToURL:path];
 
-            // [NSString stringWithFormat:@"%@%@",path,s];
-            NSLog([NSString stringWithFormat:@"Path to Image: %@",pathToImg]);
-            NSImage *image = [[NSImage alloc] initByReferencingURL:pathToImg];
-            NSSize dimensions = [image size];
-            NSInteger w = (int) dimensions.width;
-            NSInteger h = (int) dimensions.height;
-            NSLog([NSString stringWithFormat:@"Resolving width of image from original file: %d (setting as CSS-width)",w]);
-            NSLog([NSString stringWithFormat:@"Resolving height of Image from original file: %d (setting as CSS-height)",h]);
-            if (!widthGesetzt)
-                [style appendFormat:@"width:%dpx;",w];
-            if (!heightGesetzt)
-                [style appendFormat:@"height:%dpx;",h];
+                // [NSString stringWithFormat:@"%@%@",path,s];
+                NSLog([NSString stringWithFormat:@"Path to Image: %@",pathToImg]);
+                NSImage *image = [[NSImage alloc] initByReferencingURL:pathToImg];
+                NSSize dimensions = [image size];
+                NSInteger w = (int) dimensions.width;
+                NSInteger h = (int) dimensions.height;
+                NSLog([NSString stringWithFormat:@"Resolving width of image from original file: %d (setting as CSS-width)",w]);
+                NSLog([NSString stringWithFormat:@"Resolving height of Image from original file: %d (setting as CSS-height)",h]);
+                if (!widthGesetzt)
+                    [style appendFormat:@"width:%dpx;",w];
+                if (!heightGesetzt)
+                    [style appendFormat:@"height:%dpx;",h];
 
-            [style appendFormat:@"background-image:url(%@);",s];
+                [style appendFormat:@"background-image:url(%@);",s];
+            }
  
         }
     }
@@ -10878,27 +10879,27 @@ BOOL isJSArray(NSString *s)
     "}\n"
     "\n"
     "\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// Hindere IE 9 am seitlichen scrollen mit dem Scrollrad!\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// Bricht das scrollen von RollUpDown-Elementen, deswegen auskommentiert\n"
-    "// ToDo: Check this again with IE\n"
-    "/*\n"
-    "function wheel(event)\n"
-    "{\n"
-    "    if (!event)\n"
-    "        event = window.event;\n"
-    "\n"
-    "    if (event.preventDefault)\n"
-    "    {\n"
-    "        event.preventDefault();\n"
-    "        event.returnValue = false;\n"
-    "    }\n"
-    "}\n"
-    "if (window.addEventListener)\n"
-    "    window.addEventListener('DOMMouseScroll', wheel, false);\n"
-    "window.onmousewheel = document.onmousewheel = wheel;\n"
-    "*/\n"
+    //"/////////////////////////////////////////////////////////\n"
+    //"// Hindere IE 9 am seitlichen scrollen mit dem Scrollrad!\n"
+    //"/////////////////////////////////////////////////////////\n"
+    //"// Bricht das scrollen von RollUpDown-Elementen, deswegen auskommentiert\n"
+    //"// Ohnehin nicht mehr nötig\n"
+    //"/*\n"
+    //"function wheel(event)\n"
+    //"{\n"
+    //"    if (!event)\n"
+    //"        event = window.event;\n"
+    //"\n"
+    //"    if (event.preventDefault)\n"
+    //"    {\n"
+    //"        event.preventDefault();\n"
+    //"        event.returnValue = false;\n"
+    //"    }\n"
+    //"}\n"
+    //"if (window.addEventListener)\n"
+    //"    window.addEventListener('DOMMouseScroll', wheel, false);\n"
+    //"window.onmousewheel = document.onmousewheel = wheel;\n"
+    //"*/\n"
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////\n"
@@ -11239,7 +11240,9 @@ BOOL isJSArray(NSString *s)
     "\n"
     "    this.AudioService = function() {\n"
     "        this.playSound = function(res) {\n"
-    "            // Play the Sound (ToDo);\n"
+    "            var snd = new Audio(res); // buffers automatically when created\n"
+    "            snd.load(); // To play the sound on the iPad!?\n"
+    "            snd.play();\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -11836,7 +11839,7 @@ BOOL isJSArray(NSString *s)
     "// Opposite of jQuerys param() - um Cookies auf ein Objekt zu mappen\n"
     "/////////////////////////////////////////////////////////\n"
     "function stringToObject(query) {\n"
-    "    if (query == '') return null;\n"
+    "    if (query == '') return {}; // Leeres Objekt zurückliefern, nicht null, sonst Absturz bei IE bei lokalen Seiten, da dort kein Cookie vorhanden.\n"
     "    var hash = {};\n"
     "    var vars = query.split('&');\n"
     "    for (var i = 0; i < vars.length; i++) {\n"
@@ -11976,7 +11979,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "//////////////////////////////////////////////////////////\n"
-    "// Ersetzt das intern verwendete parent.                //\n"
+    "// Ersetzt das intern verwendete parent                 //\n"
     "//////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'getTheParent', {\n"
     "enumerable: false, // Darf nicht auf 'true' gesetzt werden! Sonst bricht jQuery!\n"

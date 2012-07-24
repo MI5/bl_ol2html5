@@ -690,11 +690,17 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Wenn wir ein Objekt sind dann achten wir auf das onchange-Event
             // Sind wir aber eine Variable, dann müssen wir watchen
 
-            // Falls wir mit 'this.' starten muss ich this durch die aktuelle ID ersetzen
+            // Falls wir mit 'this.' starten muss ich this durch die aktuelle ID ersetzen.
             if ([object hasPrefix:@"this."])
             {
                 object = [object substringFromIndex:4];
                 object = [NSString stringWithFormat:@"%@%@",self.zuletztGesetzteID,object];
+            }
+            // Falls wir mit 'parent.' oder 'immediateparent' starten, muss ich die aktuelle ID
+            // davor setzen.
+            if ([object hasPrefix:@"parent."] || [object hasPrefix:@"immediateparent."])
+            {
+                object = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,object];
             }
 
 
@@ -1328,7 +1334,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         if ([src hasPrefix:@"http:"] && ![src hasPrefix:@"http://"])
         {
             // Wenn ich Example 8.6 richtig verstehe, muss ich in diesem Fall das 'http:' entfernen
-            // Es ist bei einer lokalen Datei nur ein Hinweis darauf, dass es erst ab run-time geladen werden darf
+            // Es ist bei einer lokalen Datei lediglich  ein Hinweis darauf, dass es erst ab
+            // run-time geladen werden darf.
             src = [src substringFromIndex:5];
         }
 
@@ -1340,58 +1347,71 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         if ([src rangeOfString:@"classroot"].location != NSNotFound)
         {
-            // Dann wurde es per <attribute> gesetzt - Nur dafür speichere ich alle <attribute>'s intern mit...
+            // Dann wurde es per <attribute> gesetzt -
+            // Nur dafür speichere ich alle <attribute>'s intern mit...
             src = [self removeOccurrencesOfDollarAndCurlyBracketsIn:src];
             src = [src stringByReplacingOccurrencesOfString:@"classroot" withString:@""];
             src = [src stringByReplacingOccurrencesOfString:@"." withString:@""];
-            if ([src isEqualToString:@"resource"])
-            {
-                // ToDo.. I don't know what this means
-            }
-            else
+            if (![src isEqualToString:@"resource"])
             {
                 // Hier greife ich das erste mal auf die intern gespeicherten Vars zu,
-                // und gleich nochmal (Doppelt referenzierte Variable)
+                // und gleich nochmal (Doppelt referenzierte Variable).
                 src = [self.allJSGlobalVars valueForKey:src];
-
-                // Klappt iwie nicht:
-                // if (index > 0)
-                //    src = [NSString stringWithFormat:@"%@[%d]",src,index];
             }
         }
-        // Wenn die Variable keinen Wert enthält,dann kann auch keine korrekte Res gesetzt werden...
-        // In dem Fall ist die Variable wohl nur ein Platzhalter für eine spätere Res?
-        // Im 2. Fall (resource) erfolgt ein Zugriff auf die interne resource-Var, aber puh... to think about. ToDo
-        if ([src isEqualToString:@""] || [src isEqualToString:@"resource"])
+
+        // Im 2. Fall (resource) erfolgt ein Zugriff auf die interne resource-Var, aber puh...
+        // ... to think about. ToDo
+        if ([src isEqualToString:@"resource"])
         {
-            NSLog(@"The var is empty. I can't set the resource now.'");
+            //[self instableXML:[self makeTheComputedValueComputable:@"${classroot.stateres}"]];
         }
         else
         {
-            // Die gefunde Res muss auch in JS verfügbar sein in der Variable resource!
-            [self.jsOutput appendString:@"\n  // Setting the var 'resource' for internal JS-access"];
-            // ----->
+            // Ich setze es per setAttribute_ auf JS-Ebene.
+            // Geht wohl nur dann wenn ich DIESE CSS-Angaben noch vor alles andere setze, sonst
+            // ist width und height nicht früh genug gesetzt und SA's verschieben sich!
+            [self.jsOutput appendString:@"\n  // Setting 'resource'\n"];
+            if ([src rangeOfString:@"."].location != NSNotFound)
+            {
+                [self.jsOutput appendFormat:@"  %@.setAttribute_('resource', '%@');\n",self.zuletztGesetzteID,src];
+            }
+            else 
+            {
+                [self.jsOutput appendFormat:@"  %@.setAttribute_('resource', %@);\n",self.zuletztGesetzteID,src];
+            }
+
+            if ([attributeDict valueForKey:@"frame"])
+            {
+                [self.jsOutput appendString:@"\n  // Setting 'frame'\n"];
+                [self.jsOutput appendFormat:@"  %@.setAttribute_('frame', %d);\n",self.zuletztGesetzteID,index+1];
+            }
 
 
+
+
+// Dieser Code ist nicht mehr nötig, aber würde auch nichts schaden mit ausgeführt zu werden.
+// Es gibt irgendwie noch Probs mit dem Code. Er lädt css-Bilder nicht korrekt beim startup... WHY??
+ 
             // Wenn ein Punkt enthalten ist, ist es wohl eine Datei
             if ([src rangeOfString:@"."].location != NSNotFound ||
-                /* ... Keine Ahnung wo diese Res herkommenen sollen. Super nervig sowas. */
-                [src isEqualToString:@"lzgridsortarrow_rsrc"])
+            // ... Keine Ahnung wo diese Res herkommenen sollen. Super nervig sowas.
+            [src isEqualToString:@"lzgridsortarrow_rsrc"])
             {
                 // Möglichkeit 1: Resource wird direkt als String angegeben!
-
+                
                 // <----- (hier mit '' setzen, da ja ein String!
-                [self.jsOutput appendFormat:@"\n  $('#%@').get(0).resource = '%@';\n",self.zuletztGesetzteID,src];
-
+                //[self.jsOutput appendFormat:@"\n  $('#%@').get(0).resource = '%@';\n",self.zuletztGesetzteID,src];
+                
                 s = src;
             }
             else
             {
                 // Möglichkeit 2: Resource wurde vorher extern gesetzt+
-
+                
                 // <-----
-                [self.jsOutput appendFormat:@"\n  $('#%@').get(0).resource = %@;\n",self.zuletztGesetzteID,src];
-
+                //[self.jsOutput appendFormat:@"\n  $('#%@').get(0).resource = %@;\n",self.zuletztGesetzteID,src];
+                
                 // Namen des Bildes aus eigener vorher angelegter Res-DB ermitteln
                 if ([[self.allJSGlobalVars valueForKey:src] isKindOfClass:[NSArray class]])
                 {
@@ -1402,28 +1422,16 @@ void OLLog(xmlParser *self, NSString* s,...)
                     s = [self.allJSGlobalVars valueForKey:src];
                 }
             }
+
+
+
             if (s == nil || [s isEqualToString:@""])
             {
                 // Release: Rausnehmen, es entspricht der OL-Logik, keinen Fehler zu werfen.
-                [self instableXML:[NSString stringWithFormat:@"ERROR: The image-path '%@' isn't valid.",src]];
+                // [self instableXML:[NSString stringWithFormat:@"ERROR: The image-path '%@' isn't valid.",src]];
             }
-
-            // Ich setze es per setAttribute_ auf JS-Ebene. Aller nachfolgender Code überhaupt noch nötig? ToDo
-            // Geht wohl nur dann wenn ich DIESE CSS-Angaben noch vor alles andere setze, sonst
-            // ist width und height nicht früh genug gesetzt und SA's verschieben sich!
-            [self.jsOutput appendString:@"\n  // Setting 'resource'\n"];
-            if ([src rangeOfString:@"."].location != NSNotFound)
-                [self.jsOutput appendFormat:@"  %@.setAttribute_('resource', '%@');\n",self.zuletztGesetzteID,src];
-            else 
-                [self.jsOutput appendFormat:@"  %@.setAttribute_('resource', %@);\n",self.zuletztGesetzteID,src];
-
-            if ([attributeDict valueForKey:@"frame"])
-            {
-                [self.jsOutput appendString:@"\n  // Setting 'frame'\n"];
-                [self.jsOutput appendFormat:@"  %@.setAttribute_('frame', %d);\n",self.zuletztGesetzteID,index+1];
-            }
-
-
+ 
+ 
             NSLog(@"Checking the image-size directly on file-system:");
             // Dann erstmal width und height von dem Image auf Dateiebene ermitteln
             NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
@@ -1443,17 +1451,8 @@ void OLLog(xmlParser *self, NSString* s,...)
             if (!heightGesetzt)
                 [style appendFormat:@"height:%dpx;",h];
 
-            [style appendString:@"background-image:url("];
-            [style appendString:s];
-            [style appendString:@");"];
-            // Aus irgendeinem Grund müssen nach meiner großen Änderung von absolute auf relative
-            // die Bilder trotzdem weiterhin absolute sein... aber nur die... hmmm.
-            // Das ist Unsinn...
-            // Bilder dürfen nicht absolute sein, weil ich in bestimmten Situationen auf
-            // position:absolute teste (Simplelayout) und nur bei absolute-Elementen aufrücke
-            // Wenn Bilder IMMER absolute wären, würde diese Abfrage brechen
-            // [style appendString:@"position:absolute;"];
-
+            [style appendFormat:@"background-image:url(%@);",s];
+ 
         }
     }
 
@@ -1878,15 +1877,11 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Hatte ich mal als 'setAttribute(', aber die Klamemr bricht natürlich den RegExp
     s = [self inString:s searchFor:@"setAttribute" andReplaceWith:@"setAttribute_" ignoringTextInQuotes:YES];
 
-    s = [self inString:s searchFor:@"immediateparent" andReplaceWith:@"getTheParent(true)" ignoringTextInQuotes:YES];
+    //s = [self inString:s searchFor:@"immediateparent" andReplaceWith:@"getTheParent(true)" ignoringTextInQuotes:YES];
+    // --> Neu als getter gelöst
 
-    // 'parent' muss ersetzt werden mit 'getTheParent(this)'
-    // Wir ersetzen es immer mit Parameter, aber wirklich nötig ist der Parameter,
-    // nur beim ersten Objekt in einer Kette: parent2(this).parent2().parent2()
-    //s = [self inString:s searchFor:@"parent" andReplaceWith:@"getTheParent(this)" ignoringTextInQuotes:YES];
-    // Neu: Ich habe in allen Handlern auf with (this) {} umgestellt, deswegen ist das this als Parameter wohl
-    // gar nicht mehr nötig? => Mal schauen ob es irgendwo bricht in nächster Zeit.
-    s = [self inString:s searchFor:@"parent" andReplaceWith:@"getTheParent()" ignoringTextInQuotes:YES];
+    //s = [self inString:s searchFor:@"parent" andReplaceWith:@"getTheParent()" ignoringTextInQuotes:YES];
+    // --> Neu als getter gelöst
 
 
     // Das OpenLaszlo-'height' muss ersetzt werden (über getter klappt nicht)
@@ -6248,18 +6243,19 @@ if (![elementName isEqualToString:@"combobox"])
                 [self instableXML:@"Konnte Attribut 'name' in <class> nicht löschen."];
 
             // extends auslesen und speichern, dann extends aus der Attribute-liste löschen
-            NSString *parent = [attributeDict valueForKey:@"extends"];
-            if (parent == nil || parent.length == 0)
+            NSString *inherit = [attributeDict valueForKey:@"extends"];
+            if (inherit == nil || inherit.length == 0)
             {
-                [self.jsOLClassesOutput appendString:@"  this.parent = new oo.view();\n\n"];
+                [self.jsOLClassesOutput appendString:@"  this.inherit = new oo.view();\n\n"];
             }
             else
             {
                 self.attributeCount++;
 
-                if ([parent isEqualToString:@"window"])
-                    parent = @"basewindow";
-                [self.jsOLClassesOutput appendFormat:@"  this.parent = new oo.%@(textBetweenTags);\n\n",parent];
+                if ([inherit isEqualToString:@"window"])
+                    inherit = @"basewindow";
+
+                [self.jsOLClassesOutput appendFormat:@"  this.inherit = new oo.%@(textBetweenTags);\n\n",inherit];
             }
             [keys removeObject:@"extends"];
 
@@ -11363,8 +11359,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "        // Hardcore-Code..... Diese Funktion ist das Arbeitstier\n"
     "        this.setXPath = function(xpath_) {\n"
-    "            if (this.xpath === undefined || this.xpath == null)\n"
-    "            {"
+    "            if (this.xpath === undefined || this.xpath == null) {\n"
     "                // Dann noch nachträglich initialisieren\n"
     "                this.init(xpath_);\n"
     "            }\n"
@@ -11462,6 +11457,15 @@ BOOL isJSArray(NSString *s)
     "                    nodeName = nodes[i].parentNode.nodeName;\n"
     "                    nodeType = nodes[i].nodeType;\n"
     "                }\n"
+    "                // Eventuell ist es auch eine Abfrage nach einem direkten Elementknoten\n"
+    "                else if (nodes[i] && nodes[i].nodeType == 1)\n"
+    "                {\n"
+    "                    node = nodes[i];\n"
+    "                    nodeValue = nodes[i].nodeValue;\n"
+    "                    nodeName = nodes[i].nodeName;\n"
+    "                    nodeType = nodes[i].nodeType;\n"
+    "                    childrenCounter++;\n"
+    "                }\n"
     "            }\n"
     "            else if (document.implementation && document.implementation.createDocument) // code for IE9, Mozilla, Firefox, Opera, etc.\n"
     "            {\n"
@@ -11492,6 +11496,17 @@ BOOL isJSArray(NSString *s)
     "                            nodeValue += result.nodeValue;\n"
     "\n"
     "                        nodeName = result.parentNode.nodeName;\n"
+    "                        nodeType = result.nodeType;\n"
+    "                        childrenCounter++;\n"
+    "                    }\n"
+    "                    // Eventuell ist es auch eine Abfrage nach einem direkten Elementknoten\n"
+    "                    // (welches keine Kinder hat). Gilt das immer?\n"
+    "                    // Codezeile, wo aufgetreten: dpEingaben.setXPath(\"dsEingaben:/\");\n"
+    "                    else if (result.nodeName && result.nodeType == 1)\n"
+    "                    {\n"
+    "                        node = result;\n"
+    "                        nodeValue = result.nodeValue;\n"
+    "                        nodeName = result.nodeName;\n"
     "                        nodeType = result.nodeType;\n"
     "                        childrenCounter++;\n"
     "                    }\n"
@@ -11673,6 +11688,7 @@ BOOL isJSArray(NSString *s)
     "            dupe.lastNode = this.lastNode;\n"
     "            dupe.lastNodeText = this.lastNodeText;\n"
     "            dupe.lastNodeName = this.lastNodeName;\n"
+    "            dupe.lastNodeType = this.lastNodeType;\n"
     "            dupe.xpath = null;\n"
     "            return dupe;\n"
     "        }\n"
@@ -11720,10 +11736,18 @@ BOOL isJSArray(NSString *s)
     "            return undefined;\n"
     "        }\n"
     "        this.addNodeFromPointer = function(pointer) {\n"
+    "            if (this.lastNode === undefined) // Dringend ToDo\n"
+    "                return; //throw new TypeError('function datapointer.addNodeFromPointer - this.lastNode should not be undefined. Can not add Pointer to an undefined datapointer.');\n"
+    "            if (pointer === undefined)\n"
+    "                throw new TypeError('function datapointer.addNodeFromPointer - pointer should not be undefined. Can not add an undefined Pointer.');\n"
+    "\n"
     "            // alert(pointer.serialize());\n"
-    "            if (pointer && pointer.lastNode)\n"
-    "            {\n"
+    "            if (pointer && pointer.lastNode) {\n"
+    "\n"
     "                var newNode = pointer.lastNode.cloneNode(true);\n"
+    "                // alert((new XMLSerializer()).serializeToString(newNode));\n"
+    "\n"
+    "                this.lastNode.appendChild(newNode);\n"
     "\n"
     "                return newNode;\n"
     "            }\n"
@@ -12138,6 +12162,10 @@ BOOL isJSArray(NSString *s)
     "        // if set to true, the component manager will call this component with doEnterDown\n"
     "        // and doEnterUp when the enter key goes up or down if it is focussed\n"
     "    }\n"
+    "    else if (attributeName === 'initstage' && value === 'defer')\n"
+    "    {\n"
+    "      //$(me).hide() // ToDo: Bricht Anzeige Kinder;\n"
+    "    }\n"
     "    else if (attributeName == 'align')\n"
     "    {\n"
     "        if (value === 'center')\n"
@@ -12209,6 +12237,9 @@ BOOL isJSArray(NSString *s)
     "    }\n"
     "    else if (attributeName == 'resource')\n"
     "    {\n"
+    "        // In jedem Falle speichern. Var kann auch ausgelesen werden\n"
+    "        me.resource = value;\n"
+    "\n"
     "        // Die res kann sowohl als String, als auch als JS-Var übergeben werden. Beides wird erkannt\n"
     "        if ($.isArray(window[value]) || $.isArray(value))\n"
     "        {\n"
@@ -12253,7 +12284,7 @@ BOOL isJSArray(NSString *s)
     "        {\n"
     "            if (typeof value === 'string' && value.contains('.'))\n"
     "              setWidthAndHeightAndBackgroundImage(me,value);\n"
-    "            else if (typeof value === 'string')\n"
+    "            else if (typeof value === 'string' && value != '')\n"
     "              setWidthAndHeightAndBackgroundImage(me,window[value]);\n"
     "            else\n"
     "              throw 'setAttribute_ - Error trying to set reource. (value = '+value+', me.id = '+me.id+').';\n"
@@ -12392,6 +12423,7 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "var destroyFunction = function () {\n"
     "    $(this).remove;\n"
+    "    $(this).triggerHandler('ondestroy');\n"
     "}\n"
     "\n"
     "HTMLDivElement.prototype.destroy = destroyFunction;\n"
@@ -12788,6 +12820,26 @@ BOOL isJSArray(NSString *s)
     "});\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'parent'                          //\n"
+    "// READ-ONLY                                           //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'parent', {\n"
+    "    get : function(){ if (!isDOM(this)) return undefined; return this.getTheParent(); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'immediateparent'                 //\n"
+    "// READ-ONLY                                           //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'immediateparent', {\n"
+    "    get : function(){ if (!isDOM(this)) return undefined; return this.getTheParent(true); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// Getter/Setter for 'y'                               //\n"
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
@@ -12827,7 +12879,9 @@ BOOL isJSArray(NSString *s)
     "//// Nicht Object prototypen. Sonst wird auch das 'style'-Objekt prototgetypet und damit\n"
     "//// dort die opacity-Property kaputt gemacht und damit bricht jQuery.\n"
     "//// Statt dessen an HTMLElement prototypen.\n"
-    "//// ToDo: Im Prinzip können dann alle Propertys hier im 'HTMLElement' definiert werden.\n"
+    "//// Im Prinzip können dann alle Propertys hier im 'HTMLElement' definiert werden.\n"
+    "//// Aber auch nicht 100 % perfekt, da dann ein DOM-Element extended wird. Es ist immer\n"
+    "//// besser reine JS-Objekte zu extenden.\n"
     "Object.defineProperty(HTMLElement.prototype, 'opacity', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return $(this).css('opacity'); },\n"
     "    set: function(newValue){ this.setAttribute_('opacity', newValue); },\n"
@@ -13424,10 +13478,10 @@ BOOL isJSArray(NSString *s)
     "  // Muss deswegen auch rückwärts ausgewertet werden\n"
     "  var currentObj = obj; // Zwischenspeichern\n"
     "  var rueckwaertsArray = [];\n"
-    "  while (obj.parent !== undefined)\n"
+    "  while (obj.inherit !== undefined)\n"
     "  {\n"
     "    rueckwaertsArray.push(obj);\n"
-    "    obj = obj.parent;\n"
+    "    obj = obj.inherit;\n"
     "  }\n"
     "  obj = currentObj; // Wieder unser Original-Objekt setzen\n"
     "  rueckwaertsArray.reverse();\n"
@@ -13469,18 +13523,18 @@ BOOL isJSArray(NSString *s)
     "  // und die Attribute übernehmen (bei gleichen gelten die hierachiemäßig allernächsten).\n"
     "  // Außerdem den HTML-Content von Vorfahren einfügen und individuelle ID vergeben.\n"
     "  var currentObj = obj; // Zwischenspeichern\n"
-    "  while (obj.parent !== undefined)\n"
+    "  while (obj.inherit !== undefined)\n"
     "  {\n"
     "    // Doppelte Einträge von Attributen entfernen\n"
-    "    obj.parent = deleteAttributesPreviousDeclared(currentObj.attributeNames,obj.parent);\n"
+    "    obj.inherit = deleteAttributesPreviousDeclared(currentObj.attributeNames,obj.inherit);\n"
     "\n"
     "    // attributeNames übernehmen\n"
-    "    if (obj.parent.attributeNames.length > 0)\n"
-    "      currentObj.attributeNames = currentObj.attributeNames.concat(obj.parent.attributeNames);\n"
+    "    if (obj.inherit.attributeNames.length > 0)\n"
+    "      currentObj.attributeNames = currentObj.attributeNames.concat(obj.inherit.attributeNames);\n"
     "\n"
     "    // attributeValues übernehmen\n"
-    "    if (obj.parent.attributeValues.length > 0)\n"
-    "      currentObj.attributeValues = currentObj.attributeValues.concat(obj.parent.attributeValues);\n"
+    "    if (obj.inherit.attributeValues.length > 0)\n"
+    "      currentObj.attributeValues = currentObj.attributeValues.concat(obj.inherit.attributeValues);\n"
     "\n"
     "\n"
     "    // Dann den HTML-Content des Vorfahren einfügen\n"
@@ -13493,7 +13547,7 @@ BOOL isJSArray(NSString *s)
     "    // Dies äußerst sich darin, dass z. B. ein onclick-Handler auf höchster Ebene der Klasse mit 'this' auch\n"
     "    // Methoden von <text> aufrufen kann (2. Beispiel von <text> in OL-Doku)\n"
     "    // Derzeitige Lösung: Bei Text nicht appenden, sondern ersetzen... (und die Attribute übernehmen)\n"
-    "    if (obj.parent.name === 'text' || obj.parent.name === 'inputtext' || obj.parent.name === 'basewindow' || obj.parent.name === 'button')\n"
+    "    if (obj.inherit.name === 'text' || obj.inherit.name === 'inputtext' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button')\n"
     "    {\n"
     "        var gesicherteAttribute = {};\n"
     "        Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
@@ -13502,8 +13556,8 @@ BOOL isJSArray(NSString *s)
     "        });\n"
     "\n"
     "        // Da wir ersetzen, bekommt dieses Element den Universal-id-Namen\n"
-    "        obj.parent.contentHTML = replaceID(obj.parent.contentHTML,''+$(id).attr('id'));\n"
-    "        var theSavedCSSFromRemovedElement = $(id).replaceWith(obj.parent.contentHTML).attr('style');\n"
+    "        obj.inherit.contentHTML = replaceID(obj.inherit.contentHTML,''+$(id).attr('id'));\n"
+    "        var theSavedCSSFromRemovedElement = $(id).replaceWith(obj.inherit.contentHTML).attr('style');\n"
     "        // Interne ID dieser Funktion neu setzen\n"
     "        id = document.getElementById(id.id);\n"
     "        // Und externen elementnamen neu setzen\n"
@@ -13520,24 +13574,24 @@ BOOL isJSArray(NSString *s)
     "        });\n"
     "\n"
     "      // Dann den kompletten JS-Code ausführen\n"
-    "      executeJSCodeOfThisObject(obj.parent, id, $(id).attr('id'));\n"
+    "      executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id'));\n"
     "    }\n"
     "    else\n"
     "    {\n"
-    "      if (obj.parent.contentHTML.length > 0)\n"
+    "      if (obj.inherit.contentHTML.length > 0)\n"
     "      {\n"
-    "        // Damit es die IDs nicht doppelt gibt, hänge ich 'parent.name' dran.\n"
-    "        obj.parent.contentHTML = replaceID(obj.parent.contentHTML,''+$(id).attr('id')+'_'+obj.parent.name);\n"
-    //"        obj.parent.contentHTML = replaceID(obj.parent.contentHTML,''+$(id).attr('id'));\n"
-    "        $(id).prepend(obj.parent.contentHTML);\n"
+    "        // Damit es die IDs nicht doppelt gibt, hänge ich 'inherit.name' dran.\n"
+    "        obj.inherit.contentHTML = replaceID(obj.inherit.contentHTML,''+$(id).attr('id')+'_'+obj.inherit.name);\n"
+    //"        obj.inherit.contentHTML = replaceID(obj.inherit.contentHTML,''+$(id).attr('id'));\n"
+    "        $(id).prepend(obj.inherit.contentHTML);\n"
     "      }\n"
     "\n"
     "      // Dann den kompletten JS-Code ausführen\n"
-    "      executeJSCodeOfThisObject(obj.parent, id, $(id).attr('id')+'_'+obj.parent.name, $(id).attr('id'));\n"
+    "      executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id')+'_'+obj.inherit.name, $(id).attr('id'));\n"
     "    }\n"
     "\n"
     "    // Objekt der nächsten Vererbungs-Stufe holen\n"
-    "    obj = obj.parent;\n"
+    "    obj = obj.inherit;\n"
     "  }\n"
     "  obj = currentObj; // Wieder unser Original-Objekt setzen\n"
     "\n"
@@ -13587,7 +13641,7 @@ BOOL isJSArray(NSString *s)
     //"    alert(an[i]);\n"
     //"    alert(av[i]);\n"
     "    var cssAttributes = ['bgcolor','x','y','width','height'];\n"
-    "    var jsAttributes = ['onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown','focusable','styleable','layout','initstage','text'];\n"
+    "    var jsAttributes = ['onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown','focusable','layout','text'];\n"
     "    if (jQuery.inArray(an[i],cssAttributes) != -1)\n"
     "    {\n"
     "        if (an[i] === 'bgcolor')\n"
@@ -13601,10 +13655,11 @@ BOOL isJSArray(NSString *s)
     "        {\n"
     "            av[i] = av[i].substring(2,av[i].length-1);\n"
     "\n"
-    "            av[i] = av[i].replace('immediateparent','getTheParent(true)');\n"
-    "    // ToDo -> Das hier beides könnten doch getter werden, oder?\n"
-    "            av[i] = av[i].replace('parent','getTheParent()');\n"
-    "\n"
+    //"            av[i] = av[i].replace('immediateparent','getTheParent(true)');\n"
+    //"\n"
+    //"            av[i] = av[i].replace('parent','getTheParent()');\n"
+    //"\n"
+    // --> Neu gelöst über getter, deswegen muss ich nicht mehr ersetzen.
     "            av[i] = av[i].replace('.width','.myWidth');\n"
     "\n"
     "            av[i] = av[i].replace('.height','.myHeight');\n"
@@ -13621,8 +13676,10 @@ BOOL isJSArray(NSString *s)
     "    {\n"
     "      if (an[i].startsWith('on'))\n"
     "      {\n"
-    "        // Dann ist es JS-Code, Anpassungen vornehmen. Zusätzlich wohl noch die von oben ToDo ToCheck\n"
+    "        // Dann ist es JS-Code, Anpassungen vornehmen.\n"
     "        av[i] = av[i].replace('setAttribute','setAttribute_');\n"
+    "        av[i] = av[i].replace('.width','.myWidth');\n"
+    "        av[i] = av[i].replace('.height','.myHeight');\n"
     "\n"
     "        // 'on' entfernen\n"
     "        an[i] = an[i].substr(2);\n"
@@ -13656,14 +13713,6 @@ BOOL isJSArray(NSString *s)
     "      {\n"
     "        // Einen eventuell vorher gesetzten focus-Handler, der blur() handlet, entfernen\n"
     "        $(id).off('focus.blurnamespace');\n"
-    "      }\n"
-    "      else if (an[i] === 'styleable' && av[i] === 'false')\n"
-    "      {\n"
-    "        // ToDo\n"
-    "      }\n"
-    "      else if (an[i] === 'initstage' && av[i] === 'defer')\n"
-    "      {\n"
-    "        //$(id).hide() // ToDo: Bricht Anzeige Kinder;\n"
     "      }\n"
     "      else if (an[i] === 'layout' && !av[i].contains('class') &&  av[i].replace(/\\s/g,'').contains('axis:x'))\n"
     "      {\n"
@@ -13718,15 +13767,15 @@ BOOL isJSArray(NSString *s)
     "  var kinderVorDemAppenden = $(id).children(); // die existierenden Kinder sichern\n"
     "\n"
     "\n"
-    "  // ********* Ich muss jedoch auch MICH selber an die richtige Stelle vom Parent setzen *********\n"
+    "  // ********* Ich muss jedoch auch MICH selber an die richtige Stelle vom inherit setzen *********\n"
     "  // ********* Wenn der ein defaultplacement hat, muss ich da rein schlüpfen *********\n"
-    "  if (obj.parent && obj.parent.defaultplacement && obj.parent.defaultplacement !== '')\n"
+    "  if (obj.inherit && obj.inherit.defaultplacement && obj.inherit.defaultplacement !== '')\n"
     "  {\n"
-    "    // Da der 'name' als parent gesetzt wurde, spreche ich es darüber an\n"
-    "    if ($(id[obj.parent.defaultplacement]).length == 0)\n"
+    "    // Da der 'name' als inherit gesetzt wurde, spreche ich es darüber an\n"
+    "    if ($(id[obj.inherit.defaultplacement]).length == 0)\n"
     "      alert('Kann nicht auf defaultplacement zugreifen. Das sollte nicht passieren.');\n"
     "\n"
-    "    $(id[obj.parent.defaultplacement]).prepend(s);\n"
+    "    $(id[obj.inherit.defaultplacement]).prepend(s);\n"
     "  }\n"
     "  else\n"
     "  {\n"
@@ -13874,7 +13923,7 @@ BOOL isJSArray(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "oo.view = function() {\n"
     "  this.name = 'view';\n"
-    "  this.parent = undefined;\n"
+    "  this.inherit = undefined;\n"
     "\n"
     "  this.attributeNames = [];\n"
     "  this.attributeValues = [];\n"
@@ -13893,7 +13942,7 @@ BOOL isJSArray(NSString *s)
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'text';\n"
-    "  this.parent = new oo.view();\n"
+    "  this.inherit = new oo.view();\n"
     "\n"
     "  // Text kann entweder als Attribut übergeben werden, oder als Text zwischen den Tags\n"
     "  // Deswegen kein direktes einfügen in contentHTML, sondern als Attribut auswerten lassen\n"
@@ -13915,7 +13964,7 @@ BOOL isJSArray(NSString *s)
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'inputtext';\n"
-    "  this.parent = new oo.view();\n"
+    "  this.inherit = new oo.view();\n"
     "\n"
     "  // Text kann entweder als Attribut übergeben werden, oder als Text zwischen den Tags\n"
     "  // Deswegen kein direktes einfügen in contentHTML, sondern als Attribut auswerten lassen\n"
@@ -13937,7 +13986,7 @@ BOOL isJSArray(NSString *s)
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'basewindow';\n"
-    "  this.parent = new oo.view();\n"
+    "  this.inherit = new oo.view();\n"
     "\n"
     "  this.attributeNames = [\"text\"];\n"
     "  this.attributeValues = [textBetweenTags];\n"
@@ -13976,7 +14025,7 @@ BOOL isJSArray(NSString *s)
     //"    textBetweenTags = '';\n"
     //"\n"
     //"  this.name = 'window';\n"
-    //"  this.parent = new basewindow(textBetweenTags);\n"
+    //"  this.inherit = new basewindow(textBetweenTags);\n"
     //"\n"
     //"  this.attributeNames = [];\n"
     //"  this.attributeValues = [];\n"
@@ -13994,7 +14043,7 @@ BOOL isJSArray(NSString *s)
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'button';\n"
-    "  this.parent = new oo.view();\n"
+    "  this.inherit = new oo.view();\n"
     "\n"
     "  this.attributeNames = [\"text\"];\n"
     "  this.attributeValues = [textBetweenTags];\n"
@@ -14032,7 +14081,7 @@ BOOL isJSArray(NSString *s)
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'basebutton';\n"
-    "  this.parent = new oo.basecomponent();\n"
+    "  this.inherit = new oo.basecomponent();\n"
     "\n"
     "  this.attributeNames = [];\n"
     "  this.attributeValues = [];\n"
@@ -14062,7 +14111,7 @@ BOOL isJSArray(NSString *s)
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'baselistitem';\n"
-    "  this.parent = new oo.view();\n"
+    "  this.inherit = new oo.view();\n"
     "\n"
     "  this.attributeNames = [];\n"
     "  this.attributeValues = [];\n"
@@ -14080,7 +14129,7 @@ BOOL isJSArray(NSString *s)
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'basevaluecomponent';\n"
-    "  this.parent = new oo.basecomponent();\n"
+    "  this.inherit = new oo.basecomponent();\n"
     "\n"
     //"  // Ob dann das hier raus kann? Dafür unten die selfdefinedAttributes ja\n"
     //"  //  -> Es MUSS sogar raus, sonst wird es doppelt ausgewertet\n
@@ -14104,7 +14153,7 @@ BOOL isJSArray(NSString *s)
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'basecomponent';\n"
-    "  this.parent = new oo.view();\n"
+    "  this.inherit = new oo.view();\n"
     "\n"
     //"  // Ob dann das hier raus kann? Dafür unten die selfdefinedAttributes ja\n"
     //"  //  -> Es MUSS sogar raus, sonst wird es doppelt ausgewertet\n

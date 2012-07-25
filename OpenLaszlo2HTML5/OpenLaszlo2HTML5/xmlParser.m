@@ -64,6 +64,11 @@ BOOL werteItemUndItemsAlsArrayAus = YES; // Muss ich noch in eine XML-Struktur �
 
 @property (nonatomic) BOOL isRecursiveCall;
 
+// Falls Resourcen relativ gesetzt sind, in tiefer verschachtelten library-files.
+// dann muss ich an den originären Pfad kommen, um den Pfad der Bilder
+// js-intern richtig setzen zu können.
+@property (strong, nonatomic) NSString *pathToFile_basedir;
+
 @property (strong, nonatomic) NSMutableString *log;
 
 @property (strong, nonatomic) NSURL * pathToFile;
@@ -161,6 +166,9 @@ BOOL werteItemUndItemsAlsArrayAus = YES; // Muss ich noch in eine XML-Struktur �
 // Damit ich auch intern auf die Inhalte der Variablen zugreifen kann
 @property (strong, nonatomic) NSMutableDictionary *allJSGlobalVars;
 
+// Damit ich alle Images preloaden kann
+@property (strong, nonatomic) NSMutableArray *allImgPaths;
+
 // Gefundene <class>-Tags, die definiert wurden
 @property (strong, nonatomic) NSMutableDictionary *allFoundClasses;
 
@@ -215,7 +223,7 @@ BOOL werteItemUndItemsAlsArrayAus = YES; // Muss ich noch in eine XML-Struktur �
 // private
 @synthesize parser = _parser;
 
-@synthesize isRecursiveCall = _isRecursiveCall;
+@synthesize isRecursiveCall = _isRecursiveCall, pathToFile_basedir = _pathToFile_basedir;
 
 @synthesize log = _log;
 
@@ -246,7 +254,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize animDuration = _animDuration, lastUsedTabSheetContainerID = _lastUsedTabSheetContainerID, rememberedID4closingSelfDefinedClass = _rememberedID4closingSelfDefinedClass, defaultplacement = _defaultplacement, lastUsedNameAttributeOfMethod = _lastUsedNameAttributeOfMethod, lastUsedNameAttributeOfClass = _lastUsedNameAttributeOfClass, lastUsedNameAttributeOfFont = _lastUsedNameAttributeOfFont, lastUsedNameAttributeOfDataPointer = _lastUsedNameAttributeOfDataPointer;
 
-@synthesize allJSGlobalVars = _allJSGlobalVars;
+@synthesize allJSGlobalVars = _allJSGlobalVars, allImgPaths = _allImgPaths;
 
 @synthesize allFoundClasses = _allFoundClasses;
 
@@ -332,6 +340,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         self.pathToFile = pathToFile;
 
+        self.pathToFile_basedir = @"";
+
         self.items = [[NSMutableArray alloc] init];
         self.textInProgress = [[NSMutableString alloc] initWithString:@""];
 
@@ -404,6 +414,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
         self.allFoundClasses = [[NSMutableDictionary alloc] initWithCapacity:200];
+
+        self.allImgPaths = [[NSMutableArray alloc] init];
     }
     return self;
 }
@@ -453,13 +465,12 @@ void OLLog(xmlParser *self, NSString* s,...)
          [parser setShouldResolveExternalEntities:NO];
          */
 
-        // NSLog([NSString stringWithFormat:@"Passing so much times here, but are we recursive? => %d",self.isRecursiveCall]);
         // Do the parse
         [self.parser parse];
 
         // Zur Sicherheit mache ich von allem ne Copy.
         // Nicht, dass es beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInt:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy], nil];
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInt:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.allImgPaths copy], nil];
         return r;
     }
 }
@@ -2988,6 +2999,13 @@ void OLLog(xmlParser *self, NSString* s,...)
     NSURL *pathToFile = [NSURL URLWithString:relativePath relativeToURL:path];
 
     xmlParser *x = [[xmlParser alloc] initWith:pathToFile recursiveCall:YES];
+
+    // Den Pfad zur base-nicht-rekursiven-Datei muss ich mitspeichern
+    if (self.isRecursiveCall)
+        x.pathToFile_basedir = self.pathToFile_basedir;
+    else
+        x.pathToFile_basedir = [[self.pathToFile URLByDeletingLastPathComponent] relativeString];
+
     // Wenn es eine Datei ist, die Items für ein Dataset enthält, dann muss das rekursiv
     // aufgerufene Objekt das letzte DataSet wissen, damit es die Items richtig zuordnen kann
     x.lastUsedDataset = self.lastUsedDataset;
@@ -3046,6 +3064,10 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         [self.jsComputedValuesOutput appendString:[result objectAtIndex:13]];
         [self.jsConstraintValuesOutput appendString:[result objectAtIndex:14]];
+
+        // Hier adden, weil ich NICHT die Werte aus diesem Array mit an die
+        // Rekursions-Stufe übergeben hatte
+        [self.allImgPaths addObjectsFromArray:[result objectAtIndex:15]];
     }
 
     NSLog(@"Leaving recursion");
@@ -4214,14 +4236,25 @@ didStartElement:(NSString *)elementName
             else
                 self.attributeCount++;
 
+
+            NSString *src = [attributeDict valueForKey:@"src"];
+
+            src = [self onRecursionEnsureValidPath:src];
+
+            
             [self.jsHeadOutput appendString:@"var "];
             [self.jsHeadOutput appendString:[attributeDict valueForKey:@"name"]];
             [self.jsHeadOutput appendString:@" = \""];
-            [self.jsHeadOutput appendString:[attributeDict valueForKey:@"src"]];
+            [self.jsHeadOutput appendString:src];
             [self.jsHeadOutput appendString:@"\";\n"];
 
+
+
             // Auch intern die Var speichern
-            [self.allJSGlobalVars setObject:[attributeDict valueForKey:@"src"] forKey:[attributeDict valueForKey:@"name"]];
+            [self.allJSGlobalVars setObject:src forKey:[attributeDict valueForKey:@"name"]];
+
+            // Für das preloaden auch den Pfad der Bilddatei nochmal extra sichern.
+            [self.allImgPaths addObject:src];
         }
         else if ([attributeDict valueForKey:@"name"])
         {
@@ -4522,8 +4555,16 @@ didStartElement:(NSString *)elementName
         else
             self.attributeCount++;
 
+        NSString *src = [attributeDict valueForKey:@"src"];
+
+        src = [self onRecursionEnsureValidPath:src];
+
+
         // Erstmal alle frame-Einträge sammeln, weil wir nicht wissen wie viele noch kommen
-        [self.collectedFrameResources addObject:[attributeDict valueForKey:@"src"]];
+        [self.collectedFrameResources addObject:src];
+
+        // Für das preloaden auch den Pfad der Bilddatei nochmal extra sichern.
+        [self.allImgPaths addObject:src];
     }
 
 
@@ -7919,6 +7960,55 @@ if (![elementName isEqualToString:@"combobox"])
 }
 
 
+-(NSString*) onRecursionEnsureValidPath:(NSString*)s
+{
+    // Dann muss ich das aktuelle Verzeichnis erst ermitteln, weil es abweichend kann
+    // Die rekursiv aufgerufene Datei kann schließlich woanders sein
+    if ([s hasPrefix:@"./"] && self.isRecursiveCall)
+    {
+        // Ich ziehe einfach so viele Zeichen ab, wie das basedir hat,
+        // so komme ich an den relativen Pfad.
+        // Dies könnte brechen, wenn es kein Unterverzeichnis ist, sondern ein paralleles
+        // Eine solche Ordner-projekt-struktur ist aber eher unwahrscheinlicher. Hoffe ich?!
+
+        int n1 = [self.pathToFile_basedir length];
+
+        // int n2 = [[[self.pathToFile URLByDeletingLastPathComponent] absoluteString] length];
+
+        NSString *relativePath = [[[self.pathToFile URLByDeletingLastPathComponent] absoluteString] substringFromIndex:n1];
+
+        // Den leading Punkt und Slash entfernen
+        s = [s substringFromIndex:2];
+
+        // Den gewonnenen relativen Pfad davor schalten
+        s = [NSString stringWithFormat:@"%@%@",relativePath,s];
+
+        return s;
+    }
+    else if (self.isRecursiveCall)
+    {
+        // Auch ohne './' kann es natürlich auf den relativen Pfad verweisen.
+        // Dann muss ich n1 und n2 vergleichen, ob wir in einem anderen Pfad sind.
+
+        int n1 = [self.pathToFile_basedir length];
+
+        int n2 = [[[self.pathToFile URLByDeletingLastPathComponent] absoluteString] length];
+
+        if (n1 != n2)
+        {
+            NSString *relativePath = [[[self.pathToFile URLByDeletingLastPathComponent] absoluteString] substringFromIndex:n1];
+
+            // Den gewonnenen relativen Pfad davor schalten
+            s = [NSString stringWithFormat:@"%@%@",relativePath,s];
+        }
+
+        return s;
+    }
+
+    return s;
+}
+
+
 -(NSMutableString*) holAlleArgumentDieKeineDefaultArgumenteSind:(NSString*)args
 {
     NSError *error = NULL;
@@ -8403,6 +8493,8 @@ BOOL isJSArray(NSString *s)
         NSString *rekursiveRueckgabeJsConstraintValuesOutput = [result objectAtIndex:14];
         if (![rekursiveRueckgabeJsConstraintValuesOutput isEqualToString:@""])
             NSLog(@"String 14 aus der Rekursion wird unser JS-Constraint-Values-content für JS-Objekt");
+
+        [self.allImgPaths addObjectsFromArray:[result objectAtIndex:15]];
 
 
 
@@ -9489,6 +9581,24 @@ BOOL isJSArray(NSString *s)
     [self.output appendString:temp];
 
 
+
+    // Ich muss alle verwendeten css-background-images auf CSS-Ebene preloaden, sonst werden sie
+    // nicht korrekt dargestellt (gerade auch die, die in Klassen erst instanziert werden).
+    // Es klappt nicht in Firefox mehr als 200 Divs übereinander zu stapeln. WTF Firefox???
+    // Deswegen als 'img'-Tag gelöst
+    [self.output appendString:@"\n"];
+    for(id object in self.allImgPaths)
+    {
+        // Falls Flash-Dateien als Resource gesetzt wurde, diese ignorieren
+        if (![object hasSuffix:@".swf"])
+        {
+            [self.output appendFormat:@"<img class=\"img_preload\" src=\"%@\" />\n",object];
+        }
+    }
+    [self.output appendString:@"\n"];
+
+
+
     // Füge noch die nötigen JS ein:
     [self.output appendString:@"\n<script type=\"text/javascript\">\n"];
 
@@ -9701,6 +9811,16 @@ BOOL isJSArray(NSString *s)
     "    /* Prevents scrolling */\n"
     "    overflow: hidden;\n"
     "\n"
+    "}\n"
+    "\n"
+    ".img_preload\n"
+    "{\n"
+    "    /* display: none; Auskommentieren, sonst kein preload bei Firefox. */\n"
+    "    position: absolute;\n"
+    "    left: -9999px;\n"
+    "    top: -9999px;\n"
+    "    z-index: -30;\n"
+    "    background-repeat: no-repeat;\n"
     "}\n"
     "\n"
     "/* Der button, wie er ungefähr in OpenLaszlo aussieht */\n"
@@ -13549,24 +13669,50 @@ BOOL isJSArray(NSString *s)
     "    // <div class='div_text'> sein. (obwohl 'text' ja eigentlich auch nochmal von view erbt...)\n"
     "    // Dies äußerst sich darin, dass z. B. ein onclick-Handler auf höchster Ebene der Klasse mit 'this' auch\n"
     "    // Methoden von <text> aufrufen kann (2. Beispiel von <text> in OL-Doku)\n"
-    "    // Derzeitige Lösung: Bei Text nicht appenden, sondern ersetzen... (und die Attribute übernehmen)\n"
+    "    // Derzeitige Lösung: Bei Text nicht appenden, sondern ersetzen... (und die Attribute, CSS und Events übernehmen)\n"
     "    if (obj.inherit.name === 'text' || obj.inherit.name === 'inputtext' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button')\n"
     "    {\n"
+    "        // Attribute sichern\n"
     "        var gesicherteAttribute = {};\n"
     "        Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
     "        {\n"
     "            gesicherteAttribute[key] = id[key];\n"
     "        });\n"
     "\n"
+    "        // Alle auf vorherigen Vererbungs-Ebenen hinzugefügten Methoden sichern\n"
+    "        var gesicherteMethoden = {};\n"
+    "        for(var prop in id) {\n"
+    "            if (id.hasOwnProperty(prop) && typeof id[prop] === 'function') {\n"
+    //"                alert(id[prop]);\n"
+    //"                alert(prop);\n"
+    "                gesicherteMethoden[prop] = id[prop];\n"
+    "            }\n"
+    "        }\n"
+    "\n"
+    "        // Events sichern\n"
+    //"        var gesicherteEvents = $(id).data('events'); // Will break on jQuery 1.8\n"
+    "        var gesicherteEvents = $._data(id,'events'); // Will work on jQuery 1.8\n"
+    "\n"
+    "\n"
     "        // Da wir ersetzen, bekommt dieses Element den Universal-id-Namen\n"
     "        obj.inherit.contentHTML = replaceID(obj.inherit.contentHTML,''+$(id).attr('id'));\n"
     "        var theSavedCSSFromRemovedElement = $(id).replaceWith(obj.inherit.contentHTML).attr('style');\n"
     "        // Interne ID dieser Funktion neu setzen\n"
     "        id = document.getElementById(id.id);\n"
-    "        // Und externen elementnamen neu setzen\n"
+    "        // Und externen Elementnamen neu setzen\n"
     "        window[id.id] = id; // Falls es irgendwo als parent gesetzt wurde, puh... überlegen, wie ich da dran käme\n"
     "        // Und das gerettete CSS wieder einsetzen\n"
-    "        $(id).attr('style',theSavedCSSFromRemovedElement);\n"
+    "        $(id).attr('style',$(id).attr('style') + theSavedCSSFromRemovedElement);\n"
+    "\n"
+    "        // Und die zuvor gesicherten events wieder einsetzen\n"
+    "        if (gesicherteEvents) // Schutz gegen undefined, sonst Absturz bei undefined\n"
+    "        {\n"
+    "            $.each(gesicherteEvents, function() {\n"
+    "                $.each(this, function() {\n"
+    "                    $(id).on(this.type, this.handler);\n"
+    "                });\n"
+    "            });\n"
+    "        }\n"
     "\n"
     "        // Und die Original-Propertys wieder herstellen mit Default-Werten (Wie käme ich an die Nicht-Default-Werte ... ?)\n"
     "        // Jupp. Gelöst! In dem ich alle selbst gesetzten Attribute vorher sichere und nun setze\n"
@@ -13576,8 +13722,14 @@ BOOL isJSArray(NSString *s)
     "            id[key] = gesicherteAttribute[key];\n"
     "        });\n"
     "\n"
-    "      // Dann den kompletten JS-Code ausführen\n"
-    "      executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id'));\n"
+    "        // Und die Methoden wieder herstellen\n"
+    "        Object.keys(gesicherteMethoden).forEach(function(key)\n"
+    "        {\n"
+    "            id[key] = gesicherteMethoden[key];\n"
+    "        });\n"
+    "\n"
+    "        // Dann den kompletten JS-Code ausführen\n"
+    "        executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id'));\n"
     "    }\n"
     "    else\n"
     "    {\n"
@@ -13852,16 +14004,6 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "\n"
-    "  // Muss noch drin bleiben, sonst bricht 'Und hier das Ergebnis der Steuerberechnung' (ToDo)\n"
-    "  // (doppelt ausgeführter Code...weiter unten wird er ebenfalls ausgeführt...)\n"
-    "  // Replace-IDs von contentJQuery ersetzen\n"
-    "  var s = replaceID(obj.contentJQuery, r, r2);\n"
-    "  // Dann den jQuery-Content hinzufügen/auswerten\n"
-    "  if (s.length > 0)\n"
-    "    evalCode(s);\n"
-    "\n"
-    "\n"
-    "\n"
     "  // Replace-IDs von den Constraint Values ersetzen\n"
     "  var s = replaceID(obj.contentJSConstraintValues, r, r2);\n"
     "  // Dann den ConstraintValues-Content hinzufügen/auswerten\n"
@@ -14053,7 +14195,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "  this.defaultplacement = '';\n"
     "\n"
-    "  this.contentHTML = '<button type=\"button\" id=\"@@@P-L,A#TZHALTER@@@\" class=\"input_standard\" style=\"height:inherit;\">'+textBetweenTags+'</button>';\n"
+    "  this.contentHTML = '<button type=\"button\" id=\"@@@P-L,A#TZHALTER@@@\" class=\"input_standard\" style=\"\">'+textBetweenTags+'</button>';\n"
     "\n"
     "  this.contentLeadingJSHead = '';\n"
     "\n"

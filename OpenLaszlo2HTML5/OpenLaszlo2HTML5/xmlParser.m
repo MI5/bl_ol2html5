@@ -4994,7 +4994,7 @@ didStartElement:(NSString *)elementName
         // erstmal size="1" setzen, damit ein Wert existiert, wird beim schließen von </baselist> anhand der
         // gezählten <baselistitem>'s korrigiert (oder anhand des gesetzten Wertes 'shownitems'.
         self.baselistitemCounter = 0;
-        [self.output appendString:@"<select class=\"select_combobox\" size=\"1\""];
+        [self.output appendString:@"<select class=\"select_standard\" size=\"1\""];
 
         [self addIdToElement:attributeDict];
 
@@ -5117,7 +5117,7 @@ didStartElement:(NSString *)elementName
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
-        [self.output appendString:@"<select class=\"select_combobox\" size=\"1\""];
+        [self.output appendString:@"<select class=\"select_standard\" size=\"1\""];
 
         NSString *theId =[self addIdToElement:attributeDict];
 
@@ -7827,8 +7827,9 @@ if (![elementName isEqualToString:@"combobox"])
         [d removeObjectForKey:@"mask"];
         [d removeObjectForKey:@"ignoreplacement"];
 
-        [d removeObjectForKey:@"value"];
+        /* [d removeObjectForKey:@"value"]; Auskommentieren, bricht sonst Beispiel <basecombobox> */
         [d removeObjectForKey:@"text"];
+
 
         // Really Build-In-Values??
         [d removeObjectForKey:@"boxheight"];
@@ -10049,8 +10050,8 @@ BOOL isJSArray(NSString *s)
     "    pointer-events: auto;\n"
     "}\n"
     "\n"
-    "/* Standard-combobox (die combobox selber) */\n"
-    ".select_combobox\n"
+    "/* Standard-Select-combobox (die combobox selber) */\n"
+    ".select_standard\n"
     "{\n"
     "    position:relative;\n"
     "    width:100px;\n"
@@ -12209,6 +12210,10 @@ BOOL isJSArray(NSString *s)
     "      else\n"
     "          $(me).html(value);\n"
     "    }\n"
+    "    else if (attributeName == 'font')\n"
+    "    {\n"
+    "        // ToDo\n"
+    "    }\n"
     "    else if (attributeName == 'bgcolor')\n"
     "    {\n"
     "        if (typeof value === 'number')\n"
@@ -12412,6 +12417,10 @@ BOOL isJSArray(NSString *s)
     "            else\n"
     "              throw 'setAttribute_ - Error trying to set reource. (value = '+value+', me.id = '+me.id+').';\n"
     "        }\n"
+    "    }\n"
+    "    else if ($(me).hasClass('select_standard') && attributeName == 'editable') // Nur vom Element 'basecombobox' von Haus aus gesetztes Attribut\n"
+    "    {\n"
+    "        // Not supported so far. The items of the select-box are never editable\n"
     "    }\n"
     "    else if ($(me).hasClass('div_text') && (attributeName == 'thickness' || attributeName == 'sharpness')) // Nur vom Element 'text' von Haus aus gesetztes Attribut\n"
     "    {\n"
@@ -13669,8 +13678,9 @@ BOOL isJSArray(NSString *s)
     "    // <div class='div_text'> sein. (obwohl 'text' ja eigentlich auch nochmal von view erbt...)\n"
     "    // Dies äußerst sich darin, dass z. B. ein onclick-Handler auf höchster Ebene der Klasse mit 'this' auch\n"
     "    // Methoden von <text> aufrufen kann (2. Beispiel von <text> in OL-Doku)\n"
-    "    // Derzeitige Lösung: Bei Text nicht appenden, sondern ersetzen... (und die Attribute, CSS und Events übernehmen)\n"
-    "    if (obj.inherit.name === 'text' || obj.inherit.name === 'inputtext' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button')\n"
+    "    // Derzeitige Lösung: Bei Text nicht appenden, sondern ersetzen...\n"
+    "    // (und die Attribute, Methoden, Events und CSS übernehmen)\n"
+    "    if (obj.inherit.name === 'text' || obj.inherit.name === 'inputtext' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button' || obj.inherit.name === 'basecombobox')\n"
     "    {\n"
     "        // Attribute sichern\n"
     "        var gesicherteAttribute = {};\n"
@@ -14002,8 +14012,6 @@ BOOL isJSArray(NSString *s)
     "  if (s.length > 0)\n"
     "    evalCode(s);\n"
     "\n"
-    "\n"
-    "\n"
     "  // Replace-IDs von den Constraint Values ersetzen\n"
     "  var s = replaceID(obj.contentJSConstraintValues, r, r2);\n"
     "  // Dann den ConstraintValues-Content hinzufügen/auswerten\n"
@@ -14172,9 +14180,6 @@ BOOL isJSArray(NSString *s)
     //"  this.name = 'window';\n"
     //"  this.inherit = new basewindow(textBetweenTags);\n"
     //"\n"
-    //"  this.attributeNames = [];\n"
-    //"  this.attributeValues = [];\n"
-    //"\n"
     //"  this.defaultplacement = '';\n"
     //"}\n"
     "\n"
@@ -14261,7 +14266,85 @@ BOOL isJSArray(NSString *s)
     "  this.attributeNames = [];\n"
     "  this.attributeValues = [];\n"
     "\n"
+    "  this.selfDefinedAttributes = { selected:false }\n"
+    "\n"
     "  this.contentHTML = '<option id=\"@@@P-L,A#TZHALTER@@@\">'+textBetweenTags+'</option>';\n"
+    "};\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = textlistitem (native class)                      //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.textlistitem = function(textBetweenTags) {\n"
+    "  if(typeof(textBetweenTags) === 'undefined')\n"
+    "    textBetweenTags = '';\n"
+    "\n"
+    "  this.name = 'textlistitem';\n"
+    "  this.inherit = new oo.listitem();\n"
+    "\n"
+    "  this.attributeNames = [];\n"
+    "  this.attributeValues = [];\n"
+    "\n"
+    "  this.contentHTML = '';\n"
+    "};\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = listitem (native class)                          //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.listitem = function(textBetweenTags) {\n"
+    "  if(typeof(textBetweenTags) === 'undefined')\n"
+    "    textBetweenTags = '';\n"
+    "\n"
+    "  this.name = 'listitem';\n"
+    "  this.inherit = new oo.baselistitem();\n"
+    "\n"
+    "  this.attributeNames = [];\n"
+    "  this.attributeValues = [];\n"
+    "\n"
+    "  this.contentHTML = '';\n"
+    "};\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = basecombobox (native class)                      //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.basecombobox = function(textBetweenTags) {\n"
+    "  if(typeof(textBetweenTags) === 'undefined')\n"
+    "    textBetweenTags = '';\n"
+    "\n"
+    "  this.name = 'basecombobox';\n"
+    "  this.inherit = new oo.baseformitem();\n"
+    "\n"
+    "  this.attributeNames = [];\n"
+    "  this.attributeValues = [];\n"
+    "\n"
+    "  this.selfDefinedAttributes = { editable:true }\n"
+    "\n"
+    "  this.contentHTML = '<select id=\"@@@P-L,A#TZHALTER@@@\" class=\"select_standard\"></select>';\n"
+    "};\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = baseformitem (native class)                      //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.baseformitem = function(textBetweenTags) {\n"
+    "  if(typeof(textBetweenTags) === 'undefined')\n"
+    "    textBetweenTags = '';\n"
+    "\n"
+    "  this.name = 'baseformitem';\n"
+    "  this.inherit = new oo.basevaluecomponent();\n"
+    "\n"
+    "  this.attributeNames = [];\n"
+    "  this.attributeValues = [];\n"
+    "\n"
+    "  this.selfDefinedAttributes = { changed:false, ignoreform:false, rollbackvalue:null, submit:this.inherit.inherit.selfDefinedAttributes.enabled, submitname:'', value:null }\n"
+    "\n"
+    "  this.contentHTML = '';\n"
     "};\n"
     "\n"
     "\n"
@@ -14276,10 +14359,6 @@ BOOL isJSArray(NSString *s)
     "  this.name = 'basevaluecomponent';\n"
     "  this.inherit = new oo.basecomponent();\n"
     "\n"
-    //"  // Ob dann das hier raus kann? Dafür unten die selfdefinedAttributes ja\n"
-    //"  //  -> Es MUSS sogar raus, sonst wird es doppelt ausgewertet\n
-    //"  this.attributeNames = ['type','value'];\n"
-    //"  this.attributeValues = ['none',null];\n"
     "  this.attributeNames = [];\n"
     "  this.attributeValues = [];\n"
     "\n"

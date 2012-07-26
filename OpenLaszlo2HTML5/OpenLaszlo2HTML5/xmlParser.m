@@ -37,7 +37,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -383,7 +383,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         self.zuletztGesetzteID = ID_REPLACE_STRING;
 
-        self.last_resource_name_for_frametag = [[NSString alloc] initWithString:@""];
+        self.last_resource_name_for_frametag = @"";
         self.collectedFrameResources = [[NSMutableArray alloc] init];
 
         self.animDuration = @"slow";
@@ -470,7 +470,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Zur Sicherheit mache ich von allem ne Copy.
         // Nicht, dass es beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInt:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.allImgPaths copy], nil];
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.allImgPaths copy], nil];
         return r;
     }
 }
@@ -576,9 +576,9 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Dann noch eventuelle spezielle Wörter austauschen
             varName = [self modifySomeExpressionsInJSCode:varName];
 
-            // Falls ganz vorne jetzt getTheParent() steht, dann muss ich unser aktuelles Element davorsetzen
-            // Weil jetzt nochmal extra mit with () {} zu arbeiten ist wohl nicht nötig, da wir ja auf Ebene der
-            // einzelnen Variable sind und individuell reagieren können
+            // Falls ganz vorne jetzt getTheParent() steht, dann muss ich unser aktuelles Element
+            // davorsetzen. Weil jetzt nochmal extra mit with () {} zu arbeiten ist wohl nicht nötig
+            // da wir ja auf Ebene der einzelnen Variable sind und individuell reagieren können.
             if ([varName hasPrefix:@"getTheParent("])
                 varName = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,varName];
 
@@ -692,7 +692,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     if (constraintValue && !nichtWatchen && !nochVorDOMAusfuehren)
     {
         [o appendString:@"  // Zusätzlich bei change aktualisieren bzw. auf ein event horchen, da constraint-value\n"];
-        [o appendFormat:@"  // Der zu setzende Wert ist abhängig von %d woanders gesetzten Variable(n)\n",[vars count]];
+        [o appendFormat:@"  // Der zu setzende Wert ist abhängig von %ld woanders gesetzten Variable(n)\n",[vars count]];
 
         // '__strong', damit ich object modifizieren kann
         for (id __strong object in vars)
@@ -1395,7 +1395,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             if ([attributeDict valueForKey:@"frame"])
             {
                 [self.jsOutput appendString:@"\n  // Setting 'frame'\n"];
-                [self.jsOutput appendFormat:@"  %@.setAttribute_('frame', %d);\n",self.zuletztGesetzteID,index+1];
+                [self.jsOutput appendFormat:@"  %@.setAttribute_('frame', %ld);\n",self.zuletztGesetzteID,index+1];
             }
 
 
@@ -1453,8 +1453,8 @@ void OLLog(xmlParser *self, NSString* s,...)
                 NSLog([NSString stringWithFormat:@"Path to Image: %@",pathToImg]);
                 NSImage *image = [[NSImage alloc] initByReferencingURL:pathToImg];
                 NSSize dimensions = [image size];
-                NSInteger w = (int) dimensions.width;
-                NSInteger h = (int) dimensions.height;
+                int w = (int)dimensions.width;
+                int h = (int)dimensions.height;
                 NSLog([NSString stringWithFormat:@"Resolving width of image from original file: %d (setting as CSS-width)",w]);
                 NSLog([NSString stringWithFormat:@"Resolving height of Image from original file: %d (setting as CSS-height)",h]);
                 if (!widthGesetzt)
@@ -1838,7 +1838,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         /*************** Für die Debug-Ausgabe ***************/
         NSUInteger numberOfMatches = [regexp numberOfMatchesInString:s options:0 range:NSMakeRange(0, [s length])];
         if (numberOfMatches > 0)
-            NSLog([NSString stringWithFormat:@"%d mal hat ein RegExp gematcht und hat %@ ausgetauscht.",numberOfMatches,f]);
+            NSLog([NSString stringWithFormat:@"%ld mal hat ein RegExp gematcht und hat %@ ausgetauscht.",numberOfMatches,f]);
         /*************** Für die Debug-Ausgabe ***************/
 
         if (numberOfMatches > 0)
@@ -1889,11 +1889,11 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Hatte ich mal als 'setAttribute(', aber die Klamemr bricht natürlich den RegExp
     s = [self inString:s searchFor:@"setAttribute" andReplaceWith:@"setAttribute_" ignoringTextInQuotes:YES];
 
-    //s = [self inString:s searchFor:@"immediateparent" andReplaceWith:@"getTheParent(true)" ignoringTextInQuotes:YES];
-    // --> Neu als getter gelöst
+    s = [self inString:s searchFor:@"immediateparent" andReplaceWith:@"getTheParent(true)" ignoringTextInQuotes:YES];
+    // --> Neu als getter gelöst / Bricht leider jQuery UI...
 
-    //s = [self inString:s searchFor:@"parent" andReplaceWith:@"getTheParent()" ignoringTextInQuotes:YES];
-    // --> Neu als getter gelöst
+    s = [self inString:s searchFor:@"parent" andReplaceWith:@"getTheParent()" ignoringTextInQuotes:YES];
+    // --> Neu als getter gelöst / Bricht leider jQuery UI...
 
 
     // Das OpenLaszlo-'height' muss ersetzt werden (über getter klappt nicht)
@@ -2561,7 +2561,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             //[o appendString:@"      clone2.attr('id',clone2.attr('id')+'_repl'+c);\n"];
             //[o appendString:@"      // Ab dem 2. mal auch die der Kinder austauschen, damit ich später geklonte Zwillinge erkennen kann und damit es id's nicht doppelt gibt\n"];
             [o appendString:@"      // Ab dem 2. mal alle id's austauschen, damit ich später geklonte Zwillinge erkennen kann und damit es id's nicht doppelt gibt\n"];
-            [o appendFormat:@"      if (i >= 1)\n",idName];
+            [o appendString:@"      if (i >= 1)\n"];
             [o appendString:@"      {\n"];
             [o appendString:@"          clone2.find('*').andSelf().each(function() {\n"];
             [o appendString:@"              $(this).attr('id',$(this).attr('id')+'_repl'+c);\n"];
@@ -2581,12 +2581,12 @@ void OLLog(xmlParser *self, NSString* s,...)
             [o appendString:@"      // Den Klon an das parent-Element anfügen\n"];
             //[o appendFormat:@"      clone2.appendTo('#%@');\n",idName];
             // Neu:
-            [o appendFormat:@"      clone2.appendTo(p);\n",idName];
+            [o appendString:@"      clone2.appendTo(p);\n"];
             [o appendString:@"    }\n"];
             [o appendString:@"  }\n"];
             [o appendString:@"  else\n"];
             [o appendString:@"  {\n"];
-            [o appendFormat:@"    if (lastDP.getNodeType() == 3)\n",idName];
+            [o appendString:@"    if (lastDP.getNodeType() == 3)\n"];
             [o appendFormat:@"      $('#%@').html(lastDP.getNodeText());\n",idName];
             [o appendString:@"  }\n"];
         }
@@ -2692,7 +2692,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
     else
     {
-        self.zuletztGesetzteID = [NSString stringWithFormat:@"element%d",self.idZaehler];
+        self.zuletztGesetzteID = [NSString stringWithFormat:@"element%ld",self.idZaehler];
     }
 
 
@@ -2701,7 +2701,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // welcher später beim auslesen der Klasse ersetzt werden muss.
     // (Es sei denn es wurde wirklich vom Benutzer explizit eine ID vergeben)
     if (self.ignoreAddingIDsBecauseWeAreInClass && ![attributeDict valueForKey:@"id"])
-        self.zuletztGesetzteID = [NSString stringWithFormat:@"%@_%d",ID_REPLACE_STRING,self.idZaehler];
+        self.zuletztGesetzteID = [NSString stringWithFormat:@"%@_%ld",ID_REPLACE_STRING,self.idZaehler];
 
     [self.output appendString:@" id=\""];
     [self.output appendString:self.zuletztGesetzteID];
@@ -2805,7 +2805,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         [self.jsOutput appendFormat:@"parseInt($('#%@').prev().get(0).lastElementChild.offsetHeight)+",id];
 
-        [self.jsOutput appendFormat:@"%d", spacing_y];
+        [self.jsOutput appendFormat:@"%ld", spacing_y];
         [self.jsOutput appendString:@") + 'px';\n\n"];
 
         wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y = NO;
@@ -2817,7 +2817,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         // X-Attribut darf sich hingegen auswirken und darf nicht genullt werden!
         if ([attributeDict valueForKey:@"y"])
         {
-            [self.jsOutput appendFormat:@"\n  // top-css-Eigenschaft nullen, da ein y-wert gesetzt wurde,\n  // obwohl wir in einem Simplelayout Y sind, welches top automatisch ausrichtet.\n",id];
+            [self.jsOutput appendString:@"\n  // top-css-Eigenschaft nullen, da ein y-wert gesetzt wurde,\n  // obwohl wir in einem Simplelayout Y sind, welches top automatisch ausrichtet.\n"];
             // Eigenschaft entfernen verwirrt JS etwas (wenn gleich auch nicht jQuery)
             //[self.jsOutput appendFormat:@"\n$('#%@').css('top','');\n\n",id];
             // Deswegen einfach auf 0 setzen
@@ -2852,7 +2852,7 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [self.jsOutput appendFormat:@"$('#%@').prev().outerHeight()+",id];
 
             // Spacing-Angabe auch gleich hier mitkorrigieren
-            [self.jsOutput appendFormat:@"%d", spacing_y];
+            [self.jsOutput appendFormat:@"%ld", spacing_y];
             [self.jsOutput appendString:@") + 'px';\n"];
 
             // Ansonsten müssen wir halt nur entsprechend des spacing-Wertes nach unten
@@ -2871,7 +2871,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             [self.jsOutput appendString:@"').css('top',"];
             // += funzt nicht wegen der Startvorgabe 'auto'. Da kann man nicht draufaddieren. Aber klappt auch ohne +=
             // [self.jsOutput appendString:@"'+=' + "];
-            [self.jsOutput appendFormat:@"%d", spacing_y];
+            [self.jsOutput appendFormat:@"%ld", spacing_y];
             [self.jsOutput appendFormat:@" * $('#%@').prevAll().length);\n\n",id];
         }
         self.firstElementOfSimpleLayout_y = NO;
@@ -2899,7 +2899,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         [self.jsOutput appendFormat:@"parseInt($('#%@').prev().get(0).lastElementChild.offsetWidth)+",id];
 
-        [self.jsOutput appendFormat:@"%d", spacing_x];
+        [self.jsOutput appendFormat:@"%ld", spacing_x];
         [self.jsOutput appendString:@") + 'px';\n\n"];
 
         wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_X = NO;
@@ -2911,7 +2911,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         // Y-Attribut darf sich hingegen auswirken und darf nicht genullt werden!
         if ([attributeDict valueForKey:@"x"])
         {
-            [self.jsOutput appendFormat:@"\n  // left-css-Eigenschaft nullen, da ein x-wert gesetzt wurde,\n  // obwohl wir in einem Simplelayout X sind, welches left automatisch ausrichtet.\n",id];
+            [self.jsOutput appendString:@"\n  // left-css-Eigenschaft nullen, da ein x-wert gesetzt wurde,\n  // obwohl wir in einem Simplelayout X sind, welches left automatisch ausrichtet.\n"];
             [self.jsOutput appendFormat:@"  $('#%@').css('left','0');\n\n",id];
         }
 
@@ -2951,7 +2951,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             [self.jsOutput appendFormat:@"$('#%@').prev().outerWidth()+",id];
 
             // Spacing-Angabe auch gleich hier mitkorrigieren
-            [self.jsOutput appendFormat:@"%d", spacing_x];
+            [self.jsOutput appendFormat:@"%ld", spacing_x];
 
             [self.jsOutput appendString:@") + 'px';\n"];
 
@@ -2973,7 +2973,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             [self.jsOutput appendString:@"').css('left',"];
             // += klappt nicht wegen der Startvorgabe 'auto'. Da kann man nicht draufaddieren. Aber klappt auch ohne +=
             // [self.jsOutput appendString:@"'+=' + "];
-            [self.jsOutput appendFormat:@"%d", spacing_x];
+            [self.jsOutput appendFormat:@"%ld", spacing_x];
             [self.jsOutput appendFormat:@" * $('#%@').prevAll().length);\n\n",id];
         }
         self.firstElementOfSimpleLayout_x = NO;
@@ -3151,12 +3151,12 @@ void OLLog(xmlParser *self, NSString* s,...)
             }
             else
             {
-                [self.enclosingElementsIds addObject:[NSString stringWithFormat:@"%@_%d",ID_REPLACE_STRING,self.idZaehler+1]];
+                [self.enclosingElementsIds addObject:[NSString stringWithFormat:@"%@_%ld",ID_REPLACE_STRING,self.idZaehler+1]];
             }
         }
         else
         {
-            [self.enclosingElementsIds addObject:[NSString stringWithFormat:@"element%d",self.idZaehler+1]];
+            [self.enclosingElementsIds addObject:[NSString stringWithFormat:@"element%ld",self.idZaehler+1]];
         }
     }
 }
@@ -3623,7 +3623,7 @@ didStartElement:(NSString *)elementName
     [self initTextAndKeyInProgress:elementName];
 
 
-    NSLog([NSString stringWithFormat:@"\nOpening Element: %@ (Neue Verschachtelungstiefe: %d)", elementName,self.verschachtelungstiefe]);
+    NSLog([NSString stringWithFormat:@"\nOpening Element: %@ (Neue Verschachtelungstiefe: %ld)", elementName,self.verschachtelungstiefe]);
     NSLog([NSString stringWithFormat:@"with these attributes: %@\n", attributeDict]);
 
 
@@ -4034,7 +4034,7 @@ didStartElement:(NSString *)elementName
 
                 // Trotzdem anlegen, damit das Programm nicht laufend abstürzt.
                 [self.jsHead2Output appendString:@"\n// Ein Dataset, welches noch ausgewertet werden muss (ToDo). Aber ich lege trotzdem schonmal ein Objekt an, damit Attribute und Methoden erfolgreich daran gebunden werden können.\n"];
-                [self.jsHead2Output appendFormat:@"%@ = new lz.dataset('%@'); // muss vom Typ dataset sein, damit er auf die Methode 'setQueryParam' z. B. zugreifen kann\n",self.lastUsedDataset, self.lastUsedDataset, self.lastUsedDataset];
+                [self.jsHead2Output appendFormat:@"%@ = new lz.dataset('%@'); // muss vom Typ dataset sein, damit er auf die Methode 'setQueryParam' z. B. zugreifen kann\n",self.lastUsedDataset, self.lastUsedDataset];
             }
             else
             {
@@ -5821,7 +5821,7 @@ if (![elementName isEqualToString:@"combobox"])
         // Alte Lösung:
         // breiteVonRollUpDown = (breiteVonRollUpDown - abstand*2);
         // Folgeänderung Neue Lösung:
-        breiteVonRollUpDown = (breiteVonRollUpDown - (abstand*2*(self.rollUpDownVerschachtelungstiefe-2)));
+        breiteVonRollUpDown = (breiteVonRollUpDown - (abstand*2*((int)self.rollUpDownVerschachtelungstiefe-2)));
 
         // Auch noch die Breite des Rahmens (links und rechts) abziehen.
         // Erst dann ist es geometrisch.
@@ -5962,7 +5962,7 @@ if (![elementName isEqualToString:@"combobox"])
         [self.output appendString:@"<!-- Die Flipleiste -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<div style=\"position:relative; top:0px; left:0px; width:"];
-        [self.output appendFormat:@"%dpx; height:%dpx; background-color:lightblue; line-height: %dpx; vertical-align:middle;\" class=\"ui-corner-top\" id=\"",breiteVonRollUpDown,heightOfFlipBar];
+        [self.output appendFormat:@"%dpx; height:%dpx; background-color:lightblue; line-height: %dpx; vertical-align:middle;\" class=\"ui-corner-top\" id=\"",breiteVonRollUpDown,heightOfFlipBar, heightOfFlipBar];
         [self.output appendString:id4flipleiste];
         [self.output appendString:@"\">\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
@@ -6266,7 +6266,7 @@ if (![elementName isEqualToString:@"combobox"])
             [self.jsOLClassesOutput appendString:@"///////////////////////////////////////////////////////////////\n"];
             [self.jsOLClassesOutput appendFormat:@"// class = %@ (from %@)",name,[self.pathToFile lastPathComponent]];
 
-            for (int i=(42-([name length]+[[self.pathToFile lastPathComponent] length])); i > 0; i--)
+            for (int i=(42-((int)[name length]+(int)[[self.pathToFile lastPathComponent] length])); i > 0; i--)
             {
                 [self.jsOLClassesOutput appendFormat:@" "];
             }
@@ -6279,7 +6279,7 @@ if (![elementName isEqualToString:@"combobox"])
             [self.jsOLClassesOutput appendFormat:@"  this.name = '%@';\n",name];
 
             // Das Attribut 'name' brauchen wir jetzt nicht mehr.
-            int i = [keys count]; // Test, ob es auch klappt
+            int i = (int)[keys count]; // Test, ob es auch klappt
             [keys removeObject:@"name"];
             if (i == [keys count])
                 [self instableXML:@"Konnte Attribut 'name' in <class> nicht löschen."];
@@ -7112,7 +7112,7 @@ if (![elementName isEqualToString:@"combobox"])
                     // Defaultargumente setzen und dann gleich die alle mit.
                     neueArgs = [self holAlleArgumentDieKeineDefaultArgumenteSind:args];
 
-                    NSLog([NSString stringWithFormat:@"There is/are %d argument(s) with a default argument. I will regexp them.",numberOfMatches]);
+                    NSLog([NSString stringWithFormat:@"There is/are %ld argument(s) with a default argument. I will regexp them.",numberOfMatches]);
 
                     NSArray *matches = [regexp matchesInString:args options:0 range:NSMakeRange(0, [args length])];
 
@@ -7123,9 +7123,9 @@ if (![elementName isEqualToString:@"combobox"])
                         NSRange defaultValueRange = [match rangeAtIndex:2];
 
                         NSString *varName = [args substringWithRange:varNameRange];
-                        NSLog([NSString stringWithFormat:@"%Resulting variable name: %@",varName]);
+                        NSLog([NSString stringWithFormat:@"Resulting variable name: %@",varName]);
                         NSString *defaultValue = [args substringWithRange:defaultValueRange];
-                        NSLog([NSString stringWithFormat:@"%Resulting default value: %@",defaultValue]);
+                        NSLog([NSString stringWithFormat:@"Resulting default value: %@",defaultValue]);
 
                         // ... dann die Variablennamen der args neu sammeln...
                         if (![neueArgs isEqualToString:@""])
@@ -7254,6 +7254,18 @@ if (![elementName isEqualToString:@"combobox"])
 
         NSString *enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
 
+        // Wenn 'reference' gesetzt, dann Bezug nehmen und DARAN binden
+        // Aber gleichzeitig muss das aktuelle this erhalten bleiben, deswegen mit bind() arbeiten
+        if ([attributeDict valueForKey:@"reference"])
+        {
+            self.attributeCount++;
+
+            self.referenceAttributeInHandler = YES;
+
+            NSLog(@"Using the referenced element to bind the handler, not the enclosing Element.");
+
+            enclosingElem = [attributeDict valueForKey:@"reference"];
+        }
 
         [self.jQueryOutput appendString:@"\n  // pointer-events zulassen, da ein Handler an dieses Element gebunden ist."];
         [self.jQueryOutput appendFormat:@"\n  $('#%@').css('pointer-events','auto');\n",enclosingElem];
@@ -7576,22 +7588,6 @@ if (![elementName isEqualToString:@"combobox"])
 
 
 
-        // Wenn 'reference' gesetzt, dann Bezug nehmen und DARAN binden
-        // Aber gleichzeitig muss das this beim alten bleiben, deswegen mit bind() arbeiten
-        if ([attributeDict valueForKey:@"reference"])
-        {
-            self.attributeCount++;
-
-            self.referenceAttributeInHandler = YES;
-
-            //[self.jQueryOutput appendFormat:@"\n  // 'reference'-Attribut, deswegen addEventListener\n"];
-            //[self.jQueryOutput appendFormat:@"  %@.addEventListener('%@',function() { alert('Hmmm'); }, false);\n",[attributeDict valueForKey:@"reference"],name];
-
-            NSLog(@"Using the referenced element to bind the handler, not the enclosing Element.");
-        }
-
-
-
         // Wenn es vorher nicht gematcht hat, dann ist es wohl ein self-defined event.
         // Irgend jemand anderes muss das event dann per triggerHandler() aufrufen
         if (!alsBuildInEventBearbeitet)
@@ -7609,16 +7605,8 @@ if (![elementName isEqualToString:@"combobox"])
             // ebenso 'setAttribute_'.
             // Das erste Argument (e) ist immer automatisch das event-Objekt.
             // (Siehe Beispiel <event>, Example 28)
-            if ([attributeDict valueForKey:@"reference"])
-            {
-                [self.jQueryOutput appendFormat:@"\n  // 'custom'-Handler für %@\n",[attributeDict valueForKey:@"reference"]];
-                [self.jQueryOutput appendFormat:@"  $(%@).on('%@',function(e%@)\n  {\n    ",[attributeDict valueForKey:@"reference"],name,args];
-            }
-            else
-            {
-                [self.jQueryOutput appendFormat:@"\n  // 'custom'-Handler für %@\n",enclosingElem];
-                [self.jQueryOutput appendFormat:@"  $('#%@').on('%@',function(e%@)\n  {\n    ",enclosingElem,name,args];
-            }
+            [self.jQueryOutput appendFormat:@"\n  // 'custom'-Handler für %@\n",enclosingElem];
+            [self.jQueryOutput appendFormat:@"  $('#%@').on('%@',function(e%@)\n  {\n    ",enclosingElem,name,args];
 
 
             // Okay, jetzt Text sammeln und beim schließen einfügen
@@ -7948,7 +7936,7 @@ if (![elementName isEqualToString:@"combobox"])
         if (!element_bearbeitet)
             [self instableXML:[NSString stringWithFormat:@"\nERROR: Nicht erfasstes öffnendes Element: '%@'", elementName]];
 
-        NSLog([NSString stringWithFormat:@"Es wurden %d von %d Attributen berücksichtigt.",self.attributeCount,[attributeDict count]]);
+        NSLog([NSString stringWithFormat:@"Es wurden %d von %ld Attributen berücksichtigt.",self.attributeCount,[attributeDict count]]);
 
         if (self.attributeCount != [attributeDict count])
         {
@@ -7972,7 +7960,7 @@ if (![elementName isEqualToString:@"combobox"])
         // Dies könnte brechen, wenn es kein Unterverzeichnis ist, sondern ein paralleles
         // Eine solche Ordner-projekt-struktur ist aber eher unwahrscheinlicher. Hoffe ich?!
 
-        int n1 = [self.pathToFile_basedir length];
+        NSUInteger n1 = [self.pathToFile_basedir length];
 
         // int n2 = [[[self.pathToFile URLByDeletingLastPathComponent] absoluteString] length];
 
@@ -7991,9 +7979,9 @@ if (![elementName isEqualToString:@"combobox"])
         // Auch ohne './' kann es natürlich auf den relativen Pfad verweisen.
         // Dann muss ich n1 und n2 vergleichen, ob wir in einem anderen Pfad sind.
 
-        int n1 = [self.pathToFile_basedir length];
+        NSUInteger n1 = [self.pathToFile_basedir length];
 
-        int n2 = [[[self.pathToFile URLByDeletingLastPathComponent] absoluteString] length];
+        NSUInteger n2 = [[[self.pathToFile URLByDeletingLastPathComponent] absoluteString] length];
 
         if (n1 != n2)
         {
@@ -8205,7 +8193,7 @@ BOOL isJSArray(NSString *s)
     [self reduziereVerschachtelungstiefe];
 
 
-    NSLog([NSString stringWithFormat:@"Closing Element: %@ (Neue Verschachtelungstiefe: %d)\n", elementName,self.verschachtelungstiefe]);
+    NSLog([NSString stringWithFormat:@"Closing Element: %@ (Neue Verschachtelungstiefe: %ld)\n", elementName,self.verschachtelungstiefe]);
 
 
     // Alle einzeln durchgehen, damit wir besser fehlende überprüfen können,
@@ -8511,7 +8499,7 @@ BOOL isJSArray(NSString *s)
 
         // In manchen JS/jQuery tauchen \n auf, die müssen zu <br /> werden
         rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\\n" withString:@"<br />"];
-
+        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\\n" withString:@"<br />"];
 
 
         // Ich muss im Quellcode bereits vorab geschriebene Escape-Sequenzen berücksichtigen:
@@ -8535,7 +8523,8 @@ BOOL isJSArray(NSString *s)
         // Deswegen muss ich diese aus dem String entfernen.
         // Eine wirklich gute Multi-Line-String-Lösung gibt es wohl nicht.
         // Siehe auch: http://google-styleguide.googlecode.com/svn/trunk/javascriptguide.xml?showone=Multiline_string_literals#Multiline_string_literals
-        // Am Ende innerhalb der JS-String-Zeile muss ein \\n stehen, damit Kommentare nur für eine Zeile gelten
+        // Am Ende innerhalb der JS-String-Zeile muss ein \\n stehen,
+        // damit Kommentare nur für eine Zeile gelten.
         rekursiveRueckgabeOutput = [rekursiveRueckgabeOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n' + \n  '"];
         rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
@@ -8869,7 +8858,7 @@ BOOL isJSArray(NSString *s)
         // Und das Array wieder leeren
         [self.collectedFrameResources removeAllObjects];
         // und den brauchen wir auch nicht mehr
-        self.last_resource_name_for_frametag = [[NSString alloc] initWithString:@""];
+        self.last_resource_name_for_frametag = @"";
     }
 
 
@@ -9161,7 +9150,7 @@ BOOL isJSArray(NSString *s)
                 // Defaultwerten als auch solchen ohne. Deswegen hier erstmal ohne
                 // Defaultargumente setzen und dann gleich die alle mit.
                 neueArgs = [self holAlleArgumentDieKeineDefaultArgumenteSind:args];
-                NSLog([NSString stringWithFormat:@"There is/are %d argument(s) with a default argument. I will regexp them.",numberOfMatches]);
+                NSLog([NSString stringWithFormat:@"There is/are %ld argument(s) with a default argument. I will regexp them.",numberOfMatches]);
 
                 NSArray *matches = [regexp2 matchesInString:args options:0 range:NSMakeRange(0, [args length])];
 
@@ -9172,9 +9161,9 @@ BOOL isJSArray(NSString *s)
                     NSRange defaultValueRange = [match rangeAtIndex:2];
 
                     NSString *varName = [args substringWithRange:varNameRange];
-                    NSLog([NSString stringWithFormat:@"%Resulting variable name: %@",varName]);
+                    NSLog([NSString stringWithFormat:@"Resulting variable name: %@",varName]);
                     NSString *defaultValue = [args substringWithRange:defaultValueRange];
-                    NSLog([NSString stringWithFormat:@"%Resulting default value: %@",defaultValue]);
+                    NSLog([NSString stringWithFormat:@"Resulting default value: %@",defaultValue]);
 
                     // ... dann die Variablennamen der args neu sammeln...
                     if (![neueArgs isEqualToString:@""])
@@ -9190,7 +9179,7 @@ BOOL isJSArray(NSString *s)
                 args = neueArgs;
 
                 // Den funktionskopf von oben jetzt benutzen. In diesem die Argumente ersetzen...
-                int posOeffnendeKlammer = [funktionskopf rangeOfString:@"("].location;
+                NSUInteger posOeffnendeKlammer = [funktionskopf rangeOfString:@"("].location;
                 funktionskopf = [funktionskopf substringToIndex:posOeffnendeKlammer];
                 funktionskopf = [NSString stringWithFormat:@"%@(%@) {",funktionskopf,neueArgs];
 
@@ -9199,9 +9188,9 @@ BOOL isJSArray(NSString *s)
 
 
                 // Jetzt muss ich 'nur noch' die defaultwerte injecten
-                // Dazu kurz mit einem NSMutableString arbeiten
-                // Und wir greifen auf den 'match' und dessen Länge vo ganz oben zu um die genaue Stelle zu ermitteln
-                int n_entfernteZeichen = [match rangeAtIndex:0].length - funktionskopf.length;
+                // Dazu kurz mit einem NSMutableString arbeiten. Und wir greifen auf den 'match'
+                // und dessen Länge vo ganz oben zu um die genaue Stelle zu ermitteln.
+                NSUInteger n_entfernteZeichen = [match rangeAtIndex:0].length - funktionskopf.length;
 
                 NSMutableString *t = [NSMutableString stringWithFormat:@"%@",s];
                 [t insertString:defaultValues atIndex:[match rangeAtIndex:0].location+[match rangeAtIndex:0].length-n_entfernteZeichen];
@@ -9330,7 +9319,8 @@ BOOL isJSArray(NSString *s)
 
         s = [self modifySomeExpressionsInJSCode:s];
         // In String auftauchende '\n' müssen ersetzt werden, sonst JS-Error. Gilt das sogar global?
-        s = [s stringByReplacingOccurrencesOfString:@"\\n" withString:@"\\\\n"];
+        //s = [s stringByReplacingOccurrencesOfString:@"\\n" withString:@"\\\\n"];
+        // Puh, das war ein collectedClasses-Problem. Strings müssen untouched bleiben hier.
 
         // super ist nicht erlaubt in JS und gibt es auch nicht.
         // Ich ersetze es erstmal durch this.getTheParent(). Sollte funktionieren.
@@ -12039,27 +12029,28 @@ BOOL isJSArray(NSString *s)
     "// Debug-Objekt, welches unter Umständen angesprochen wird\n"
     "/////////////////////////////////////////////////////////\n"
     "Debug = {};\n"
-    "Debug.debug = function(s,v) {\n"
+    "Debug.debug = function(s,v0,v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14,v15,v16,v17,v18,v19) {\n"
     "    // Damit Example 5 von lz.Formatter kompiliert (jedoch ohne zu klappen):\n"
-    "    s = s.replace(' %w',' %s');\n"
-    "    s = s.replace(' %#w',' %s');\n"
+    "    s = s.replace(/%w/,'%s');\n"
+    "    s = s.replace(/%#w/,'%s');\n"
     //"    s = s.replace('%s',v);\n"
     //"    s = s.replace('%w',v);\n"
-    "    s = s + '<br />'\n"
+    "    s = s + '<br />';\n"
     "    if ($('#debugInnerWindow').length)\n"
-    "        $('#debugInnerWindow').append(sprintf(s, v))\n"
-    "    //alert(s)\n"
+    "        $('#debugInnerWindow').append(sprintf(s,v0,v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14,v15,v16,v17,v18,v19));\n"
+    "    //alert(s);\n"
     "};\n"
+    "Debug.format = Debug.debug; // I don't c the difference between this methods\n"
     "Debug.write = function(s1,v) {\n"
     "    if (v === undefined)\n"
     "        v = '';\n"
     "\n"
     "    var s = s1 + ' ' + v;\n"
     "    if ($('#debugInnerWindow').length)\n"
-    "        $('#debugInnerWindow').append(s + '<br />')\n"
+    "        $('#debugInnerWindow').append(s + '<br />');\n"
     "    else\n"
-    "        console.log(s)\n"
-    "    //alert(s)\n"
+    "        console.log(s);\n"
+    "    //alert(s);\n"
     "};\n"
     "\n"
     "\n"
@@ -12203,12 +12194,24 @@ BOOL isJSArray(NSString *s)
     "\n"
     "    if (attributeName == 'text')\n"
     "    {\n"
-    "      if ($(me).children().length > 0 && $(me).children().get(0).nodeName == 'INPUT')\n"
-    "          $(me).children().attr('value',value);\n"
-    "      else if ($(me).get(0).nodeName == 'INPUT')\n"
-    "          $(me).attr('value',value);\n"
-    "      else\n"
-    "          $(me).html(value);\n"
+    "        if ($(me).children().length > 0 && $(me).children().get(0).nodeName == 'INPUT')\n"
+    "        {\n"
+    "            $(me).children().attr('value',value);\n"
+    "        }\n"
+    "        else if ($(me).get(0).nodeName == 'INPUT')\n"
+    "        {\n"
+    "            $(me).attr('value',value);\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "            $(me).html(value);\n"
+    "\n"
+    "            if (me.resize)\n"
+    "            {\n"
+    "                $(me).parent().height($(me).height()+4); // + 4 for the padding of div_text\n"
+    "                $(me).parent().width($(me).width()+4); // + 4 for the padding of div_text\n"
+    "            }\n"
+    "        }\n"
     "    }\n"
     "    else if (attributeName == 'font')\n"
     "    {\n"
@@ -12270,6 +12273,22 @@ BOOL isJSArray(NSString *s)
     "        $(me).css('height',value);\n"
     //"        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
     //"        $(me).get(0).myHeight = value;\n"
+    "    }\n"
+    "    else if (attributeName == 'rotation')\n"
+    "    {\n"
+    "        var v = 'rotate('+value+'deg)';\n"
+    "        var w = '0% 0% 0';\n"
+    "\n"
+    "        $(me).css('-moz-transform',v); // FF\n"
+    "        $(me).css('-webkit-transform',v); // Safari, Chrome\n"
+    "        $(me).css('-o-transform',v); // Opera\n"
+    "        $(me).css('-ms-transform',v); // IE\n"
+    "        $(me).css('transform',v); // W3C\n"
+    "        $(me).css('-moz-transform-origin',w); // FF\n"
+    "        $(me).css('-webkit-transform-origin',w); // Safari, Chrome\n"
+    "        $(me).css('-o-transform-origin',w); // Opera\n"
+    "        $(me).css('-ms-transform-origin',w); // IE\n"
+    "        $(me).css('transform-origin',w); // W3C\n"
     "    }\n"
     "    else if (attributeName == 'clickable')\n"
     "    {\n"
@@ -12487,6 +12506,7 @@ BOOL isJSArray(NSString *s)
     "          attributeName === 'isopen' ||\n"
     "          attributeName === 'parentnumber' ||\n"
     "          attributeName === 'index' ||\n"
+    "          attributeName === 'season' ||\n"
     "          attributeName === 'avalue')\n"
     "      {\n"
     "         if (this[attributeName] !== undefined)\n"
@@ -12643,8 +12663,7 @@ BOOL isJSArray(NSString *s)
     "// Nur für class='div_text' sind diese Methoden gültig //\n"
     "/////////////////////////////////////////////////////////\n"
     "function warnOnWrongClass(me) {\n"
-    "    if (!$(me).hasClass('div_text'))\n"
-    "    {\n"
+    "    if (!$(me).hasClass('div_text')) {\n"
     "        alert('Wieso meinst du mich aufrufen zu können? Du bist doch gar kein \\'div_text\\'. Ernsthafte Frage!');\n"
     "        return true;\n"
     "    }\n"
@@ -12951,12 +12970,16 @@ BOOL isJSArray(NSString *s)
     "    configurable : true\n"
     "});\n"
     "\n"
+    "// bei jQueri UI gibt es auch parent. Um Kompatibilität damit aufrecht zu erhalten, myParent\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Getter/Setter for 'parent'                          //\n"
+    "// Getter/Setter for 'myParent'                        //\n"
     "// READ-ONLY                                           //\n"
     "/////////////////////////////////////////////////////////\n"
-    "Object.defineProperty(Object.prototype, 'parent', {\n"
-    "    get : function(){ if (!isDOM(this)) return undefined; return this.getTheParent(); },\n"
+    "Object.defineProperty(Object.prototype, 'myParent', {\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "        return this.getTheParent();\n"
+    "    },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -13805,12 +13828,10 @@ BOOL isJSArray(NSString *s)
     "  {\n"
     //"    alert(an[i]);\n"
     //"    alert(av[i]);\n"
-    "    var cssAttributes = ['bgcolor','x','y','width','height'];\n"
+    "    var cssAttributes = ['x','y','width','height'];\n"
     "    var jsAttributes = ['onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown','focusable','layout','text'];\n"
     "    if (jQuery.inArray(an[i],cssAttributes) != -1)\n"
     "    {\n"
-    "        if (an[i] === 'bgcolor')\n"
-    "          an[i] = 'background-color';\n"
     "        if (an[i] === 'x')\n"
     "          an[i] = 'left';\n"
     "        if (an[i] === 'y')\n"
@@ -13820,11 +13841,12 @@ BOOL isJSArray(NSString *s)
     "        {\n"
     "            av[i] = av[i].substring(2,av[i].length-1);\n"
     "\n"
-    //"            av[i] = av[i].replace('immediateparent','getTheParent(true)');\n"
-    //"\n"
-    //"            av[i] = av[i].replace('parent','getTheParent()');\n"
-    //"\n"
+    "            av[i] = av[i].replace('immediateparent','getTheParent(true)');\n"
+    "\n"
+    "            av[i] = av[i].replace('parent','getTheParent()');\n"
+    "\n"
     // --> Neu gelöst über getter, deswegen muss ich nicht mehr ersetzen.
+    // --> Neuer: Bricht leider jQueri UI. hmmm, dewegen kein getter für parent möglich
     "            av[i] = av[i].replace('.width','.myWidth');\n"
     "\n"
     "            av[i] = av[i].replace('.height','.myHeight');\n"
@@ -14101,6 +14123,8 @@ BOOL isJSArray(NSString *s)
     "  // Deswegen kein direktes einfügen in contentHTML, sondern als Attribut auswerten lassen\n"
     "  this.attributeNames = [\"text\"];\n"
     "  this.attributeValues = [textBetweenTags];\n"
+    "\n"
+    "  this.selfDefinedAttributes = { resize:true, selectable:false }\n"
     "\n"
     "  this.defaultplacement = '';\n"
     "\n"
@@ -14423,7 +14447,7 @@ BOOL isJSArray(NSString *s)
 
 - (void) parser:(NSXMLParser *)parser parseErrorOccurred:(NSError *)parseError
 {
-    NSString *errorString = [NSString stringWithFormat:@"Error code %i", [parseError code]];
+    NSString *errorString = [NSString stringWithFormat:@"Error code %ld", [parseError code]];
     NSLog([NSString stringWithFormat:@"Error parsing XML: %@", errorString]);
 
 

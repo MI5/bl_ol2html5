@@ -17,7 +17,7 @@
 {	
     NSLog(@"doSaveAs");	
     NSSavePanel *saveDlg = [NSSavePanel savePanel];
-    int tvarInt	= [saveDlg runModal];
+    NSInteger tvarInt	= [saveDlg runModal];
     if(tvarInt == NSOKButton)
     {
      	NSLog(@"doSaveAs we have an OK button");	
@@ -29,7 +29,7 @@
     }
     else
     {
-     	NSLog(@"doSaveAs tvarInt not equal 1 or zero = %3d",tvarInt);
+     	NSLog(@"doSaveAs tvarInt not equal 1 or zero = %3ld",tvarInt);
      	return;
     }
 

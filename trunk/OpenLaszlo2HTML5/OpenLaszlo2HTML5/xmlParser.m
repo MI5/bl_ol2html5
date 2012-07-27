@@ -37,7 +37,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -843,7 +843,13 @@ void OLLog(xmlParser *self, NSString* s,...)
         // Und setAttribute_ biegt alle Farbwerte vorher richtig um
         [self setTheValue:[attributeDict valueForKey:@"bgcolor"] ofAttribute:@"bgcolor"];
     }
-    
+
+    if ([attributeDict valueForKey:@"rotation"])
+    {
+        self.attributeCount++;
+        [self setTheValue:[attributeDict valueForKey:@"rotation"] ofAttribute:@"rotation"];
+    }
+
     if ([attributeDict valueForKey:@"opacity"])
     {
         self.attributeCount++;
@@ -1889,11 +1895,21 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Hatte ich mal als 'setAttribute(', aber die Klamemr bricht natürlich den RegExp
     s = [self inString:s searchFor:@"setAttribute" andReplaceWith:@"setAttribute_" ignoringTextInQuotes:YES];
 
+
+
+    // Bevor ich die parents ersetze muss ich das native 'parentNode', welches im Code vorkommen kann, retten
+    s = [self inString:s searchFor:@"parentNode" andReplaceWith:@"@@@_prentNode_@@@" ignoringTextInQuotes:YES];
+
+
     s = [self inString:s searchFor:@"immediateparent" andReplaceWith:@"getTheParent(true)" ignoringTextInQuotes:YES];
-    // --> Neu als getter gelöst / Bricht leider jQuery UI...
+    // --> Neu als getter gelöst / Ganz neu: Bricht leider jQuery UI...
 
     s = [self inString:s searchFor:@"parent" andReplaceWith:@"getTheParent()" ignoringTextInQuotes:YES];
-    // --> Neu als getter gelöst / Bricht leider jQuery UI...
+    // --> Neu als getter gelöst / Ganz neu: Bricht leider jQuery UI...
+
+
+    // Und das native 'parentNode' wieder herstellen.
+    s = [self inString:s searchFor:@"@@@_prentNode_@@@" andReplaceWith:@"parentNode" ignoringTextInQuotes:YES];
 
 
     // Das OpenLaszlo-'height' muss ersetzt werden (über getter klappt nicht)
@@ -3289,6 +3305,9 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Falls sich der Textinhalt ändert, soll sich bei true, die Größe also mitändern
     // true = default, und auch in HTML default
     NSString *resize = @"true";
+    // Beispiel lz.DataNodeMixin: Wenn eine width (und/oder eine height?) gegeben ist, dann ist resize wohl false
+    if ([attributeDict valueForKey:@"width"])    
+        resize = @"false";
     if ([attributeDict valueForKey:@"resize"])
     {
         self.attributeCount++;
@@ -4311,7 +4330,7 @@ didStartElement:(NSString *)elementName
         }
         else
         {
-            if (isNumeric([attributeDict valueForKey:@"value"]))
+            if (isNumeric([attributeDict valueForKey:@"value"]) || [[attributeDict valueForKey:@"value"] isEqual:@"null"])
                 type_ = @"number";
             else
                 type_ = @"string";
@@ -4319,6 +4338,7 @@ didStartElement:(NSString *)elementName
 
 
         // Es gibt auch attributes ohne Startvalue, dann mit einem leeren String initialisieren
+        // Warum leerer String? Bitte Beleg Beispiel dafür. Ich würde sagen gemäß Bsp. 29.27 müsste es eher 'null' sein
         NSString *value;
         if ([attributeDict valueForKey:@"value"])
         {
@@ -4343,24 +4363,94 @@ didStartElement:(NSString *)elementName
         }
         else
         {
-            value = @""; // Quotes werden dann automatisch unten reingesetzt
+            // value = @""; // Quotes werden dann automatisch unten reingesetzt
+            value = @"null"; // 'null' sollte dann natürlich ohne Quotes sein...
+            // ... deswegen type_ auf number setzen
+            type_ = @"number";
         }
 
 
-        // Das Attribut 'setter' hmmm, ToDo
+
+        NSString *elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+        NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
+
+        if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
+            elem = @"canvas";
+
+
+        // Hier drin sammle ich erstmal alle Ausgaben
+        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
+
+
+        if ([attributeDict valueForKey:@"value"] && [attributeDict valueForKey:@"setter"])
+        {
+            //[self instableXML:@"Setting value and setter at once is not supported. Because the value can't be set as long I don't know the method that should be called in the setter."];
+            // Neu: Sollte jetzt klappen.
+        }
+
         if ([attributeDict valueForKey:@"setter"])
         {
-            NSLog(@"Skipping the attribute 'setter' (ToDo).");
+            NSLog(@"Setting the attribute 'setter' as setter for the property of the object.");
             self.attributeCount++;
+
+            NSString *setter = [attributeDict valueForKey:@"setter"];
+
+
+            /*
+            // Ich kann leider nicht NUR einen setter anlegen. Immer analog mit getter nur.
+            // Denn getter mappe ich um, dann auf eine interne Variable die ich dafür anlege.
+            // Direkt an das Objekt binden, das setter/getter-Paar. Nicht per Prototype (eh Compilerfehler dann)
+
+            [o appendString:@"\n  // Ein setter... \n"];
+            [o appendFormat:@"  /////////////////////////////////////////////////////////\n"];
+            [o appendFormat:@"  // Getter/Setter for '%@'\n",a];
+            [o appendFormat:@"  // READ/WRITE\n"];
+            [o appendFormat:@"  /////////////////////////////////////////////////////////\n"];
+            [o appendFormat:@"  Object.defineProperty(%@, '%@', {\n",elem,a];
+            [o appendFormat:@"      get : function(){ return 99; },\n"];
+            NSString *arg = [setter substringFromIndex:[setter rangeOfString:@"("].location+1];
+            arg = [arg substringToIndex:[arg rangeOfString:@")"].location];
+            [o appendFormat:@"      set: function(%@){ this.%@ },\n",arg,setter]; // this MUSS rein
+            [o appendFormat:@"      enumerable : false,\n"];
+            [o appendFormat:@"      configurable : true\n"];
+            [o appendFormat:@"  });\n"];
+             */
+
+            // I can't work with REAL JS-setters, else infinite recursion, weil in der setter-Funktion dann Wert gesetzt wird
+            // Ich könnte das rausparsen... aber statt dessen einfach eigenen setter erfinden und darauf testen in setAttribute_
+            [o appendString:@"\n  // Define a 'setter'... I can't work with real JS-Setters here, else infinite recursion."];
+            setter = [setter substringToIndex:[setter rangeOfString:@"("].location];
+            [o appendFormat:@"\n  %@.mySetterFor_%@_ = '%@'; \n",elem,a,setter];
+
+            // Und event mitgeben. Gilt wohl eigentlich für alle Attribute, aber noch anders gelöst, da ich in
+            // setAtribute_ immer DIREKT triggerHandler aufrufe.
+            // Bei settern darf triggerHandler() jedoch nicht automatisch ausgelöst werden. Statt dessen wird es oft
+            // in der setAttribute manuell ausgelöst. Mit diesem event schaffe ich die Möglichkeit dazu. S. Bsp. 29.27
+            // Vermutlich gilt dies sogar generell für alle Attribute.
+            NSString *enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+            [o appendFormat:@"  // Gleichzeitig <event> für %@ setzen\n",enclosingElem];
+            [o appendFormat:@"  %@.on%@ = new lz.event(null,%@,'on%@');\n",enclosingElem, a, enclosingElem, a];
         }
 
 
         if ([attributeDict valueForKey:@"when"])
         {
+            // Sollte der Standard sein bei Atributen
             if ([[attributeDict valueForKey:@"when"] isEqualToString:@"once"])
             {
                 NSLog(@"Skipping the attribute 'when'.");
                 self.attributeCount++;
+            }
+
+            // Hmmm, dann packe ich mal ${} drum herum, damit er unten korrekt rein geht.
+            // Aber das ist noch nicht die ganze Wahrheit. Er legt unten ja iwie keine Constraints an
+            if ([[attributeDict valueForKey:@"when"] isEqualToString:@"always"])
+            {
+                NSLog(@"Using the attribute 'when' to create a constraint value.");
+                self.attributeCount++;
+
+                value = [NSString stringWithFormat:@"${%@}",value];
             }
         }
 
@@ -4399,7 +4489,7 @@ didStartElement:(NSString *)elementName
             NSString *className = self.lastUsedNameAttributeOfClass;
             
             if (![self.allFoundClasses objectForKey:className])
-                [self instableXML:@"Nunja, das geht so nicht. Wenn ich Attribute hinzufüge zu einer Klasse, muss ich ja vorher auf diese Klasse gestoßen sein!"];
+                [self instableXML:@"Das geht so nicht. Wenn ich Attribute hinzufüge zu einer Klasse, muss ich vorher auf diese Klasse gestoßen sein!"];
 
             NSMutableDictionary *attrDictOfClass = [self.allFoundClasses objectForKey:className];
 
@@ -4414,17 +4504,6 @@ didStartElement:(NSString *)elementName
         }
         else
         {
-            NSString *elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
-
-            NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
-
-            if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
-                elem = @"canvas";
-
-            // Hier drin sammle ich erstmal alle Ausgaben
-            NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
-
-
             // Folgendes Szenario: Wenn eine selbst definierte Klasse ein Attribut definiert, aber gleichzeitig
             // dieses erbt, dann hat das selbst definierte Vorrang. Deswegen überschreibe ich das Attribut
             // innerhalb der Klasse nicht! Dazu teste ich einfach vorher, ob es auch wirklich undefined ist!
@@ -4439,32 +4518,36 @@ didStartElement:(NSString *)elementName
 
 
 
-            // Wenn wir ein Attribut eines Datasets haben, dann binde ich an self.lastUsedDataset
-            // Denn Datasets werden oft nur per 'name' gesetzt und nicht per 'id'
-            if ([elemTyp isEqualToString:@"dataset"])
+            // Bei einem setter nicht setzen des Wertes, da Methode, die im Setter aufgerufen werden soll u. U. noch nicht
+            // bekannt ist.
+            if (![attributeDict valueForKey:@"setterxyToDoTakeMeOut"])
             {
-                [o appendFormat:@"\n// Ein per <attribute> gesetztes Attribut des Elements %@ (Objekttyp: %@)", self.lastUsedDataset, elemTyp];
-                [o appendFormat:@"\n%@.",self.lastUsedDataset];
+                // Wenn wir ein Attribut eines Datasets haben, dann binde ich an self.lastUsedDataset
+                // Denn Datasets werden oft nur per 'name' gesetzt und nicht per 'id'
+                if ([elemTyp isEqualToString:@"dataset"])
+                {
+                    [o appendFormat:@"\n// Ein per <attribute> gesetztes Attribut des Elements %@ (Objekttyp: %@)", self.lastUsedDataset, elemTyp];
+                    [o appendFormat:@"\n%@.",self.lastUsedDataset];
+                }
+                else
+                {
+                    [o appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut des Elements %@ (Objekttyp: %@)", elem, elemTyp];
+                    [o appendFormat:@"\n  %@.",elem];
+                }
+
+
+
+
+                [o appendFormat:@"%@ = ",a];
+                if (weNeedQuotes)
+                    [o appendString:@"\""];
+                [o appendString:value];
+                if (weNeedQuotes)
+                    [o appendString:@"\""];
+                [o appendString:@";\n"];
             }
-            else
-            {
-                [o appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut des Elements %@ (Objekttyp: %@)", elem, elemTyp];
-                [o appendFormat:@"\n  %@.",elem];
-            }
 
-
-
-
-            [o appendFormat:@"%@ = ",a];
-            if (weNeedQuotes)
-                [o appendString:@"\""];
-            [o appendString:value];
-            if (weNeedQuotes)
-                [o appendString:@"\""];
-            [o appendString:@";\n"];
-
-
-            // Erstmal mir hier drin. Eventuell aber auch erst nach der geschweiften Klammer
+            // Erstmal nur hier drin. Eventuell aber auch erst nach der geschweiften Klammer
             // Und erstmal nicht, wenn wir in canvas sind (globale Attribute)
             if (berechneterWert)
             {
@@ -4507,8 +4590,7 @@ didStartElement:(NSString *)elementName
 
             // War früher mal jsHeadOutput, aber die Elemente sind ja erst nach Instanzierung
             // bekannt, deswegen jQueryOutput0
-            // (damit es noch vor den Computed Values und Constraint Values bekannt ist)
-            // canvas zu, die ja bereits bekannt sein müssen!
+            // (Damit es noch vor den Computed Values und Constraint Values bekannt ist)
             // Wenn wir ein Attribut eines Datasets haben, dann direkt hinter das dataset schreiben
             if ([elemTyp isEqualToString:@"dataset"])
             {
@@ -7637,8 +7719,6 @@ if (![elementName isEqualToString:@"combobox"])
     }
 
 
-    // s. http://www.openlaszlo.org/lps4.9/docs/developers/methods-events-attributes.html
-    // Alles da drin ToDo
 
     if ([elementName isEqualToString:@"event"])
     {
@@ -9358,6 +9438,14 @@ BOOL isJSArray(NSString *s)
             [o appendString:@"\n  }\n"];
         }
 
+        if ([self.lastUsedNameAttributeOfMethod isEqualToString:@"init"])
+        {
+            // in der init-Methode werden u. U. computedValues-Werte überschrieben,
+            // deswegen die init-Methode erst danach ausführen
+            [self.jsComputedValuesOutput appendString:@"\n  // Oben definierte init-Methode wird erst hier ausgeführt\n"];
+            [self.jsComputedValuesOutput appendFormat:@"  %@.init();\n",[self.enclosingElementsIds lastObject]];
+        }
+
         // jQueryOutput0 (Begründung siehe öffnendes Tag)
         [self.jQueryOutput0 appendString:o];
     }
@@ -10309,15 +10397,22 @@ BOOL isJSArray(NSString *s)
     //"/////////////////////////////////////////////////////////\n"
     //"// All color-code are available as constants? NO!      //\n"
     //"/////////////////////////////////////////////////////////\n"
-    //"var white = 'white';\n"
     //"var black = 'black';\n"
-    //"var red = 'red';\n"
     //"var green = 'green';\n"
-    //"var blue = 'blue';\n"
+    //"var silver = 'silver';\n"
+    //"var lime = 'lime';\n"
+    //"var gray = 'gray';\n"
+    //"var olive = 'olive';\n"
+    //"var white = 'white';\n"
     //"var yellow = 'yellow';\n"
-    //"var magenta = 'magenta';\n"
+    //"var maroon = 'maroon';\n"
+    //"var navy = 'navy';\n"
+    //"var red = 'red';\n"
+    //"var blue = 'blue';\n"
     //"var purple = 'purple';\n"
-    //"var brown = 'brown';\n"
+    //"var teal = 'teal';\n"
+    //"var fuchsia = 'fuchsia';\n"
+    //"var aqua = 'aqua';\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -11339,6 +11434,11 @@ BOOL isJSArray(NSString *s)
     "        this.restoreCursor = function() {\n"
     "            $('body').css('cursor', 'default');\n"
     "        }\n"
+    "        this.setCursorGlobal = function(cursor) {\n"
+    "            if (cursor === 'waitcursor')\n"
+    "                cursor = 'wait';\n"
+    "            $('body').css('cursor', cursor);\n"
+    "        }\n"
     "    }\n"
     "\n"
     "\n"
@@ -11377,6 +11477,41 @@ BOOL isJSArray(NSString *s)
     "        }\n"
     "        this.next = function() {\n"
     "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "    this.DataElement = function(name,attr,children) {\n"
+    "        if (typeof name !== 'string')\n"
+    "            throw new TypeError('Constructor function this.DataElement - first argument must be a string.');\n"
+    "        if (attr && typeof attr !== 'objet')\n"
+    "            throw new TypeError('Constructor function this.DataElement - second argument must be a object dictionary.');\n"
+    "\n"
+    "        this.makeNodeList = function(count,name) {\n"
+    "        }\n"
+    "        this.stringToLzData = function(s,trim,nsprefix) {\n"
+    "        }\n"
+    "        this.valueToElement = function(o) {\n"
+    "        }\n"
+    "\n"
+    "        var el = document.createElement(name);\n"
+    "        if (attr)\n"
+    "        {\n"
+    "            for(var prop in attr) {\n"
+    "                if (attr.hasOwnProperty(prop) && typeof attr[prop] === 'string') {\n"
+    "                    el.setAttribute([prop],attr[prop]);\n"
+    "                }\n"
+    "            }\n"
+    "        }\n"
+    "        if (children)\n"
+    "        {\n"
+    "            for (var i = 0; i < children.length; i++) {\n"
+    "                el.appendChild(children[i]);\n"
+    "            }\n"
+    "        }\n"
+    "\n"
+    "        // ToDo: Alle Methoden von this.DataElementMixin() hier reinmixen (und von DataNodeMixin)\n"
+    "\n"
+    "        return el;\n"
     "    }\n"
     "\n"
     "\n"
@@ -11901,11 +12036,17 @@ BOOL isJSArray(NSString *s)
     "lz.History = new lz.HistoryService();\n"
     "\n"
     "// Viele Objekte können auch mit vorangestellten Lz aufgerufen werden\n"
-    "LzBrowser = lz.Browser;\n"
-    "LzEvent = lz.event;\n"
-    "LzFormatter = lz.Formatter;\n"
-    "LzView = lz.view;\n"
-    "LzText = lz.text;\n"
+    "var LzBrowser = lz.Browser;\n"
+    "var LzEvent = lz.event;\n"
+    "var LzFormatter = lz.Formatter;\n"
+    "var LzView = lz.view;\n"
+    "var LzText = lz.text;\n"
+    "var LzDataElement = lz.DataElement;\n"
+    "\n"
+    "// deprecated\n"
+    "lz.DataNode = lz.DataElement;\n"
+    "var LzDataNode = lz.DataElement;\n"
+    "\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -11935,14 +12076,10 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "\n"
-    "\n"
     //"// var canvas = new Object();\n"
     //"// statt dessen besser:\n"
     //"function canvasKlasse() {\n}\nvar canvas = new canvasKlasse();\n"
     "var SonstigeAusgaben = null; //function() {}; //ToDo <-- id von BDSinputgrid, welches noch nicht ausgewertet wird, deswegen muss ich die Var noch manuell bekannt machen\n"
-    "\n"
-    "var LzDataElement = {} // ToDo;\n"
-    "LzDataElement.stringToLzData = function() {};\n"
     "\n"
     "\n"
     "\n"
@@ -12191,6 +12328,24 @@ BOOL isJSArray(NSString *s)
     "    var me = this;\n"
     //"    if (this.nodeName == 'DIV' || this.nodeName == 'INPUT' || this.nodeName == 'SELECT')\n"
     //"      me = this; // Wir wurden aus einem Kontext heraus aufgerufen x.setAttribute() - Und nicht aus DOMWindow\n"
+    "\n"
+    "\n"
+    "    // Attribute können u. U. auch einen eigenen Setter gesetzt haben, dann diesen aufrufen\n"
+    //"    alert(Object.getOwnPropertyDescriptor(Object.getPrototypeOf(me),attributeName));\n"
+    //"    if (Object.getOwnPropertyDescriptor(me,attributeName) && Object.getOwnPropertyDescriptor(me,attributeName).set)\n"
+    "    if (me['mySetterFor_'+attributeName+'_'])\n"
+    "    {\n"
+    "        var fnName = me['mySetterFor_'+attributeName+'_'];\n"
+    "        var fn = me[fnName];\n"
+    //"        alert(fn);\n"
+    "        var boundFn = fn.bind(me)\n"
+    //"        alert(boundFn);\n"
+    "        boundFn(value);\n"
+    "\n"
+    "        // Dann raus, damit er nicht triggert (s. Chapter 29, 6.5)\n"
+    "        return;\n"
+    "    }\n"
+    "\n"
     "\n"
     "    if (attributeName == 'text')\n"
     "    {\n"
@@ -12494,30 +12649,30 @@ BOOL isJSArray(NSString *s)
     "    }\n"
     "    else\n"
     "    {\n"
-    "      // Wenn es vorher nicht matcht, dann einfach die Property setzen, dann ist es eine selbst definierte Variable\n"
-    "      // Aber erstmal noch sammeln der Vars, die gesetzt werden sollen. Später lockern\n"
-    "      // Vorher aber Test ob die Property auch vorher definiert wurde! Sonst läuft wohl etwas schief\n"
-    "      if (attributeName === 'zusammenveranlagung' ||\n"
-    "          attributeName === 'titlewidth' ||\n"
-    "          attributeName === 'spacing' ||\n"
-    "          attributeName === 'controlwidth' ||\n"
-    "          attributeName === 'inset_y' ||\n"
-    "          attributeName === 'focused' ||\n"
-    "          attributeName === 'isopen' ||\n"
-    "          attributeName === 'parentnumber' ||\n"
-    "          attributeName === 'index' ||\n"
-    "          attributeName === 'season' ||\n"
-    "          attributeName === 'avalue')\n"
-    "      {\n"
-    "         if (this[attributeName] !== undefined)\n"
-    "             this[attributeName] = value;\n"
-    "         else\n"
-    "             alert('Trying to set a property that never was declared!');\n"
-    "      }\n"
-    "      else\n"
-    "      {\n"
-    "          alert('Aufruf von setAttribute, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
-    "      }\n"
+    "        // Wenn es vorher nicht matcht, dann einfach die Property setzen, dann ist es eine selbst definierte Variable\n"
+    "        // Aber erstmal noch sammeln der Vars, die gesetzt werden sollen. Später lockern\n"
+    "        // Vorher aber Test ob die Property auch vorher definiert wurde! Sonst läuft wohl etwas schief\n"
+    "        if (attributeName === 'zusammenveranlagung' ||\n"
+    "            attributeName === 'titlewidth' ||\n"
+    "            attributeName === 'spacing' ||\n"
+    "            attributeName === 'controlwidth' ||\n"
+    "            attributeName === 'inset_y' ||\n"
+    "            attributeName === 'focused' ||\n"
+    "            attributeName === 'isopen' ||\n"
+    "            attributeName === 'parentnumber' ||\n"
+    "            attributeName === 'index' ||\n"
+    "            attributeName === 'season' ||\n"
+    "            attributeName === 'avalue')\n"
+    "        {\n"
+    "            if (me[attributeName] !== undefined)\n"
+    "                me[attributeName] = value;\n"
+    "            else\n"
+    "                alert('Trying to set a property that never was declared!');\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "            alert('Aufruf von setAttribute, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
+    "        }\n"
     "    }\n"
     "\n"
     "    // In jedem Fall: triggern! Das sieht OL so vor\n"
@@ -12582,6 +12737,39 @@ BOOL isJSArray(NSString *s)
     "HTMLInputElement.prototype.destroy = destroyFunction;\n"
     "HTMLSelectElement.prototype.destroy = destroyFunction;\n"
     "HTMLButtonElement.prototype.destroy = destroyFunction;\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// init() - nachimplementiert                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var initFunction = function () {\n"
+    "    $(this).triggerHandler('oninit');\n"
+    "    this.inited = true;\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.init = initFunction;\n"
+    "HTMLInputElement.prototype.init = initFunction;\n"
+    "HTMLSelectElement.prototype.init = initFunction;\n"
+    "HTMLButtonElement.prototype.init = initFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// inited - nachimplementiert\n"
+    "/////////////////////////////////////////////////////////\n"
+    "HTMLDivElement.prototype.inited = false;\n"
+    "HTMLInputElement.prototype.inited = false;\n"
+    "HTMLSelectElement.prototype.inited = false;\n"
+    "HTMLButtonElement.prototype.inited = false;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// isinited - undokumentiert - aber in Example 29.27 taucht es auf\n"
+    "/////////////////////////////////////////////////////////\n"
+    "HTMLDivElement.prototype.isinited = true;\n"
+    "HTMLInputElement.prototype.isinited = true;\n"
+    "HTMLSelectElement.prototype.isinited = true;\n"
+    "HTMLButtonElement.prototype.isinited = true;\n"
     "\n"
     "\n"
     "\n"

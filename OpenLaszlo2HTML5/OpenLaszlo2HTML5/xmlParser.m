@@ -155,6 +155,10 @@ BOOL werteItemUndItemsAlsArrayAus = YES; // Muss ich noch in eine XML-Struktur �
 // damit ich dort die gefundenen Attribute richtig zuweisen kann.
 @property (strong, nonatomic) NSString *lastUsedNameAttributeOfClass;
 
+// "class" muss auch das extends-attribut in den rekursiven Aufruf <evaluateclass> rüberretten,
+// damit ich dort darauf reagieren kann (z. B. bei <drawview> der Fall.
+@property (strong, nonatomic) NSString *lastUsedExtendsAttributeOfClass;
+
 // Damit auch 'face' es nutzen kann
 @property (strong, nonatomic) NSString *lastUsedNameAttributeOfFont;
 
@@ -207,6 +211,7 @@ BOOL werteItemUndItemsAlsArrayAus = YES; // Muss ich noch in eine XML-Struktur �
 @property (nonatomic) BOOL onInitInHandler;
 // 'reference'-Variable in einem Handler muss an das korrekte Element gebunden werden
 @property (nonatomic) BOOL referenceAttributeInHandler;
+@property (nonatomic) BOOL handlerofDrawview;
 // 'method'-Variable in einem Handler
 @property (strong, nonatomic) NSString *methodAttributeInHandler;
 
@@ -252,7 +257,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize datasetItemsCounter = _datasetItemsCounter, rollupDownElementeCounter = _rollupDownElementeCounter;
 
-@synthesize animDuration = _animDuration, lastUsedTabSheetContainerID = _lastUsedTabSheetContainerID, rememberedID4closingSelfDefinedClass = _rememberedID4closingSelfDefinedClass, defaultplacement = _defaultplacement, lastUsedNameAttributeOfMethod = _lastUsedNameAttributeOfMethod, lastUsedNameAttributeOfClass = _lastUsedNameAttributeOfClass, lastUsedNameAttributeOfFont = _lastUsedNameAttributeOfFont, lastUsedNameAttributeOfDataPointer = _lastUsedNameAttributeOfDataPointer;
+@synthesize animDuration = _animDuration, lastUsedTabSheetContainerID = _lastUsedTabSheetContainerID, rememberedID4closingSelfDefinedClass = _rememberedID4closingSelfDefinedClass, defaultplacement = _defaultplacement, lastUsedNameAttributeOfMethod = _lastUsedNameAttributeOfMethod, lastUsedNameAttributeOfClass = _lastUsedNameAttributeOfClass, lastUsedExtendsAttributeOfClass =_lastUsedExtendsAttributeOfClass, lastUsedNameAttributeOfFont = _lastUsedNameAttributeOfFont, lastUsedNameAttributeOfDataPointer = _lastUsedNameAttributeOfDataPointer;
 
 @synthesize allJSGlobalVars = _allJSGlobalVars, allImgPaths = _allImgPaths;
 
@@ -269,7 +274,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize weAreCollectingTheCompleteContentInClass = _weAreCollectingTheCompleteContentInClass;
 @synthesize weAreSkippingTheCompleteContentInThisElement = _weAreSkippingTheCompleteContentInThisElement;
 
-@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler;
+@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler, handlerofDrawview = _handlerofDrawview;
 
 
 
@@ -319,7 +324,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 -(id)init
 {
     @throw [NSException exceptionWithName:NSInternalInconsistencyException reason:@"-init is not a valid initializer for the class xmlParser. use initWith:(NSURL*) pathToFile instead" userInfo:nil];
-    //return nil;
+
     return [self initWith:[NSURL URLWithString:@""]];
 }
 
@@ -393,6 +398,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.lastUsedDataset = @"";
         self.lastUsedNameAttributeOfMethod = @"";
         self.lastUsedNameAttributeOfClass = @"";
+        self.lastUsedExtendsAttributeOfClass = @"";
         self.lastUsedNameAttributeOfFont = @"";
         self.lastUsedNameAttributeOfDataPointer = @"";
 
@@ -410,6 +416,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.ignoreAddingIDsBecauseWeAreInClass = NO;
         self.onInitInHandler = NO;
         self.referenceAttributeInHandler = NO;
+        self.handlerofDrawview = NO;
         self.methodAttributeInHandler = @"";
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
@@ -848,6 +855,18 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         self.attributeCount++;
         [self setTheValue:[attributeDict valueForKey:@"rotation"] ofAttribute:@"rotation"];
+    }
+
+    if ([attributeDict valueForKey:@"text_x"])
+    {
+        self.attributeCount++;
+        [self setTheValue:[attributeDict valueForKey:@"text_x"] ofAttribute:@"text_x"];
+    }
+
+    if ([attributeDict valueForKey:@"text_y"])
+    {
+        self.attributeCount++;
+        [self setTheValue:[attributeDict valueForKey:@"text_y"] ofAttribute:@"text_y"];
     }
 
     if ([attributeDict valueForKey:@"opacity"])
@@ -1453,6 +1472,9 @@ void OLLog(xmlParser *self, NSString* s,...)
                 // Dann erstmal width und height von dem Image auf Dateiebene ermitteln
                 NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
 
+                // Schutz gegen Leerzeichen im Pfad
+                s = [s stringByAddingPercentEscapesUsingEncoding: NSUTF8StringEncoding];
+
                 NSURL *pathToImg = [NSURL URLWithString:s relativeToURL:path];
 
                 // [NSString stringWithFormat:@"%@%@",path,s];
@@ -1468,7 +1490,8 @@ void OLLog(xmlParser *self, NSString* s,...)
                 if (!heightGesetzt)
                     [style appendFormat:@"height:%dpx;",h];
 
-                [style appendFormat:@"background-image:url(%@);",s];
+                // Als Schutz gegen Leerzeichen im Pfad Hochkommata drum herum
+                [style appendFormat:@"background-image:url('%@');",s];
             }
  
         }
@@ -1926,6 +1949,10 @@ void OLLog(xmlParser *self, NSString* s,...)
     // dataset ist eine interne Property von ECMAScript 5. Keine Property darf so heißen.
     s = [self inString:s searchFor:@".dataset" andReplaceWith:@".myDataset" ignoringTextInQuotes:YES];
 
+    // context scheint iwie intern auch von jQuery genutzt zu werden...
+    s = [self inString:s searchFor:@".context" andReplaceWith:@".myContext" ignoringTextInQuotes:YES];
+
+
     // Das OpenLaszlo-'name' muss ersetzt werden (über getter klappt nicht)
     // Der getter muss neu benannt werden, da intern von jQuery benutzt
     // und wenn ich den getter probiere zu überschreiben, gibt es eine Rekursion.
@@ -1945,6 +1972,41 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+- (NSString*) modifySomeCanvasExpressionsInJSCode:(NSString*)s
+{
+    // und Farbwerte Raus regExpen
+    // DIESES DUMME OPENLASZLO hält sich an keine Standards.
+    // Jetzt müssen auch noch Hex-Farb-werte in Strings mit Leading '#' gepackt werden
+    // Wie ich RegExp liebe....
+    NSError *error = NULL;
+    NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:@"(0x([a-fA-F0-9]{6}))" options:NSRegularExpressionCaseInsensitive error:&error];
+    
+    NSUInteger numberOfMatches;
+    do {
+        numberOfMatches = [regexp numberOfMatchesInString:s options:0 range:NSMakeRange(0, [s length])];
+        
+        if (numberOfMatches > 0)
+        {
+            NSArray *matches = [regexp matchesInString:s options:0 range:NSMakeRange(0, [s length])];
+            
+            // Ein match nach dem anderen, weil sich sonst die range ja verschiebt
+            NSRange matchRange = [[matches objectAtIndex:0] range];
+            
+            NSString *hexWert = [s substringWithRange:matchRange];
+            
+            NSString *replacement = [NSString stringWithFormat:@"'#%@'",[hexWert substringFromIndex:2]];
+            
+            s = [s stringByReplacingOccurrencesOfString:hexWert withString:replacement];
+        }
+    } while (numberOfMatches > 0);
+
+
+    return s;
+}
+
+
+
+
 - (NSString *) somePropertysNeedToBeRenamed:(NSString*)s
 {
     if ([s isEqualToString:@"height"])
@@ -1955,6 +2017,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([s isEqualToString:@"dataset"])
         s = @"myDataset";
+
+    if ([s isEqualToString:@"context"])
+        s = @"myContext";
 
     return s;
 }
@@ -3012,6 +3077,10 @@ void OLLog(xmlParser *self, NSString* s,...)
 -(void) callMyselfRecursive:(NSString*)relativePath
 {
     NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
+
+    // Schutz gegen Leerzeichen im Pfad
+    relativePath = [relativePath stringByAddingPercentEscapesUsingEncoding: NSUTF8StringEncoding];
+
     NSURL *pathToFile = [NSURL URLWithString:relativePath relativeToURL:path];
 
     xmlParser *x = [[xmlParser alloc] initWith:pathToFile recursiveCall:YES];
@@ -4240,7 +4309,7 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"resource"])
+    if ([elementName isEqualToString:@"resource"] || [elementName isEqualToString:@"audio"])
     {
         element_bearbeitet = YES;
 
@@ -4338,7 +4407,6 @@ didStartElement:(NSString *)elementName
 
 
         // Es gibt auch attributes ohne Startvalue, dann mit einem leeren String initialisieren
-        // Warum leerer String? Bitte Beleg Beispiel dafür. Ich würde sagen gemäß Bsp. 29.27 müsste es eher 'null' sein
         NSString *value;
         if ([attributeDict valueForKey:@"value"])
         {
@@ -4363,10 +4431,18 @@ didStartElement:(NSString *)elementName
         }
         else
         {
-            // value = @""; // Quotes werden dann automatisch unten reingesetzt
-            value = @"null"; // 'null' sollte dann natürlich ohne Quotes sein...
-            // ... deswegen type_ auf number setzen
-            type_ = @"number";
+            // Wenn wir also weder value noch type haben, dann beides setzen
+            if (![attributeDict valueForKey:@"type"])
+            {
+                // Gemäß Bsp. 29.27 muss es hier wohl 'null' sein
+                value = @"null"; // 'null' sollte dann natürlich ohne Quotes sein...
+                // ... deswegen type_ auf number setzen
+                type_ = @"number";
+            }
+            else
+            {
+                value = @""; // Quotes werden dann automatisch unten reingesetzt
+            }
         }
 
 
@@ -4764,11 +4840,9 @@ didStartElement:(NSString *)elementName
     if ([elementName isEqualToString:@"view"] ||
         [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"hbox"] ||
-        [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"rotateNumber"])
     {
         element_bearbeitet = YES;
-
 
         [self.output appendString:@"<div"];
 
@@ -4839,6 +4913,43 @@ didStartElement:(NSString *)elementName
 
 
 
+    if ([elementName isEqualToString:@"drawview"])
+    {
+        element_bearbeitet = YES;
+
+        NSString *canvasWidth = [attributeDict valueForKey:@"width"] ? [attributeDict valueForKey:@"width"] : @"300";
+        NSString *canvasHeight = [attributeDict valueForKey:@"height"] ? [attributeDict valueForKey:@"height"] : @"150";
+
+        // Weil IN canvas gemäß OL noch Elemente liegen können, ein Extra div drum. Gemäß HTML5 geht das nämlich nicht.
+        [self.output appendFormat:@"<div class=\"canvas_element noPointerEvents\" style=\"width:%@px;height:%@px;\"><canvas",canvasWidth,canvasHeight];
+
+        // id hinzufügen und gleichzeitg speichern
+        NSString *theId = [self addIdToElement:attributeDict];
+
+
+        // width und height werden bei HTML5-Canvas gesondert ohne CSS und ohn px-Angabe gesetzt. Warum auch immer
+        // Ich lasse die width/height-Angabe parallel unten von CSS auswerten, denke das schadet nicht.
+        if ([attributeDict valueForKey:@"width"])
+        {
+            [self.output appendFormat:@" width=\"%@\"",canvasWidth];
+        }
+        if ([attributeDict valueForKey:@"height"])
+        {
+            [self.output appendFormat:@" height=\"%@\"",canvasHeight];
+        }
+
+
+        [self.output appendString:@" class=\"div_standard noPointerEvents\" style=\""];
+
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+        [self.output appendString:@"\"></canvas>\n"];
+
+        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
+    }
+
+
+
 
     if ([elementName isEqualToString:@"button"])
     {
@@ -4898,12 +5009,6 @@ didStartElement:(NSString *)elementName
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'text_padding_x' for now.");
-        }
-        // ToDo: Wird derzeit nicht ausgewertet
-        if ([attributeDict valueForKey:@"text_x"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'text_x' for now.");
         }
 
 
@@ -4973,7 +5078,7 @@ didStartElement:(NSString *)elementName
         [self addIdToElement:attributeDict];
 
 
-        [self.output appendString:@" class=\"div_text"];
+        [self.output appendString:@" class=\"div_text noPointerEvents"];
 
         [self.output appendString:[self addCSSClasses:attributeDict]];
 
@@ -5118,6 +5223,27 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@" style=\""];
 
+
+
+
+        // datapth-Attribut MUSS zuerst ausgewertet, falls sich Attribut 'text' auf den dort gesetzten Pfad bezieht
+        // Andererseits muss Attribut "text_x" wegen Beispiel <textlistitem> vor "text" ausgewertet werden.
+        // Mal schauen ob es was bricht, dass die beiden hier mitten drin falls ja, dann zurück.
+        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
+
+        if ([attributeDict valueForKey:@"text"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'text' as text between opening and closing tag.");
+
+            // [self.output appendString:[attributeDict valueForKey:@"text"]];
+            // Kann nicht direkt gesetzt werden, falls constraint oder $path
+            [self setTheValue:[attributeDict valueForKey:@"text"] ofAttribute:@"text"];
+        }
+
+
+
+
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
         [self.output appendString:@"\">"];
@@ -5125,19 +5251,6 @@ didStartElement:(NSString *)elementName
         self.baselistitemCounter++;
 
 
-        // datapth-Attribut MUSS zuerst ausgewertet, falls sich Attribut 'text' auf den dort gesetzten Pfad bezieht
-        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
-
-
-        if ([attributeDict valueForKey:@"text"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'text' as text between opening and closing tag.");
-            
-            // [self.output appendString:[attributeDict valueForKey:@"text"]];
-            // Kann nicht direkt gesetzt werden, falls constraint oder $path
-            [self setTheValue:[attributeDict valueForKey:@"text"] ofAttribute:@"text"];
-        }
 
 
         if ([attributeDict valueForKey:@"value"])
@@ -6268,35 +6381,6 @@ if (![elementName isEqualToString:@"combobox"])
     }
 
 
-    // ToDo Audio (ist wohl sehr ähnlich aufgebaut wie ressource. Trotzdem erstmal checken
-    if ([elementName isEqualToString:@"audio"])
-    {
-        element_bearbeitet = YES;
-
-        if ([attributeDict valueForKey:@"src"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-    }
-
-
-    // ToDo
-    if ([elementName isEqualToString:@"calcDisplay"] || // Ist das eine selbst defineirte Klasse? ToDo
-        [elementName isEqualToString:@"calcButton"]) // Ist das eine selbst defineirte Klasse? ToDo
-    {
-        element_bearbeitet = YES;
-        
-        if ([attributeDict valueForKey:@"id"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"buttLabel"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"resource"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"labelX"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"align"])
-            self.attributeCount++;
-    }
 
 
     if ([elementName isEqualToString:@"class"])
@@ -6332,6 +6416,9 @@ if (![elementName isEqualToString:@"combobox"])
             // Damit ich in <evaluateclass> die Attribute korrekt zuordnen kann,
             // muss ich mir den Namen der Klasse merken:
             self.lastUsedNameAttributeOfClass = name;
+
+            // Manchmal muss ich wissen von wem die Klasse erbt, z.B. bei <drawview>
+            self.lastUsedExtendsAttributeOfClass = [attributeDict valueForKey:@"extends"] ? [attributeDict valueForKey:@"extends"] : @"view";
 
 
             // Auserdem speichere ich die gefunden Klasse als JS-Objekt und schreibe es nach
@@ -6712,6 +6799,10 @@ if (![elementName isEqualToString:@"combobox"])
 
         // ToDo
         if ([attributeDict valueForKey:@"process"])
+            self.attributeCount++;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"repeat"])
             self.attributeCount++;
     }
     // ToDo
@@ -7121,7 +7212,7 @@ if (![elementName isEqualToString:@"combobox"])
 
 
 
-        [self.output appendString:@" class=\"div_text\" style=\""];
+        [self.output appendString:@" class=\"div_text noPointerEvents\" style=\""];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
@@ -7290,6 +7381,16 @@ if (![elementName isEqualToString:@"combobox"])
                 //if ([elemTyp isEqualToString:@"evaluateclass"]) // Weil ich dort rückwärts auswerte
                 //    [o appendFormat:@"  if (%@.%@ == undefined)\n",elem,[attributeDict valueForKey:@"name"]];
                 // Unsinn! Ich wärte vorwärts aus! Methoden sollen BEWUSST überschrieben werden
+
+
+                //NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
+                // Da ich bei canvas alle handler an den context binde, muss ich, falls in handlern methoden aufgerufen
+                // werden, diese auch direkt an den Context binden.
+                // Dies gilt auch Falls wir eine Klasse auswerten, die von drawview erbt natürlich.
+                //if ([enclosingElemTyp isEqualToString:@"drawview"] || ([enclosingElemTyp isEqualToString:@"evaluateclass"] && [self.lastUsedExtendsAttributeOfClass isEqualToString:@"drawview"]))
+                //    [o appendFormat:@"  %@.getContext('2d').",elem];
+                //else
+
                 [o appendFormat:@"  %@.",elem];
             }
         }
@@ -7336,6 +7437,18 @@ if (![elementName isEqualToString:@"combobox"])
 
         NSString *enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
 
+
+        // Für Drawview:
+        NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
+
+        // Beim Schließen des Tags dann auf den 'canvas' reagieren
+        // Falls wir eine Klasse auswerten, die von drawview erbt, muss er natürlich auch richtig darauf reagieren.
+        if ([enclosingElemTyp isEqualToString:@"drawview"] || ([enclosingElemTyp isEqualToString:@"evaluateclass"] && [self.lastUsedExtendsAttributeOfClass isEqualToString:@"drawview"]))
+        {
+            self.handlerofDrawview = YES;
+        }
+
+
         // Wenn 'reference' gesetzt, dann Bezug nehmen und DARAN binden
         // Aber gleichzeitig muss das aktuelle this erhalten bleiben, deswegen mit bind() arbeiten
         if ([attributeDict valueForKey:@"reference"])
@@ -7348,6 +7461,7 @@ if (![elementName isEqualToString:@"combobox"])
 
             enclosingElem = [attributeDict valueForKey:@"reference"];
         }
+
 
         [self.jQueryOutput appendString:@"\n  // pointer-events zulassen, da ein Handler an dieses Element gebunden ist."];
         [self.jQueryOutput appendFormat:@"\n  $('#%@').css('pointer-events','auto');\n",enclosingElem];
@@ -7470,7 +7584,7 @@ if (![elementName isEqualToString:@"combobox"])
             [self.jQueryOutput appendFormat:@"\n  // oninit-Handler für %@ (wir führen den Code direkt aus)\n  // Aber korrekten Scope berücksichtigen! Deswegen in einer Funktion mit bind() ausführen\n  // Zusätzlich ist auch noch with (this) {} erforderlich, puh...\n",enclosingElem];
 
             // [self.jQueryOutput appendFormat:@"  $('#%@').load(function()\n  {\n    ",self.zuletztGesetzteID];
-            [self.jQueryOutput appendFormat:@"  var bindMeToCorrectScope = function () {\n    with (this) {\n      "];
+            [self.jQueryOutput appendFormat:@"  var bindMeToCorrectScope = function () {\n    with (this) {\n        "];
 
 
             if ([attributeDict valueForKey:@"args"])
@@ -7874,6 +7988,8 @@ if (![elementName isEqualToString:@"combobox"])
         [d removeObjectForKey:@"resource"];
         [d removeObjectForKey:@"source"];
         [d removeObjectForKey:@"debug"];
+        [d removeObjectForKey:@"text_x"];
+        [d removeObjectForKey:@"text_y"];
         // JS
         [d removeObjectForKey:@"visible"];
         [d removeObjectForKey:@"focusable"];
@@ -8485,6 +8601,9 @@ BOOL isJSArray(NSString *s)
         // muss ich den Namen der Klasse wissen!
         x.lastUsedNameAttributeOfClass = self.lastUsedNameAttributeOfClass;
 
+        // <drawview> bzw. die da drin befindlichen handler müssen wissen von wem sie erben.
+        x.lastUsedExtendsAttributeOfClass = self.lastUsedExtendsAttributeOfClass;
+
         NSArray* result = [x startWithString:self.collectedContentOfClass];
         NSLog(@"Leaving recursion (with String, not file, because of <class>)");
 
@@ -8892,7 +9011,7 @@ BOOL isJSArray(NSString *s)
 
 
 
-    if ([elementName isEqualToString:@"resource"])
+    if ([elementName isEqualToString:@"resource"] || [elementName isEqualToString:@"audio"])
     {
         element_geschlossen = YES;
 
@@ -8956,7 +9075,6 @@ BOOL isJSArray(NSString *s)
         [elementName isEqualToString:@"face"] ||
         [elementName isEqualToString:@"library"] ||
         [elementName isEqualToString:@"html"] ||
-        [elementName isEqualToString:@"audio"] ||
         [elementName isEqualToString:@"include"] ||
         [elementName isEqualToString:@"datapointer"] ||
         [elementName isEqualToString:@"attribute"] ||
@@ -8976,8 +9094,6 @@ BOOL isJSArray(NSString *s)
         [elementName isEqualToString:@"scrollview"] ||
         [elementName isEqualToString:@"BDStabsheetselected"] ||
         [elementName isEqualToString:@"ftdynamicgrid"] ||
-        [elementName isEqualToString:@"calcDisplay"] ||
-        [elementName isEqualToString:@"calcButton"] ||
         [elementName isEqualToString:@"debug"] ||
         [elementName isEqualToString:@"event"] ||
         [elementName isEqualToString:@"slider"] ||
@@ -8995,12 +9111,19 @@ BOOL isJSArray(NSString *s)
         [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"hbox"] ||
         [elementName isEqualToString:@"splash"] ||
-        [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"])
+    {
+        element_geschlossen = YES;
+
+        [self.output appendString:@"</div>\n"];
+    }
+
+    // Schließen von drawview
+    if ([elementName isEqualToString:@"drawview"])
     {
         element_geschlossen = YES;
 
@@ -9310,15 +9433,29 @@ BOOL isJSArray(NSString *s)
         }
         else
         {
+            NSString* enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1];
+
+
             NSString *s = [self holDenGesammeltenTextUndLeereIhn];
 
             NSLog([NSString stringWithFormat:@"Original code defined in handler: \n**********\n%@\n**********",s]);
 
-
             s = [self indentTheCode:s];
 
-
             s = [self modifySomeExpressionsInJSCode:s];
+
+
+
+            if (self.handlerofDrawview)
+            {
+                // Dann an den context binden des 'canvas', nicht an das canvas selber! (Damit es bei oninit klappt)
+                // enclosingElem = [NSString stringWithFormat:@"%@.getContext('2d')",enclosingElem];
+                // Neu: Ich mappe alles direkt in das HTMLCanvasElement. Erklärung siehe dort.
+
+
+                s = [self modifySomeCanvasExpressionsInJSCode:s];
+            }
+
 
 
             // OL benutzt 'classroot' als Variable für den Zugriff auf das erste in einer Klasse
@@ -9329,7 +9466,7 @@ BOOL isJSArray(NSString *s)
             if (self.onInitInHandler)
             {
                 [self.jQueryOutput appendString:s];
-                [self.jQueryOutput appendFormat:@"\n    }\n  }\n  bindMeToCorrectScope.bind(%@)();\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1]];
+                [self.jQueryOutput appendFormat:@"\n    }\n  }\n  bindMeToCorrectScope.bind(%@)();\n",enclosingElem];
             }
             else
             {
@@ -9340,35 +9477,64 @@ BOOL isJSArray(NSString *s)
                 // Ich denke es klappt jetzt auch so, seitdem ich das äußerste Elemente bei <class extends="text">
                 // ersetze, anstatt zu appenden. Dadurch spreche ich automatisch das richtige Element an!
 
+
                 // bei reference ist es ein anderes this, und gleichzeitig kann ich dann nicht auf
                 // e.target testen. Der Witz ist ja gerade, dass es wo anders dran gebunden wurde.
                 if (self.referenceAttributeInHandler)
                 {
                     [self.jQueryOutput appendString:@"  // Wegen 'reference'-Attribut falsches this. Dieses korrigieren mit selbst ausführender Funktion und bind()\n"];                
-                    [self.jQueryOutput appendString:@"      (function() {\n      with (this) {\n        "];
+                    [self.jQueryOutput appendString:@"      (function() {\n"];
                 }
                 else
                 {
-                    [self.jQueryOutput appendString:@"if (this == e.target) {\n      with (this) {\n        "];
+                    [self.jQueryOutput appendString:@"if (this == e.target) {\n"];
                 }
+
+                if (self.handlerofDrawview)
+                {
+                    // Dann das innere 'this' nochmals korrigieren über selbst ausführende Funktion mit bind
+                    //[self.jQueryOutput appendString:@"      (function() {\n"];
+                    // Neu: Ich mappe alles direkt in das HTMLCanvasElement. Erklärung siehe dort.
+                }
+
+                [self.jQueryOutput appendString:@"      with (this) {\n        "];
 
                 [self.jQueryOutput appendString:s];
 
                 [self.jQueryOutput appendString:@"\n      }\n"];
 
+                if (self.handlerofDrawview)
+                {
+                    //[self.jQueryOutput appendFormat:@"      }).bind(%@)();\n",enclosingElem];
+                    // Neu: Ich mappe alles direkt in das HTMLCanvasElement. Erklärung siehe dort.
+                }
+
                 if (self.referenceAttributeInHandler)
-                    [self.jQueryOutput appendFormat:@"    }).bind(%@)();\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1]];
+                {
+                    [self.jQueryOutput appendFormat:@"    }).bind(%@)();\n",enclosingElem];
+                }
                 else
+                {
                     [self.jQueryOutput appendString:@"    }\n"];
+                }
 
                 [self.jQueryOutput appendString:@"  });\n"];
             }
+        }
+
+
+        if (self.handlerofDrawview)
+        {
+            // oft ist es an 'oncontext' gebunden. Deswegen dies einfach hinterher triggern.
+            [self.jQueryOutput appendFormat:@"  $(%@).triggerHandler('oncontext');\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1]];
         }
 
         // Erkennungszeichen für oninit in jedem Fall zurücksetzen
         self.onInitInHandler = NO;
         // Erkennungszeichen für 'reference'-Attribut auf jeden Fall zurücksetzen
         self.referenceAttributeInHandler = NO;
+        // Erkennungszeichen für 'drawview'-Handler auf jeden Fall zurücksetzen
+        self.handlerofDrawview = NO;
         // Erkennungszeichen für 'method'-Attribut auf jeden Fall zurücksetzen
         self.methodAttributeInHandler = @"";
     }
@@ -9409,6 +9575,15 @@ BOOL isJSArray(NSString *s)
 
         // Damit er in jeder Code-Zeile korrekt einrückt
         s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\n   "];
+
+
+        // Bei Methoden in 'drawview' muss ich nochmal extra was machen.
+        NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-1];
+        if ([enclosingElemTyp isEqualToString:@"drawview"] || ([enclosingElemTyp isEqualToString:@"evaluateclass"] && [self.lastUsedExtendsAttributeOfClass isEqualToString:@"drawview"]))
+        {
+            s = [self modifySomeCanvasExpressionsInJSCode:s];
+        }
+
 
         NSLog([NSString stringWithFormat:@"Modified code changed to in method: \n**********\n%@\n**********",s]);
 
@@ -9564,6 +9739,7 @@ BOOL isJSArray(NSString *s)
     [pre appendString:@"<!DOCTYPE HTML>\n<html>\n<head>\n"];
 
     // Damit IE 9 auf jeden Fall im IE 9-Modus lädt und nicht irgendeinen Kompatibilitäts-modus
+    // Gleichzeitig Fallback auf Google Chrome Frame, sofern installiert.
     [pre appendString:@"<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge,chrome=1\">\n"];
 
     // Nicht HTML5-Konform, aber zum testen um sicherzustellen, dass wir nichts aus dem Cache laden
@@ -10009,6 +10185,17 @@ BOOL isJSArray(NSString *s)
     "    border-width:0;\n"
     "\n"
     "    background-repeat:no-repeat; /* Falls eine Res gesetzt wird, diese standardmäßig nicht wiederholen */\n"
+    "}\n"
+    "\n"
+    "\n"
+    ".canvas_element\n"
+    "{\n"
+	"    height:auto;\n"
+	"    width:auto;\n"
+    "\n"
+	"    position:relative;\n"
+	"    top:0px;\n"
+	"    left:0px;\n"
     "}\n"
     "\n"
     "/* Das Standard-input-Feld (Der Rand darf nicht überschrieben werden)*/\n"
@@ -11289,7 +11476,7 @@ BOOL isJSArray(NSString *s)
     "    else if (name === 'text') {\n"
     "        jQuery('<div/>', {\n"
     "            id: id,\n"
-    "            class: 'div_text',\n"
+    "            class: 'div_text noPointerEvents',\n"
     //"            text: 'Go to Google!'\n"
     "        }).appendTo(scope);\n"
     "    }\n"
@@ -12298,7 +12485,7 @@ BOOL isJSArray(NSString *s)
     "            if ($(me).get(0).style.height == '')\n"
     "                $(me).height(img.height);\n"
     "\n"
-    "            $(me).css('background-image','url('+imgpath+')');\n"
+    "            $(me).css('background-image','url(\\''+imgpath+'\\')');\n"
     "    }\n"
     "\n"
     "    function preload(arrayOfImages) {\n"
@@ -12309,9 +12496,9 @@ BOOL isJSArray(NSString *s)
     "        });\n"
     "    }\n"
     "\n"
-    "    if (attributeName == undefined || attributeName == '')\n"
+    "    if (attributeName === undefined || attributeName === '')\n"
     "        throw 'Error1 calling setAttribute, no argument attributeName given (this = '+this+').';\n"
-    "    if (value == undefined)\n"
+    "    if (value === undefined) // Wirklich Triple-= erforderlich, damit er 'null' passieren lässt bei 'text'\n"
     "        throw 'Error2 calling setAttribute, no argument value given or undefined (attributeName = \"'+attributeName+'\" and this = '+this+').';\n"
     "\n"
     // Kann auch im Skript aufgetaucht sein und dort geändert worden sein, z. B. Beispiel 28.16
@@ -12349,6 +12536,8 @@ BOOL isJSArray(NSString *s)
     "\n"
     "    if (attributeName == 'text')\n"
     "    {\n"
+    "        if (value === null) value = 'null'; // Damit er 'null' textuell ausgibt.\n"
+    "\n"
     "        if ($(me).children().length > 0 && $(me).children().get(0).nodeName == 'INPUT')\n"
     "        {\n"
     "            $(me).children().attr('value',value);\n"
@@ -12454,6 +12643,15 @@ BOOL isJSArray(NSString *s)
     "        }\n"
     "        else\n"
     "            alert('So far unsupported value for clickable. value: '+value);\n"
+    "    }\n"
+    "    else if (attributeName === 'focusable' && value === 'false')\n"
+    "    {\n"
+    "        $(me).on('focus.blurnamespace', function() { this.blur(); });\n"
+    "    }\n"
+    "    else if (attributeName === 'focusable' && value === 'true')\n"
+    "    {\n"
+    "        // Einen eventuell vorher gesetzten focus-Handler, der blur() handlet, entfernen\n"
+    "        $(me).off('focus.blurnamespace');\n"
     "    }\n"
     "    else if (attributeName == 'focustrap')\n"
     "    {\n"
@@ -12568,16 +12766,16 @@ BOOL isJSArray(NSString *s)
     "            if (imgpath1 != undefined && imgpath2 != undefined)\n"
     "            {\n"
     "                // hover löst regelmäßig auch aus, wenn man kurz antoucht. Aber kann man wohl so lassen\n"
-    "                $(me).hover(function() { $(me).css('background-image','url('+imgpath1+')') }, function() { $(me).css('background-image','url('+imgpath0+')') });\n"
+    "                $(me).hover(function() { $(me).css('background-image','url(\\''+imgpath1+'\\')') }, function() { $(me).css('background-image','url(\\''+imgpath0+'\\')') });\n"
     "                if ('ontouchstart' in document.documentElement)\n"
     "                {\n"
-    "                    $(me).on('touchstart',function() { $(me).css('background-image','url('+imgpath2+')') });\n"
-    "                    $(me).on('touchend',function() { $(me).css('background-image','url('+imgpath0+')') });\n"
+    "                    $(me).on('touchstart',function() { $(me).css('background-image','url(\\''+imgpath2+'\\')') });\n"
+    "                    $(me).on('touchend',function() { $(me).css('background-image','url(\\''+imgpath0+'\\')') });\n"
     "                }\n"
     "                else\n"
     "                {\n"
-    "                    $(me).on('mousedown',function() { $(me).css('background-image','url('+imgpath2+')') });\n"
-    "                    $(me).on('mouseup',function() { $(me).css('background-image','url('+imgpath0+')') });\n"
+    "                    $(me).on('mousedown',function() { $(me).css('background-image','url(\\''+imgpath2+'\\')') });\n"
+    "                    $(me).on('mouseup',function() { $(me).css('background-image','url(\\''+imgpath0+'\\')') });\n"
     "                }\n"
     "            }\n"
 
@@ -12585,11 +12783,11 @@ BOOL isJSArray(NSString *s)
     "        else\n"
     "        {\n"
     "            if (typeof value === 'string' && value.contains('.'))\n"
-    "              setWidthAndHeightAndBackgroundImage(me,value);\n"
+    "                setWidthAndHeightAndBackgroundImage(me,value);\n"
     "            else if (typeof value === 'string' && value != '')\n"
-    "              setWidthAndHeightAndBackgroundImage(me,window[value]);\n"
+    "                setWidthAndHeightAndBackgroundImage(me,window[value]);\n"
     "            else\n"
-    "              throw 'setAttribute_ - Error trying to set reource. (value = '+value+', me.id = '+me.id+').';\n"
+    "                throw 'setAttribute_ - Error trying to set reource. (value = '+value+', me.id = '+me.id+').';\n"
     "        }\n"
     "    }\n"
     "    else if ($(me).hasClass('select_standard') && attributeName == 'editable') // Nur vom Element 'basecombobox' von Haus aus gesetztes Attribut\n"
@@ -12621,6 +12819,19 @@ BOOL isJSArray(NSString *s)
     "    {\n"
     "        // src-Attribut des iframe setzen\n"
     "        $(me).html('<iframe style=\"width:inherit;height:inherit;\" src=\"'+value+'\"></iframe>');\n"
+    "    }\n"
+    "    else if ($(me).is('option') && attributeName == 'text_x') // Nur vom Element 'textlistitem' von Haus aus gesetztes Attribut\n"
+    "    {\n"
+    "        // Direktes setzen des margin-left klappt zumindestens bei Webkit nicht... Deswegen Leerzeichen einfügen\n"
+    "        var anzahl_leerzeichen = parseInt(value / 5); // Für 5 Pixel ein Leerzeichen\n"
+    "        for (var i = 0;i < anzahl_leerzeichen;i++)\n"
+    "        {\n"
+    "            $(me).html('&nbsp;'+$(me).html());\n"
+    "        }\n"
+    "    }\n"
+    "    else if ($(me).is('option') && attributeName == 'text_y') // Nur vom Element 'textlistitem' von Haus aus gesetztes Attribut\n"
+    "    {\n"
+    "        // not supported so far. Man könnte den margin nach oben und unten setzen der <option>. Unterstützt aber nur FF\n"
     "    }\n"
     "    else if ($(me).hasClass('div_window') && attributeName == 'title') // Nur vom Element 'window' von Haus aus gesetztes Attribut\n"
     "    {\n"
@@ -12729,8 +12940,8 @@ BOOL isJSArray(NSString *s)
     "// destroy() - nachimplementiert                       //\n"
     "/////////////////////////////////////////////////////////\n"
     "var destroyFunction = function () {\n"
-    "    $(this).remove;\n"
     "    $(this).triggerHandler('ondestroy');\n"
+    "    $(this).remove;\n"
     "}\n"
     "\n"
     "HTMLDivElement.prototype.destroy = destroyFunction;\n"
@@ -13101,6 +13312,133 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Methoden von <canvas> (OL: <drawview>)              //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "////////////////////////INCOMPLETE///////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// clear() - nachimplementiert (interner Aufruf)       //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var clearFunction = function () {\n"
+    "    var context = this.getContext('2d');\n"
+    "    context.clearRect(0, 0, this.width, this.height);\n"
+    "}\n"
+    "\n"
+    "HTMLCanvasElement.prototype.clear = clearFunction;\n"
+    "\n"
+    //"CanvasRenderingContext2D.prototype.context = true;\n"
+    //"// Auch das direkte CanvasRendering-Objekt kriegt die Clear-Methode\n"
+    //"CanvasRenderingContext2D.prototype.clear = function() { this.clearRect(0, 0, this.canvas.width, this.canvas.height); } ;\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// clear() - nachimplementiert (externer Aufruf)       //\n"
+    "// Kann auch extern aufgerufen werden (Bsp. 13.10). Dann an div binden, weil canvas ein umgebendes Div hat.//\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var clearFunction = function () {\n"
+    "    if ($(this).children().eq(0).is('canvas'))\n"
+    "        $(this).children().eq(0).get(0).clear();\n"
+    "    else\n"
+    "        throw new Error('function clear() for Element canvas - This call went wrong.');\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.clear = clearFunction;\n"
+    "\n"
+    "// Für OL sind das HTMLCanvasElement und CanvasRenderingContext2D auf der gleichen 'this'-ebene angesiedelt.\n"
+    "// Der erste Ansatz war das this in Handlern, Methoden und Attributen von drawviews auf element.getContext('2d')\n"
+    "// zu mappen. Aber das hätte noch umfangreichere Folgeänderungen zu folgen. In InterpretObject das neue zuweisen\n"
+    "// der Attribute und auch alle Getter und Setter müssten nur für diesen Fall auf das Canvas-Element testen und dann\n"
+    "// den Aufruf immer an this.getContext('2d') weiterleiten. Dies sind zu große Folgeänderungen und zerstören die\n"
+    "// derzeit einfach zu lesenden Setter/Getter. - Neuer Ansatz: Mappen der Methoden im getContext('2d')-Objekt\n"
+    "// direkt in das Canvas-Objekt, um so der OL-Logik zu entsprechen (That's JavaScript on its Edge).\n"
+    "// Attribute:\n"
+    "Object.defineProperty(HTMLCanvasElement.prototype, 'aliaslines', {\n"
+    "    get : function(){ this.getContext('2d').aliaslines; },\n"
+    "    set : function(newValue){ this.getContext('2d').aliaslines = newValue; },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "Object.defineProperty(HTMLCanvasElement.prototype, 'cachebitmap', {\n"
+    "    get : function(){ this.getContext('2d').cachebitmap; },\n"
+    "    set : function(newValue){ this.getContext('2d').cachebitmap = newValue; },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "Object.defineProperty(HTMLCanvasElement.prototype, 'fillStyle', {\n"
+    "    get : function(){ this.getContext('2d').fillStyle; },\n"
+    "    set : function(newValue){ this.getContext('2d').fillStyle = newValue; },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "Object.defineProperty(HTMLCanvasElement.prototype, 'globalAlpha', {\n"
+    "    get : function(){ this.getContext('2d').globalAlpha; },\n"
+    "    set : function(newValue){ this.getContext('2d').globalAlpha = newValue; },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "Object.defineProperty(HTMLCanvasElement.prototype, 'lineCap', {\n"
+    "    get : function(){ this.getContext('2d').lineCap; },\n"
+    "    set : function(newValue){ this.getContext('2d').lineCap = newValue; },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "Object.defineProperty(HTMLCanvasElement.prototype, 'lineJoin', {\n"
+    "    get : function(){ this.getContext('2d').lineJoin; },\n"
+    "    set : function(newValue){ this.getContext('2d').lineJoin = newValue; },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "Object.defineProperty(HTMLCanvasElement.prototype, 'lineWidth', {\n"
+    "    get : function(){ this.getContext('2d').lineWidth; },\n"
+    "    set : function(newValue){ this.getContext('2d').lineWidth = newValue; },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "Object.defineProperty(HTMLCanvasElement.prototype, 'measuresize', {\n"
+    "    get : function(){ this.getContext('2d').measuresize; },\n"
+    "    set : function(newValue){ this.getContext('2d').measuresize = newValue; },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "Object.defineProperty(HTMLCanvasElement.prototype, 'miterLimit', {\n"
+    "    get : function(){ this.getContext('2d').miterLimit; },\n"
+    "    set : function(newValue){ this.getContext('2d').miterLimit = newValue; },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "Object.defineProperty(HTMLCanvasElement.prototype, 'strokeStyle', {\n"
+    "    get : function(){ this.getContext('2d').strokeStyle; },\n"
+    "    set : function(newValue){ this.getContext('2d').strokeStyle = newValue; },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "// Methoden:\n"
+    "HTMLCanvasElement.prototype.arc = function(a,b,c,d,e,f) { this.getContext('2d').arc(a,b,c,d,e,f); };\n"
+    "HTMLCanvasElement.prototype.beginPath = function() { this.getContext('2d').beginPath(); };\n"
+    "HTMLCanvasElement.prototype.bezierCurveTo = function(a,b,c,d,e,f) { this.getContext('2d').bezierCurveTo(a,b,c,d,e,f); };\n"
+    "HTMLCanvasElement.prototype.closePath = function() { this.getContext('2d').closePath(); };\n"
+    "HTMLCanvasElement.prototype.createLinearGradient = function(a,b,c,d) { return this.getContext('2d').createLinearGradient(a,b,c,d); };\n"
+    "HTMLCanvasElement.prototype.createRadialGradient = function(a,b,c,d,e,f) { return this.getContext('2d').createRadialGradient(a,b,c,d,e,f); };\n"
+    "HTMLCanvasElement.prototype.fill = function() { this.getContext('2d').fill(); };\n"
+    "HTMLCanvasElement.prototype.lineTo = function(a,b) { this.getContext('2d').lineTo(a,b); };\n"
+    "HTMLCanvasElement.prototype.moveTo = function(a,b) { this.getContext('2d').moveTo(a,b); };\n"
+    "HTMLCanvasElement.prototype.oval = function(a,b,c,d) { this.getContext('2d').oval(a,b,c,d); };\n"
+    "HTMLCanvasElement.prototype.quadraticCurveTo = function(a,b,c,d) { this.getContext('2d').quadraticCurveTo(a,b,c,d); };\n"
+    "HTMLCanvasElement.prototype.rect = function(a,b,c,d,e,f,g,h) { this.getContext('2d').rect(a,b,c,d,e,f,g,h); };\n"
+    "HTMLCanvasElement.prototype.stroke = function() { this.getContext('2d').stroke(); };\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
     "\n"
     "\n"
     "\n"
@@ -13183,12 +13521,23 @@ BOOL isJSArray(NSString *s)
     "});\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'myContext'                       //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'myContext', {\n"
+    "    get : function(){ if ($(this).is('canvas')) return (this.getContext('2d')); return null; },\n"
+    "    set : function(newValue){ if ($(this).is('canvas')) { this.getContext('2d') = newValue; $(this).triggerHandler('oncontext', newValue); } },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// Getter/Setter for 'y'                               //\n"
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'y', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('top')); },\n"
-    "    set: function(newValue){ $(this).css('top', newValue); $(this).triggerHandler('ony', newValue); },\n"
+    "    set : function(newValue){ $(this).css('top', newValue); $(this).triggerHandler('ony', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -13199,7 +13548,7 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'x', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('left')); },\n"
-    "    set: function(newValue){ $(this).css('left', newValue); $(this).triggerHandler('onx', newValue); },\n"
+    "    set : function(newValue){ $(this).css('left', newValue); $(this).triggerHandler('onx', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -13210,7 +13559,7 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'bgcolor', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('background-color')); },\n"
-    "    set: function(newValue){ $(this).css('background-color', newValue); $(this).triggerHandler('onbgcolor', newValue); },\n"
+    "    set : function(newValue){ $(this).css('background-color', newValue); $(this).triggerHandler('onbgcolor', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -13227,7 +13576,7 @@ BOOL isJSArray(NSString *s)
     "//// besser reine JS-Objekte zu extenden.\n"
     "Object.defineProperty(HTMLElement.prototype, 'opacity', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return $(this).css('opacity'); },\n"
-    "    set: function(newValue){ this.setAttribute_('opacity', newValue); },\n"
+    "    set : function(newValue){ this.setAttribute_('opacity', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -13289,7 +13638,7 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'textalign', {\n"
     "    get : function(){ if (!isDOM(this)) return undefined; return $(this).css('text-align'); },\n"
-    "    set: function(newValue){\n"
+    "    set : function(newValue){\n"
     "        if (newValue !== 'left' && newValue !== 'center' && newValue !== 'right')\n"
     "            throw new Error('Unsupported value for textalign.');\n"
     "\n"
@@ -13891,14 +14240,18 @@ BOOL isJSArray(NSString *s)
     "    // Methoden von <text> aufrufen kann (2. Beispiel von <text> in OL-Doku)\n"
     "    // Derzeitige Lösung: Bei Text nicht appenden, sondern ersetzen...\n"
     "    // (und die Attribute, Methoden, Events und CSS übernehmen)\n"
-    "    if (obj.inherit.name === 'text' || obj.inherit.name === 'inputtext' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button' || obj.inherit.name === 'basecombobox')\n"
+    "    if (obj.inherit.name === 'text' || obj.inherit.name === 'inputtext' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button' || obj.inherit.name === 'basecombobox' || obj.inherit.name === 'baselistitem'\n"
+    "    || obj.inherit.name === 'drawview')\n"
     "    {\n"
     "        // Attribute sichern\n"
     "        var gesicherteAttribute = {};\n"
-    "        Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
+    "        if (obj.selfDefinedAttributes) // Schutz gegen Objekte die keine selfDefinedAttributes haben\n"
     "        {\n"
-    "            gesicherteAttribute[key] = id[key];\n"
-    "        });\n"
+    "            Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
+    "            {\n"
+    "                gesicherteAttribute[key] = id[key];\n"
+    "            });\n"
+    "        }\n"
     "\n"
     "        // Alle auf vorherigen Vererbungs-Ebenen hinzugefügten Methoden sichern\n"
     "        var gesicherteMethoden = {};\n"
@@ -13914,6 +14267,11 @@ BOOL isJSArray(NSString *s)
     //"        var gesicherteEvents = $(id).data('events'); // Will break on jQuery 1.8\n"
     "        var gesicherteEvents = $._data(id,'events'); // Will work on jQuery 1.8\n"
     "\n"
+    "        // Kinder sichern\n"
+    "        // Ist klonen hier überhaupt nötig? Falls jQuery die Kinder aus dem Speicher entfernt,\n"
+    "        // sobald das Elternelement gelöscht ist, zur Sicherheit klonen.\n"
+    "        var gesicherteKinder = $(id).children().clone(true);\n"
+    "\n"
     "\n"
     "        // Da wir ersetzen, bekommt dieses Element den Universal-id-Namen\n"
     "        obj.inherit.contentHTML = replaceID(obj.inherit.contentHTML,''+$(id).attr('id'));\n"
@@ -13922,6 +14280,7 @@ BOOL isJSArray(NSString *s)
     "        id = document.getElementById(id.id);\n"
     "        // Und externen Elementnamen neu setzen\n"
     "        window[id.id] = id; // Falls es irgendwo als parent gesetzt wurde, puh... überlegen, wie ich da dran käme\n"
+    "\n"
     "        // Und das gerettete CSS wieder einsetzen\n"
     "        $(id).attr('style',$(id).attr('style') + theSavedCSSFromRemovedElement);\n"
     "\n"
@@ -13935,19 +14294,24 @@ BOOL isJSArray(NSString *s)
     "            });\n"
     "        }\n"
     "\n"
-    "        // Und die Original-Propertys wieder herstellen mit Default-Werten (Wie käme ich an die Nicht-Default-Werte ... ?)\n"
-    "        // Jupp. Gelöst! In dem ich alle selbst gesetzten Attribute vorher sichere und nun setze\n"
-    "        Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
+    "        // Und die Original-Propertys wieder herstellen mit den Nicht-Default-Werten\n"
+    "        if (obj.selfDefinedAttributes) // Schutz gegen Objekte die keine selfDefinedAttributes haben\n"
     "        {\n"
-    //"            id[key] = obj.selfDefinedAttributes[key];\n"
-    "            id[key] = gesicherteAttribute[key];\n"
-    "        });\n"
+    "            Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
+    "            {\n"
+    //"              id[key] = obj.selfDefinedAttributes[key]; // Das sind die Default-Werte.Aber wir wollen Nicht-Default\n"
+    "                id[key] = gesicherteAttribute[key];\n"
+    "            });\n"
+    "        }\n"
     "\n"
     "        // Und die Methoden wieder herstellen\n"
     "        Object.keys(gesicherteMethoden).forEach(function(key)\n"
     "        {\n"
     "            id[key] = gesicherteMethoden[key];\n"
     "        });\n"
+    "\n"
+    "        // Und die Kinder wieder herstellen\n"
+    "        $(id).append(gesicherteKinder);\n"
     "\n"
     "        // Dann den kompletten JS-Code ausführen\n"
     "        executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id'));\n"
@@ -13987,11 +14351,14 @@ BOOL isJSArray(NSString *s)
     "    {\n"
     "      var l = css[i].split(':');\n"
     "      var attr = $.trim(l[0]);\n"
+    "      if (attr == 'background-image') attr = 'resource';\n"
+    "      if (attr == 'background-color') attr = 'bgcolor';\n"
     "      if (attr != '')\n"
     "        attrArr.push(attr);\n"
     "    }\n"
     "  }\n"
     "\n"
+    "  var onInitFunc = undefined;\n"
     "\n"
     "  // Erst die Attribute auswerten\n"
     "  var an = obj.attributeNames;\n"
@@ -14016,40 +14383,16 @@ BOOL isJSArray(NSString *s)
     "  {\n"
     //"    alert(an[i]);\n"
     //"    alert(av[i]);\n"
-    "    var cssAttributes = ['x','y','width','height'];\n"
-    "    var jsAttributes = ['onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown','focusable','layout','text'];\n"
-    "    if (jQuery.inArray(an[i],cssAttributes) != -1)\n"
+    "    var jsAttributes = ['oninit','onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown','layout','text'];\n"
+    "\n"
+    "    if (jQuery.inArray(an[i],jsAttributes) != -1)\n"
     "    {\n"
-    "        if (an[i] === 'x')\n"
-    "          an[i] = 'left';\n"
-    "        if (an[i] === 'y')\n"
-    "          an[i] = 'top';\n"
-    "\n"
-    "        if (av[i].startsWith('$')) // = Constraint value\n"
-    "        {\n"
-    "            av[i] = av[i].substring(2,av[i].length-1);\n"
-    "\n"
-    "            av[i] = av[i].replace('immediateparent','getTheParent(true)');\n"
-    "\n"
-    "            av[i] = av[i].replace('parent','getTheParent()');\n"
-    "\n"
-    // --> Neu gelöst über getter, deswegen muss ich nicht mehr ersetzen.
-    // --> Neuer: Bricht leider jQueri UI. hmmm, dewegen kein getter für parent möglich
-    "            av[i] = av[i].replace('.width','.myWidth');\n"
-    "\n"
-    "            av[i] = av[i].replace('.height','.myHeight');\n"
-    "\n"
-    "            // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
-    "            var result = (function() { with (id) { return eval(av[i]); } }).bind(id)();\n"
-    "            av[i] = result;\n"
-    "        }\n"
-    "\n"
-    "        if (jQuery.inArray(an[i],attrArr) == -1)\n"
-    "          $(id).css(an[i],av[i]);\n"
-    "    }\n"
-    "    else if (jQuery.inArray(an[i],jsAttributes) != -1)\n"
-    "    {\n"
-    "      if (an[i].startsWith('on'))\n"
+    "      if (an[i] === 'oninit') \n"
+    "      {\n"
+    "        // Kann erst später ausgeführt, werden, wenn alle Methoden bekannt sind.\n"
+    "        onInitFunc = av[i];\n"
+    "      }\n"
+    "      else if (an[i].startsWith('on'))\n"
     "      {\n"
     "        // Dann ist es JS-Code, Anpassungen vornehmen.\n"
     "        av[i] = av[i].replace('setAttribute','setAttribute_');\n"
@@ -14079,15 +14422,6 @@ BOOL isJSArray(NSString *s)
     "          // Neuer Code: Ich muss den KOMPLETTEN on-Befehl per eval setzen,\n"
     "          // damit die Variable direkt verwertet wird.\n"
     "          eval('$(id).on(an[i], function() { with (this) { '+av[i]+'; } });');\n"
-    "      }\n"
-    "      else if (an[i] === 'focusable' && av[i] === 'false')\n"
-    "      {\n"
-    "        $(id).on('focus.blurnamespace', function() { this.blur(); });\n"
-    "      }\n"
-    "      else if (an[i] === 'focusable' && av[i] === 'true')\n"
-    "      {\n"
-    "        // Einen eventuell vorher gesetzten focus-Handler, der blur() handlet, entfernen\n"
-    "        $(id).off('focus.blurnamespace');\n"
     "      }\n"
     "      else if (an[i] === 'layout' && !av[i].contains('class') &&  av[i].replace(/\\s/g,'').contains('axis:x'))\n"
     "      {\n"
@@ -14127,7 +14461,26 @@ BOOL isJSArray(NSString *s)
     "        if (id.text !== undefined)\n"
     "            id.text = av[i];\n"
     "    }\n"
-    "    else { id.setAttribute_(an[i],av[i]); /* alert('Whoops, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() ausgewertet werden.'); */ }\n"
+    "    else\n"
+    "    {\n"
+    "        if (av[i].startsWith('$')) // = Constraint value\n"
+    "        {\n"
+    "            av[i] = av[i].substring(2,av[i].length-1);\n"
+    "            av[i] = av[i].replace('immediateparent','getTheParent(true)');\n"
+    "            av[i] = av[i].replace('parent','getTheParent()');\n"
+    // --> Neu gelöst über getter, deswegen muss ich nicht mehr ersetzen.
+    // --> Neuer: Bricht leider jQueri UI. hmmm, dewegen kein getter für parent möglich
+    "            av[i] = av[i].replace('.width','.myWidth');\n"
+    "            av[i] = av[i].replace('.height','.myHeight');\n"
+    "\n"
+    "            // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
+    "            var result = (function() { with (id) { return eval(av[i]); } }).bind(id)();\n"
+    "            av[i] = result;\n"
+    "        }\n"
+    "\n"
+    "        if (jQuery.inArray(an[i],attrArr) == -1)\n"
+    "            id.setAttribute_(an[i],av[i]);\n"
+    "    }\n"
     "  }\n"
     // "  $(id).css('background-color','black').css('width','200').css('height','5');\n"
     // "  $(id).attr('style',obj.style);\n"
@@ -14179,6 +14532,13 @@ BOOL isJSArray(NSString *s)
     "  // Dann den kompletten JS-Code ausführen\n"
     "  // ToDo -> Eigentlich ohne das, was eben schon ausgeführt wurde.\n"
     "  executeJSCodeOfThisObject(obj, id, $(id).attr('id'));\n"
+    "\n"
+    "  // Einen als Attribut gesetzten 'oninit'-Handler, kann ich erst jetzt ausführen, da jetzt erst alle Methoden bekannt sind\n"
+    "  if (onInitFunc)\n"
+    "  {\n"
+    "    // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
+    "    (function() { with (id) { eval(onInitFunc); } }).bind(id)();\n"
+    "  }\n"
     "\n"
     "}\n"
     "\n"
@@ -14298,6 +14658,23 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
+    "//  class = drawview (native class)                          //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.drawview = function() {\n"
+    "  this.name = 'drawview';\n"
+    "  this.inherit = new oo.view();\n"
+    "\n"
+    "  this.attributeNames = [];\n"
+    "  this.attributeValues = [];\n"
+    "\n"
+    "  this.selfDefinedAttributes = { width:300, height:150 }\n"
+    "\n"
+    "  this.contentHTML = '<div class=\"canvas_element noPointerEvents\"><canvas id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_standard noPointerEvents\"></canvas></div>';\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
     "//  class = text (native class)                              //\n"
     "///////////////////////////////////////////////////////////////\n"
     "oo.text = function(textBetweenTags) {\n"
@@ -14316,7 +14693,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "  this.defaultplacement = '';\n"
     "\n"
-    "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_text\" />';\n"
+    "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_text noPointerEvents\" />';\n"
     "}\n"
     "\n"
     "\n"
@@ -14338,7 +14715,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "  this.defaultplacement = '';\n"
     "\n"
-    "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_text\" />';\n"
+    "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_text noPointerEvents\" />';\n"
     "}\n"
     "\n"
     "\n"

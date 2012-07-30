@@ -21,6 +21,13 @@
 // - width/height muss nicht mehr initial auf 'auto' gesetzt werden, seitdem der ganze JS-Code
 // in '$(window).load(function()' steckt,
 //
+//- Eigene Klassen müssen als allererstes und nicht als letztes gecheckt werden (Bsp. 15.14 und 15.15)
+// (erst nachdem ich alle ToDos und alle noch nicht selbst ausgewerteten Klassen entfernt habe)
+//
+//
+//
+//
+//
 //
 //
 // Als Optionen mit anbieten
@@ -3896,7 +3903,7 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"include"])
+    if ([elementName isEqualToString:@"include"] || [elementName isEqualToString:@"import"])
     {
         element_bearbeitet = YES;
 
@@ -3911,8 +3918,35 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Using the element 'href' as path to the recursive called file.");
         }
+        NSString *href = [attributeDict valueForKey:@"href"];
 
-        [self callMyselfRecursive:[attributeDict valueForKey:@"href"]];
+        if (![href hasSuffix:@".lzx"])
+        {
+            // Wegen Chapter 15, 3.1
+            href = [NSString stringWithFormat:@"%@/library.lzx",href];
+        }
+
+        // Diese implizit inkludierten Files, können u. U. auch explizit gesetzt werden. Dann ignorieren.
+        // Damit kein Fehler geworfen wird, hier abfangen und nicht rekursiv aufrufen.
+        if (![href isEqualToString:@"lz/button.lzx"] &&
+            ![href isEqualToString:@"lz/radio.lzx"] &&
+            ![href isEqualToString:@"incubator/base64.lzx"])
+            [self callMyselfRecursive:href];
+
+
+        // Zusätzliche Attribute vom Import-Tag, die ignoriert werden
+        if ([attributeDict valueForKey:@"stage"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"prefix"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"onerror"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"ontimeout"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"onload"])
+            [self.jQueryOutput appendFormat:@"  (function() { %@; })();",[attributeDict valueForKey:@"onload"]]; // untested
     }
 
 
@@ -5274,7 +5308,8 @@ didStartElement:(NSString *)elementName
 
 
     if ([elementName isEqualToString:@"BDScombobox"] || // ToDo -  als Klasse auslesen
-        [elementName isEqualToString:@"combobox"])
+        [elementName isEqualToString:@"combobox"] ||
+        [elementName isEqualToString:@"datacombobox"])
     {
         element_bearbeitet = YES;
 
@@ -5347,7 +5382,8 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"\">\n"];
 
-if (![elementName isEqualToString:@"combobox"]) // ToDo - Auflösen, wenn BDSCheckbox als Klasse ausgewertet
+ // ToDo - Auflösen, wenn BDSCheckbox als Klasse ausgewertet
+if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:@"datacombobox"])
 {
         if (![attributeDict valueForKey:@"dataset"])
         {
@@ -5433,6 +5469,15 @@ if (![elementName isEqualToString:@"combobox"]) // ToDo - Auflösen, wenn BDSChe
             self.attributeCount++;
         // ToDo
         if ([attributeDict valueForKey:@"searchable"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"itemdatapath"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"textdatapath"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"valuedatapath"])
             self.attributeCount++;
 
 
@@ -5979,6 +6024,19 @@ if (![elementName isEqualToString:@"combobox"]) // ToDo - Auflösen, wenn BDSChe
         [self.output appendString:@"</div>\n"];
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
+    }
+
+
+
+    if ([elementName isEqualToString:@"goldstyle"] ||
+        [elementName isEqualToString:@"greenstyle"])
+    {
+        element_bearbeitet = YES;
+
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"isdefault"])
+            self.attributeCount++;
     }
 
 
@@ -6944,41 +7002,6 @@ if (![elementName isEqualToString:@"combobox"]) // ToDo - Auflösen, wenn BDSChe
     }
 
 
-    if ([elementName isEqualToString:@"datacombobox"])
-    {
-        element_bearbeitet = YES;
-
-        // ToDo
-        if ([attributeDict valueForKey:@"defaulttext"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"itemdatapath"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"listwidth"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"onblur"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"onfocus"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"shownitems"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"textdatapath"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"valuedatapath"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"width"])
-            self.attributeCount++;
-    }
     if ([elementName isEqualToString:@"multistatebutton"])
     {
         element_bearbeitet = YES;
@@ -7161,47 +7184,6 @@ if (![elementName isEqualToString:@"combobox"]) // ToDo - Auflösen, wenn BDSChe
         else
         {
             // JS-Code mit foundCharacters sammeln und beim schließen übernehmen
-        }
-    }
-
-
-
-
-    // Eine BDSFinanzaemter-View... ToDo (evtl. eher eine Art input-Feld und dort zuzuordnen?)
-    if ([elementName isEqualToString:@"BDSFinanzaemter"])
-    {
-        element_bearbeitet = YES;
-
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
-        [self.output appendString:@"<!-- Finanzaemter-View: -->\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
-        [self.output appendString:@"<div></div>\n"];
-
-
-        if ([attributeDict valueForKey:@"controlwidth"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'controlwidth'.");
-        }
-        if ([attributeDict valueForKey:@"datapath"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'datapath'.");
-        }
-        if ([attributeDict valueForKey:@"dptext"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'dptext'.");
-        }
-        if ([attributeDict valueForKey:@"id"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'id'.");
-        }
-        if ([attributeDict valueForKey:@"title"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'title'.");
         }
     }
 
@@ -8019,7 +8001,7 @@ if (![elementName isEqualToString:@"combobox"]) // ToDo - Auflösen, wenn BDSChe
         [d removeObjectForKey:@"mask"];
         [d removeObjectForKey:@"ignoreplacement"];
 
-         [d removeObjectForKey:@"value"];/* Auskommentieren, bricht sonst Beispiel <basecombobox> */
+        /* [d removeObjectForKey:@"value"]; Auskommentieren, bricht sonst Beispiel <basecombobox> */
         [d removeObjectForKey:@"text"];
 
 
@@ -9070,18 +9052,20 @@ BOOL isJSArray(NSString *s)
 
     // Bei diesen Elementen muss beim schließen nichts unternommen werden
     if ([elementName isEqualToString:@"simplelayout"] ||
+        [elementName isEqualToString:@"goldstyle"] ||
+        [elementName isEqualToString:@"greenstyle"] ||
         [elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDSeditdate"] ||
         [elementName isEqualToString:@"BDScheckbox"] ||
         [elementName isEqualToString:@"checkbox"] ||
         [elementName isEqualToString:@"radiobutton"] ||
-        [elementName isEqualToString:@"BDSFinanzaemter"] ||
         [elementName isEqualToString:@"frame"] ||
         [elementName isEqualToString:@"font"] ||
         [elementName isEqualToString:@"face"] ||
         [elementName isEqualToString:@"library"] ||
         [elementName isEqualToString:@"html"] ||
         [elementName isEqualToString:@"include"] ||
+        [elementName isEqualToString:@"import"] ||
         [elementName isEqualToString:@"datapointer"] ||
         [elementName isEqualToString:@"attribute"] ||
         [elementName isEqualToString:@"infobox_notsupported"] ||
@@ -9093,7 +9077,6 @@ BOOL isJSArray(NSString *s)
         [elementName isEqualToString:@"animator"] ||
         [elementName isEqualToString:@"datapath"] ||
         [elementName isEqualToString:@"int_vscrollbar"] ||
-        [elementName isEqualToString:@"datacombobox"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
         [elementName isEqualToString:@"stableborderlayout"] ||
         [elementName isEqualToString:@"scrollview"] ||
@@ -9129,7 +9112,8 @@ BOOL isJSArray(NSString *s)
 
 
     if ([elementName isEqualToString:@"BDScombobox"] ||
-        [elementName isEqualToString:@"combobox"])
+        [elementName isEqualToString:@"combobox"] ||
+        [elementName isEqualToString:@"datacombobox"])
     {
         element_geschlossen = YES;
 
@@ -11670,11 +11654,16 @@ BOOL isJSArray(NSString *s)
     "        this.callJS = function(method,callback,args) {\n"
     "            window[method](args);\n"
     "        }\n"
+    "        this.isAAActive = function() {\n"
+    "            return false;\n"
+    "        }\n"
     "        this.loadJS = function(code,target) {\n"
     "            eval(code);\n"
     "        }\n"
     "        this.loadURL = function(url,target) {\n"
     "            window.open(url, target);\n"
+    "        }\n"
+    "        this.setClipboard = function(s) {\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -12903,6 +12892,12 @@ BOOL isJSArray(NSString *s)
     "            });\n"
     "        }\n"
     "    }\n"
+    "    else if (attributeName == 'index')\n"
+    "    {\n"
+    "        // Noch ka, wird von GFlender benutzt, in der Klasse baserollUpDownContainer. Wo das Attribut herkommt: unklar!\n"
+    "        // Ich reiche es erstmal einfach durch:\n"
+    "        me.index = value;\n"
+    "    }\n"
     "    else\n"
     "    {\n"
     "        // Wenn es vorher nicht matcht, dann einfach die Property setzen, dann ist es eine selbst definierte Variable\n"
@@ -12947,6 +12942,17 @@ BOOL isJSArray(NSString *s)
     "    writable: false,\n"
     "    value: setAttributeFunc\n"
     "});\n"
+    "\n"
+    "\n"
+    // Funktioniert nicht, bricht irgendwas in jQuery
+    //"// Wegen Chapter 15 5.\n"
+    //"Object.defineProperty(Object.prototype, 'unload', {\n"
+    //"    enumerable: false, // Darf nicht auf 'true' gesetzt werden! Sonst bricht jQuery!\n"
+    //"    configurable: true,\n"
+    //"    writable: false,\n"
+    //"    value: function() {}\n"
+    //"});\n"
+    "\n"
     "\n"
     "// Für alle DOM-Objekte\n"
     "// Ohne enumerabe und configurable, sonst beschwert sich Safari\n"
@@ -13490,6 +13496,81 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'aaactive'                        //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'aaactive', {\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "\n"
+    "        return $(this).data('aaactive_');\n"
+    "    },\n"
+    "    set : function(newValue){ $(this).data('aaactive_',newValue); $(this).triggerHandler('onaaactive', newValue); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'aadescription'                   //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'aadescription', {\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "\n"
+    "        return $(this).data('aadescription_');\n"
+    "    },\n"
+    "    set : function(newValue){ $(this).data('aadescription_',newValue); $(this).triggerHandler('onaadescription', newValue); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'aaname'                          //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'aaname', {\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "\n"
+    "        return $(this).data('aaname_') || $(this).html();\n"
+    "    },\n"
+    "    set : function(newValue){ $(this).data('aaname_',newValue); $(this).triggerHandler('onaaname', newValue); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'aasilent'                        //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'aasilent', {\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "\n"
+    "        return $(this).data('aasilent_');\n"
+    "    },\n"
+    "    set : function(newValue){ $(this).data('aasilent_',newValue); $(this).triggerHandler('onaasilent', newValue); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'aatabindex'                      //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'aatabindex', {\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "\n"
+    "        return $(this).data('aatabindex_');\n"
+    "    },\n"
+    "    set : function(newValue){ $(this).data('aatabindex_',newValue); $(this).triggerHandler('onaatabindex', newValue); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// Getter/Setter for 'layout'                          //\n"
     "// READ/WRITE                                          //\n"
     "// Speichern des Wertes per jQuery in 'layout_', sonst infinite loop\n"
@@ -13497,7 +13578,7 @@ BOOL isJSArray(NSString *s)
     "Object.defineProperty(Object.prototype, 'layout', {\n"
     "    get : function(){\n"
     "        if (!isDOM(this)) return undefined;\n"
-    "        if (!$(this).data('layout')) $(this).data('layout_', new lz.layout());\n"
+    "        if (!$(this).data('layout_')) $(this).data('layout_', new lz.layout());\n"
     "\n"
     "        return $(this).data('layout_');\n"
     "    },\n"
@@ -14751,6 +14832,23 @@ BOOL isJSArray(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "oo.replicator = function() {\n"
     "  this.name = 'replicator';\n"
+    "  this.inherit = new oo.view();\n"
+    "\n"
+    "  this.attributeNames = [];\n"
+    "  this.attributeValues = [];\n"
+    "\n"
+    "  this.selfDefinedAttributes = { }\n"
+    "\n"
+    "  this.contentHTML = '';\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = radiogroup (native class)                        //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.radiogroup = function() {\n"
+    "  this.name = 'radiogroup';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
     "  this.attributeNames = [];\n"

@@ -2053,6 +2053,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self convertNameAttributeToGlobalJSVar:attributeDict];
 
     if (kompiliereSpeziellFuerTaxango)
+    {
     if ([attributeDict valueForKey:@"visible"])
     {
         self.attributeCount++;
@@ -2259,12 +2260,13 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
         }
     }
-
+    }
     else
-
+    {
     if ([attributeDict valueForKey:@"visible"])
     {
         self.attributeCount++;
+        NSLog(@"Setting the attribute 'visible' as JS.");
 
         // ToDo - Diese werden noch nicht unterstützt:
         // Beim Abarbeiten vorne anfangen, da Abhängigkeiten nach hinten
@@ -2279,7 +2281,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             ![self.zuletztGesetzteID isEqualToString:@"element376"])
             [self setTheValue:[attributeDict valueForKey:@"visible"] ofAttribute:@"visible"];
     }
-
+    }
 
     if ([attributeDict valueForKey:@"focusable"])
     {
@@ -3737,8 +3739,6 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
         [elementName isEqualToString:@"baselist"] ||
         [elementName isEqualToString:@"list"] ||
-        [elementName isEqualToString:@"baselistitem"] ||
-        [elementName isEqualToString:@"textlistitem"] ||
         [elementName isEqualToString:@"rollUpDown"])
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
@@ -4148,6 +4148,10 @@ didStartElement:(NSString *)elementName
 
     if ([elementName isEqualToString:@"datapointer"])
     {
+        // Sammeln der Ausgabe
+        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
+
+
         element_bearbeitet = YES;
 
         if ([attributeDict valueForKey:@"name"])
@@ -4162,7 +4166,6 @@ didStartElement:(NSString *)elementName
             NSLog(@"Setting the attribute 'id' as JS-var-name for the datapointer.");
         }
 
-
         if ([attributeDict valueForKey:@"xpath"])
         {
             self.attributeCount++;
@@ -4172,6 +4175,7 @@ didStartElement:(NSString *)elementName
         {
             [self instableXML:@"Ein datapointer ohne 'xpath'-Attribut macht wohl keinen Sinn."];
         }
+
         NSString *dp = [attributeDict valueForKey:@"xpath"];
         // In Anführungszeichen setzen:
         if ([dp length] > 0)
@@ -4189,25 +4193,25 @@ didStartElement:(NSString *)elementName
         // Ich lege jeden datapointer als globales Objekt an, auf welches zugegriffen werden kann
         if ([name length] > 0)
         {
-            [self.jQueryOutput appendString:@"\n  // Ein Datapointer (bewusst ohne var, damit global verfügbar)\n"];
-            [self.jQueryOutput appendFormat:@"  %@ = new lz.datapointer(%@);\n",name,dp];
+            [o appendString:@"\n  // Ein Datapointer (bewusst ohne var, damit global verfügbar)\n"];
+            [o appendFormat:@"  %@ = new lz.datapointer(%@);\n",name,dp];
         }
         else
         {
             name = @"pointerWithoutName";
 
-            [self.jQueryOutput0 appendString:@"\n  // Ein Datapointer ohne 'name'- oder 'id'-Attribut. Wohl nur um ein Handler daran zu binden oder so... hmmm\n"];
-            [self.jQueryOutput0 appendFormat:@" %@ = new lz.datapointer(%@);\n",name,dp];
-
-            // Dann jQueryOutput0, sonst kann die Methode sich nicht daran binden
-            // Beispiel 11.4
+            [o appendString:@"\n  // Ein Datapointer ohne 'name'- oder 'id'-Attribut. Wohl nur um ein Handler daran zu binden oder so... hmmm\n"];
+            [o appendFormat:@" %@ = new lz.datapointer(%@);\n",name,dp];
         }
 
         // Falls gleich eine Methode kommt, die sich an diesen Pointer binden möchte
         self.lastUsedNameAttributeOfDataPointer = name;
 
-
         [self addJSCode:attributeDict withId:name];
+
+        // Weil Methoden darauf zugreifen, deswegen muss der Datapointer vorher bekannt sein
+        // Und damit Methoden sich daran binden können (Beispiel 11.4).
+        [self.jQueryOutput0 appendString:o];
     }
 
 
@@ -5210,6 +5214,8 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+
         [self.output appendString:@"<option"];
 
         [self addIdToElement:attributeDict];
@@ -5217,6 +5223,7 @@ didStartElement:(NSString *)elementName
         if ([attributeDict valueForKey:@"selected"] && [[attributeDict valueForKey:@"selected"] isEqualToString:@"true"])
         {
             self.attributeCount++;
+            NSLog(@"Setting the attribute 'selected' as 'selected=\"selected\".");
 
             [self.output appendString:@" selected=\"selected\""];
         }
@@ -5258,15 +5265,16 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Setting the attribute 'value' as jQuerys val().");
 
-            [self.jQueryOutput appendFormat:@"\n  // Setting the value of '%@'",self.zuletztGesetzteID];
-            [self.jQueryOutput appendFormat:@"  $('#%@').val(%@);\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"value"]];
+            // Muss jQueryOutput0 (nicht jQueryOutput) sein, weil z.B. Constraints den Wert auslesen wollen (Bsp. <combobox>)
+            [self.jQueryOutput0 appendFormat:@"\n  // Setting the value of '%@'\n",self.zuletztGesetzteID];
+            [self.jQueryOutput0 appendFormat:@"  $('#%@').val(%@);\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"value"]];
         }
     }
 
 
 
-    if ([elementName isEqualToString:@"BDScombobox"] ||
-        [elementName isEqualToString:@"comboboxxxx"]) // ToDo -  als Klasse auslesen
+    if ([elementName isEqualToString:@"BDScombobox"] || // ToDo -  als Klasse auslesen
+        [elementName isEqualToString:@"combobox"])
     {
         element_bearbeitet = YES;
 
@@ -5274,7 +5282,7 @@ didStartElement:(NSString *)elementName
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
 
-        // Umgebendes <Div> für die komplette Combobox inklusive Text
+        // Umgebendes <div> für die komplette Combobox inklusive Text
         // WOW, dieses vorangehende <br /> als Lösung zu setzen, hat mich 3 Stunden Zeit gekostet...
         // Quatsch, jetzt nach der neuen Lösung.
         [self.output appendString:@"<div class=\"div_combobox\">\n"];
@@ -5282,12 +5290,11 @@ didStartElement:(NSString *)elementName
 
 
 
-
         [self.output appendString:@"<span"];
         [self.output appendString:[self addTitlewidth:attributeDict]];
         [self.output appendString:@">"];
 
-        
+
 
 
         // Wenn im Attribut title Code auftaucht, dann müssen wir es dynamisch setzen
@@ -5340,7 +5347,7 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"\">\n"];
 
-if (![elementName isEqualToString:@"combobox"])
+if (![elementName isEqualToString:@"combobox"]) // ToDo - Auflösen, wenn BDSCheckbox als Klasse ausgewertet
 {
         if (![attributeDict valueForKey:@"dataset"])
         {
@@ -5400,13 +5407,6 @@ if (![elementName isEqualToString:@"combobox"])
         [self.output appendString:@"__CodeMarker -->\n"];
 }
 
-
-
-        // Select auch wieder schließen
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
-        [self.output appendString:@"</select>\n"];
-
-
         if ([attributeDict valueForKey:@"simple"])
         {
             self.attributeCount++;
@@ -5417,11 +5417,23 @@ if (![elementName isEqualToString:@"combobox"])
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'listwidth'.");
         }
-
-
-
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"</div>\n\n"];
+        if ([attributeDict valueForKey:@"editable"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'editable'.");
+        }
+        // ToDo
+        if ([attributeDict valueForKey:@"defaulttext"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"doesenter"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"shownitems"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"searchable"])
+            self.attributeCount++;
 
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
@@ -5545,7 +5557,7 @@ if (![elementName isEqualToString:@"combobox"])
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"</div>\n"];
 
-        // Javascript aufrufen hier, für z.B. Visible-Eigenschaften usw.
+        // Javascript aufrufen hier, für z. B. Visible-Eigenschaften usw.
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
     }
 
@@ -5562,6 +5574,22 @@ if (![elementName isEqualToString:@"combobox"])
 
 
         [self.output appendString:@"<input class=\"input_checkbox\" type=\"radio\""];
+
+        if ([attributeDict valueForKey:@"value"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'value' as 'value' for the radiobutton.");
+
+            [self.output appendFormat:@" value=\"%@\"",[attributeDict valueForKey:@"value"]];
+        }
+
+        if ([attributeDict valueForKey:@"selected"] && [[attributeDict valueForKey:@"selected"] isEqualToString:@"true"])
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'selected' as 'checked=\"checked\".");
+
+            [self.output appendString:@" checked=\"checked\""];
+        }
 
         [self.output appendFormat:@" name=\"%@_radiogroup\"",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2]];
 
@@ -5720,6 +5748,11 @@ if (![elementName isEqualToString:@"combobox"])
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'minvalue'.");
         }
+        if ([attributeDict valueForKey:@"maxvalue"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'maxvalue'.");
+        }
         if ([attributeDict valueForKey:@"enabled"]) // ToDo
         {
             self.attributeCount++;
@@ -5739,6 +5772,26 @@ if (![elementName isEqualToString:@"combobox"])
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'simple'.");
+        }
+        if ([attributeDict valueForKey:@"toobigErrorstring"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'toobigErrorstring'.");
+        }
+        if ([attributeDict valueForKey:@"toosmallErrorstring"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'toosmallErrorstring'.");
+        }
+        if ([attributeDict valueForKey:@"plausicheck"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'plausicheck'.");
+        }
+        if ([attributeDict valueForKey:@"plausiinfo"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'plausiinfo'.");
         }
 
 
@@ -5848,6 +5901,16 @@ if (![elementName isEqualToString:@"combobox"])
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'restrictyear'.");
+        }
+        if ([attributeDict valueForKey:@"datedays"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'datedays'.");
+        }
+        if ([attributeDict valueForKey:@"allowfuturedate"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'allowfuturedate'.");
         }
         if ([attributeDict valueForKey:@"simple"]) // ToDo
         {
@@ -6727,25 +6790,6 @@ if (![elementName isEqualToString:@"combobox"])
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
         self.weAreSkippingTheCompleteContentInThisElement = YES;
     }
-    // ToDo
-    if ([elementName isEqualToString:@"BDSreplicator"])
-    {
-        element_bearbeitet = YES;
-
-
-
-        if ([attributeDict valueForKey:@"dataset"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"xpath"])
-            self.attributeCount++;
-
-
-        // ToDo
-        // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreSkippingTheCompleteContentInThisElement = YES;
-    }
 
     // ToDo
     if ([elementName isEqualToString:@"infobox_notsupported"] ||
@@ -6900,42 +6944,6 @@ if (![elementName isEqualToString:@"combobox"])
     }
 
 
-
-    if ([elementName isEqualToString:@"combobox"])
-    {
-        element_bearbeitet = YES;
-
-        // ToDo
-        if ([attributeDict valueForKey:@"defaulttext"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"doesenter"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"editable"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"onblur"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"onfocus"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"searchable"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"shownitems"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"width"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"y"])
-            self.attributeCount++;
-    }
     if ([elementName isEqualToString:@"datacombobox"])
     {
         element_bearbeitet = YES;
@@ -8011,7 +8019,7 @@ if (![elementName isEqualToString:@"combobox"])
         [d removeObjectForKey:@"mask"];
         [d removeObjectForKey:@"ignoreplacement"];
 
-        /* [d removeObjectForKey:@"value"]; Auskommentieren, bricht sonst Beispiel <basecombobox> */
+         [d removeObjectForKey:@"value"];/* Auskommentieren, bricht sonst Beispiel <basecombobox> */
         [d removeObjectForKey:@"text"];
 
 
@@ -8019,7 +8027,7 @@ if (![elementName isEqualToString:@"combobox"])
         [d removeObjectForKey:@"boxheight"];
         [d removeObjectForKey:@"listwidth"];
         [d removeObjectForKey:@"controlwidth"];
-
+        [d removeObjectForKey:@"title"];
 
 
 
@@ -8913,8 +8921,7 @@ BOOL isJSArray(NSString *s)
         return;
     }
 
-    if ([elementName isEqualToString:@"BDSinputgrid"] ||
-        [elementName isEqualToString:@"BDSreplicator"])
+    if ([elementName isEqualToString:@"BDSinputgrid"])
     {
         element_geschlossen = YES;
 
@@ -9065,7 +9072,6 @@ BOOL isJSArray(NSString *s)
     if ([elementName isEqualToString:@"simplelayout"] ||
         [elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDSeditdate"] ||
-        [elementName isEqualToString:@"BDScombobox"] ||
         [elementName isEqualToString:@"BDScheckbox"] ||
         [elementName isEqualToString:@"checkbox"] ||
         [elementName isEqualToString:@"radiobutton"] ||
@@ -9087,7 +9093,6 @@ BOOL isJSArray(NSString *s)
         [elementName isEqualToString:@"animator"] ||
         [elementName isEqualToString:@"datapath"] ||
         [elementName isEqualToString:@"int_vscrollbar"] ||
-        [elementName isEqualToString:@"combobox"] ||
         [elementName isEqualToString:@"datacombobox"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
         [elementName isEqualToString:@"stableborderlayout"] ||
@@ -9121,6 +9126,21 @@ BOOL isJSArray(NSString *s)
 
         [self.output appendString:@"</div>\n"];
     }
+
+
+    if ([elementName isEqualToString:@"BDScombobox"] ||
+        [elementName isEqualToString:@"combobox"])
+    {
+        element_geschlossen = YES;
+
+        // Select auch wieder schließen
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+3];
+        [self.output appendString:@"</select>\n"];
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+        [self.output appendString:@"</div>\n\n"];
+    }
+
 
     // Schließen von drawview
     if ([elementName isEqualToString:@"drawview"])
@@ -9680,7 +9700,6 @@ BOOL isJSArray(NSString *s)
         {
             // Von den hier genannten Tags wird der Text zwischen den Tags noch nichts ausgewertet
             if (![self.keyInProgress isEqualToString:@"BDSinputgrid"] &&
-                ![self.keyInProgress isEqualToString:@"BDSreplicator"] &&
                 // Text oder Newlines DIREKT zwischen den canvas-Tags wird immer ignoriert
                 ![self.keyInProgress isEqualToString:@"canvas"])
             {
@@ -11173,8 +11192,8 @@ BOOL isJSArray(NSString *s)
     "    });\n"
     "\n"
     "    // Davon unabhängig: Triggern, damit da dran hängende Constraints die Änderung mitbekommen\n"
-    "    // Dies gilt sogar für jedes input!\n"
-    "    $('input').each( function() {\n"
+    "    // Dies gilt sogar für jedes input (und select)!\n"
+    "    $('input,select').each( function() {\n"
     "        $(this).on('change',function() {\n"
     "            $(this).triggerHandler('onvalue',$(this).val());\n"
     "        });\n"
@@ -11343,6 +11362,7 @@ BOOL isJSArray(NSString *s)
     "{\n"
     "  var isvalid = typeof isvalid !== 'undefined' ? isvalid : true; // (ToDo - ist ein Attribut von rud-Container)\n"
     "  var closeable = typeof closeable !== 'undefined' ? closeable : true; // (ToDo - hat was mit nicedialog zu tun)\n"
+    "  var titlewidth = typeof titlewidth !== 'undefined' ? titlewidth : true; // (ToDo - hat was mit BDSFinanzamt zu tun)\n"
     "\n"
     "\n"
     "\n"
@@ -12195,6 +12215,10 @@ BOOL isJSArray(NSString *s)
     "    }\n"
     "\n"
     "\n"
+    "    this.layout = function() {\n"
+    "        this.update = function() {};\n"
+    "    }\n"
+    "\n"
     "    this.view = function(scope,attributes) {\n"
     "        return createObjectFromScript('view',scope,attributes);\n"
     "    }\n"
@@ -12580,6 +12604,13 @@ BOOL isJSArray(NSString *s)
     "                value = value.substr(1);\n"
     "            value = '#' + value;\n"
     "        }\n"
+    "        if (typeof value === 'string' && !value.startsWith('#') && value.length < 6) // Bsp. 1 <combobox>\n"
+    "        {\n"
+    "            value = Number(value).toString(16);\n"
+    "            while (value.length < 6)\n"
+    "                value = '0' + value;\n"
+    "            value = '#' + value;\n"
+    "        }\n"
     "        $(me).css('background-color',value);\n"
     "    }\n"
     "    else if (attributeName == 'x')\n"
@@ -12600,6 +12631,9 @@ BOOL isJSArray(NSString *s)
     "    }\n"
     "    else if (attributeName == 'width')\n"
     "    {\n"
+    "        if ($(this).is('canvas')) // Bei 'canvas' wird es direkt im Element gesetzt\n"
+    "            $(this).attr('width',value);\n"
+    "\n"
     "        // jQuery doesn't like plain strings containing a number\n"
     "        if (typeof value === 'string' && !value.endsWith('px') && !value.endsWith('%'))\n"
     "            value = value + 'px';\n"
@@ -12610,6 +12644,9 @@ BOOL isJSArray(NSString *s)
     "    }\n"
     "    else if (attributeName == 'height')\n"
     "    {\n"
+    "        if ($(this).is('canvas')) // Bei 'canvas' wird es direkt im Element gesetzt\n"
+    "            $(this).attr('height',value);\n"
+    "\n"
     "        // jQuery doesn't like plain strings containing a number\n"
     "        if (typeof value === 'string' && !value.endsWith('px') && !value.endsWith('%'))\n"
     "            value = value + 'px';\n"
@@ -12662,6 +12699,10 @@ BOOL isJSArray(NSString *s)
     "        // if set to true, the component manager will call this component with doEnterDown\n"
     "        // and doEnterUp when the enter key goes up or down if it is focussed\n"
     "    }\n"
+    "    else if (attributeName == 'styleable')\n"
+    "    {\n"
+    "        // ToDo\n"
+    "    }\n"
     "    else if (attributeName === 'initstage' && value === 'defer')\n"
     "    {\n"
     "      //$(me).hide() // ToDo: Bricht Anzeige Kinder;\n"
@@ -12701,7 +12742,11 @@ BOOL isJSArray(NSString *s)
     "    }\n"
     "    else if (attributeName == 'background-image')\n"
     "    {\n"
-    "        $(me).css('background-image','url('+value+')');\n"
+    "       alert('Wer ruft mich denn auf? Seltsam'); $(me).css('background-image','url('+value+')');\n"
+    "    }\n"
+    "    else if (attributeName == 'animduration')\n"
+    "    {\n"
+    "       // ToDo\n"
     "    }\n"
     "    else if (attributeName == 'stretches')\n"
     "    {\n"
@@ -13444,18 +13489,43 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'layout'                          //\n"
+    "// READ/WRITE                                          //\n"
+    "// Speichern des Wertes per jQuery in 'layout_', sonst infinite loop\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'layout', {\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "        if (!$(this).data('layout')) $(this).data('layout_', new lz.layout());\n"
+    "\n"
+    "        return $(this).data('layout_');\n"
+    "    },\n"
+    "    set : function(newValue){ $(this).data('layout_',newValue); $(this).triggerHandler('onlayout', newValue); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'loadratio'                       //\n"
+    "// READ-ONLY                                           //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'loadratio', {\n"
+    "    get : function(){ return 1; },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Getter for 'mask' (setter only to trigger an event) //\n"
     "// mask seems to be the next clipped parent.           //\n"
     "/////////////////////////////////////////////////////////\n"
-    "\n"
-    "\n"
     "var findNextMaskedElement = function(e) {\n"
     "    return $(e).parents().filter(function() {\n"
     "        return $(this).css('clip').startsWith('rect');\n"
     "    });\n"
     "}\n"
+    "\n"
     "// in '_mask' speichern wir einen eventuell gesetzten Wert...\n"
     "Object.defineProperty(Object.prototype, '_mask', {\n"
     "    enumerable: false,\n"
@@ -14282,7 +14352,9 @@ BOOL isJSArray(NSString *s)
     "        window[id.id] = id; // Falls es irgendwo als parent gesetzt wurde, puh... überlegen, wie ich da dran käme\n"
     "\n"
     "        // Und das gerettete CSS wieder einsetzen\n"
-    "        $(id).attr('style',$(id).attr('style') + theSavedCSSFromRemovedElement);\n"
+    //"        $(id).attr('style',$(id).attr('style') + theSavedCSSFromRemovedElement);\n"
+    // Warum $(id).attr('style') ??. Das ist doch eh immer undefined und bricht dadurch das erste Attribut. Deswegen neu:
+    "        $(id).attr('style',theSavedCSSFromRemovedElement);\n"
     "\n"
     "        // Und die zuvor gesicherten events wieder einsetzen\n"
     "        if (gesicherteEvents) // Schutz gegen undefined, sonst Absturz bei undefined\n"
@@ -14670,6 +14742,23 @@ BOOL isJSArray(NSString *s)
     "  this.selfDefinedAttributes = { width:300, height:150 }\n"
     "\n"
     "  this.contentHTML = '<div class=\"canvas_element noPointerEvents\"><canvas id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_standard noPointerEvents\"></canvas></div>';\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = replicator (native class)                        //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.replicator = function() {\n"
+    "  this.name = 'replicator';\n"
+    "  this.inherit = new oo.view();\n"
+    "\n"
+    "  this.attributeNames = [];\n"
+    "  this.attributeValues = [];\n"
+    "\n"
+    "  this.selfDefinedAttributes = { }\n"
+    "\n"
+    "  this.contentHTML = '';\n"
     "}\n"
     "\n"
     "\n"

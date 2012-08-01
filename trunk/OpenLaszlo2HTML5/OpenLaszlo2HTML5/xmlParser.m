@@ -44,11 +44,11 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
-BOOL kompiliereSpeziellFuerTaxango = YES;
+BOOL kompiliereSpeziellFuerTaxango = NO;
 
 
 
@@ -3732,7 +3732,9 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"button"] ||
         [elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
+        [elementName isEqualToString:@"tabslider"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
+        [elementName isEqualToString:@"tabelement"] ||
         [elementName isEqualToString:@"baselist"] ||
         [elementName isEqualToString:@"list"] ||
         [elementName isEqualToString:@"rollUpDown"])
@@ -4036,7 +4038,10 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
 
             [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere x-Position haben\n"];
-            [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('left','%@px');\n\n",[attributeDict valueForKey:@"x"]];
+            [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('left','%@px');",[attributeDict valueForKey:@"x"]];
+
+            [self.jQueryOutput appendString:@"\n  // Dann auch Breite des Debug-Fenster anpassen (Elternbreite - Padding - Border - 1 * X\n"];
+            [self.jQueryOutput appendFormat:@"  $('#debugWindow').width($('#debugWindow').parent().width()-20-10-1*%@);\n",[attributeDict valueForKey:@"x"]];
         }
 
         if ([attributeDict valueForKey:@"y"])
@@ -4044,7 +4049,7 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
 
             [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere y-Position haben\n"];
-            [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('top','%@');\n\n",[attributeDict valueForKey:@"y"]];
+            [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('top','%@px');\n",[attributeDict valueForKey:@"y"]];
         }
 
         if ([attributeDict valueForKey:@"height"])
@@ -6358,7 +6363,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-    if ([elementName isEqualToString:@"BDStabsheetcontainer"])
+    if ([elementName isEqualToString:@"BDStabsheetcontainer"] || [elementName isEqualToString:@"tabslider"])
     {
         element_bearbeitet = YES;
 
@@ -6429,7 +6434,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
     // Wir müssen hier 2 Sachen machen:
     // 1) Ein div aufmachen mit einer ID
     // 2) per jQuery das neu entdeckte tab mit der tabsheetcCntainerID und der gerade vergebenen tabsheet-ID hinzufügen
-    if ([elementName isEqualToString:@"BDStabsheetTaxango"])
+    if ([elementName isEqualToString:@"BDStabsheetTaxango"] || [elementName isEqualToString:@"tabelement"])
     {
         element_bearbeitet = YES;
 
@@ -6456,22 +6461,26 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             NSLog(@"Skipping the attribute 'info' for now.");
         }
 
+        if ([attributeDict valueForKey:@"selected"]) // ToDo
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"text"]) // ToDo
+            self.attributeCount++;
 
-        if (![attributeDict valueForKey:@"title"])
-        {
-            [self instableXML:@"ERROR: No attribute 'title' given in BDStabsheetTaxango-tag"];
-        }
-        else
+
+        NSString *title = @"";
+        if ([attributeDict valueForKey:@"title"])
         {
             self.attributeCount++;
             NSLog(@"Using the attribute 'title' as heading for the tabsheet.");
+
+            title = [attributeDict valueForKey:@"title"];
         }
 
 
 
         // jQuery-Output
         [self.jQueryOutput appendString:@"\n  // Hinzufügen eines tabsheets in den tabsheetContainer\n"];
-        [self.jQueryOutput appendFormat:@"  $('#%@').tabs('add', '#%@', '%@');\n",self.lastUsedTabSheetContainerID,geradeVergebeneID,[attributeDict valueForKey:@"title"]];
+        [self.jQueryOutput appendFormat:@"  $('#%@').tabs('add', '#%@', '%@');\n",self.lastUsedTabSheetContainerID,geradeVergebeneID,title];
     }
 
 
@@ -7221,7 +7230,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
                 // Überprüfen ob es default values gibt im Handler direkt (mit RegExp)...
                 NSError *error = NULL;
-                NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:@"([\\w]+)=([\\w]+)" options:NSRegularExpressionCaseInsensitive error:&error];
+                NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:@"([\\w]+)=([\\w']+)" options:NSRegularExpressionCaseInsensitive error:&error];
 
                 NSUInteger numberOfMatches = [regexp numberOfMatchesInString:args options:0 range:NSMakeRange(0, [args length])];
 
@@ -8150,7 +8159,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
     NSError *error = NULL;
 
     // Auf Default values untersuchen...
-    NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:@"\\w+[=]\\w+" options:NSRegularExpressionCaseInsensitive error:&error];
+    NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:@"\\w+[=][\\w']+" options:NSRegularExpressionCaseInsensitive error:&error];
 
 
     NSUInteger numberOfMatches;
@@ -8175,9 +8184,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
     // Noch die Kommas zurecht stutzen
-    args = [args stringByReplacingOccurrencesOfString:@",," withString:@","];
-
-    if ( [args length] > 0 && [args hasSuffix:@","])
+    while ( [args length] > 0 && [args hasSuffix:@","])
         args = [args substringToIndex:[args length] - 1];
 
     NSMutableString* ms = [[NSMutableString alloc] initWithString:args];
@@ -8924,7 +8931,9 @@ BOOL isJSArray(NSString *s)
         [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
+        [elementName isEqualToString:@"tabslider"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
+        [elementName isEqualToString:@"tabelement"] ||
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"baselist"] ||
         [elementName isEqualToString:@"list"] ||
@@ -9066,7 +9075,9 @@ BOOL isJSArray(NSString *s)
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
-        [elementName isEqualToString:@"BDStabsheetTaxango"])
+        [elementName isEqualToString:@"tabslider"] ||
+        [elementName isEqualToString:@"BDStabsheetTaxango"] ||
+        [elementName isEqualToString:@"tabelement"])
     {
         element_geschlossen = YES;
 
@@ -9308,9 +9319,9 @@ BOOL isJSArray(NSString *s)
             // Falls es default Values gibt, muss ich diese in JS extra setzen
             NSMutableString *defaultValues = [[NSMutableString alloc] initWithString:@""];
 
-            // Überprüfen ob es default values gibt im Handler direkt (mit RegExp)...
+            // Überprüfen ob es default values gibt
             NSError *error = NULL;
-            NSRegularExpression *regexp2 = [NSRegularExpression regularExpressionWithPattern:@"([\\w]+)=([\\w]+)" options:NSRegularExpressionCaseInsensitive error:&error];
+            NSRegularExpression *regexp2 = [NSRegularExpression regularExpressionWithPattern:@"([\\w]+)=([\\w']+)" options:NSRegularExpressionCaseInsensitive error:&error];
 
             NSUInteger numberOfMatches = [regexp2 numberOfMatchesInString:args options:0 range:NSMakeRange(0, [args length])];
             if (numberOfMatches > 0)
@@ -12725,6 +12736,11 @@ BOOL isJSArray(NSString *s)
     "            }\n"
     "        }\n"
     "    }\n"
+    "    else if (attributeName == 'value')\n"
+    "    {\n"
+    "        if ($(me).is('input') && $(me).attr('type') === 'checkbox')\n"
+    "            $(me).prop('checked',value);\n"
+    "    }\n"
     "    else if (attributeName == 'font')\n"
     "    {\n"
     "        // ToDo\n"
@@ -14220,6 +14236,7 @@ BOOL isJSArray(NSString *s)
     "    for (var i = 1; i < $(el).children().length; i++)\n"
     "    {\n"
     "        var kind = $(el).children().eq(i);\n"
+    "        if (kind.get(0).id === 'debugWindow') continue; // Das debugWindow bleibt unberücksichtigt\n"
     "\n"
     "        if (@@positionAbsoluteReplaceMe@@)\n"
     "        {\n"
@@ -14274,6 +14291,8 @@ BOOL isJSArray(NSString *s)
     "    for (var i = 1; i < $(el).children().length; i++)\n"
     "    {\n"
     "        var kind = $(el).children().eq(i);\n"
+    "        if (kind.get(0).id === 'debugWindow') continue; // Das debugWindow bleibt unberücksichtigt\n"
+    "\n"
     "        if (@@positionAbsoluteReplaceMe@@) {\n"
     "            var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + spacing;\n"
     "        }\n"

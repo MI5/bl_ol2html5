@@ -1271,29 +1271,10 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
     }
 
-
     if ([attributeDict valueForKey:@"clip"])
     {
-        if ([[attributeDict valueForKey:@"clip"] isEqual:@"false"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'clip' CSS 'overflow'.");
-
-            [self.jQueryOutput appendString:@"\n  // clip='false', just in case, set overflow back to default."];
-            [self.jQueryOutput appendFormat:@"\n  $('#%@').css('overflow','visible');\n",self.zuletztGesetzteID];
-        }
-
-        if ([[attributeDict valueForKey:@"clip"] isEqual:@"true"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'clip' as CSS 'clip' and CSS 'overflow'.");
-            [self.jQueryOutput appendString:@"\n  // clip='true', so clipping to width and height."];
-            //[self.jQueryOutput appendFormat:@"\n  $('#%@').css('clip','rect(0px, '+$('#%@').width()+'px, '+$('#%@').height()+'px, 0px)');",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
-            // clip macht zu oft Ärger. Passt sich nicht an, wenn sich Höhe oder Breite ändert. Erstmal
-            // ganz rausgenommem, weil es auch sehr gut nur mit der overflow-Angabe klappt. Falls clip doch
-            // irgendwo unbedingt erforderlich ist, wäre eine Alternative width und height zu watchen.
-            [self.jQueryOutput appendFormat:@"\n  $('#%@').css('overflow','hidden');\n",self.zuletztGesetzteID];
-        }
+        self.attributeCount++;
+        [self setTheValue:[attributeDict valueForKey:@"clip"] ofAttribute:@"clip"];
     }
 
 
@@ -1969,6 +1950,15 @@ void OLLog(xmlParser *self, NSString* s,...)
     // classroot taucht nur in Klassen auf und bezeichnet die Wurzel der Klasse
     if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
         s = [self inString:s searchFor:@"classroot" andReplaceWith:ID_REPLACE_STRING ignoringTextInQuotes:YES];
+
+
+    // Diese Doppelpunkt-Syntax muss weg... omg... Wieso kann man sich nicht an ECMAScript-Standards halten?
+    // Damit sollen wohl Variablen typisiert werden, dabei ist JS im Grunde typenlos... Hallo?
+    s = [self inString:s searchFor:@":FileReference" andReplaceWith:@"" ignoringTextInQuotes:YES];
+
+
+    // Was ist das? Eine Art cast-Anweisung? Da wäre ein Mega-RegExp fällig. Erstmal auskommentieren
+    s = [self inString:s searchFor:@" cast " andReplaceWith:@"; // cast " ignoringTextInQuotes:YES];
 
 
     // Remove leading and ending Whitespaces and NewlineCharacters
@@ -3642,7 +3632,6 @@ didStartElement:(NSString *)elementName
     }
 
 
-    // skipping all Elements in fileUpload (ToDo) (and other elements)
     if (self.weAreCollectingTheCompleteContentInClass)
     {
         // Wenn wir in <class> sind, sammeln wir alles (wird erst später rekursiv ausgewertet)
@@ -4433,6 +4422,7 @@ didStartElement:(NSString *)elementName
         {
             NSLog(@"Using the attribute 'type' to determine if we need quotes.");
             self.attributeCount++;
+
             type_ = [attributeDict valueForKey:@"type"];
         }
         else
@@ -4442,6 +4432,7 @@ didStartElement:(NSString *)elementName
             else
                 type_ = @"string";
         }
+
 
 
         // Es gibt auch attributes ohne Startvalue, dann mit einem leeren String initialisieren
@@ -4479,7 +4470,10 @@ didStartElement:(NSString *)elementName
             }
             else
             {
-                value = @""; // Quotes werden dann automatisch unten reingesetzt
+                // Wenn bei einer 'expression', 'string', 'number' kein value gesetzt ist, ist es gemäß OL-Test immer undefined
+                value = @"undefined";
+
+                // value = @""; // Quotes werden dann automatisch unten reingesetzt
             }
         }
 
@@ -4496,12 +4490,6 @@ didStartElement:(NSString *)elementName
         // Hier drin sammle ich erstmal alle Ausgaben
         NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
-
-        if ([attributeDict valueForKey:@"value"] && [attributeDict valueForKey:@"setter"])
-        {
-            //[self instableXML:@"Setting value and setter at once is not supported. Because the value can't be set as long I don't know the method that should be called in the setter."];
-            // Neu: Sollte jetzt klappen.
-        }
 
         if ([attributeDict valueForKey:@"setter"])
         {
@@ -4573,7 +4561,7 @@ didStartElement:(NSString *)elementName
         NSLog([NSString stringWithFormat:@"Setting '%@' as object-attribute in JavaScript-object.",a]);
 
         BOOL weNeedQuotes = YES;
-        if ([type_ isEqualTo:@"boolean"] || [type_ isEqualTo:@"number"])
+        if ([type_ isEqualTo:@"boolean"] || [type_ isEqualTo:@"number"]  || [type_ isEqualTo:@"expression"])
             weNeedQuotes = NO;
 
         // Wenn er schon in einfachen Hochkommata ist, dann nicht zusätzliche drum.
@@ -6028,8 +6016,12 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-    if ([elementName isEqualToString:@"goldstyle"] ||
-        [elementName isEqualToString:@"greenstyle"])
+    if ([elementName isEqualToString:@"whitestyle"] ||
+        [elementName isEqualToString:@"silverstyle"] ||
+        [elementName isEqualToString:@"bluestyle"] ||
+        [elementName isEqualToString:@"greenstyle"] ||
+        [elementName isEqualToString:@"goldstyle"] ||
+        [elementName isEqualToString:@"purplestyle"])
     {
         element_bearbeitet = YES;
 
@@ -6741,51 +6733,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // Alles was in diesen Dialogen definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
         self.weAreCollectingTheCompleteContentInClass = YES;
     }
-    // ToDo
-    if ([elementName isEqualToString:@"rollUpDownContainerReplicator"])
-    {
-        element_bearbeitet = YES;
 
-        if ([attributeDict valueForKey:@"id"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"max"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"maxinfo"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"newdp"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"xpath"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"y"])
-            self.attributeCount++;
-
-
-
-        // ToDo
-        // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreCollectingTheCompleteContentInClass = YES;
-    }
-    // ToDo
-    if ([elementName isEqualToString:@"calculator_anim"])
-    {
-        element_bearbeitet = YES;
-
-
-        if ([attributeDict valueForKey:@"id"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"initstage"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"visible"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"x"])
-            self.attributeCount++;
-
-        // ToDo
-        // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreCollectingTheCompleteContentInClass = YES;
-    }
     // ToDo
     if ([elementName isEqualToString:@"certdatepicker"])
     {
@@ -7258,6 +7206,17 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
                 args = [attributeDict valueForKey:@"args"];
                 args = [args stringByReplacingOccurrencesOfString:@" " withString:@""];
+
+
+
+                // Es gibt doch tatsächlich Argumente wo explizit der Typ dahinter steht, z. B. in fileUpload im Cancelhandler
+                // Da JS typenlos, sinnlos und somit raus damit
+                args = [args stringByReplacingOccurrencesOfString:@":IOErrorEvent" withString:@""];
+                args = [args stringByReplacingOccurrencesOfString:@":HTTPStatusEvent" withString:@""];
+                args = [args stringByReplacingOccurrencesOfString:@":SecurityErrorEvent" withString:@""];
+                args = [args stringByReplacingOccurrencesOfString:@":ProgressEvent" withString:@""];
+                args = [args stringByReplacingOccurrencesOfString:@":Event" withString:@""];
+
 
 
                 // Überprüfen ob es default values gibt im Handler direkt (mit RegExp)...
@@ -7917,7 +7876,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
                 BOOL weNeedQuotes = YES;
 
-                if (isNumeric(value) || isJSArray(value))
+                // Der Test auf null und undefined bricht bei Strings, die WIRKLICH diese Werte enthalten,
+                // aber das nehme ich in Kauf.
+                if (isNumeric(value) || isJSArray(value) || [value isEqualToString:@"null"] || [value isEqualToString:@"undefined"])
                     weNeedQuotes = NO;
 
                 // Falls es ein berechneter Wert war, erkennen wir es an der Markierung
@@ -8873,8 +8834,6 @@ BOOL isJSArray(NSString *s)
         [elementName isEqualToString:@"nicepopup"] ||
         [elementName isEqualToString:@"nicemodaldialog"] ||
         [elementName isEqualToString:@"nicedialog"] ||
-        [elementName isEqualToString:@"rollUpDownContainerReplicator"] ||
-        [elementName isEqualToString:@"calculator_anim"] ||
         [elementName isEqualToString:@"certdatepicker"])
     {
         element_geschlossen = YES;
@@ -9052,8 +9011,12 @@ BOOL isJSArray(NSString *s)
 
     // Bei diesen Elementen muss beim schließen nichts unternommen werden
     if ([elementName isEqualToString:@"simplelayout"] ||
-        [elementName isEqualToString:@"goldstyle"] ||
+        [elementName isEqualToString:@"whitestyle"] ||
+        [elementName isEqualToString:@"silverstyle"] ||
+        [elementName isEqualToString:@"bluestyle"] ||
         [elementName isEqualToString:@"greenstyle"] ||
+        [elementName isEqualToString:@"goldstyle"] ||
+        [elementName isEqualToString:@"purplestyle"] ||
         [elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDSeditdate"] ||
         [elementName isEqualToString:@"BDScheckbox"] ||
@@ -11135,6 +11098,8 @@ BOOL isJSArray(NSString *s)
     "    // ohne 'var', damit global. \n"
     "    $debug = false;\n"
     "    $swf8 = false;\n"
+    "\n"
+    "    flash = { net : { FileReference : function() { } } }\n"
     "}\n"
     "\n"
     "\n"
@@ -11755,7 +11720,7 @@ BOOL isJSArray(NSString *s)
     "        this.getUserData = function(s) {\n"
     "            return $(this).data(s);\n"
     "        }\n"
-    "        this.serialize = function(s) {\n"
+    "        this.serialize = function() {\n"
     "            if (this && this.xml) { // IE 6 - IE 8\n"
     "                return this.xml;\n"
     "            } else { // W3C (Mozilla Firefox, Safari) or IE 9 (standard mode)\n"
@@ -11960,6 +11925,7 @@ BOOL isJSArray(NSString *s)
     "            var nodeValue = undefined;\n"
     "            var nodeName = undefined;\n"
     "            var nodeType = undefined;\n"
+    "            var p = undefined;\n"
     "            var childrenCounter = 0;\n"
     "            var numberOfNodesPointingTo = 0;\n"
     "\n"
@@ -12099,6 +12065,7 @@ BOOL isJSArray(NSString *s)
     "            this.lastNodeText = nodeValue;\n"
     "            this.lastNodeName = nodeName;\n"
     "            this.lastNodeType = nodeType;\n"
+    "            this.p = node; // Hoffe das stimmt so grob, dass p immer die letzte node ist\n"
     "            this.lastQueryChildrenCounter = childrenCounter;\n"
     "            this.lastQueryNumberOfNodesPointingTo = numberOfNodesPointingTo;\n"
     "\n"
@@ -12135,8 +12102,7 @@ BOOL isJSArray(NSString *s)
     "        this.lastNodeText = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
     "        this.lastNodeName = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
     "        this.lastNodeType = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
-    "\n"
-    "        this.p = undefined;\n"
+    "        this.p = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
     "\n"
     //"        // Wenn dieses blöde Objekt kommt, dann keine Initialisierung\n"
     //"        // Das 'object' (DOMWindow), welches GFlender einmal übergibt, muss ich aussparen\n"
@@ -12165,6 +12131,7 @@ BOOL isJSArray(NSString *s)
     "            var lastNodeText = this.lastNodeText;\n"
     "            var lastNodeName = this.lastNodeName;\n"
     "            var lastNodeType = this.lastNodeType;\n"
+    "            var lastP = this.p;\n"
     "\n"
     "\n"
     //"            var originalQuery = query;\n"
@@ -12192,6 +12159,7 @@ BOOL isJSArray(NSString *s)
     "            this.lastNodeText = lastNodeText;\n"
     "            this.lastNodeName = lastNodeName;\n"
     "            this.lastNodeType = lastNodeType;\n"
+    "            this.p = lastP;\n"
     "\n"
     "            return returnValue;\n"
     "        }\n"
@@ -12233,6 +12201,25 @@ BOOL isJSArray(NSString *s)
     "                return undefined;\n"
     "        }\n"
     "        this.selectNext = function() {\n"
+    "            // Damit Beispiel lz.DataNodeMixin funzt, hier mit p arbeiten, falls p gesetzt\n"
+    "            // p wird gesondert gesetzt in this.setPointer(). Ansonsten ist es eh immer this.lastNode\n"
+    "            // Irgendwas stimmt noch nicht ganz.\n"
+    "            if (this.p)\n"
+    "            {\n"
+    "                if (this.p.nextSibling != null)\n"
+    "                {\n"
+    "                    this.p = this.p.nextSibling;\n"
+    "\n"
+    "                    this.lastNodeText = this.p.nodeValue;\n"
+    "                    this.lastNodeName = this.p.nodeName;\n"
+    "                    this.lastNodeType = this.p.nodeType;\n"
+    "                    this.xpath = this.datasetName + ':' + this.getElementsXPath(this.lastNode);\n"
+    "\n"
+    "                    return true;\n"
+    "                }\n"
+    "            }\n"
+    "\n"
+    "\n"
     "            // Node aktualisieren in dem ich eins weiter wandere\n"
     "            if (this.lastNode)\n"
     "                this.lastNode = this.lastNode.nextSibling;\n"
@@ -12274,6 +12261,7 @@ BOOL isJSArray(NSString *s)
     "            dupe.lastNodeText = this.lastNodeText;\n"
     "            dupe.lastNodeName = this.lastNodeName;\n"
     "            dupe.lastNodeType = this.lastNodeType;\n"
+    "            dupe.p = this.p;\n"
     "            dupe.xpath = null;\n"
     "            return dupe;\n"
     "        }\n"
@@ -12353,15 +12341,17 @@ BOOL isJSArray(NSString *s)
     "\n"
     "            this.setXPath(this.xpath);\n"
     "\n"
-    "            // this.p = p;\n"
+    "            // In dem Fall p direkt übernehmen, sonst gehen zu viele Informationen verloren (z. B. parentNode)\n"
+    "            this.p = p;\n"
     "        }\n"
-    "        // Ich hatte 'p' die ganze Zeit schon. p ist wohl nichts anderes als this.lastNode!\n"
-    "        Object.defineProperty(this, 'p', {\n"
-    "            get : function(){ return this.lastNode; },\n"
-    "            set : function(newValue){ this.lastNode = newValue; $(this).triggerHandler('onp', newValue); },\n"
-    "            enumerable : false,\n"
-    "            configurable : true\n"
-    "        });\n"
+    // Doesn't work with Example lz.DataNodeMixin
+    //"        // Ich hatte 'p' die ganze Zeit schon. p ist wohl nichts anderes als this.lastNode!\n"
+    //"        Object.defineProperty(this, 'p', {\n"
+    //"            get : function(){ return this.lastNode; },\n"
+    //"            set : function(newValue){ this.lastNode = newValue; $(this).triggerHandler('onp', newValue); },\n"
+    //"            enumerable : false,\n"
+    //"            configurable : true\n"
+    //"        });\n"
     "    }\n"
     "\n"
     "\n"
@@ -12434,6 +12424,8 @@ BOOL isJSArray(NSString *s)
     "\n"
     "document.exitpage = {}; // <-- Taucht in general.js in 'setid' auf\n"
     "document.exitpage.request = {}; // <-- Taucht in general.js in 'setid' auf\n"
+    "\n"
+    "HTMLDivElement.prototype.doroll = function() {}; // ToDo <-- Seitdem ich rollUpDownContainerReplicator auswerte, taucht es auf\n"
     "\n"
     "function LzContextMenu() { }\n"
     "\n"
@@ -12512,7 +12504,7 @@ BOOL isJSArray(NSString *s)
     "    {\n"
     "        var cookiedaten = document.cookie;\n"
     "        // Cookie-Einträge sind wohl durch ';' getrennt, für 'stringToObject müssen es jedoch '&' sein\n"
-    "        cookiedaten = cookiedaten.replace(/;/,'&');\n"
+    "        cookiedaten = cookiedaten.replace(/;/g,'&');\n"
     "        window[context] = new SharedObjectInstance();\n"
     "        // Cookie auslesen und auf das Objekt mappen\n"
     "        \n"
@@ -12531,10 +12523,10 @@ BOOL isJSArray(NSString *s)
     "Debug = {};\n"
     "Debug.debug = function(s,v0,v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14,v15,v16,v17,v18,v19) {\n"
     "    // Damit Example 5 von lz.Formatter kompiliert (jedoch ohne zu klappen):\n"
-    "    s = s.replace(/%w/,'%s');\n"
-    "    s = s.replace(/%#w/,'%s');\n"
-    //"    s = s.replace('%s',v);\n"
-    //"    s = s.replace('%w',v);\n"
+    "    s = s.replace(/%w/g,'%s');\n"
+    "    s = s.replace(/%#w/g,'%s');\n"
+    //"    s = s.replace(/%s/g,v);\n"
+    //"    s = s.replace(/%w/g,v);\n"
     "    s = s + '<br />';\n"
     "    if ($('#debugInnerWindow').length)\n"
     "        $('#debugInnerWindow').append(sprintf(s,v0,v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14,v15,v16,v17,v18,v19));\n"
@@ -12674,7 +12666,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "    if (attributeName === undefined || attributeName === '')\n"
     "        throw 'Error1 calling setAttribute, no argument attributeName given (this = '+this+').';\n"
-    "    if (value === undefined) // Wirklich Triple-= erforderlich, damit er 'null' passieren lässt bei 'text'\n"
+    "    if (value === undefined) // Wirklich Triple-= erforderlich, damit er 'null' passieren lässt bei 'text' und 'mask'\n"
     "        throw 'Error2 calling setAttribute, no argument value given or undefined (attributeName = \"'+attributeName+'\" and this = '+this+').';\n"
     "\n"
     // Kann auch im Skript aufgetaucht sein und dort geändert worden sein, z. B. Beispiel 28.16
@@ -12807,6 +12799,20 @@ BOOL isJSArray(NSString *s)
     //"        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
     //"        $(me).get(0).myHeight = value;\n"
     "    }\n"
+    "    else if (attributeName === 'clip' && value === 'false')\n"
+    "    {\n"
+    "        // clip='false', just in case, set overflow back to default.\n"
+    "        $(me).css('overflow','visible');\n"
+    "    }\n"
+    "    else if (attributeName === 'clip' && value === 'true')\n"
+    "    {\n"
+    "        // clip='true', so clipping to width and height\n"
+    //  $(me).css('clip','rect(0px, '+$(me).width()+'px, '+$(me).height(+'px, 0px)');\n"
+    //  clip macht zu oft Ärger. Passt sich nicht an, wenn sich Höhe oder Breite ändert. Erstmal
+    //  ganz rausgenommem, weil es auch sehr gut nur mit der overflow-Angabe klappt. Falls clip doch
+    //  irgendwo unbedingt erforderlich ist, wäre eine Alternative width und height zu watchen.
+    "        $(me).css('overflow','hidden');\n"
+    "    }\n"
     "    else if (attributeName == 'rotation')\n"
     "    {\n"
     "        var v = 'rotate('+value+'deg)';\n"
@@ -12842,16 +12848,20 @@ BOOL isJSArray(NSString *s)
     "        // Einen eventuell vorher gesetzten focus-Handler, der blur() handlet, entfernen\n"
     "        $(me).off('focus.blurnamespace');\n"
     "    }\n"
-    "    else if (attributeName == 'focustrap')\n"
+    "    else if (attributeName === 'focustrap')\n"
     "    {\n"
     "        // ToDo When 'true' dann wird der Focus-Bereich z. B. auf ein bestimmtes Fenster beschränkt\n"
     "    }\n"
-    "    else if (attributeName == 'doesenter')\n"
+    "    else if (attributeName === 'mask')\n"
+    "    {\n"
+    "        $(me).data('mask_',value); // noch ka warum man den explizit setzen kann\n"
+    "    }\n"
+    "    else if (attributeName === 'doesenter')\n"
     "    {\n"
     "        // if set to true, the component manager will call this component with doEnterDown\n"
     "        // and doEnterUp when the enter key goes up or down if it is focussed\n"
     "    }\n"
-    "    else if (attributeName == 'styleable')\n"
+    "    else if (attributeName === 'styleable')\n"
     "    {\n"
     "        // ToDo\n"
     "    }\n"
@@ -12859,7 +12869,7 @@ BOOL isJSArray(NSString *s)
     "    {\n"
     "      //$(me).hide() // ToDo: Bricht Anzeige Kinder;\n"
     "    }\n"
-    "    else if (attributeName == 'align')\n"
+    "    else if (attributeName === 'align')\n"
     "    {\n"
     "        if (value === 'center')\n"
     "            this.align = value; // hmmm, Zugriff auf die Original-JS-Propertys erstmal \n"
@@ -13304,7 +13314,7 @@ BOOL isJSArray(NSString *s)
     "        throw new Error('addText() - argument should not be undefined');\n"
     "    s = String(s); // Damit s.replace keinen Error wirft bei übergebenen numbers\n"
     "\n"
-    "    s = s.replace(/\\n/,'<br />');\n"
+    "    s = s.replace(/\\n/g,'<br />');\n"
     "    $(this).append(s);\n"
     "    $(this).triggerHandler('ontext',s);\n"
     "}\n"
@@ -13389,7 +13399,7 @@ BOOL isJSArray(NSString *s)
     "        throw new Error('setText() - argument should not be undefined');\n"
     "    s = String(s); // Damit s.replace keinen Error wirft bei übergebenen numbers\n"
     "\n"
-    "    s = s.replace(/\\n/,'<br />');\n"
+    "    s = s.replace(/\\n/g,'<br />');\n"
     "    this.setAttribute_('text', s);\n"
     "}\n"
     "\n"
@@ -13791,19 +13801,12 @@ BOOL isJSArray(NSString *s)
     "    });\n"
     "}\n"
     "\n"
-    "// in '_mask' speichern wir einen eventuell gesetzten Wert...\n"
-    "Object.defineProperty(Object.prototype, '_mask', {\n"
-    "    enumerable: false,\n"
-    "    configurable: false,\n"
-    "    writable: true, /* setting to false would be ignored by webkit... why? */\n"
-    "    value: undefined\n"
-    "});\n"
     "// ... aber der Getter gibt stets den korrekt berechneten Wert zurück...\n"
     "// ... und der Setter triggert im wesentlichen nur 'onmask'. Ein übergebener Wert \n"
     "// wird trotzdem mal gespeichert. Aber er sollte nie über 'mask' accessible sein.\n"
     "Object.defineProperty(Object.prototype, 'mask', {\n"
-    "    get : function(){ return findNextMaskedElement(this).get(0); },\n"
-    "    set : function(newValue){ this._mask = 2; $(this).triggerHandler('onmask',newValue); },\n"
+    "    get : function(){ return findNextMaskedElement(this).get(0) ? findNextMaskedElement(this).get(0) : null; },\n"
+    "    set : function(newValue){ $(this).data('mask_',newValue); $(this).triggerHandler('onmask',newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -13967,22 +13970,27 @@ BOOL isJSArray(NSString *s)
     //"    enumerable : false,\n"
     //"    configurable : true\n"
     //"});\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// Getter/Setter for 'textalign'                       //\n"
-    "// READ/WRITE                                          //\n"
-    "/////////////////////////////////////////////////////////\n"
-    "Object.defineProperty(Object.prototype, 'textalign', {\n"
-    "    get : function(){ if (!isDOM(this)) return undefined; return $(this).css('text-align'); },\n"
-    "    set : function(newValue){\n"
-    "        if (newValue !== 'left' && newValue !== 'center' && newValue !== 'right')\n"
-    "            throw new Error('Unsupported value for textalign.');\n"
-    "\n"
-    "        $(this).css('text-align', newValue);\n"
-    "        $(this).triggerHandler('textalign', newValue);\n"
-    "    },\n"
-    "    enumerable : false,\n"
-    "    configurable : true\n"
-    "});\n"
+    //
+    //
+    //
+    // Wo kommt das her???? Es gibt gar kein Attribut textalign gemäß Doku.
+    // Es hat bei mir die Auswertung von 'radiobutton' gebrochen, deswegen raus genommen.
+    //"/////////////////////////////////////////////////////////\n"
+    //"// Getter/Setter for 'textalign'                       //\n"
+    //"// READ/WRITE                                          //\n"
+    //"/////////////////////////////////////////////////////////\n"
+    //"Object.defineProperty(Object.prototype, 'textalign', {\n"
+    //"    get : function(){ if (!isDOM(this)) return undefined; return $(this).css('text-align'); },\n"
+    //"    set : function(newValue){\n"
+    //"        if (newValue !== 'left' && newValue !== 'center' && newValue !== 'right')\n"
+    //"            throw new Error('Unsupported value for textalign.');\n"
+    //"\n"
+    //"        $(this).css('text-align', newValue);\n"
+    //"        $(this).triggerHandler('textalign', newValue);\n"
+    //"    },\n"
+    //"    enumerable : false,\n"
+    //"    configurable : true\n"
+    //"});\n"
     "\n"
     "\n"
     "\n"
@@ -14732,9 +14740,9 @@ BOOL isJSArray(NSString *s)
     "      else if (an[i].startsWith('on'))\n"
     "      {\n"
     "        // Dann ist es JS-Code, Anpassungen vornehmen.\n"
-    "        av[i] = av[i].replace('setAttribute','setAttribute_');\n"
-    "        av[i] = av[i].replace('.width','.myWidth');\n"
-    "        av[i] = av[i].replace('.height','.myHeight');\n"
+    "        av[i] = av[i].replace(/setAttribute/g,'setAttribute_');\n"
+    "        av[i] = av[i].replace(/.width/g,'.myWidth');\n"
+    "        av[i] = av[i].replace(/.height/g,'.myHeight');\n"
     "\n"
     "        // 'on' entfernen\n"
     "        an[i] = an[i].substr(2);\n"
@@ -14803,12 +14811,12 @@ BOOL isJSArray(NSString *s)
     "        if (av[i].startsWith('$')) // = Constraint value\n"
     "        {\n"
     "            av[i] = av[i].substring(2,av[i].length-1);\n"
-    "            av[i] = av[i].replace('immediateparent','getTheParent(true)');\n"
-    "            av[i] = av[i].replace('parent','getTheParent()');\n"
+    "            av[i] = av[i].replace(/immediateparent/g,'getTheParent(true)');\n"
+    "            av[i] = av[i].replace(/parent/g,'getTheParent()');\n"
     // --> Neu gelöst über getter, deswegen muss ich nicht mehr ersetzen.
     // --> Neuer: Bricht leider jQueri UI. hmmm, dewegen kein getter für parent möglich
-    "            av[i] = av[i].replace('.width','.myWidth');\n"
-    "            av[i] = av[i].replace('.height','.myHeight');\n"
+    "            av[i] = av[i].replace(/.width/g,'.myWidth');\n"
+    "            av[i] = av[i].replace(/.height/g,'.myHeight');\n"
     "\n"
     "            // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
     "            var result = (function() { with (id) { return eval(av[i]); } }).bind(id)();\n"
@@ -14866,9 +14874,7 @@ BOOL isJSArray(NSString *s)
     "    $(kinderVorDemAppenden).appendTo($(window[obj.defaultplacement]));\n"
     "\n"
     "  // JS erst jetzt ausführen, sonst stimmen bestimmte width/height's nicht, weil ja etwas verschoben wurde\n"
-    "  // Dann den kompletten JS-Code ausführen\n"
-    "  // ToDo -> Eigentlich ohne das, was eben schon ausgeführt wurde.\n"
-    "  executeJSCodeOfThisObject(obj, id, $(id).attr('id'));\n"
+    "  executeJSCodeOfThisObject(obj, id, $(id).attr('id'), undefined, true);\n"
     "\n"
     "  // Einen als Attribut gesetzten 'oninit'-Handler, kann ich erst jetzt ausführen, da jetzt erst alle Methoden bekannt sind\n"
     "  if (onInitFunc)\n"
@@ -14886,50 +14892,54 @@ BOOL isJSArray(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "// @arg r = replacement-String\n"
     "// @arg r2 = Ersatz-replacement-String. - Erklärung bei replaceID()\n"
-    "function executeJSCodeOfThisObject(obj, id, r, r2)\n"
+    "// @arg skipContentJS = weil ich die defaultPlacement-Var, die in contentJS steckt, u. U. gesondert auslese.\n"
+    "function executeJSCodeOfThisObject(obj, id, r, r2, skipContentJS)\n"
     "{\n"
-    "  // Replace-IDs von contentLeadingJSHead ersetzen\n"
-    "  var s = replaceID(obj.contentLeadingJSHead, r, r2);\n"
-    "  // Dann den LeadingJSHead-Content hinzufügen/auswerten\n"
-    "  if (s.length > 0)\n"
-    "    evalCode(s);\n"
+    "    // Replace-IDs von contentLeadingJSHead ersetzen\n"
+    "    var s = replaceID(obj.contentLeadingJSHead, r, r2);\n"
+    "    // Dann den LeadingJSHead-Content hinzufügen/auswerten\n"
+    "    if (s.length > 0)\n"
+    "        evalCode(s);\n"
     "\n"
-    "  // Replace-IDs von contentJSHead ersetzen\n"
-    "  var s = replaceID(obj.contentJSHead, r, r2);\n"
-    "  // Dann den JSHead-Content hinzufügen/auswerten\n"
-    "  if (s.length > 0)\n"
-    "    evalCode(s);\n"
+    "    // Replace-IDs von contentJSHead ersetzen\n"
+    "    var s = replaceID(obj.contentJSHead, r, r2);\n"
+    "    // Dann den JSHead-Content hinzufügen/auswerten\n"
+    "    if (s.length > 0)\n"
+    "        evalCode(s);\n"
     "\n"
-    "  // Replace-IDs von contentJS ersetzen\n"
-    "  var s = replaceID(obj.contentJS, r, r2);\n"
-    "  // Dann den JS-Content hinzufügen/auswerten\n"
-    "  if (s.length > 0)\n"
-    "    evalCode(s);\n"
+    "    if (!skipContentJS)\n"
+    "    {\n"
+    "        // Replace-IDs von contentJS ersetzen\n"
+    "        var s = replaceID(obj.contentJS, r, r2);\n"
+    "        // Dann den JS-Content hinzufügen/auswerten\n"
+    "        if (s.length > 0)\n"
+    "            evalCode(s);\n"
+    "    }\n"
     "\n"
-    "  // Replace-IDs von contentLeadingJQuery ersetzen\n"
-    "  var s = replaceID(obj.contentLeadingJQuery, r, r2);\n"
-    "  // Dann den LeadingJQuery-Content hinzufügen/auswerten\n"
-    "  // evalCode benötigt Referenz auf id, damit es Methoden direkt adden kann\n"
-    "  if (s.length > 0)\n"
-    "    evalCode(s,id);\n"
+    "    // Replace-IDs von contentLeadingJQuery ersetzen\n"
+    "    var s = replaceID(obj.contentLeadingJQuery, r, r2);\n"
+    "    // Dann den LeadingJQuery-Content hinzufügen/auswerten\n"
+    "    // evalCode benötigt Referenz auf id, damit es Methoden direkt adden kann\n"
+    "    if (s.length > 0)\n"
+    "        evalCode(s,id);\n"
     "\n"
-    "  // Replace-IDs von den Computed Values ersetzen\n"
-    "  var s = replaceID(obj.contentJSComputedValues, r, r2);\n"
-    "  // Dann den ComputedValues-Content hinzufügen/auswerten\n"
-    "  if (s.length > 0)\n"
-    "    evalCode(s);\n"
+    "    // Replace-IDs von den Computed Values ersetzen\n"
+    "    var s = replaceID(obj.contentJSComputedValues, r, r2);\n"
+    "    // Dann den ComputedValues-Content hinzufügen/auswerten\n"
+    "    if (s.length > 0)\n"
+    "        evalCode(s);\n"
     "\n"
-    "  // Replace-IDs von den Constraint Values ersetzen\n"
-    "  var s = replaceID(obj.contentJSConstraintValues, r, r2);\n"
-    "  // Dann den ConstraintValues-Content hinzufügen/auswerten\n"
-    "  if (s.length > 0)\n"
-    "    evalCode(s);\n"
+    "    // Replace-IDs von den Constraint Values ersetzen\n"
+    "    var s = replaceID(obj.contentJSConstraintValues, r, r2);\n"
+    "    // Dann den ConstraintValues-Content hinzufügen/auswerten\n"
+    "    if (s.length > 0)\n"
+    "        evalCode(s);\n"
     "\n"
-    "  // Replace-IDs von contentJQuery ersetzen\n"
-    "  var s = replaceID(obj.contentJQuery, r, r2);\n"
-    "  // Dann den jQuery-Content hinzufügen/auswerten\n"
-    "  if (s.length > 0)\n"
-    "    evalCode(s);\n"
+    "    // Replace-IDs von contentJQuery ersetzen\n"
+    "    var s = replaceID(obj.contentJQuery, r, r2);\n"
+    "    // Dann den jQuery-Content hinzufügen/auswerten\n"
+    "    if (s.length > 0)\n"
+    "        evalCode(s);\n"
     "}\n"
     "\n"
     "\n"

@@ -24,7 +24,7 @@
 //- Eigene Klassen müssen als allererstes und nicht als letztes gecheckt werden (Bsp. 15.14 und 15.15)
 // (erst nachdem ich alle ToDos und alle noch nicht selbst ausgewerteten Klassen entfernt habe)
 //
-//
+//- tabslider muss ein jQuery UI Accordian werden
 //
 //
 //
@@ -44,11 +44,11 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
-BOOL kompiliereSpeziellFuerTaxango = NO;
+BOOL kompiliereSpeziellFuerTaxango = YES;
 
 
 
@@ -864,6 +864,13 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self setTheValue:[attributeDict valueForKey:@"rotation"] ofAttribute:@"rotation"];
     }
 
+    if ([attributeDict valueForKey:@"style"]) // Von Basecomponent, aber immer auswerten, damit kein Konflikt mit css-style
+    {
+        self.attributeCount++;
+
+        [self setTheValue:[attributeDict valueForKey:@"style"] ofAttribute:@"style"];
+    }
+
     if ([attributeDict valueForKey:@"text_x"])
     {
         self.attributeCount++;
@@ -1284,7 +1291,6 @@ void OLLog(xmlParser *self, NSString* s,...)
     if ([attributeDict valueForKey:@"stretches"])
     {
         self.attributeCount++;
-
         [self setTheValue:[attributeDict valueForKey:@"stretches"] ofAttribute:@"stretches"];
     }
 
@@ -1415,7 +1421,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 // Dieser Code ist nicht mehr nötig, aber würde auch nichts schaden mit ausgeführt zu werden.
-// Es gibt irgendwie noch Probs mit dem Code. Er lädt css-Bilder nicht korrekt beim startup... WHY??
+// Es gibt irgendwie noch Probs mit dem Code. Er lädt css-Bilder nicht korrekt beim startup... -> War ein preload-Problem
  
             // Wenn ein Punkt enthalten ist, ist es wohl eine Datei
             if ([src rangeOfString:@"."].location != NSNotFound ||
@@ -3393,7 +3399,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         if ([[attributeDict valueForKey:@"text"] hasPrefix:@"$"])
         {
-            // MUSS derzeit noch rein, sonst verschwindet Schriftzug "Seine Steuererklärung 2011"
+            // MUSS derzeit noch rein, sonst verschwindet Schriftzug "Deine Steuererklärung 2011"
             // Ich vermute, weil er sonst bestimmte Simplelayouts nicht richtig berechnen kann (ToDo?)
             [self.output appendString:@"CODE! - Wird dynamisch mit jQuery ersetzt."];
 
@@ -4068,6 +4074,13 @@ didStartElement:(NSString *)elementName
             // Deswegen einfach direkt auf den eben ausgerechneten Wert beziehen:
             [self.jQueryOutput appendString:@"  $('#debugInnerWindow').height($('#debugWindow').height()-30);\n\n"];
         }
+
+        if ([attributeDict valueForKey:@"fontsize"])
+        {
+            self.attributeCount++;
+            [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere Schriftgröße haben\n"];
+            [self.jQueryOutput appendFormat:@"  $('#debugWindow').setAttribute_('fontsize',%@);\n",[attributeDict valueForKey:@"fontsize"]];
+        }
     }
 
 
@@ -4475,10 +4488,14 @@ didStartElement:(NSString *)elementName
             }
             else
             {
+                // value = @""; // Quotes werden dann automatisch unten reingesetzt
+
                 // Wenn bei einer 'expression', 'string', 'number' kein value gesetzt ist, ist es gemäß OL-Test immer undefined
                 value = @"undefined";
 
-                // value = @""; // Quotes werden dann automatisch unten reingesetzt
+                // Text vor Example 28.10:
+                if ([a isEqualToString:@"text"] && ([type_ isEqualToString:@"text"] || [type_ isEqualToString:@"html"]))
+                    value = @"textBetweenTags";
             }
         }
 
@@ -4625,34 +4642,30 @@ didStartElement:(NSString *)elementName
 
 
 
-            // Bei einem setter nicht setzen des Wertes, da Methode, die im Setter aufgerufen werden soll u. U. noch nicht
-            // bekannt ist.
-            if (![attributeDict valueForKey:@"setterxyToDoTakeMeOut"])
+
+            // Wenn wir ein Attribut eines Datasets haben, dann binde ich an self.lastUsedDataset
+            // Denn Datasets werden oft nur per 'name' gesetzt und nicht per 'id'
+            if ([elemTyp isEqualToString:@"dataset"])
             {
-                // Wenn wir ein Attribut eines Datasets haben, dann binde ich an self.lastUsedDataset
-                // Denn Datasets werden oft nur per 'name' gesetzt und nicht per 'id'
-                if ([elemTyp isEqualToString:@"dataset"])
-                {
-                    [o appendFormat:@"\n// Ein per <attribute> gesetztes Attribut des Elements %@ (Objekttyp: %@)", self.lastUsedDataset, elemTyp];
-                    [o appendFormat:@"\n%@.",self.lastUsedDataset];
-                }
-                else
-                {
-                    [o appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut des Elements %@ (Objekttyp: %@)", elem, elemTyp];
-                    [o appendFormat:@"\n  %@.",elem];
-                }
-
-
-
-
-                [o appendFormat:@"%@ = ",a];
-                if (weNeedQuotes)
-                    [o appendString:@"\""];
-                [o appendString:value];
-                if (weNeedQuotes)
-                    [o appendString:@"\""];
-                [o appendString:@";\n"];
+                [o appendFormat:@"\n// Ein per <attribute> gesetztes Attribut des Elements %@ (Objekttyp: %@)", self.lastUsedDataset, elemTyp];
+                [o appendFormat:@"\n%@.",self.lastUsedDataset];
             }
+            else
+            {
+                [o appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut des Elements %@ (Objekttyp: %@)", elem, elemTyp];
+                [o appendFormat:@"\n  %@.",elem];
+            }
+            
+
+
+            [o appendFormat:@"%@ = ",a];
+            if (weNeedQuotes)
+                [o appendString:@"\""];
+            [o appendString:value];
+            if (weNeedQuotes)
+                [o appendString:@"\""];
+            [o appendString:@";\n"];
+
 
             // Erstmal nur hier drin. Eventuell aber auch erst nach der geschweiften Klammer
             // Und erstmal nicht, wenn wir in canvas sind (globale Attribute)
@@ -5490,16 +5503,14 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
     {
         element_bearbeitet = YES;
 
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
         // Bei onclick die this-Abfrage damit es keine unendlichkeits-Schleige gibt, falls man gleichzeitig auch auf
         // den Button oder das span innerhalb des divs kommt
         [self.output appendString:@"<div class=\"div_checkbox\" onclick=\"if (this == event.target) $(this).children(':first').trigger('click');\">\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
 
-
-
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<input class=\"input_checkbox\" type=\"checkbox\""];
 
         NSString *theId =[self addIdToElement:attributeDict];
@@ -5514,7 +5525,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<span class=\"div_text\" onclick=\"$(this).prev().trigger('click');\""];
         [self.output appendString:[self addTitlewidth:attributeDict]];
         [self.output appendString:@">"];
@@ -5592,9 +5603,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         }
 
 
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"</div>\n"];
-
         // Javascript aufrufen hier, für z. B. Visible-Eigenschaften usw.
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
     }
@@ -5654,9 +5662,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
         [self.output appendString:@"</span>\n"];
 
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"</div>\n"];
-
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
     }
 
@@ -5670,14 +5675,14 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
     {
         element_bearbeitet = YES;
 
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
         if ([attributeDict valueForKey:@"title"])
             [self.output appendString:@"<div class=\"div_textfield\">\n"];
         else
             [self.output appendString:@"<div class=\"div_textfield_ohne_vorangehenden_text\">\n"];
 
 
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
 
 
@@ -5708,7 +5713,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             }
         }
         [self.output appendString:@"</span>\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
         if ([attributeDict valueForKey:@"multiline"] && [[attributeDict valueForKey:@"multiline"] isEqualToString:@"true"])
             [self.output appendString:@"<textarea class=\"input_textfield\" type=\"text\""];
@@ -5908,7 +5913,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
         [self.output appendString:@"margin-left:4px;\" />\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"</div>\n\n"];
+        [self.output appendString:@"</div>\n"];
 
 
         // Jetzt noch den jQuery-Code für den Datepicker
@@ -6031,7 +6036,12 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         element_bearbeitet = YES;
 
         if ([attributeDict valueForKey:@"name"])
+        {
             self.attributeCount++;
+
+            [self.jsOutput appendString:@"  // Ein 'style' bekommt einen neuen Namen zugewiesen\n"];
+            [self.jsOutput appendFormat:@"  var %@ = %@;\n",[attributeDict valueForKey:@"name"],elementName];
+        }
         if ([attributeDict valueForKey:@"isdefault"])
             self.attributeCount++;
     }
@@ -6389,7 +6399,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
         // tabwidth auslesen
         int tabwidth = 127;
-        int tabwidthForLink;
+        int tabwidthForLink = tabwidth - 4*6;
         if ([attributeDict valueForKey:@"tabwidth"])
         {
             self.attributeCount++;
@@ -6409,7 +6419,14 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // Hier legen wir den TabSheetContainer per jQuery an
         [self.jQueryOutput appendString:@"\n  // Ein TabSheetContainer. Jetzt wird's kompliziert. Wir legen ihn hier an.\n  // Die einzelnen Tabs werden, sobald sie im Code auftauchen, per add hinzugefügt\n  // Mit der Option 'tabTemplate' legen wir die width fest\n  // Mit der Option 'fx' legen wir eine Animation für das Wechseln fest\n"];
 
-        [self.jQueryOutput appendFormat:@"  $('#%@').tabs({ tabTemplate: '<li style=\"width:%dpx;\"><a href=\"#{href}\" style=\"width:%dpx;\"><span>#{label}</span></a></li>' });\n",self.lastUsedTabSheetContainerID,tabwidth,tabwidthForLink];
+        if ([elementName isEqualToString:@"BDStabsheetcontainer"])
+        {
+            [self.jQueryOutput appendFormat:@"  $('#%@').tabs({ tabTemplate: '<li style=\"width:%dpx;\"><a href=\"#{href}\" style=\"width:%dpx;\"><span>#{label}</span></a></li>' });\n",self.lastUsedTabSheetContainerID,tabwidth,tabwidthForLink];
+        }
+        else
+        {
+            [self.jQueryOutput appendFormat:@"  $('#%@').tabs({ tabTemplate: '<li style=\"width:%dpx;\"><a href=\"#{href}\" style=\"width:%dpx;\"><span style=\"font-size:10px\">#{label}</span></a></li>' });\n",self.lastUsedTabSheetContainerID,tabwidth,tabwidthForLink];
+        }
         [self.jQueryOutput appendFormat:@"  $('#%@').tabs({ fx: { opacity: 'toggle' } });\n",self.lastUsedTabSheetContainerID];
         [self.jQueryOutput appendFormat:@"  $('#%@').tabs();\n",self.lastUsedTabSheetContainerID];
 
@@ -6449,9 +6466,11 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // Sonst verrutscht es alles wegen der zwischengeschobenen Leiste
         // Etwas geschummelt, aber nun gut.
         // Auch das width muss ich hier explizit übernehmen.
-        [self.output appendString:@" style=\"top:50px;width:inherit;height:inherit;\""];
+        [self.output appendString:@" style=\"top:50px;width:inherit;height:inherit;"];
 
-        [self.output appendString:@">\n"];
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+        [self.output appendString:@"\">\n"];
 
 
         // ToDo: Wird derzeit nicht ausgewertet
@@ -6461,13 +6480,19 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             NSLog(@"Skipping the attribute 'info' for now.");
         }
 
-        if ([attributeDict valueForKey:@"selected"]) // ToDo
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"text"]) // ToDo
-            self.attributeCount++;
 
 
         NSString *title = @"";
+        if ([attributeDict valueForKey:@"text"])
+        {
+            self.attributeCount++;
+            NSLog(@"Using the attribute 'text' as heading for the tabsheet.");
+
+            title = [attributeDict valueForKey:@"text"];
+        }
+
+        // Das Attribut 'title' hat noch Vorrang und überschreibt u. U. 'text'
+        //  solange wir BDStabsheetTaxango gesondert auswerten.
         if ([attributeDict valueForKey:@"title"])
         {
             self.attributeCount++;
@@ -6477,10 +6502,20 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         }
 
 
-
-        // jQuery-Output
         [self.jQueryOutput appendString:@"\n  // Hinzufügen eines tabsheets in den tabsheetContainer\n"];
         [self.jQueryOutput appendFormat:@"  $('#%@').tabs('add', '#%@', '%@');\n",self.lastUsedTabSheetContainerID,geradeVergebeneID,title];
+
+
+        if ([attributeDict valueForKey:@"selected"])
+        {
+            self.attributeCount++;
+
+            if ([[attributeDict valueForKey:@"selected"] isEqualToString:@"true"])
+            {
+                [self.jQueryOutput appendString:@"\n  // Dieser Tab ist selected\n"];
+                [self.jQueryOutput appendFormat:@"  $('#%@').tabs('select', '#%@');\n",self.lastUsedTabSheetContainerID,geradeVergebeneID];
+            }
+        }
     }
 
 
@@ -6611,14 +6646,15 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             // if ([keys count] > 0)
             {
                 // Alle Attributnamen als Array hinzufügen
-                [self.jsOLClassesOutput appendString:@"  this.attributeNames = ['textBetweenTags_'"];
+                [self.jsOLClassesOutput appendString:@"  this.attributeNames = ["];
 
                 int i = 0;
                 for (NSString *key in keys)
                 {
                     i++;
 
-                    [self.jsOLClassesOutput appendString:@", "];
+                    if (i > 1)
+                        [self.jsOLClassesOutput appendString:@", "];
 
                     // Es gibt Attribute mit ' drin, deswegen hier "
                     [self.jsOLClassesOutput appendString:@"\""];
@@ -6637,14 +6673,15 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
                 // Und alle Attributwerte als Array hinzufügen
-                [self.jsOLClassesOutput appendString:@"  this.attributeValues = [textBetweenTags"];
+                [self.jsOLClassesOutput appendString:@"  this.attributeValues = ["];
 
                 i = 0;
                 for (NSString *key in keys)
                 {
                     i++;
 
-                    [self.jsOLClassesOutput appendString:@", "];
+                    if (i > 1)
+                        [self.jsOLClassesOutput appendString:@", "];
 
                     // Es gibt Attribute mit ' drin, deswegen hier "
                     [self.jsOLClassesOutput appendString:@"\""];
@@ -7890,6 +7927,11 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
                 if (isNumeric(value) || isJSArray(value) || [value isEqualToString:@"null"] || [value isEqualToString:@"undefined"])
                     weNeedQuotes = NO;
 
+                // Wegen Beispiel 28.10 => Klassen können auf den Text zwischen den Tags zugreifen, wenn das Attribut text heißt
+                // Dann nicht hier ausgeben der Var
+                if ([key isEqualToString:@"text"] && [value isEqualToString:@"textBetweenTags"])
+                    continue;
+
                 // Falls es ein berechneter Wert war, erkennen wir es an der Markierung
                 // Dann Markierung raushauen und wir brauchen dann keine Quotes
                 // Außerdem das korrekte Element für this ersetzen
@@ -8692,9 +8734,6 @@ BOOL isJSArray(NSString *s)
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
 
 
-        [self.jsOLClassesOutput appendString:@"  // Die selfDefinedAttributes sind nun sehr wichtig und werden stets verwertet\n"];
-
-
 /* // Dieser alte Code war zu ungenau, und hat z.B. Arrays nicht als Arrays erkannt, sondern nur als Strings.
         NSString *newlyIntroducedAttributes = [NSString stringWithFormat:@"%@",[self.allFoundClasses objectForKey:self.lastUsedNameAttributeOfClass]];
 
@@ -8719,7 +8758,7 @@ BOOL isJSArray(NSString *s)
 */
 
 
-        [self.jsOLClassesOutput appendFormat:@"  this.selfDefinedAttributes = { "];
+        [self.jsOLClassesOutput appendFormat:@"  this.selfDefinedAttributes = {"];
 
         NSArray *keys = [self.allFoundClasses objectForKey:self.lastUsedNameAttributeOfClass];
         if ([keys count] > 0)
@@ -8734,6 +8773,9 @@ BOOL isJSArray(NSString *s)
                 if (isNumeric([keys valueForKey:key]) || isJSArray([keys valueForKey:key]))
                     weNeedQuotes = NO;
 
+                // Wegen Beispiel 28.10 => Klassen können auf den Text zwischen den Tags zugreifen, wenn das Attribut text heißt
+                if ([key isEqualToString:@"text"] && [value isEqualToString:@"textBetweenTags"])
+                    weNeedQuotes = NO;
 
                 // Falls es ein berechneter Wert war, erkennen wir es an der Markierung
                 // Dann Markierung raushauen und wir brauchen dann keine Quotes
@@ -8937,9 +8979,6 @@ BOOL isJSArray(NSString *s)
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"baselist"] ||
         [elementName isEqualToString:@"list"] ||
-        [elementName isEqualToString:@"edittext"] ||
-        [elementName isEqualToString:@"BDSedittext"] ||
-        [elementName isEqualToString:@"BDSeditnumber"] ||
         [elementName isEqualToString:@"imgbutton"])
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
@@ -9028,9 +9067,6 @@ BOOL isJSArray(NSString *s)
         [elementName isEqualToString:@"purplestyle"] ||
         [elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDSeditdate"] ||
-        [elementName isEqualToString:@"BDScheckbox"] ||
-        [elementName isEqualToString:@"checkbox"] ||
-        [elementName isEqualToString:@"radiobutton"] ||
         [elementName isEqualToString:@"frame"] ||
         [elementName isEqualToString:@"font"] ||
         [elementName isEqualToString:@"face"] ||
@@ -9068,6 +9104,7 @@ BOOL isJSArray(NSString *s)
     // Nur schließen des Div's
     if ([elementName isEqualToString:@"canvas"] || 
         [elementName isEqualToString:@"view"] ||
+        [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"hbox"] ||
         [elementName isEqualToString:@"splash"] ||
@@ -9085,6 +9122,7 @@ BOOL isJSArray(NSString *s)
     }
 
 
+
     if ([elementName isEqualToString:@"BDScombobox"] ||
         [elementName isEqualToString:@"combobox"] ||
         [elementName isEqualToString:@"datacombobox"])
@@ -9096,17 +9134,9 @@ BOOL isJSArray(NSString *s)
         [self.output appendString:@"</select>\n"];
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
-        [self.output appendString:@"</div>\n\n"];
-    }
-
-
-    // Schließen von drawview
-    if ([elementName isEqualToString:@"drawview"])
-    {
-        element_geschlossen = YES;
-
         [self.output appendString:@"</div>\n"];
     }
+
 
 
     if ([elementName isEqualToString:@"window"])
@@ -9120,6 +9150,7 @@ BOOL isJSArray(NSString *s)
     }
 
 
+
     // Schließen von passthrough
     if ([elementName isEqualToString:@"passthrough"])
     {
@@ -9128,6 +9159,7 @@ BOOL isJSArray(NSString *s)
         // Ich muss in dem Fall den gesammelten Text leeren, da ich diesen nicht verwerte
         self.textInProgress = nil;
     }
+
 
 
     // Schließen von baselistitem
@@ -9159,12 +9191,8 @@ BOOL isJSArray(NSString *s)
 
         NSString *s = [self holDenGesammeltenTextUndLeereIhn];
 
-
         if (![s isEqualToString:@""])
-        {
-            //s = [NSString stringWithFormat:@"'%@'",s];
             [self setTheValue:s ofAttribute:@"text"];
-        }
     }
 
 
@@ -9204,10 +9232,13 @@ BOOL isJSArray(NSString *s)
 
 
 
-    // Schließen von edittext
+    // Schließen von Elementen, in denen u. U. Text gesammelt wurde
     if ([elementName isEqualToString:@"edittext"] ||
         [elementName isEqualToString:@"BDSedittext"] ||
-        [elementName isEqualToString:@"BDSeditnumber"])
+        [elementName isEqualToString:@"BDSeditnumber"] ||
+        [elementName isEqualToString:@"BDScheckbox"] ||
+        [elementName isEqualToString:@"checkbox"] ||
+        [elementName isEqualToString:@"radiobutton"])
     {
         element_geschlossen = YES;
 
@@ -9217,7 +9248,8 @@ BOOL isJSArray(NSString *s)
         if (s.length > 0)
             [self setTheValue:s ofAttribute:@"text"];
 
-        [self.output appendString:@"  </div>\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self.output appendString:@"</div>\n"];
     }
 
 
@@ -11165,6 +11197,14 @@ BOOL isJSArray(NSString *s)
     "        $(this).next().css('cursor','pointer');\n"
     "    });\n"
     "\n"
+    "\n"
+    "    // ohne 'var', damit global\n"
+    "    whitestyle = 'background-color:white;';\n"
+    "    silverstyle = 'background-color:silver;';\n"
+    "    bluestyle = 'background-color:blue;';\n"
+    "    greenstyle = 'background-color:green;';\n"
+    "    goldstyle = 'background-color:gold;';\n"
+    "    purplestyle = 'background-color:purple;';\n"
     "}\n"
     "\n"
     "\n"
@@ -11197,6 +11237,15 @@ BOOL isJSArray(NSString *s)
     "    var sum = 0;"
     "    $.each(arr,function(){sum+=parseFloat(this) || 0;});\n"
     "    return sum;\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Testet Numbers oder Strings, ob sie Nummern sind    //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function isNumber(o)\n"
+    "{\n"
+    "    return ! isNaN (o-0);\n"
     "}\n"
     "\n"
     "\n"
@@ -11460,11 +11509,15 @@ BOOL isJSArray(NSString *s)
     //"            text: 'Go to Google!'\n"
     "        }).appendTo(scope);\n"
     "    }\n"
-    "    else if (name === 'rotateDigit') { /*ToDo - Warum matcht er das nicht automatisch? */\n"
+    "    else if (typeof oo[name] === 'function') {\n"
     "        jQuery('<div/>', {\n"
     "            id: id,\n"
     "            class: 'div_standard noPointerEvents',\n"
     "        }).appendTo(scope);\n"
+    "\n"
+    "        var obj = new oo[name]('');\n"
+    "        var el = document.getElementById(id);\n"
+    "        interpretObject(obj,el);\n"
     "    }\n"
     "    else\n"
     "    {\n"
@@ -11521,6 +11574,9 @@ BOOL isJSArray(NSString *s)
     "\n"
     "\n"
     "    objectFromScriptCounter++;\n"
+    "\n"
+    "    // Damit sich z. B. Simplelayouts aktualiseren können (s. Bsp. 17.2)\n"
+    "    $('#'+id).parent().triggerHandler('onaddsubview');\n"
     "\n"
     "    return $('#'+id).get(0);\n"
     "}\n"
@@ -12717,11 +12773,15 @@ BOOL isJSArray(NSString *s)
     "    {\n"
     "        if (value === null) value = 'null'; // Damit er 'null' textuell ausgibt.\n"
     "\n"
-    "        if ($(me).children().length > 0 && $(me).children().get(0).nodeName == 'INPUT')\n"
+    "        if ($(me).children().length > 0 && $(me).children(':first').is('input'))\n"
     "        {\n"
-    "            $(me).children().attr('value',value);\n"
+    "            $(me).children(':first').attr('value',value);\n"
     "        }\n"
-    "        else if ($(me).get(0).nodeName == 'INPUT')\n"
+    "        else if ($(me).is('input') && $(me).attr('type') === 'checkbox')\n"
+    "        {\n"
+    "            $(me).parent().children('span').html(value);\n"
+    "        }\n"
+    "        else if ($(me).is('input'))\n"
     "        {\n"
     "            $(me).attr('value',value);\n"
     "        }\n"
@@ -12745,6 +12805,12 @@ BOOL isJSArray(NSString *s)
     "    {\n"
     "        // ToDo\n"
     "    }\n"
+    "    else if (attributeName == 'fontsize')\n"
+    "    {\n"
+    "        $(me).css('font-size',value+'px');\n"
+    "        // Die Eigenschaft font-size überträgt sich auf alle Kinder und Enkel\n"
+    "        $(me).find('.div_text').css('font-size',value+'px')\n"
+    "    }\n"
     "    else if (attributeName == 'bgcolor')\n"
     "    {\n"
     "        if (typeof value === 'number')\n"
@@ -12757,14 +12823,14 @@ BOOL isJSArray(NSString *s)
     "        {\n"
     "            value = '#' + value.substr(2);\n"
     "        }\n"
-    "        if (typeof value === 'string' && !value.startsWith('#') && value.length > 6)\n"
+    "        if (typeof value === 'string' && !value.startsWith('#') && isNumber(value) && value.length > 6)\n"
     "        {\n"
     "            value = '#' + Number(value).toString(16);\n"
     "            while (value.length > 6)\n"
     "                value = value.substr(1);\n"
     "            value = '#' + value;\n"
     "        }\n"
-    "        if (typeof value === 'string' && !value.startsWith('#') && value.length < 6) // Bsp. 1 <combobox>\n"
+    "        if (typeof value === 'string' && !value.startsWith('#') && isNumber(value) && value.length < 6) // Bsp. 1 <combobox>\n"
     "        {\n"
     "            value = Number(value).toString(16);\n"
     "            while (value.length < 6)\n"
@@ -12879,7 +12945,28 @@ BOOL isJSArray(NSString *s)
     "    }\n"
     "    else if (attributeName === 'styleable')\n"
     "    {\n"
-    "        // ToDo\n"
+    "        me.styleable = value; // Ruft den dazu gehörigen Setter auf (der speichert dann den value)\n"
+    "    }\n"
+    "    else if (attributeName === 'style')\n"
+    "    {\n"
+    "        if (me.styleable)\n"
+    "        {\n"
+    "            if ($(me).attr('style'))\n"
+    "            {\n"
+    "                // Dann 'style' ergänzen\n"
+    "\n"
+    "                // Sollte eigentlich nicht passieren, aber zur absoluten Sicherheit:\n"
+    "                if (!$(me).attr('style').endsWith(';'))\n"
+    "                    value = ';' + value;\n"
+    "\n"
+    "                $(me).attr('style',$(me).attr('style')+value);\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                // Dann 'style' neu setzen\n"
+    "                $(me).attr('style',value);\n"
+    "            }\n"
+    "        }\n"
     "    }\n"
     "    else if (attributeName === 'initstage' && value === 'defer')\n"
     "    {\n"
@@ -13111,7 +13198,7 @@ BOOL isJSArray(NSString *s)
     "        }\n"
     "        else\n"
     "        {\n"
-    "            alert('Aufruf von setAttribute, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
+    "            alert('Aufruf von setAttribute_, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: '+ value);\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -13964,6 +14051,22 @@ BOOL isJSArray(NSString *s)
     "    configurable : true\n"
     "});\n"
     "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'styleable'                       //\n"
+    "// (von 'basecomponent')                               //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'styleable', {\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "        if ($(this).data('styleable_') !== undefined) return $(this).data('styleable_');\n"
+    "        return true; /* => Default Value */\n"
+    "    },\n"
+    "    set : function(newValue){ $(this).data('styleable_', newValue); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
     // es gibt ein natives JS-align, was sich wohl korrekt zur OL-Logik verhält
     // http://jsfiddle.net/Pv8YQ/ Deswegen nicht nötig.
     //"/////////////////////////////////////////////////////////\n"
@@ -14232,34 +14335,42 @@ BOOL isJSArray(NSString *s)
     "    if ($(el).hasClass('div_window'))\n"
     "        el = $('#'+el.id+'_content').get(0);\n"
     "\n"
-    "    // Es soll wirklich erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"
-    "    for (var i = 1; i < $(el).children().length; i++)\n"
+    "    // Während Änderung event wegnehmen, sonst viel zu starke Prozessorbelastung, durch zu viele rekursive Aufrufe?!\n"
+    "    $(el).off('onaddsubview.SAY');\n"
+    "\n"
+    "    for (var i = 0; i < $(el).children().length; i++)\n"
     "    {\n"
     "        var kind = $(el).children().eq(i);\n"
     "        if (kind.get(0).id === 'debugWindow') continue; // Das debugWindow bleibt unberücksichtigt\n"
+    "        // Auch dieses event wegnehmen, analoge Begründung wie oben\n"
+    "        $(kind).off('onheight.SAY');\n"
     "\n"
-    "        if (@@positionAbsoluteReplaceMe@@)\n"
+    "        // Es soll erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"
+    "        if (i > 0)\n"
     "        {\n"
-    "            var topValue = kind.prev().get(0).offsetTop + kind.prev().outerHeight() + spacing;\n"
-    "        }\n"
-    "        else\n"
-    "        {\n"
-    "            var topValue = i * spacing;\n"
-    "            if (kind.css('position') === 'relative')\n"
+    "            if (@@positionAbsoluteReplaceMe@@)\n"
     "            {\n"
-    "                // Wenn wir hinten nicht runter gefallen sind\n"
-    "                if ($(el).children().eq(0).position().left != kind.position().left)\n"
+    "                var topValue = kind.prev().get(0).offsetTop + kind.prev().outerHeight() + spacing;\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                var topValue = i * spacing;\n"
+    "                if (kind.css('position') === 'relative')\n"
     "                {\n"
-    "                    // topValue = i * spacing + kind.prev().outerHeight()/* + kind.prev().position().top*/;\n"
-    "                    // Nur so klappt es bei Beispiel <basebutton>:\n"
-    "                    topValue = spacing + kind.prev().outerHeight() + kind.prev().position().top;\n"
-    "                    // var leftValue = kind.prev().position().left-kind.prev().outerWidth();\n"
-    "                    // leftValue = leftValue * i;\n"
-    "                    // nur so klappt es bei Bsp. 27.1 (Constraints in tags):\n"
-    "                    var width = 0;\n"
-    "                    kind.prevAll().each(function() { width += $(this).outerWidth(); });\n"
-    "                    var leftValue = width * -1;\n"
-    "                    kind.get(0).setAttribute_('x',leftValue+'px');\n"
+    "                    // Wenn wir hinten nicht runter gefallen sind\n"
+    "                    if ($(el).children().eq(0).position().left != kind.position().left)\n"
+    "                    {\n"
+    "                        // topValue = i * spacing + kind.prev().outerHeight()/* + kind.prev().position().top*/;\n"
+    "                        // Nur so klappt es bei Beispiel <basebutton>:\n"
+    "                        topValue = spacing + kind.prev().outerHeight() + kind.prev().position().top;\n"
+    "                        // var leftValue = kind.prev().position().left-kind.prev().outerWidth();\n"
+    "                        // leftValue = leftValue * i;\n"
+    "                        // nur so klappt es bei Bsp. 27.1 (Constraints in tags):\n"
+    "                        var width = 0;\n"
+    "                        kind.prevAll().each(function() { width += $(this).outerWidth(); });\n"
+    "                        var leftValue = width * -1;\n"
+    "                        kind.get(0).setAttribute_('x',leftValue+'px');\n"
+    "                    }\n"
     "                }\n"
     "            }\n"
     "        }\n"
@@ -14272,7 +14383,12 @@ BOOL isJSArray(NSString *s)
     "            setSimpleLayoutYIn($('#'+el.id+'_repl'+c).get(0),spacing);\n"
     "            c++;\n"
     "        }\n"
+    "\n"
+    "        // Aber auf event lauschen, soll er bei jedem Kind (um u. U. SA zu aktualisieren)\n"
+    "        $(kind).on('onheight.SAY', function() { setSimpleLayoutYIn(el,spacing); } );\n"
     "    }\n"
+    "\n"
+    "    $(el).on('onaddsubview.SAY', function() { setSimpleLayoutYIn(el,spacing); } );\n"
     "}\n"
     "\n"
     "\n"
@@ -14287,19 +14403,27 @@ BOOL isJSArray(NSString *s)
     "    if ($(el).hasClass('div_window'))\n"
     "        el = $('#'+el.id+'_content').get(0);\n"
     "\n"
-    "    // Es soll wirklich erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"
-    "    for (var i = 1; i < $(el).children().length; i++)\n"
+    "    // Während Änderung event wegnehmen, sonst viel zu starke Prozessorbelastung, durch zu viele rekursive Aufrufe?!\n"
+    "    $(el).off('onaddsubview.SAX');\n"
+    "\n"
+    "    for (var i = 0; i < $(el).children().length; i++)\n"
     "    {\n"
     "        var kind = $(el).children().eq(i);\n"
     "        if (kind.get(0).id === 'debugWindow') continue; // Das debugWindow bleibt unberücksichtigt\n"
+    "        // Auch dieses event wegnehmen, analoge Begründung wie oben\n"
+    "        $(kind).off('onwidth.SAX');\n"
     "\n"
-    "        if (@@positionAbsoluteReplaceMe@@) {\n"
-    "            var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + spacing;\n"
+    "        // Es soll erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"
+    "        if (i > 0)\n"
+    "        {\n"
+    "            if (@@positionAbsoluteReplaceMe@@) {\n"
+    "                var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + spacing;\n"
+    "            }\n"
+    "            else {\n"
+    "                var leftValue = spacing * i;\n"
+    "            }\n"
+    "            kind.get(0).setAttribute_('x',leftValue+'px');\n"
     "        }\n"
-    "        else {\n"
-    "            var leftValue = spacing * i;\n"
-    "        }\n"
-    "        kind.get(0).setAttribute_('x',leftValue+'px');\n"
     "\n"
     "        // Falls es geklonte Geschwister gibt:\n"
     "        var c = 2;\n"
@@ -14308,7 +14432,12 @@ BOOL isJSArray(NSString *s)
     "            setSimpleLayoutXIn($('#'+el.id+'_repl'+c).get(0),spacing);\n"
     "            c++;\n"
     "        }\n"
+    "\n"
+    "        // Aber auf event lauschen, soll er bei jedem Kind (um u. U. SA zu aktualisieren)\n"
+    "        $(kind).on('onwidth.SAX', function() { setSimpleLayoutXIn(el,spacing); } );\n"
     "    }\n"
+    "\n"
+    "    $(el).on('onaddsubview.SAX', function() { setSimpleLayoutXIn(el,spacing); } );\n"
     "}\n"
     "\n"
     "\n"
@@ -14413,7 +14542,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Hilfsfunktion, um das size-Attribut von select-Boxen zu setzen\n"
-    "// setSizeOfSelectBoxIn()                             //\n"
+    "// setSizeOfSelectBoxIn()                              //\n"
     "/////////////////////////////////////////////////////////\n"
     "var setSizeOfSelectBoxIn = function (el) {\n"
     "    if ($(el).data('shownitems') != -1)\n"
@@ -14444,6 +14573,21 @@ BOOL isJSArray(NSString *s)
     // Beispiel von <list> klappt nur so (unter Webkit):
     "        $(el).height(Number($(el).attr('size'))*15);\n"
     "    }\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hilfsfunktion, um Mauscursur anzuzeigen             //\n"
+    "// enableMouseCursorOnHover()                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var enableMouseCursorOnHover = function (el) {\n"
+    "    $(el).hover(function(e) {\n"
+    "        if (this == e.target)\n"
+    "            $(this).css('cursor','pointer');\n"
+    "    }, function(e) {\n"
+    "        if (this == e.target)\n"
+    "            $(this).css('cursor','auto');\n"
+    "    });\n"
     "}\n"
     "\n"
     "\n"
@@ -14602,7 +14746,7 @@ BOOL isJSArray(NSString *s)
     "    // Methoden von <text> aufrufen kann (2. Beispiel von <text> in OL-Doku)\n"
     "    // Derzeitige Lösung: Bei Text nicht appenden, sondern ersetzen...\n"
     "    // (und die Attribute, Methoden, Events und CSS übernehmen)\n"
-    "    if (obj.inherit.name === 'text' || obj.inherit.name === 'inputtext' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button' || obj.inherit.name === 'basecombobox' || obj.inherit.name === 'baselistitem'\n"
+    "    if (obj.inherit.name === 'text' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button' || obj.inherit.name === 'basecombobox' || obj.inherit.name === 'baselistitem'\n"
     "    || obj.inherit.name === 'drawview')\n"
     "    {\n"
     "        // Attribute sichern\n"
@@ -14743,7 +14887,7 @@ BOOL isJSArray(NSString *s)
     "    av.move(posWidthInArray,0);\n"
     "  }\n"
     "\n"
-    "  for (i = 0;i<an.length;i++)\n"
+    "  for (var i = 0;i<an.length;i++)\n"
     "  {\n"
     //"    alert(an[i]);\n"
     //"    alert(av[i]);\n"
@@ -14760,8 +14904,8 @@ BOOL isJSArray(NSString *s)
     "      {\n"
     "        // Dann ist es JS-Code, Anpassungen vornehmen.\n"
     "        av[i] = av[i].replace(/setAttribute/g,'setAttribute_');\n"
-    "        av[i] = av[i].replace(/.width/g,'.myWidth');\n"
-    "        av[i] = av[i].replace(/.height/g,'.myHeight');\n"
+    "        av[i] = av[i].replace(/\\.width/g,'.myWidth');\n"
+    "        av[i] = av[i].replace(/\\.height/g,'.myHeight');\n"
     "\n"
     "        // 'on' entfernen\n"
     "        an[i] = an[i].substr(2);\n"
@@ -14771,6 +14915,8 @@ BOOL isJSArray(NSString *s)
     "        // Auch noch von der umgebenden view (Container der Klasse) die pointerEvents entfernen\n"
     "        if ($(id).parent().hasClass('noPointerEvents'))\n"
     "          $(id).parent().removeClass('noPointerEvents');\n"
+    "\n"
+    "        enableMouseCursorOnHover(id);\n"
     "\n"
     //"        // Array-Variable in diesen Scope holen, damit ich sie in die Funktion einfügen kann\n"
     //"        var executeInOnFunction = av[i];\n"
@@ -14783,9 +14929,9 @@ BOOL isJSArray(NSString *s)
     //"          }\n"
     //"        });\n"
     // Der alte Code war Quatsch, hat immer nur die zuletzt gesetzte Methode ausgeführt
-    "          // Neuer Code: Ich muss den KOMPLETTEN on-Befehl per eval setzen,\n"
-    "          // damit die Variable direkt verwertet wird.\n"
-    "          eval('$(id).on(an[i], function() { with (this) { '+av[i]+'; } });');\n"
+    "        // Neuer Code: Ich muss den KOMPLETTEN on-Befehl per eval setzen,\n"
+    "        // damit die Variable direkt verwertet wird.\n"
+    "        eval('$(id).on(an[i], function() { with (this) { '+av[i]+'; } });');\n"
     "      }\n"
     "      else if (an[i] === 'layout' && !av[i].contains('class') &&  av[i].replace(/\\s/g,'').contains('axis:x'))\n"
     "      {\n"
@@ -14817,13 +14963,6 @@ BOOL isJSArray(NSString *s)
     "            id.setAttribute_(an[i],av[i]);\n"
     "      }\n"
     "      else { alert('Hoppala, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() als jsAttribute ausgewertet werden.'); }\n"
-    "    }\n"
-    "    else if (an[i] === 'textBetweenTags_')\n"
-    "    {\n"
-    "        // Damit passiert erstmal nichts. Aber falls die Klasse ein Attribut text definiert hat, wird der Wert zugeordnet\n"
-    "        // Klassen die <text> oder <inputtext> extenden haben dieses Attribut von haus aus und IMMER Zugriff auf Text der zwischen Tags übergeben wurde (Example 28.9 und Example 28.10)\n"
-    "        if (id.text !== undefined)\n"
-    "            id.text = av[i];\n"
     "    }\n"
     "    else\n"
     "    {\n"
@@ -15017,8 +15156,10 @@ BOOL isJSArray(NSString *s)
     "  this.attributeNames = [];\n"
     "  this.attributeValues = [];\n"
     "\n"
+    "  this.selfDefinedAttributes = { }\n"
+    "\n"
     "  this.contentHTML = '';\n"
-    //"  this.contentHTML = '<div id=\"@!JS,PLZ!REPLACE!ME!@\" class=\"div_standard\" />';\n"
+    //"  this.contentHTML = '<div id=\"@!JS,PLZ!REPLACE!ME!@\" class=\"div_standard noPointerEvents\" />';\n"
     "}\n"
     "\n"
     "\n"
@@ -15089,7 +15230,7 @@ BOOL isJSArray(NSString *s)
     "  this.attributeNames = [\"text\"];\n"
     "  this.attributeValues = [textBetweenTags];\n"
     "\n"
-    "  this.selfDefinedAttributes = { resize:true, selectable:false }\n"
+    "  this.selfDefinedAttributes = { resize:true, selectable:false, text:textBetweenTags }\n"
     "\n"
     "  this.defaultplacement = '';\n"
     "\n"
@@ -15102,16 +15243,16 @@ BOOL isJSArray(NSString *s)
     "//  class = inputtext (native class)                         //\n"
     "///////////////////////////////////////////////////////////////\n"
     "oo.inputtext = function(textBetweenTags) {\n"
-    "  if(typeof(textBetweenTags) === 'undefined')\n"
-    "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'inputtext';\n"
-    "  this.inherit = new oo.view();\n"
+    "  this.inherit = new oo.text(textBetweenTags);\n"
     "\n"
     "  // Text kann entweder als Attribut übergeben werden, oder als Text zwischen den Tags\n"
     "  // Deswegen kein direktes einfügen in contentHTML, sondern als Attribut auswerten lassen\n"
-    "  this.attributeNames = [\"text\"];\n"
-    "  this.attributeValues = [textBetweenTags];\n"
+    "  this.attributeNames = [];\n"
+    "  this.attributeValues = [];\n"
+    "\n"
+    "  this.selfDefinedAttributes = { enabled: true, passowrd: false }\n"
     "\n"
     "  this.defaultplacement = '';\n"
     "\n"
@@ -15130,8 +15271,10 @@ BOOL isJSArray(NSString *s)
     "  this.name = 'basewindow';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.attributeNames = [\"text\"];\n"
-    "  this.attributeValues = [textBetweenTags];\n"
+    "  this.attributeNames = [];\n"
+    "  this.attributeValues = [];\n"
+    "\n"
+    "  this.selfDefinedAttributes = { text:textBetweenTags }\n"
     "\n"
     "  this.defaultplacement = '_content';\n"
     "\n"
@@ -15186,6 +15329,8 @@ BOOL isJSArray(NSString *s)
     "\n"
     "  this.attributeNames = [\"text\"];\n"
     "  this.attributeValues = [textBetweenTags];\n"
+    "\n"
+    "  this.selfDefinedAttributes = { text:textBetweenTags }\n"
     "\n"
     "  this.defaultplacement = '';\n"
     "\n"
@@ -15376,7 +15521,7 @@ BOOL isJSArray(NSString *s)
     "  this.attributeValues = [];\n"
     "\n"
     "  // ich muss mehr mit den selfDefinedAttributes arbeiten!\n"
-    "  this.selfDefinedAttributes = { doesenter:false, enabled:true, hasdefault:false, isdefault:false, style: null, styleable: true, text: '' }\n"
+    "  this.selfDefinedAttributes = { doesenter:false, enabled:true, hasdefault:false, isdefault:false, style: null, styleable: true, text: textBetweenTags }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "};\n"

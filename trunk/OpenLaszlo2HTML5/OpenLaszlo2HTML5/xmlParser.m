@@ -540,7 +540,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     NSMutableArray *vars = [[NSMutableArray alloc] init];
 
     s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
-    s = [self removeOccurrencesofBracketsIn:s];
+    // s = [self removeOccurrencesofBracketsIn:s]; -> Auskommentiert, sonst wachsen JS-Wörter und Variablennamen zusammen
 
 
     // Remove everything between ' (including the ')
@@ -567,7 +567,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    // so get all var-names, that are left
+    // So get all var-names, that are left
     // Auch per Punkt verkettete Vars erlauben ( _ ist automatisch mit drin bei \W )
     pattern = @"[^\\W\\d](\\w|[.]{1,2}(?=\\w))*";
 
@@ -595,6 +595,49 @@ void OLLog(xmlParser *self, NSString* s,...)
             // da wir ja auf Ebene der einzelnen Variable sind und individuell reagieren können.
             if ([varName hasPrefix:@"getTheParent("])
                 varName = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,varName];
+
+            // Gefundene reservierte JS-Wörter muss ich an dieser Stelle fallen lassen. Dies sind keine Var-Namen
+
+            // Objektnamen
+            if ([varName isEqualToString:@"Boolean"]) continue;
+            if ([varName isEqualToString:@"Date"]) continue;
+            if ([varName isEqualToString:@"Number"]) continue;
+            if ([varName isEqualToString:@"String"]) continue;
+
+            // Funktionsnamen
+            if ([varName isEqualToString:@"eval"]) continue;
+            if ([varName isEqualToString:@"isNaN"]) continue;
+            if ([varName isEqualToString:@"parseFloat"]) continue;
+            if ([varName isEqualToString:@"parseInt"]) continue;
+
+            // reservierte Wörter
+            if ([varName isEqualToString:@"break"]) continue;
+            if ([varName isEqualToString:@"case"]) continue;
+            if ([varName isEqualToString:@"catch"]) continue;
+            if ([varName isEqualToString:@"continue"]) continue;
+            if ([varName isEqualToString:@"default"]) continue;
+            if ([varName isEqualToString:@"delete"]) continue;
+            if ([varName isEqualToString:@"do"]) continue;
+            if ([varName isEqualToString:@"else"]) continue;
+            if ([varName isEqualToString:@"false"]) continue;
+            if ([varName isEqualToString:@"finally"]) continue;
+            if ([varName isEqualToString:@"for"]) continue;
+            if ([varName isEqualToString:@"function"]) continue;
+            if ([varName isEqualToString:@"if"]) continue;
+            if ([varName isEqualToString:@"in"]) continue;
+            if ([varName isEqualToString:@"instanceof"]) continue;
+            if ([varName isEqualToString:@"new"]) continue;
+            if ([varName isEqualToString:@"null"]) continue;
+            if ([varName isEqualToString:@"return"]) continue;
+            if ([varName isEqualToString:@"switch"]) continue;
+            if ([varName isEqualToString:@"throw"]) continue;
+            if ([varName isEqualToString:@"true"]) continue;
+            if ([varName isEqualToString:@"try"]) continue;
+            if ([varName isEqualToString:@"typeof"]) continue;
+            if ([varName isEqualToString:@"var"]) continue;
+            if ([varName isEqualToString:@"void"]) continue;
+            if ([varName isEqualToString:@"while"]) continue;
+
 
             [vars addObject:varName];
         }
@@ -837,6 +880,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Alle Styles in einem eigenen String sammeln, könnte nochmal nützlich werden
     NSMutableString *style = [[NSMutableString alloc] initWithString:@""];
 
+
     if ([attributeDict valueForKey:@"multiline"])
     {
         self.attributeCount++;
@@ -853,14 +897,6 @@ void OLLog(xmlParser *self, NSString* s,...)
     if ([attributeDict valueForKey:@"bgcolor"])
     {
         self.attributeCount++;
-
-        //NSLog(@"Setting the attribute 'bgcolor' as CSS 'background-color'.");
-        //[style appendString:@"background-color:"];
-        //[style appendString:[attributeDict valueForKey:@"bgcolor"]];
-        //[style appendString:@";"];
-
-        // Lieber so, weil nicht immer sind die übergebenen Farbwerte kompatibles CSS
-        // Und setAttribute_ biegt alle Farbwerte vorher richtig um
         [self setTheValue:[attributeDict valueForKey:@"bgcolor"] ofAttribute:@"bgcolor"];
     }
 
@@ -873,7 +909,6 @@ void OLLog(xmlParser *self, NSString* s,...)
     if ([attributeDict valueForKey:@"style"]) // Von Basecomponent, aber immer auswerten, damit kein Konflikt mit css-style
     {
         self.attributeCount++;
-
         [self setTheValue:[attributeDict valueForKey:@"style"] ofAttribute:@"style"];
     }
 
@@ -887,6 +922,12 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         self.attributeCount++;
         [self setTheValue:[attributeDict valueForKey:@"text_y"] ofAttribute:@"text_y"];
+    }
+
+    if ([attributeDict valueForKey:@"fontstyle"])
+    {
+        self.attributeCount++;
+        [self setTheValue:[attributeDict valueForKey:@"fontstyle"] ofAttribute:@"fontstyle"];
     }
 
     if ([attributeDict valueForKey:@"opacity"])
@@ -1213,18 +1254,6 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Oh man, das endlich herausgefunden zu haben!
             [self.jsOutput insertString:s atIndex:0];
         }
-    }
-
-
-
-    if ([attributeDict valueForKey:@"fontstyle"])
-    {
-        self.attributeCount++;
-        NSLog(@"Setting the attribute 'fontstyle' as CSS 'font-weight'.");
-        
-        [style appendString:@"font-weight:"];
-        [style appendString:[attributeDict valueForKey:@"fontstyle"]];
-        [style appendString:@";"];
     }
 
 
@@ -2279,18 +2308,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.attributeCount++;
         NSLog(@"Setting the attribute 'visible' as JS.");
 
-        // ToDo - Diese werden noch nicht unterstützt:
-        // Beim Abarbeiten vorne anfangen, da Abhängigkeiten nach hinten
-        if (![self.zuletztGesetzteID isEqualToString:@"element65"] &&
-            ![self.zuletztGesetzteID isEqualToString:@"element66"] &&
-            ![self.zuletztGesetzteID isEqualToString:@"element106"] &&
-            ![self.zuletztGesetzteID isEqualToString:@"element107"] &&
-            ![self.zuletztGesetzteID isEqualToString:@"element252"] &&
-            ![self.zuletztGesetzteID isEqualToString:@"element303"] &&
-            ![self.zuletztGesetzteID isEqualToString:@"element333"] &&
-            ![self.zuletztGesetzteID isEqualToString:@"element375"] &&
-            ![self.zuletztGesetzteID isEqualToString:@"element376"])
-            [self setTheValue:[attributeDict valueForKey:@"visible"] ofAttribute:@"visible"];
+        [self setTheValue:[attributeDict valueForKey:@"visible"] ofAttribute:@"visible"];
     }
     }
 
@@ -5065,6 +5083,9 @@ didStartElement:(NSString *)elementName
 
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
+
+        // Ein Button kann auch HTML-Tags als Beschriftungstext haben
+        self.weAreCollectingTextAndThereMayBeHTMLTags = YES;
     }
 
 
@@ -6649,8 +6670,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             // auf JS-Ebene in der Funktion interpretObject() auswerte.
             // [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",ID_REPLACE_STRING]]];
 
+
             // Falls keine Attribute vorhanden, muss trotdzem ein leeres Array erzeugt werden!
-            // Denn deleteAttributesPreviousDeclared() verlässt sich auf die Existenz.
+            // Denn manche Abfragen verlassen sich noch auf die Existenz eines Arrays.
             // if ([keys count] > 0)
             {
                 // Alle Attributnamen als Array hinzufügen
@@ -8280,6 +8302,16 @@ BOOL isJSArray(NSString *s)
 
 
 
+BOOL isJSBoolean(NSString *s)
+{
+    if ([s isEqualToString:@"true"] || [s isEqualToString:@"false"])
+        return YES;
+
+    return NO;
+}
+
+
+
 - (NSString*) indentTheCode:(NSString*)s
 {
     // Tabs eliminieren
@@ -8778,12 +8810,16 @@ BOOL isJSArray(NSString *s)
 
                 BOOL weNeedQuotes = YES;
 
-                if (isNumeric([keys valueForKey:key]) || isJSArray([keys valueForKey:key]))
+
+                // Bricht bei 'strings' die tatsächlich diese Werte enthalten... Aber nehme ich erstmal in Kauf.
+                if (isNumeric(value) || isJSArray(value) || isJSBoolean(value) || [value isEqualToString:@"undefined"] || [value isEqualToString:@"null"])
                     weNeedQuotes = NO;
+
 
                 // Wegen Beispiel 28.10 => Klassen können auf den Text zwischen den Tags zugreifen, wenn das Attribut text heißt
                 if ([key isEqualToString:@"text"] && [value isEqualToString:@"textBetweenTags"])
                     weNeedQuotes = NO;
+
 
                 // Falls es ein berechneter Wert war, erkennen wir es an der Markierung
                 // Dann Markierung raushauen und wir brauchen dann keine Quotes
@@ -9201,6 +9237,9 @@ BOOL isJSArray(NSString *s)
 
         if (![s isEqualToString:@""])
             [self setTheValue:s ofAttribute:@"text"];
+
+
+        self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
     }
 
 
@@ -9884,8 +9923,10 @@ BOOL isJSArray(NSString *s)
     [self.output appendString:@"$(window).load(function()\n{\n"];
 
 
-    [self.output appendString:@"  if (window['tabsMain']) tabsMain.selecttab = function(index) { $(this).tabs('select', index ) } // ToDo\n"];
-    [self.output appendString:@"  if (window['tabsMain']) tabsMain.next = function() { $(this).tabs('select', 2 ) } // ToDo\n"];
+    // So lange ich den TabSheetContainer nicht auswerte, diese Methoden nach implementieren (ToDo?)
+    [self.output appendString:@"  if (window['tabsMain']) tabsMain.selecttab = function(index) { $(this).tabs('select', index ) }\n"];
+    [self.output appendString:@"  if (window['tabsMain']) tabsMain.next = function() { $(this).tabs('select', $(this).tabs('option', 'selected')+1) }\n"];
+
     [self.output appendString:@"  if (window['rudStpfl']) rudStpfl.rolldown = function() {} // ToDo\n"];
     [self.output appendString:@"  if (window['rudWeitereInfos']) rudWeitereInfos.isvalid = true; // ToDo\n"];
     [self.output appendString:@"  var globalcalendar = {}; // ToDo\n\n"];
@@ -9898,7 +9939,6 @@ BOOL isJSArray(NSString *s)
     [self.output appendString:@"    //this.completeInstantiation = function completeInstantiation() { };\n  }\n"];
     [self.output appendString:@"  function open()\n  {\n    alert('Willst du wirklich deine Ehefrau löschen? Usw...');\n  }\n"];
     //[self.output appendString:@"  var dlgFamilienstandSingle = new dlg();\n\n"];
-    [self.output appendString:@"  var dlgsave = new dlg();\n\n"];
 
 
     
@@ -11651,6 +11691,12 @@ BOOL isJSArray(NSString *s)
     "//  Die Services definieren darin ihre Methoden.       //\n"
     "/////////////////////////////////////////////////////////\n"
     "function lz_MetaClass() {\n"
+    "    this.animator = function() {\n"
+    "\n"
+    "\n"
+    "    }\n"
+    "\n"
+    "\n"
     "    this.FocusService = function() {\n"
     "        this.setFocus = function(a) {\n"
     "            $(a).focus();\n"
@@ -12719,7 +12765,10 @@ BOOL isJSArray(NSString *s)
     "// Diese Funktion werde ich gleich 3 mal prototypen müssen um setAttribute in allen Browsern zu überschreiben\n"
     "// Neu: Leider bricht setAttribute jQuery.attr(), ein Zurückbehalten auf das originale setAttribute hat wirklich nicht geklapopt \n"
     "// Deswegen arbeite ich nun mit setAttribute_ und replacement dieser Funktionen im OL-Code \n"
-    "var setAttributeFunc = function (attributeName, value) {\n"
+    "var setAttributeFunc = function (attributeName, value, ifchanged, triggerMe) {\n"
+    "    // So können setter setAttribute_ aufrufen, ohne das getriggert wird\n"
+    "    if (triggerMe === undefined) triggerMe = true;\n"
+    "\n"
     "    function setWidthAndHeightAndBackgroundImage(me, imgpath) {\n"
     "            // Get programmatically 'width' and 'height' of the image\n"
     "            var img = new Image();\n"
@@ -12811,16 +12860,47 @@ BOOL isJSArray(NSString *s)
     "    {\n"
     "        if ($(me).is('input') && $(me).attr('type') === 'checkbox')\n"
     "            $(me).prop('checked',value);\n"
+    "        else\n"
+    "            alert('So far unsupported value for value in setAttribute_()');\n"
     "    }\n"
     "    else if (attributeName == 'font')\n"
     "    {\n"
-    "        // ToDo\n"
+    "        $(me).css('font-family',value+',Verdana,sans-serif');\n"
+    "        // Die Eigenschaft font-family überträgt sich auf alle Kinder und Enkel\n"
+    "        $(me).find('.div_text').css('font-family',value+',Verdana,sans-serif')\n"
     "    }\n"
     "    else if (attributeName == 'fontsize')\n"
     "    {\n"
     "        $(me).css('font-size',value+'px');\n"
     "        // Die Eigenschaft font-size überträgt sich auf alle Kinder und Enkel\n"
     "        $(me).find('.div_text').css('font-size',value+'px')\n"
+    "    }\n"
+    "    else if (attributeName == 'fontstyle')\n"
+    "    {\n"
+    "        if (value === 'plain')\n"
+    "        {\n"
+    "            $(me).css('font-style','normal');\n"
+    "            $(me).find('.div_text').css('font-style','normal')\n"
+    "            $(me).css('font-weight','normal');\n"
+    "            $(me).find('.div_text').css('font-weight','normal')\n"
+    "        }\n"
+    "        if (value === 'bold')\n"
+    "        {\n"
+    "            $(me).css('font-weight','bold');\n"
+    "            $(me).find('.div_text').css('font-weight','bold')\n"
+    "        }\n"
+    "        if (value === 'italic')\n"
+    "        {\n"
+    "            $(me).css('font-style','italic');\n"
+    "            $(me).find('.div_text').css('font-style','italic')\n"
+    "        }\n"
+    "        if (value === 'bolditalic')\n"
+    "        {\n"
+    "            $(me).css('font-style','italic');\n"
+    "            $(me).find('.div_text').css('font-style','italic')\n"
+    "            $(me).css('font-weight','bold');\n"
+    "            $(me).find('.div_text').css('font-weight','bold')\n"
+    "        }\n"
     "    }\n"
     "    else if (attributeName == 'bgcolor')\n"
     "    {\n"
@@ -12998,8 +13078,8 @@ BOOL isJSArray(NSString *s)
     "    }\n"
     "    else if (attributeName == 'visible')\n"
     "    {\n"
-    "        // Sprung bei 'input', und 'me' neu belegen, damit er am Ende auch das richtige Element triggert\n"
-    "        if ($(me).is('input'))\n"
+    "        // Sprung bei 'input' und 'select', und 'me' neu belegen, damit er am Ende auch das richtige Element triggert\n"
+    "        if (isMultiEl(me))\n"
     "            me = $(me).parent().get(0);\n"
     "\n"
     "        if (value == true || value == 'true')\n"
@@ -13056,7 +13136,7 @@ BOOL isJSArray(NSString *s)
     "        else\n"
     "            alert('unsupported value for stretches. value: '+value);\n"
     "    }\n"
-    "    else if (attributeName == 'enabled' && $(me).is('input'))\n"
+    "    else if (attributeName == 'enabled' && ($(me).is('input') || $(me).is('select')))\n"
     "    {\n"
     "        $(me).get(0).disabled = !value;\n"
     "\n"
@@ -13226,7 +13306,8 @@ BOOL isJSArray(NSString *s)
     "    // In jedem Fall: triggern! Das sieht OL so vor\n"
     "    // Kein bubblen, sondern Point-2-Point-Logik in OL, deswegen triggerHandler\n"
     "    // der getzte Wert (value) wird als Extra-Parameter mit gesendet\n"
-    "    $(me).triggerHandler('on'+attributeName,value);\n"
+    "    if (triggerMe)\n"
+    "        $(me).triggerHandler('on'+attributeName,value);\n"
     "}\n"
     "\n"
     "// Object.prototype ist verboten und bricht jQuery und z.B. JS .split()! Deswegen über defineProperty\n"
@@ -13330,6 +13411,48 @@ BOOL isJSArray(NSString *s)
     "HTMLButtonElement.prototype.isinited = true;\n"
     "\n"
     "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// animate() - nachimplementiert                       //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var animateFunction = function (prop,to,duration,isRelative,moreArgs) {\n"
+    "    if (prop === undefined)\n"
+    "        throw new Error('animate() - First argument should not be undefined');\n"
+    "    if (prop !== 'x' && prop !== 'y' && prop !== 'width' && prop !== 'height' && prop !== 'rotation' && prop !== 'alpha')\n"
+    "        throw new Error('animate() - First argument must contain one of the following values: x, y, width, height, rotation or alpha');\n"
+    "    if (prop === 'x') prop = 'left';\n"
+    "    if (prop === 'y') prop = 'top';\n"
+    "\n"
+    "    if (to === undefined)\n"
+    "        throw new Error('animate() - Second argument (to) should not be undefined');\n"
+    "\n"
+    "    if (duration === undefined)\n"
+    "        throw new Error('applyConstraintMethod() - Third argument (duration) should not be undefined');\n"
+    "    if (duration === 0)\n"
+    "    {\n"
+    "        this.setAttribute_(prop,to);\n"
+    "        return;\n"
+    "    }\n"
+    "\n"
+    "    if (isRelative === undefined)\n"
+    "        isRelative = false;\n"
+    "\n"
+    "\n"
+    "    // Zu animierende Property. Den string direkt im Objekt angeben, klappt nicht. Deswegen danach per 'Array'-Syntax setzen\n"
+    "    var p = {}\n"
+    "    p[prop] = to;\n"
+    "\n"
+    "    // Der eigentliche Aufruf der Animation:\n"
+    "    $(this).animate(p, duration);\n"
+    "\n"
+    "\n"
+    "    return new lz.animator();\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.animate = animateFunction;\n"
+    "HTMLInputElement.prototype.animate = animateFunction;\n"
+    "HTMLSelectElement.prototype.animate = animateFunction;\n"
+    "HTMLButtonElement.prototype.animate = animateFunction;\n"
+    "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// applyConstraintMethod() - nachimplementiert         //\n"
@@ -13366,7 +13489,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Attribute/Methoden von <div> (OL: <view>)           //\n"
+    "// Methoden von <div> (OL: <view>)                     //\n"
     "/////////////////////////////////////////////////////////\n"
     "////////////////////////INCOMPLETE///////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
@@ -13846,7 +13969,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Attribute/Methoden von <div> (OL: <view>)           //\n"
+    "// Attribute          von <div> (OL: <view>)           //\n"
     "/////////////////////////////////////////////////////////\n"
     "////////////////////////INCOMPLETE///////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
@@ -13861,7 +13984,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "        return $(this).data('aaactive_');\n"
     "    },\n"
-    "    set : function(newValue){ $(this).data('aaactive_',newValue); $(this).triggerHandler('onaaactive', newValue); },\n"
+    "    set : function(newValue){ $(this).data('aaactive_',newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -13876,7 +13999,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "        return $(this).data('aadescription_');\n"
     "    },\n"
-    "    set : function(newValue){ $(this).data('aadescription_',newValue); $(this).triggerHandler('onaadescription', newValue); },\n"
+    "    set : function(newValue){ $(this).data('aadescription_',newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -13891,7 +14014,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "        return $(this).data('aaname_') || $(this).html();\n"
     "    },\n"
-    "    set : function(newValue){ $(this).data('aaname_',newValue); $(this).triggerHandler('onaaname', newValue); },\n"
+    "    set : function(newValue){ $(this).data('aaname_',newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -13906,7 +14029,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "        return $(this).data('aasilent_');\n"
     "    },\n"
-    "    set : function(newValue){ $(this).data('aasilent_',newValue); $(this).triggerHandler('onaasilent', newValue); },\n"
+    "    set : function(newValue){ $(this).data('aasilent_',newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -13921,7 +14044,7 @@ BOOL isJSArray(NSString *s)
     "\n"
     "        return $(this).data('aatabindex_');\n"
     "    },\n"
-    "    set : function(newValue){ $(this).data('aatabindex_',newValue); $(this).triggerHandler('onaatabindex', newValue); },\n"
+    "    set : function(newValue){ $(this).data('aatabindex_',newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -14026,6 +14149,7 @@ BOOL isJSArray(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'myContext', {\n"
     "    get : function(){ if ($(this).is('canvas')) return (this.getContext('2d')); return null; },\n"
+    "    // Der triggerHandler() MUSS drin bleiben, sonst aktualisiert sich Drawview nicht richtig bei Animationen\n"
     "    set : function(newValue){ if ($(this).is('canvas')) { this.getContext('2d') = newValue; $(this).triggerHandler('oncontext', newValue); } },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -14101,7 +14225,6 @@ BOOL isJSArray(NSString *s)
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(Object.prototype, 'myWidth', {\n"
-    
     //"    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('width'));  },\n"
     // Gemäß Beispiel 7.4 ist es outerWidth... wtf... ob es was bricht?
     "    get : function(){ if (!isDOM(this)) return undefined; return $(this).outerWidth();  },\n"
@@ -14109,6 +14232,36 @@ BOOL isJSArray(NSString *s)
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'visible'                         //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'visible', {\n"
+    "    get : function(){ if (!isDOM(this)) return undefined; return $(this).is(':visible');  },\n"
+    "    // Eigentlich immer über setAttribute setzen. Falls doch direkte Zuweisung, dann nicht triggern\n"
+    "    set : function(newValue){ if (isDOM(this)) this.setAttribute_('visible',newValue,undefined,false); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Getter/Setter for 'styleable'                       //\n"
@@ -14191,7 +14344,7 @@ BOOL isJSArray(NSString *s)
     // aber mit css('top') klappt es (gleiches gilt für position().left).
     // '0'+ als Schutz gegen 'auto', so, dass parseInt() auf jeden Fall ne Nummer findet.
     "var adjustHeightAndWidth = function (el) {\n"
-    "    if ($(el).is('input')) // Dann Sprung, weil inputs aus mehreren Elementen bestehen\n"
+    "    if (isMultiEl(el)) // Dann Sprung, weil manche Elemente aus mehreren Elementen bestehen\n"
     "        el = $(el).parent().get(0);\n"
     "\n"
     "    var sumXYHW = 0;\n"
@@ -14230,7 +14383,7 @@ BOOL isJSArray(NSString *s)
     "    if (sumXYHW > 0 && $(el).children().length > 0 && $(el).get(0).style.width == '')\n"
     "    {\n"
     "        // Bitte erkläre mir mal warum wir hier left zur Breite mit dazurechnen.\n"
-    "        var widths = $(el).children().map(function () { if ($(this).is('input')) return $(this).outerWidth(true)+$(this).next().outerWidth(true); return $(this).outerWidth(true)/*+$(this).position().left*/; }).get();\n"
+    "        var widths = $(el).children().map(function () { if (isMultiEl(this)) return $(this).outerWidth(true)+$(this).next().outerWidth(true); return $(this).outerWidth(true)/*+$(this).position().left*/; }).get();\n"
     "\n"
     "        // Bei einem Window entscheidet der content mit über das breiteste Element!\n"
     "        if ($('#'+el.id+'_content').length > 0)\n"
@@ -14665,6 +14818,19 @@ BOOL isJSArray(NSString *s)
     "}\n"
     "\n"
     "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hilfsfunktion, um bei 'input' und 'select' das umgebende id-lose div zu erwischen//\n"
+    "// Nötig, weil diese Elemente aus mehreren Unterelementen bestehen//\n"
+    "// isMultiEl()                                         //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var isMultiEl = function (el) {\n"
+    "    if ($(el).is('input') || $(el).is('select'))\n"
+    "        return true;\n"
+    "\n"
+    "    return false;\n"
+    "}\n"
+    "\n"
+    "\n"
     "\n";
 
 
@@ -14801,11 +14967,11 @@ BOOL isJSArray(NSString *s)
     "    obj.inherit = deleteAttributesPreviousDeclared(currentObj.attributeNames,obj.inherit);\n"
     "\n"
     "    // attributeNames übernehmen\n"
-    "    if (obj.inherit.attributeNames.length > 0)\n"
+    "    if (obj.inherit.attributeNames && obj.inherit.attributeNames.length > 0)\n"
     "      currentObj.attributeNames = currentObj.attributeNames.concat(obj.inherit.attributeNames);\n"
     "\n"
     "    // attributeValues übernehmen\n"
-    "    if (obj.inherit.attributeValues.length > 0)\n"
+    "    if (obj.inherit.attributeValues && obj.inherit.attributeValues.length > 0)\n"
     "      currentObj.attributeValues = currentObj.attributeValues.concat(obj.inherit.attributeValues);\n"
     "\n"
     "\n"
@@ -14943,11 +15109,11 @@ BOOL isJSArray(NSString *s)
     "  var onInitFunc = undefined;\n"
     "\n"
     "  // Erst die Attribute auswerten\n"
-    "  var an = obj.attributeNames;\n"
-    "  var av = obj.attributeValues;\n"
+    "  var an = obj.attributeNames ? obj.attributeNames : [];\n"
+    "  var av = obj.attributeValues ? obj.attributeValues : [];\n"
     "\n"
     "  // height und width müssen immer als erstes ausgewertet werden\n"
-    "  // z. B. 'layout' verlässt sich darauf, dass 'width' vorher gesetzt wurden\n"
+    "  // z. B. 'layout' verlässt sich darauf, dass 'width' vorher gesetzt wurde\n"
     "  var posHeightInArray = $.inArray('height', an);\n"
     "  if (posHeightInArray != -1)\n"
     "  {\n"
@@ -15203,8 +15369,8 @@ BOOL isJSArray(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "function deleteAttributesPreviousDeclared(bestand,neu)\n"
     "{\n"
-    "    var an = neu.attributeNames;\n"
-    "    var av = neu.attributeValues;\n"
+    "    var an = neu.attributeNames ? neu.attributeNames : [];\n"
+    "    var av = neu.attributeValues ? neu.attributeValues : [];\n"
     "\n"
     "    for (i = 0;i<an.length;i++)\n"
     "    {\n"
@@ -15227,9 +15393,6 @@ BOOL isJSArray(NSString *s)
     "  this.name = 'view';\n"
     "  this.inherit = undefined;\n"
     "\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
-    "\n"
     "  this.selfDefinedAttributes = { }\n"
     "\n"
     "  this.contentHTML = '';\n"
@@ -15245,9 +15408,6 @@ BOOL isJSArray(NSString *s)
     "  this.name = 'drawview';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
-    "\n"
     "  this.selfDefinedAttributes = { width:300, height:150 }\n"
     "\n"
     "  this.contentHTML = '<div class=\"canvas_element noPointerEvents\"><canvas id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_standard noPointerEvents\"></canvas></div>';\n"
@@ -15262,12 +15422,14 @@ BOOL isJSArray(NSString *s)
     "  this.name = 'replicator';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
-    "\n"
-    "  this.selfDefinedAttributes = { }\n"
+    "  this.selfDefinedAttributes = { axis:'y', _clonepool:null, _cloneprops:null, clones:null, container: null, dataset:null, mask: null, nodes:[], pool:true, replicatedsize:null, _sizes: {x:'width', y:'height' }, spacing:0, xpath:'' }\n"
     "\n"
     "  this.contentHTML = '';\n"
+    "\n"
+    "  this.contentJQuery = \"\" +\n"
+    "  \"  @@@P-L,A#TZHALTER@@@.container = @@@P-L,A#TZHALTER@@@.getTheParent(true);\\n\" +\n"
+    "  \"  @@@P-L,A#TZHALTER@@@.mask = @@@P-L,A#TZHALTER@@@.getTheParent(true).getTheParent(true);\\n\" +\n"
+    "  \"\";\n"
     "}\n"
     "\n"
     "\n"
@@ -15278,9 +15440,6 @@ BOOL isJSArray(NSString *s)
     "oo.radiogroup = function() {\n"
     "  this.name = 'radiogroup';\n"
     "  this.inherit = new oo.view();\n"
-    "\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
     "\n"
     "  this.selfDefinedAttributes = { }\n"
     "\n"
@@ -15299,16 +15458,11 @@ BOOL isJSArray(NSString *s)
     "  this.name = 'text';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  // Text kann entweder als Attribut übergeben werden, oder als Text zwischen den Tags\n"
-    "  // Deswegen kein direktes einfügen in contentHTML, sondern als Attribut auswerten lassen\n"
-    "  this.attributeNames = [\"text\"];\n"
-    "  this.attributeValues = [textBetweenTags];\n"
-    "\n"
     "  this.selfDefinedAttributes = { resize:true, selectable:false, text:textBetweenTags }\n"
     "\n"
     "  this.defaultplacement = '';\n"
     "\n"
-    "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_text noPointerEvents\" />';\n"
+    "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_text noPointerEvents\">'+textBetweenTags+'</div>';\n"
     "}\n"
     "\n"
     "\n"
@@ -15320,11 +15474,6 @@ BOOL isJSArray(NSString *s)
     "\n"
     "  this.name = 'inputtext';\n"
     "  this.inherit = new oo.text(textBetweenTags);\n"
-    "\n"
-    "  // Text kann entweder als Attribut übergeben werden, oder als Text zwischen den Tags\n"
-    "  // Deswegen kein direktes einfügen in contentHTML, sondern als Attribut auswerten lassen\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
     "\n"
     "  this.selfDefinedAttributes = { enabled: true, passowrd: false }\n"
     "\n"
@@ -15344,9 +15493,6 @@ BOOL isJSArray(NSString *s)
     "\n"
     "  this.name = 'basewindow';\n"
     "  this.inherit = new oo.view();\n"
-    "\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
     "\n"
     "  this.selfDefinedAttributes = { text:textBetweenTags }\n"
     "\n"
@@ -15380,8 +15526,6 @@ BOOL isJSArray(NSString *s)
     //"//  class = window (native class)                            //\n"
     //"///////////////////////////////////////////////////////////////\n"
     //"var window = function(textBetweenTags) {\n"
-    //"  if(typeof(textBetweenTags) === 'undefined')\n"
-    //"    textBetweenTags = '';\n"
     //"\n"
     //"  this.name = 'window';\n"
     //"  this.inherit = new basewindow(textBetweenTags);\n"
@@ -15401,9 +15545,6 @@ BOOL isJSArray(NSString *s)
     "  this.name = 'button';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.attributeNames = [\"text\"];\n"
-    "  this.attributeValues = [textBetweenTags];\n"
-    "\n"
     "  this.selfDefinedAttributes = { text:textBetweenTags }\n"
     "\n"
     "  this.defaultplacement = '';\n"
@@ -15419,10 +15560,6 @@ BOOL isJSArray(NSString *s)
     "  this.contentLeadingJQuery = ''\n"
     "\n"
     "  this.contentJQuery = '';\n"
-    "\n"
-    "  this.test1 = function () { // Intern definierte Methode\n"
-    "    return 'I am ' + this.name;\n"
-    "  };\n"
     "};\n"
     "oo.button.prototype.test2 = function() {}; // extern definierte Methode\n"
     "oo.button.prototype.test3 = 2; // extern definierte Variable\n"
@@ -15440,9 +15577,6 @@ BOOL isJSArray(NSString *s)
     "\n"
     "  this.name = 'basebutton';\n"
     "  this.inherit = new oo.basecomponent();\n"
-    "\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
     "\n"
     "  this.defaultplacement = '';\n"
     "\n"
@@ -15471,9 +15605,6 @@ BOOL isJSArray(NSString *s)
     "  this.name = 'baselistitem';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
-    "\n"
     "  this.selfDefinedAttributes = { selected:false }\n"
     "\n"
     "  this.contentHTML = '<option id=\"@@@P-L,A#TZHALTER@@@\">'+textBetweenTags+'</option>';\n"
@@ -15491,9 +15622,6 @@ BOOL isJSArray(NSString *s)
     "  this.name = 'textlistitem';\n"
     "  this.inherit = new oo.listitem();\n"
     "\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
-    "\n"
     "  this.contentHTML = '';\n"
     "};\n"
     "\n"
@@ -15509,9 +15637,6 @@ BOOL isJSArray(NSString *s)
     "  this.name = 'listitem';\n"
     "  this.inherit = new oo.baselistitem();\n"
     "\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
-    "\n"
     "  this.contentHTML = '';\n"
     "};\n"
     "\n"
@@ -15526,9 +15651,6 @@ BOOL isJSArray(NSString *s)
     "\n"
     "  this.name = 'basecombobox';\n"
     "  this.inherit = new oo.baseformitem();\n"
-    "\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
     "\n"
     "  this.selfDefinedAttributes = { editable:true }\n"
     "\n"
@@ -15547,9 +15669,6 @@ BOOL isJSArray(NSString *s)
     "  this.name = 'baseformitem';\n"
     "  this.inherit = new oo.basevaluecomponent();\n"
     "\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
-    "\n"
     "  this.selfDefinedAttributes = { changed:false, ignoreform:false, rollbackvalue:null, submit:this.inherit.inherit.selfDefinedAttributes.enabled, submitname:'', value:null }\n"
     "\n"
     "  this.contentHTML = '';\n"
@@ -15566,9 +15685,6 @@ BOOL isJSArray(NSString *s)
     "\n"
     "  this.name = 'basevaluecomponent';\n"
     "  this.inherit = new oo.basecomponent();\n"
-    "\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
     "\n"
     "  this.selfDefinedAttributes = { type:'none', value:null }\n"
     "\n"
@@ -15587,14 +15703,6 @@ BOOL isJSArray(NSString *s)
     "  this.name = 'basecomponent';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    //"  // Ob dann das hier raus kann? Dafür unten die selfdefinedAttributes ja\n"
-    //"  //  -> Es MUSS sogar raus, sonst wird es doppelt ausgewertet\n
-    //"  this.attributeNames = ['doesenter','enabled','hasdefault','isdefault','style','styleable','text'];\n"
-    //"  this.attributeValues = [false,true,false,false,null,true,''];\n"
-    "  this.attributeNames = [];\n"
-    "  this.attributeValues = [];\n"
-    "\n"
-    "  // ich muss mehr mit den selfDefinedAttributes arbeiten!\n"
     "  this.selfDefinedAttributes = { doesenter:false, enabled:true, hasdefault:false, isdefault:false, style: null, styleable: true, text: textBetweenTags }\n"
     "\n"
     "  this.contentHTML = '';\n"

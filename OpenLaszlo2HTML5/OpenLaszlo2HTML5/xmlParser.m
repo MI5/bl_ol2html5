@@ -44,7 +44,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -653,7 +653,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // setAttribute_() wird zur absolutern PRIORITY-Function. Über die läuft alles!
 - (void) setTheValue:(NSString *)s ofAttribute:(NSString*)attr
 {
-    NSLog(@"Setting the attribute with jQuery + we watch it, if necessary!");
+    NSLog([NSString stringWithFormat:@"Setting the attribute %@ with the value %@ by jQuery + we watch it, if necessary!",attr,s]);
 
     NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
@@ -734,6 +734,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         weNeedQuotes = NO;
     }
+
+    if (isJSExpression(s))
+        weNeedQuotes = NO;
 
     if (!thatWasAPath)
     {
@@ -1286,7 +1289,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         if ([[attributeDict valueForKey:@"align"] isEqual:@"left"])
         {
             self.attributeCount++;
-            NSLog(@"Skipping the attribute 'align=left', because this is the default-value.");
+            [self setTheValue:[attributeDict valueForKey:@"align"] ofAttribute:@"align"];
         }
 
 
@@ -1303,13 +1306,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         if ([[attributeDict valueForKey:@"align"] hasPrefix:@"$"])
         {
-            NSString *s = [self makeTheComputedValueComputable:[attributeDict valueForKey:@"align"]];
-
             self.attributeCount++;
-            NSLog(@"Computed value, so accessing the setter of 'align'.");
-
-            [self.jQueryOutput appendString:@"\n  // setting align by using the built-in JS-property"];
-            [self.jQueryOutput appendFormat:@"\n  %@.align = %@;\n",self.zuletztGesetzteID,s];
+            [self setTheValue:[attributeDict valueForKey:@"align"] ofAttribute:@"align"];
         }
     }
 
@@ -1632,15 +1630,18 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
 
+    [self adjustHeightAndWidthOfElement:self.zuletztGesetzteID];
+
+    return style;
+}
 
 
 
-
-
+- (void) adjustHeightAndWidthOfElement:(NSString*) elemName
+{
     if (positionAbsolute == YES)
     {
         // Aus Sicht des umgebenden Divs gelöst.
-
 
         NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
@@ -1648,37 +1649,32 @@ void OLLog(xmlParser *self, NSString* s,...)
         if ([elemName isEqualToString:@"window"])
         {
             [s appendString:@"\n  // Höhe/Breite des umgebenden Elements u. U. vergrößern\n"];
-            [s appendFormat:@"  adjustHeightAndWidth(%@_content);\n",self.zuletztGesetzteID];
+            [s appendFormat:@"  adjustHeightAndWidth(%@_content);\n",elemName];
         }
 
         [s appendString:@"\n  // Höhe/Breite des umgebenden Elements u. U. vergrößern\n"];
-        [s appendFormat:@"  adjustHeightAndWidth(%@);\n",self.zuletztGesetzteID];
-
+        [s appendFormat:@"  adjustHeightAndWidth(%@);\n",elemName];
 
 
         // ... dann ganz am Anfang adden (damit die Kinder immer vorher bekannt sind)
         [self.jQueryOutput insertString:s atIndex:0];
 
-/*
- // Aus Sicht des Kindes (Dieser Code hatte zu viel Schwächen):
 
-    [self.jQueryOutput appendString:@"\n  // Eine x- oder y-Angabe! Wir müssen eventuell deswegen die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n  // Wir überschreiben jedoch keinen explizit vorher gesetzten Wert,\n  // deswegen test auf '' (nur mit JS möglich, nicht mit jQuery) \n"];
-
-    [self.jQueryOutput appendFormat:@"  var h = $('#%@').position().top+($('#%@').outerHeight('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-    [self.jQueryOutput appendFormat:@"  if (h > $('#%@').parent().height())\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-    [self.jQueryOutput appendFormat:@"    $('#%@').parent().height(h);\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
-
-        [self.jQueryOutput appendString:@"  // Analog muss die Breite gesetzt werden\n"];
-        [self.jQueryOutput appendFormat:@"  var w = parseInt($('#%@').position().left)+($('#%@').outerWidth('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-        [self.jQueryOutput appendFormat:@"  if ($('#%@').parent().get(0).style.width == '' && w > $('#%@').parent().width())\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-        [self.jQueryOutput appendFormat:@"    $('#%@').parent().width(w);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
- */
+        /*
+         // Aus Sicht des Kindes (Dieser Code hatte zu viel Schwächen):
+         
+         [self.jQueryOutput appendString:@"\n  // Eine x- oder y-Angabe! Wir müssen eventuell deswegen die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n  // Wir überschreiben jedoch keinen explizit vorher gesetzten Wert,\n  // deswegen test auf '' (nur mit JS möglich, nicht mit jQuery) \n"];
+         [self.jQueryOutput appendFormat:@"  var h = $('#%@').position().top+($('#%@').outerHeight('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+         [self.jQueryOutput appendFormat:@"  if (h > $('#%@').parent().height())\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+         [self.jQueryOutput appendFormat:@"    $('#%@').parent().height(h);\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
+         [self.jQueryOutput appendString:@"  // Analog muss die Breite gesetzt werden\n"];
+         [self.jQueryOutput appendFormat:@"  var w = parseInt($('#%@').position().left)+($('#%@').outerWidth('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+         [self.jQueryOutput appendFormat:@"  if ($('#%@').parent().get(0).style.width == '' && w > $('#%@').parent().width())\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+         [self.jQueryOutput appendFormat:@"    $('#%@').parent().width(w);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
+         */
     }
-
-
-
-    return style;
 }
+
 
 
 // Vor jede gesetzte class muss ein Leerzeichen, damit es aufgeht
@@ -2306,33 +2302,33 @@ void OLLog(xmlParser *self, NSString* s,...)
     if ([attributeDict valueForKey:@"visible"])
     {
         self.attributeCount++;
-        NSLog(@"Setting the attribute 'visible' as JS.");
-
         [self setTheValue:[attributeDict valueForKey:@"visible"] ofAttribute:@"visible"];
     }
+    }
+
+
+    if ([attributeDict valueForKey:@"doesenter"])
+    {
+        self.attributeCount++;
+        [self setTheValue:[attributeDict valueForKey:@"doesenter"] ofAttribute:@"doesenter"];
+    }
+
+    if ([attributeDict valueForKey:@"enabled"])
+    {
+        self.attributeCount++;
+        [self setTheValue:[attributeDict valueForKey:@"enabled"] ofAttribute:@"enabled"];
+    }
+
+    if ([attributeDict valueForKey:@"isdefault"])
+    {
+        self.attributeCount++;
+        [self setTheValue:[attributeDict valueForKey:@"isdefault"] ofAttribute:@"isdefault"];
     }
 
     if ([attributeDict valueForKey:@"focusable"])
     {
         self.attributeCount++;
-
-        if ([[attributeDict valueForKey:@"focusable"] isEqualToString:@"false"])
-        {
-            NSLog(@"Setting the attribute 'focusable=false' as jQuery.");
-
-            [self.jQueryOutput appendString:@"\n  // focusable=false\n"];
-            [self.jQueryOutput appendFormat:@"  $('#%@').on('focus.blurnamespace', function() { this.blur(); });\n",idName];
-        }
-
-        if ([[attributeDict valueForKey:@"focusable"] isEqualToString:@"true"])
-        {
-            NSLog(@"Setting the attribute 'focusable=true' as jQuery.");
-
-            // Eventuell falls die vorher auf false gesetzte Eigenschaft überschrieben werden soll
-            // Deswegen auch hier Code ausführen. Aber im Prinzip wohl unnötig, da true = Standardwert.
-            [self.jQueryOutput appendString:@"\n  // focusable=true (einen eventuell vorher gesetzten focus-Handler, der blur() ausführt, entfernen"];
-            [self.jQueryOutput appendFormat:@"\n  $('#%@').off('focus.blurnamespace');\n",idName];
-        }
+        [self setTheValue:[attributeDict valueForKey:@"focusable"] ofAttribute:@"focusable"];
     }
 
 
@@ -3192,30 +3188,59 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 // Muss rückwärts gesetzt werden, weil die Höhe der Kinder ja bereits bekannt sein muss!
--(void) korrigiereHoeheDesUmgebendenDivBeiSimpleLayout
+-(void) korrigiereHoeheUndBreiteDesUmgebendenDivBeiSimpleLayoutX
 {
     NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
-    [s appendString:@"\n  // Höhe anpassen, wegen Simplelayout\n"];
+    [s appendString:@"\n  // Korrekturen wegen SA X:\n"];
     [s appendFormat:@"  adjustHeightOfEnclosingDivWithHeighestChildOnSimpleLayout(%@);\n",self.zuletztGesetzteID];
 
-    // An den Anfang des Strings setzen!
-    // Die Höhe muss bekannt sein, bevor das Simplelayout als solches ausgeführt wird!
+
+    // Auch noch die Breite setzen! (Damit die Angaben im umgebenden Div stimmen)
+    // Da sich valign=middle auf die Höhenangabe bezieht, muss diese mit jQueryOutput0
+    // noch vor allen anderen Angaben gesetzt werden.
+    // Update: Bricht Element9 (z.B.), es wird dann zu breit, deswegen bei
+    // position:absolute es sich per CSS-Angabe -> width:Auto und float:left sich selbst
+    // optimal ausrichten lassen.
+    // Nur bei position:relative muss ich nachhelfen, weil es dort sonst 0 wäre
+    // Auf sowas erstmal zu kommen.... oh man.
+    // Neu: Ich richte es immer korrekt aus, selbst bei position:absolute muss ich nachhelfen!
+    // Deswegen die Einschränkung auf position:relative unten auskommentiert
+    [s appendFormat:@"  adjustWidthOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutX(%@,%@);\n",self.zuletztGesetzteID,[self.simplelayout_x_spacing lastObject]];
+
+
+    // An den Anfang des Strings setzen
+    // Die Breite und die Höhe muss bekannt sein, bevor das Simplelayout als solches ausgeführt wird!
+    // Andererseits muss es nach evtl. klonen (multiple datapaths) kommen, die in ComputeValues stecken.
+    // Beispiel 11.3
+    // Außerdem muss es vor adjustHeightAndWidth bekannt sein, damit hier diese Korrektur als erstes
+    // ausgeführt wird (aufaddieren von children, im Gegensatz zu nur dem breitesten children).
+    // Denn SA-Korrekturen haben immer Vorrang vor dem normalen adjustHeightAndWidth().
     [self.jsConstraintValuesOutput insertString:s atIndex:0];
 }
 
 
 
 // Muss rückwärts gesetzt werden, weil die Breite der Kinder ja bereits bekannt sein muss!
--(void) korrigiereBreiteDesUmgebendenDivBeiSimpleLayout
+-(void) korrigiereBreiteUndHoeheDesUmgebendenDivBeiSimpleLayoutY:(NSString*)spacing
 {
     NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
-    [s appendString:@"\n  // Breite anpassen, wegen Simplelayout\n"];
+    [s appendString:@"\n  // Korrekturen wegen SA Y:\n"];
     [s appendFormat:@"  adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayout(%@);\n",self.zuletztGesetzteID];
 
-    // An den Anfang des Strings setzen!
-    // Die Breite muss bekannt sein, bevor das Simplelayout als solches ausgeführt wird!
+
+    // Auch noch die Höhe setzen! (Damit die Angaben im umgebenden Div stimmen). Da sich valign=middle auf
+    // die Höhenangabe bezieht, muss diese mit jQueryOutput0 noch vor allen anderen Angaben gesetzt werden.
+    [s appendFormat:@"  adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY(%@,%@);\n",self.zuletztGesetzteID,spacing];
+
+    // An den Anfang des Strings setzen
+    // Die Breite und Höhe muss bekannt sein, bevor das Simplelayout als solches ausgeführt wird!
+    // Andererseits muss es nach evtl. klonen (multiple datapaths) kommen, die in ComputeValues stecken.
+    // Beispiel 11.3
+    // Außerdem muss es vor adjustHeightAndWidth() bekannt sein, damit hier diese Korrektur als erstes
+    // ausgeführt wird (aufaddieren von children, im Gegensatz zu nur dem breitesten children).
+    // Denn SA-Korrekturen haben immer Vorrang vor dem normalen adjustHeightAndWidth().
     [self.jsConstraintValuesOutput insertString:s atIndex:0];
 }
 
@@ -3751,6 +3776,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"view"] ||
         [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"hbox"] ||
+        [elementName isEqualToString:@"vbox"] ||
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"rotateNumber"] ||
@@ -3802,7 +3828,6 @@ didStartElement:(NSString *)elementName
         }
 
         // Falls kein Wert für axis gesetzt ist, ist es immer y
-
         // Simplelayout mit Achse Y berücksichtigen
         if ([[attributeDict valueForKey:@"axis"] hasSuffix:@"y"] || ![attributeDict valueForKey:@"axis"])
         {
@@ -3824,36 +3849,12 @@ didStartElement:(NSString *)elementName
 
 
             /*******************/
-            // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Breite
+            // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe
             // der beinhaltenden Elemente an.
             // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
             // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
-            [self korrigiereBreiteDesUmgebendenDivBeiSimpleLayout];
+            [self korrigiereBreiteUndHoeheDesUmgebendenDivBeiSimpleLayoutY:[self.simplelayout_y_spacing lastObject]];
             /*******************/
-
-
-            // Auch noch die Höhe setzen! (Damit die Angaben im umgebenden Div stimmen)
-            // Da sich valign=middle auf die Höhenangabe bezieht, muss diese mit jQueryOutput0
-            // noch vor allen anderen Angaben gesetzt werden.
-            // Jedoch darf die Höhe nicht bei RollUpDownContainern gesetzt werden, da diese immer
-            // auf 'auto' gestellt sein müssen, damit es gescheit mit scrollt.
-
-            // Erst sammeln:
-            NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
-
-            [s appendString:@"\n  // SA Y:\n"];
-            [s appendFormat:@"  adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY(%@,%@);\n",self.zuletztGesetzteID,[self.simplelayout_y_spacing lastObject]];
-
-            // An den Anfang des Strings setzen
-            // Die Breite muss bekannt sein, bevor das Simplelayout als solches ausgeführt wird!
-            // Andererseits muss es nach evtl. klonen (multiple datapaths) kommen, die in ComputeValues stecken.
-            // Beispiel 11.3
-            // Außerdem muss es vor adjustHeightAndWidth bekannt sein, damit hier diese Korrektur als erstes
-            // ausgeführt wird (aufaddieren von children, im Gegensatz zu nur dem breitesten children).
-            // Denn SA-Korrekturen haben immer Vorrang vor dem normalen adjustHeightAndWidth().
-            [self.jsConstraintValuesOutput insertString:s atIndex:0];
-            //[self.jsOutput insertString:s atIndex:0];
-
 
 
             [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2] withSpacing:spacing andAttributes:attributeDict];
@@ -3880,41 +3881,12 @@ didStartElement:(NSString *)elementName
 
 
             /*******************/
-            // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Höhe
+            // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe
             // der beinhaltenden Elemente an.
             // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
             // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
-            [self korrigiereHoeheDesUmgebendenDivBeiSimpleLayout];
+            [self korrigiereHoeheUndBreiteDesUmgebendenDivBeiSimpleLayoutX];
             /*******************/
-
-
-            // Auch noch die Breite setzen! (Damit die Angaben im umgebenden Div stimmen)
-            // Da sich valign=middle auf die Höhenangabe bezieht, muss diese mit jQueryOutput0
-            // noch vor allen anderen Angaben gesetzt werden.
-            // Update: Bricht Element9 (z.B.), es wird dann zu breit, deswegen bei
-            // position:absolute es sich per CSS-Angabe -> width:Auto und float:left sich selbst
-            // optimal ausrichten lassen.
-            // Nur bei position:relative muss ich nachhelfen, weil es dort sonst 0 wäre
-            // Auf sowas erstmal zu kommen.... oh man.
-            // Neu: Ich richte es immer korrekt aus, selbst bei position:absolute muss ich nachhelfen!
-            // Deswegen die Einschränkung auf position:relative unten auskommentiert
-
-            // Erst sammeln:
-            NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
-
-            [s appendString:@"\n  // SA X:\n"];
-            [s appendFormat:@"  adjustWidthOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutX(%@,%@);\n",self.zuletztGesetzteID,[self.simplelayout_x_spacing lastObject]];
-
-
-            // An den Anfang des Strings setzen
-            // Die Breite muss bekannt sein, bevor das Simplelayout als solches ausgeführt wird!
-            // Andererseits muss es nach evtl. klonen (multiple datapaths) kommen, die in ComputeValues stecken.
-            // Beispiel 11.3
-            // Außerdem muss es vor adjustHeightAndWidth bekannt sein, damit hier diese Korrektur als erstes
-            // ausgeführt wird (aufaddieren von children, im Gegensatz zu nur dem breitesten children).
-            // Denn SA-Korrekturen haben immer Vorrang vor dem normalen adjustHeightAndWidth().
-            [self.jsConstraintValuesOutput insertString:s atIndex:0];
-
 
 
             [self becauseOfSimpleLayoutXMoveTheChildrenOfElement:[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2] withSpacing:spacing andAttributes:attributeDict];
@@ -4109,6 +4081,14 @@ didStartElement:(NSString *)elementName
         }
     }
 
+
+
+    if ([elementName isEqualToString:@"stylesheet"])
+    {
+        element_bearbeitet = YES;
+
+        // Text sammeln und beim schließen des Tags auslesen
+    }
 
 
 
@@ -4905,11 +4885,38 @@ didStartElement:(NSString *)elementName
 
 
 
+    // radiogroup hat ein eingebautes vorbelegtes layout, wenn es nicht überschrieben wird
+    if ([elementName isEqualToString:@"radiogroup"])
+    {
+        element_bearbeitet = YES;
+
+        [self.output appendString:@"<div"];
+
+        [self addIdToElement:attributeDict];
+
+        [self.output appendString:@" class=\"div_standard noPointerEvents\" style=\""];
+
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+        [self.output appendString:@"\">\n"];
+
+
+        if (![attributeDict valueForKey:@"layout"])
+        {
+            [self korrigiereBreiteUndHoeheDesUmgebendenDivBeiSimpleLayoutY:@"0"];
+
+            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:@"0" andAttributes:attributeDict];
+        }
+
+        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
+    }
+
+
 
 
     if ([elementName isEqualToString:@"view"] ||
-        [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"hbox"] ||
+        [elementName isEqualToString:@"vbox"] ||
         [elementName isEqualToString:@"rotateNumber"])
     {
         element_bearbeitet = YES;
@@ -4978,6 +4985,17 @@ didStartElement:(NSString *)elementName
 
             [self becauseOfSimpleLayoutXMoveTheChildrenOfElement:theId withSpacing:spacing andAttributes:attributeDict];
         }
+        if ([elementName isEqualToString:@"vbox"])
+        {
+            NSString *spacing = @"0";
+            if ([attributeDict valueForKey:@"spacing"])
+            {
+                self.attributeCount++;
+                spacing = [attributeDict valueForKey:@"spacing"];
+            }
+
+            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:theId withSpacing:spacing andAttributes:attributeDict];
+        }
     }
 
 
@@ -5030,7 +5048,9 @@ didStartElement:(NSString *)elementName
         // id hinzufügen und gleichzeitg speichern
         NSString *theId = [self addIdToElement:attributeDict];
 
-        [self.output appendString:@" class=\"input_standard\" style=\""];
+        // Die font-size in der css-class anzugeben, klappt nicht... Weder unter Webkit noch FF
+        // Wegen Beispiel 16.1 font-size von 11px.
+        [self.output appendString:@" class=\"input_standard\" style=\"font-size:11px;"];
         [self.output appendString:[self addCSSAttributes:attributeDict]];
         [self.output appendString:@"\">"];
 
@@ -5057,22 +5077,10 @@ didStartElement:(NSString *)elementName
 
 
         // ToDo: Wird derzeit nicht ausgewertet
-        if ([attributeDict valueForKey:@"isdefault"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'isdefault' for now.");
-        }
-        // ToDo: Wird derzeit nicht ausgewertet
         if ([attributeDict valueForKey:@"placement"])
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'placement' for now.");
-        }
-        // ToDo: Wird derzeit nicht ausgewertet
-        if ([attributeDict valueForKey:@"doesenter"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'doesenter' for now.");
         }
         // ToDo: Wird derzeit nicht ausgewertet
         if ([attributeDict valueForKey:@"text_padding_x"])
@@ -5090,17 +5098,52 @@ didStartElement:(NSString *)elementName
 
 
 
+    if ([elementName isEqualToString:@"multistatebutton"])
+    {
+        element_bearbeitet = YES;
+
+        // ToDo
+        if ([attributeDict valueForKey:@"focusable"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"maxstate"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"onblur"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"onfocus"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"reference"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"resource"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"statelength"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"statenum"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"text"])
+            self.attributeCount++;
+        // ToDo
+        if ([attributeDict valueForKey:@"width"])
+            self.attributeCount++;
+    }
+
+
+
 
     if ([elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"])
     {
         element_bearbeitet = YES;
-
-
-        if ([elementName isEqualToString:@"basebutton"])
-            [self.output appendString:@"<!-- Basebutton: -->\n"];
-        else
-            [self.output appendString:@"<!-- Imagebutton: -->\n"];
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
@@ -5125,12 +5168,6 @@ didStartElement:(NSString *)elementName
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'text' for now.");
-        }
-        // ToDo: Wird derzeit nicht ausgewertet - ist zum ersten mal bei einem imgbutton aufgetaucht (nur da?)
-        if ([attributeDict valueForKey:@"isdefault"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'isdefault' for now.");
         }
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
@@ -5497,9 +5534,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         if ([attributeDict valueForKey:@"defaulttext"])
             self.attributeCount++;
         // ToDo
-        if ([attributeDict valueForKey:@"doesenter"])
-            self.attributeCount++;
-        // ToDo
         if ([attributeDict valueForKey:@"shownitems"])
             self.attributeCount++;
         // ToDo
@@ -5550,7 +5584,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         
         [self.output appendString:[self addCSSAttributes:attributeDict]];
         
-        [self.output appendString:@"vertical-align: middle;\" />\n"];
+        [self.output appendString:@"\" />\n"];
 
 
 
@@ -5642,10 +5676,10 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
     {
         element_bearbeitet = YES;
 
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
-        [self.output appendString:@"<div class=\"div_checkbox\" onclick=\"$(this).children(':first').attr('checked',true);\">\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+        [self.output appendString:@"<div class=\"div_checkbox\" onclick=\"if (!$(this).children(':first').is(':disabled')) $(this).children(':first').attr('checked',true);\">\n"];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
 
         [self.output appendString:@"<input class=\"input_checkbox\" type=\"radio\""];
@@ -5678,7 +5712,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [self.output appendString:@"\" />\n"];
 
 
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<span class=\"div_text\">"];
 
         if ([attributeDict valueForKey:@"text"])
@@ -5824,11 +5858,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'maxvalue'.");
-        }
-        if ([attributeDict valueForKey:@"enabled"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'enabled'.");
         }
         if ([attributeDict valueForKey:@"domain"]) // ToDo
         {
@@ -6038,8 +6067,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Setting the attribute 'maxvalue' as 'maxvalue' for the slider.");
         }
-
-        [self.output appendString:@" style=\""];
+        [self.output appendString:@" class=\"input_standard\" style=\""];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
@@ -6068,7 +6096,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         {
             self.attributeCount++;
 
-            [self.jsOutput appendString:@"  // Ein 'style' bekommt einen neuen Namen zugewiesen\n"];
+            [self.jsOutput appendString:@"\n  // Ein 'style' bekommt einen neuen Namen zugewiesen\n"];
             [self.jsOutput appendFormat:@"  var %@ = %@;\n",[attributeDict valueForKey:@"name"],elementName];
         }
         if ([attributeDict valueForKey:@"isdefault"])
@@ -6399,10 +6427,39 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
+    if ([elementName isEqualToString:@"tabslider"])
+    {
+        element_bearbeitet = YES;
+
+        // Hmmm, es klappt nur so: Ein Extra-Div drum herum, dass alle CSS-Angaben aufnimmt.
+        // und dann per Option { fillSpace: true } das accordian aufrufen, damit er die Höhe korrekt setzt
+        // Die ID bekommt aber das innere div. Äußeres div bleibt id-los.
+
+        [self.output appendString:@"<div class=\"div_tabSlider\""];
+
+        [self.output appendString:@" style=\""];
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+        [self.output appendString:@"\">\n"];
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+
+        [self.output appendString:@"<div"];
+        self.lastUsedTabSheetContainerID = [self addIdToElement:attributeDict];
+        [self.output appendString:@">\n"];
+
+
+        // Hier legen wir den tabslider per jQuery an
+        [self.jQueryOutput appendString:@"\n  // Ein tabslider. Angelegt als jQuery UI accordion.\n"];
+
+        [self.jQueryOutput appendFormat:@"  $('#%@').accordion({ fillSpace: true });\n",self.lastUsedTabSheetContainerID];
+
+        [self.jQueryOutput appendString:@"  // Das von jQuery UI gesetzte CSS danach wieder zurück überschreiben.\n"];
+        [self.jQueryOutput appendFormat:@"  $('.div_tabElement').css('overflow','hidden');\n"];
+    }
 
 
 
-    if ([elementName isEqualToString:@"BDStabsheetcontainer"] || [elementName isEqualToString:@"tabslider"])
+    if ([elementName isEqualToString:@"BDStabsheetcontainer"])
     {
         element_bearbeitet = YES;
 
@@ -6448,14 +6505,10 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // Hier legen wir den TabSheetContainer per jQuery an
         [self.jQueryOutput appendString:@"\n  // Ein TabSheetContainer. Jetzt wird's kompliziert. Wir legen ihn hier an.\n  // Die einzelnen Tabs werden, sobald sie im Code auftauchen, per add hinzugefügt\n  // Mit der Option 'tabTemplate' legen wir die width fest\n  // Mit der Option 'fx' legen wir eine Animation für das Wechseln fest\n"];
 
-        if ([elementName isEqualToString:@"BDStabsheetcontainer"])
-        {
-            [self.jQueryOutput appendFormat:@"  $('#%@').tabs({ tabTemplate: '<li style=\"width:%dpx;\"><a href=\"#{href}\" style=\"width:%dpx;\"><span>#{label}</span></a></li>' });\n",self.lastUsedTabSheetContainerID,tabwidth,tabwidthForLink];
-        }
-        else
-        {
-            [self.jQueryOutput appendFormat:@"  $('#%@').tabs({ tabTemplate: '<li style=\"width:%dpx;\"><a href=\"#{href}\" style=\"width:%dpx;\"><span style=\"font-size:10px\">#{label}</span></a></li>' });\n",self.lastUsedTabSheetContainerID,tabwidth,tabwidthForLink];
-        }
+ 
+        [self.jQueryOutput appendFormat:@"  $('#%@').tabs({ tabTemplate: '<li style=\"width:%dpx;\"><a href=\"#{href}\" style=\"width:%dpx;\"><span>#{label}</span></a></li>' });\n",self.lastUsedTabSheetContainerID,tabwidth,tabwidthForLink];
+
+
         [self.jQueryOutput appendFormat:@"  $('#%@').tabs({ fx: { opacity: 'toggle' } });\n",self.lastUsedTabSheetContainerID];
         [self.jQueryOutput appendFormat:@"  $('#%@').tabs();\n",self.lastUsedTabSheetContainerID];
 
@@ -6477,10 +6530,54 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
+    if ([elementName isEqualToString:@"tabelement"])
+    {
+        element_bearbeitet = YES;
+
+
+        NSString *title = @"";
+        if ([attributeDict valueForKey:@"text"])
+        {
+            self.attributeCount++;
+            NSLog(@"Using the attribute 'text' as heading for the tabsheet.");
+
+            title = [attributeDict valueForKey:@"text"];
+        }
+
+        [self.output appendFormat:@"<h3 style=\"font-size:10px;\"><a href=\"#\">%@</a></h3>\n",title];
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+
+        [self.output appendString:@"<div class=\"div_tabElement\""];
+
+        [self addIdToElement:attributeDict];
+
+        // + 2px, damit sich der Border nicht überschneidet.
+        // Gleiche Angabe auch schon in der class, aber wird wohl von jQuery UI überschrieben
+        // Auch weitere Angaben sind dafür da, um die jQuery UI-Angaben zu überschreiben
+        [self.output appendFormat:@" style=\"%@top:2px;width:inherit;padding:0px;border-color:black;overflow:hidden;\">\n",[self addCSSAttributes:attributeDict]];
+
+
+
+        if ([attributeDict valueForKey:@"selected"])
+        {
+            self.attributeCount++;
+
+            if ([[attributeDict valueForKey:@"selected"] isEqualToString:@"true"])
+            {
+                // ToDo
+                //[self.jQueryOutput appendString:@"\n  // Dieser Tab ist selected\n"];
+                //[self.jQueryOutput appendFormat:@"  $('#%@').tabs('select', '#%@');\n",self.lastUsedTabSheetContainerID,geradeVergebeneID];
+            }
+        }
+    }
+
+
+
     // Wir müssen hier 2 Sachen machen:
     // 1) Ein div aufmachen mit einer ID
     // 2) per jQuery das neu entdeckte tab mit der tabsheetcCntainerID und der gerade vergebenen tabsheet-ID hinzufügen
-    if ([elementName isEqualToString:@"BDStabsheetTaxango"] || [elementName isEqualToString:@"tabelement"])
+    if ([elementName isEqualToString:@"BDStabsheetTaxango"])
     {
         element_bearbeitet = YES;
 
@@ -6691,9 +6788,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
                     [self.jsOLClassesOutput appendString:key];
                     [self.jsOLClassesOutput appendString:@"\""];
 
-                    //if (i < [keys count])
-                    //    [self.jsOLClassesOutput appendString:@", "];
-
                     // Die Attribute werden erst später ausgelesen, deswegen hier hochzählen
                     // Sie werden aktuell ja nicht weiter bearbeitet.
                     self.attributeCount++;
@@ -6714,12 +6808,11 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
                         [self.jsOLClassesOutput appendString:@", "];
 
                     // Es gibt Attribute mit ' drin, deswegen hier "
-                    [self.jsOLClassesOutput appendString:@"\""];
+                    if (!isJSExpression([attributeDict valueForKey:key]))
+                        [self.jsOLClassesOutput appendString:@"\""];
                     [self.jsOLClassesOutput appendString:[attributeDict valueForKey:key]];
-                    [self.jsOLClassesOutput appendString:@"\""];
-
-                    //if (i < [keys count])
-                    //    [self.jsOLClassesOutput appendString:@", "];
+                    if (!isJSExpression([attributeDict valueForKey:key]))
+                        [self.jsOLClassesOutput appendString:@"\""];
                 }
 
                 [self.jsOLClassesOutput appendString:@"];\n\n"];
@@ -7026,44 +7119,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
     }
 
 
-    if ([elementName isEqualToString:@"multistatebutton"])
-    {
-        element_bearbeitet = YES;
-
-        // ToDo
-        if ([attributeDict valueForKey:@"focusable"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"maxstate"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"onblur"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"onfocus"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"reference"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"resource"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"statelength"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"statenum"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"text"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"width"])
-            self.attributeCount++;
-    }
     if ([elementName isEqualToString:@"scrollview"])
     {
         element_bearbeitet = YES;
@@ -8024,6 +8079,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [d removeObjectForKey:@"text_y"];
         // JS
         [d removeObjectForKey:@"visible"];
+        [d removeObjectForKey:@"enabled"];
         [d removeObjectForKey:@"focusable"];
         [d removeObjectForKey:@"layout"];
         [d removeObjectForKey:@"onclick"];
@@ -8309,6 +8365,18 @@ BOOL isJSBoolean(NSString *s)
 
     return NO;
 }
+
+
+BOOL isJSExpression(NSString *s)
+{
+    // Bricht bei JS-Strings, die tatsächlich diese Werte enthalten, aber nehme ich in Kauf.
+    if (isNumeric(s) || isJSArray(s) || isJSBoolean(s) || [s isEqualToString:@"undefined"] || [s isEqualToString:@"null"])
+        return YES;
+
+    return NO;
+}
+
+
 
 
 
@@ -8811,8 +8879,7 @@ BOOL isJSBoolean(NSString *s)
                 BOOL weNeedQuotes = YES;
 
 
-                // Bricht bei 'strings' die tatsächlich diese Werte enthalten... Aber nehme ich erstmal in Kauf.
-                if (isNumeric(value) || isJSArray(value) || isJSBoolean(value) || [value isEqualToString:@"undefined"] || [value isEqualToString:@"null"])
+                if (isJSExpression(value))
                     weNeedQuotes = NO;
 
 
@@ -9012,6 +9079,7 @@ BOOL isJSBoolean(NSString *s)
     if ([elementName isEqualToString:@"view"] ||
         [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"hbox"] ||
+        [elementName isEqualToString:@"vbox"] ||
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"rotateNumber"] ||
@@ -9151,12 +9219,12 @@ BOOL isJSBoolean(NSString *s)
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"hbox"] ||
+        [elementName isEqualToString:@"vbox"] ||
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
-        [elementName isEqualToString:@"tabslider"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
         [elementName isEqualToString:@"tabelement"])
     {
@@ -9165,6 +9233,16 @@ BOOL isJSBoolean(NSString *s)
         [self.output appendString:@"</div>\n"];
     }
 
+
+
+    // Doppel-Div hier erforderlich
+    if ([elementName isEqualToString:@"tabslider"])
+    {
+        element_geschlossen = YES;
+
+        [self.output appendString:@"</div>\n"];
+        [self.output appendString:@"</div>\n"];
+    }
 
 
     if ([elementName isEqualToString:@"BDScombobox"] ||
@@ -9203,6 +9281,23 @@ BOOL isJSBoolean(NSString *s)
         // Ich muss in dem Fall den gesammelten Text leeren, da ich diesen nicht verwerte
         self.textInProgress = nil;
     }
+
+
+
+
+    if ([elementName isEqualToString:@"stylesheet"])
+    {
+        element_geschlossen = YES;
+
+        NSString *s = [self holDenGesammeltenTextUndLeereIhn];
+
+        // Hinzufügen von gesammelten Text, falls er zwischen den tags gesetzt wurde
+        if ([s length] > 0)
+        {
+            [self.cssOutput appendString:[NSString stringWithFormat:@"    %@",s]];
+        }
+    }
+
 
 
 
@@ -10135,6 +10230,33 @@ BOOL isJSBoolean(NSString *s)
     "    background-repeat: no-repeat;\n"
     "}\n"
     "\n"
+    ".greenstyleClass\n"
+    "{\n"
+    "    background: #899c89;\n"
+    "    background: -moz-linear-gradient(top, #c9e6c9, #899c89);\n"
+    "    background: -webkit-linear-gradient(top, #c9e6c9, #899c89);\n"
+    "    background: -ms-linear-gradient(top, #c9e6c9, #899c89);\n"
+    "    background: -o-linear-gradient(top, #c9e6c9, #899c89);\n"
+    "}\n"
+    "\n"
+    ".greenstyleClass:hover\n"
+    "{\n"
+    "    background: #89ad89;\n"
+    "    background: -moz-linear-gradient(top, #d9f8d9, #89ad89);\n"
+    "    background: -webkit-linear-gradient(top, #d9f8d9, #89ad89);\n"
+    "    background: -ms-linear-gradient(top, #d9f8d9, #89ad89);\n"
+    "    background: -o-linear-gradient(top, #d9f8d9, #89ad89);\n"
+    "}\n"
+    "\n"
+    ".greenstyleClass:active\n"
+    "{\n"
+    "    background: #a6bfa6;\n"
+    "    background: -moz-linear-gradient(top, #505c50, #a6bfa6);\n"
+    "    background: -webkit-linear-gradient(top, #505c50, #a6bfa6);\n"
+    "    background: -ms-linear-gradient(top, #505c50, #a6bfa6);\n"
+    "    background: -o-linear-gradient(top, #505c50, #a6bfa6);\n"
+    "}\n"
+    "\n"
     "/* Der button, wie er ungefähr in OpenLaszlo aussieht */\n"
     "input[type=\"button\"], button\n"
     "{\n"
@@ -10177,6 +10299,12 @@ BOOL isJSBoolean(NSString *s)
     "div, span, input, select, button, textarea\n"
     "{\n"
     "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
+    "}\n"
+    "\n"
+    "div, button /* Alle Elemente auf die Simplelayout stoßen kann. */\n"
+    "{           /* Damit SA nie auf 'auto' stößt, sondern bei $(el).css('top') immer einen numerischen Wert zurück bekommt (über parseInt()). */\n"
+	"    top:0;  /* Ich muss mit css('top') arbeiten, da position().top bei versteckten Elementen bricht. */\n"
+	"    left:0;\n"
     "}\n"
     "\n"
     "/* Das Standard-Canvas, welches den Rahmen darstellt */\n"
@@ -10230,7 +10358,7 @@ BOOL isJSBoolean(NSString *s)
     "/* Das Standard-View, wie es ungefähr in OpenLaszlo aussieht */\n"
     ".div_standard\n"
     "{\n"
-	"    height:auto; /* Wirklich wichtig. Damit es einen Startwert gibt.   */\n"
+	"    height:auto; /* Damit es einen Startwert gibt. */\n"
 	"    width:auto;  /* Sonst kann JS die Variable nicht richtig auslesen. */\n"
     "\n"
     "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
@@ -10286,6 +10414,30 @@ BOOL isJSBoolean(NSString *s)
     "    pointer-events: auto;\n"
     "}\n"
     "\n"
+    "/* TabSlider */\n"
+    ".div_tabSlider\n"
+    "{\n"
+    "    height:auto;\n"
+    "    width:auto;\n"
+    "    position:relative;\n"
+    "    top:0px;\n"
+    "    left:0px;\n"
+    "\n"
+    "    border-style:solid; /* Bei Bedarf auskommentieren */\n"
+    "    border-width:1px; /* Bei Bedarf auskommentieren */\n"
+    "}\n"
+    "\n"
+    "/* TabElement */\n"
+    ".div_tabElement\n"
+    "{\n"
+    "    height:auto;\n"
+    "    width:auto;\n"
+    "    position:relative;\n"
+    "    top:2px;\n"
+    "    left:0px;\n"
+    "    border-width:0; /* Um den von jQuery UI gesetzten Rand zu überschreiben */\n"
+    "}\n"
+    "\n"
     "/* CSS-Angaben für den RollUpDownContainer */\n"
     ".div_rudContainer\n"
     "{\n"
@@ -10296,7 +10448,7 @@ BOOL isJSBoolean(NSString *s)
     ".div_rudElement\n"
     "{\n"
     "    position: relative;\n"
-    "    height:auto;\n" // War mal 'inherit', aber 'auto' erscheint mir logischer, ob was bricht?
+    "    height:auto;\n" // War mal 'inherit', aber 'auto' erscheint mir logischer.
     "    margin-bottom:6px;\n"
     "\n"
     "    pointer-events: auto;\n"
@@ -10342,7 +10494,7 @@ BOOL isJSBoolean(NSString *s)
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
     "    width:100%; /* Eine checkbox soll immer die ganze Zeile einnehmen. */\n"
     "    text-align:left;\n"
-    "    padding:4px;\n"
+    "    padding:1px 2px;\n" // padding:4px;
     "\n"
     "    cursor:pointer;\n"
     "    pointer-events: auto;\n"
@@ -10354,8 +10506,8 @@ BOOL isJSBoolean(NSString *s)
     "{\n"
     //"    position:relative;\n" <-- Auskommentiert, verschiebt sonst den Text der checkbox AUF die checkbox
     //"\n"                           Und die checkbox kann wohl 'static' bleiben.
-    "    margin-right:8px;\n"
-    "    vertical-align:middle;\n"
+    "    margin-right:5px;\n"
+    "    vertical-align:top; /* Damit checkbox mit nebenstehendem Text auf einer Höhe */\n"
     "\n"
     "    cursor:pointer;\n"
     "    pointer-events: auto;\n"
@@ -11250,12 +11402,12 @@ BOOL isJSBoolean(NSString *s)
     "\n"
     "\n"
     "    // ohne 'var', damit global\n"
-    "    whitestyle = 'background-color:white;';\n"
-    "    silverstyle = 'background-color:silver;';\n"
-    "    bluestyle = 'background-color:blue;';\n"
-    "    greenstyle = 'background-color:green;';\n"
-    "    goldstyle = 'background-color:gold;';\n"
-    "    purplestyle = 'background-color:purple;';\n"
+    "    whitestyle = 'whitestyleClass';\n"
+    "    silverstyle = 'silverstyleClass';\n"
+    "    bluestyle = 'bluestyleClass';\n"
+    "    greenstyle = 'greenstyleClass';\n"
+    "    goldstyle = 'goldstyleClass';\n"
+    "    purplestyle = 'purplestyleClass';\n"
     "}\n"
     "\n"
     "\n"
@@ -12837,7 +12989,7 @@ BOOL isJSBoolean(NSString *s)
     "        {\n"
     "            $(me).children(':first').attr('value',value);\n"
     "        }\n"
-    "        else if ($(me).is('input') && $(me).attr('type') === 'checkbox')\n"
+    "        else if ($(me).is('input') && ($(me).attr('type') === 'checkbox' || $(me).attr('type') === 'radio'))\n"
     "        {\n"
     "            $(me).parent().children('span').html(value);\n"
     "        }\n"
@@ -12848,6 +13000,10 @@ BOOL isJSBoolean(NSString *s)
     "        else\n"
     "        {\n"
     "            $(me).html(value);\n"
+    "\n"
+    "            // Wegen Example 16.1, bei Buttons width mit outerwidth setzen\n"
+    "            if ($(me).is('button'))\n"
+    "                $(me).width($(me).outerWidth()/* -22 */);\n"
     "\n"
     "            if (me.resize)\n"
     "            {\n"
@@ -12972,12 +13128,12 @@ BOOL isJSBoolean(NSString *s)
     //"        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
     //"        $(me).get(0).myHeight = value;\n"
     "    }\n"
-    "    else if (attributeName === 'clip' && value === 'false')\n"
+    "    else if (attributeName === 'clip' && value === false)\n"
     "    {\n"
     "        // clip='false', just in case, set overflow back to default.\n"
     "        $(me).css('overflow','visible');\n"
     "    }\n"
-    "    else if (attributeName === 'clip' && value === 'true')\n"
+    "    else if (attributeName === 'clip' && value === true)\n"
     "    {\n"
     "        // clip='true', so clipping to width and height\n"
     //  $(me).css('clip','rect(0px, '+$(me).width()+'px, '+$(me).height(+'px, 0px)');\n"
@@ -13004,7 +13160,7 @@ BOOL isJSBoolean(NSString *s)
     "    }\n"
     "    else if (attributeName == 'clickable')\n"
     "    {\n"
-    "        if (value == 'true')\n"
+    "        if (value === true)\n"
     "        {\n"
     "            // Pointer-Events zulassen\n"
     "            $(me).css('pointer-events','auto');\n"
@@ -13012,11 +13168,11 @@ BOOL isJSBoolean(NSString *s)
     "        else\n"
     "            alert('So far unsupported value for clickable. value: '+value);\n"
     "    }\n"
-    "    else if (attributeName === 'focusable' && value === 'false')\n"
+    "    else if (attributeName === 'focusable' && value === false)\n"
     "    {\n"
     "        $(me).on('focus.blurnamespace', function() { this.blur(); });\n"
     "    }\n"
-    "    else if (attributeName === 'focusable' && value === 'true')\n"
+    "    else if (attributeName === 'focusable' && value === true)\n"
     "    {\n"
     "        // Einen eventuell vorher gesetzten focus-Handler, der blur() handlet, entfernen\n"
     "        $(me).off('focus.blurnamespace');\n"
@@ -13031,7 +13187,7 @@ BOOL isJSBoolean(NSString *s)
     "    }\n"
     "    else if (attributeName === 'doesenter')\n"
     "    {\n"
-    "        // if set to true, the component manager will call this component with doEnterDown\n"
+    "        // ToDo: if set to true, the component manager will call this component with doEnterDown\n"
     "        // and doEnterUp when the enter key goes up or down if it is focussed\n"
     "    }\n"
     "    else if (attributeName === 'styleable')\n"
@@ -13040,24 +13196,30 @@ BOOL isJSBoolean(NSString *s)
     "    }\n"
     "    else if (attributeName === 'style')\n"
     "    {\n"
-    "        if (me.styleable)\n"
-    "        {\n"
-    "            if ($(me).attr('style'))\n"
-    "            {\n"
-    "                // Dann 'style' ergänzen\n"
-    "\n"
-    "                // Sollte eigentlich nicht passieren, aber zur absoluten Sicherheit:\n"
-    "                if (!$(me).attr('style').endsWith(';'))\n"
-    "                    value = ';' + value;\n"
-    "\n"
-    "                $(me).attr('style',$(me).attr('style')+value);\n"
-    "            }\n"
-    "            else\n"
-    "            {\n"
-    "                // Dann 'style' neu setzen\n"
-    "                $(me).attr('style',value);\n"
-    "            }\n"
-    "        }\n"
+    //"        if (me.styleable)\n"
+    //"        {\n"
+    //"            if ($(me).attr('style'))\n"
+    //"            {\n"
+    //"                // Dann 'style' ergänzen\n"
+    //"\n"
+    //"                // Sollte eigentlich nicht passieren, aber zur absoluten Sicherheit:\n"
+    //"                if (!$(me).attr('style').endsWith(';'))\n"
+    //"                    value = ';' + value;\n"
+    //"\n"
+    //"                $(me).attr('style',$(me).attr('style')+value);\n"
+    //"            }\n"
+    //"            else\n"
+    //"            {\n"
+    //"                // Dann 'style' neu setzen\n"
+    //"                $(me).attr('style',value);\n"
+    //"            }\n"
+    //"        }\n"
+    "        $(me).find('input, button').andSelf().filter('input, button').each(function() { if (this.styleable) $(this).addClass(value); });\n"
+    "        $(me).prev('h3').each(function() { if (this.styleable) $(this).addClass(value); }); // <-- Um auch den Header von TabPanels zu erwischen\n"
+    "    }\n"
+    "    else if (attributeName === 'styleclass')\n"
+    "    {\n"
+    "        $(me).addClass(value);\n"
     "    }\n"
     "    else if (attributeName === 'initstage' && value === 'defer')\n"
     "    {\n"
@@ -13066,9 +13228,19 @@ BOOL isJSBoolean(NSString *s)
     "    else if (attributeName === 'align')\n"
     "    {\n"
     "        if (value === 'center')\n"
-    "            this.align = value; // hmmm, Zugriff auf die Original-JS-Propertys erstmal \n"
+    "        {\n"
+    "            // this.align = value; // hmmm, Zugriff auf die Original-JS-Propertys erstmal\n"
+    "            // Richte das Element entsprechend mittig (horizontale Achse) aus\n"
+    "            $(me).css('left',toIntFloor((parseInt($(me).parent().css('width'))-parseInt($(me).outerWidth()))/2));\n"
+    "        }\n"
     "        else if (value === 'right')\n"
-    "            $(me).css('left',$(me).parent().width()-$(me).width());\n"
+    "        {\n"
+    "            $(me).css('left',$(me).parent().width()-$(me).outerWidth());\n"
+    "        }\n"
+    "        else if (value === 'left')\n"
+    "        {\n"
+    "            $(me).css('left', 0); // Default-Value\n"
+    "        }\n"
     "        else\n"
     "            alert('So far unsupported value for align. value: '+value);\n"
     "    }\n"
@@ -13078,6 +13250,9 @@ BOOL isJSBoolean(NSString *s)
     "    }\n"
     "    else if (attributeName == 'visible')\n"
     "    {\n"
+    "        // Muss intern mitgespeichert werden, um es auslesen zu können bei SA\n"
+    "        $(me).data('visible_',value);\n"
+    "\n"
     "        // Sprung bei 'input' und 'select', und 'me' neu belegen, damit er am Ende auch das richtige Element triggert\n"
     "        if (isMultiEl(me))\n"
     "            me = $(me).parent().get(0);\n"
@@ -13140,11 +13315,21 @@ BOOL isJSBoolean(NSString *s)
     "    {\n"
     "        $(me).get(0).disabled = !value;\n"
     "\n"
-    "      // Auch die Textfarbe des zugehörigen Textes anpassen\n"
-    "      if ($(me).attr('type') === 'checkbox' && $(me).next().is('span') && $(me).next().css('color') == 'rgb(0, 0, 0)' && value == false)\n"
-    "          $(me).next().css('color','darkgrey');\n"
-    "      if ($(me).attr('type') === 'checkbox' && $(me).next().is('span') && $(me).next().css('color') == 'rgb(169, 169, 169)' && value == true)\n"
-    "          $(me).next().css('color','black');\n"
+    "        // Auch die Textfarbe des zugehörigen Textes anpassen\n"
+    "        if (($(me).attr('type') === 'checkbox' || $(me).attr('type') === 'radio') && $(me).next().is('span') && $(me).next().css('color') == 'rgb(0, 0, 0)' && value == false)\n"
+    "        {\n"
+    "            $(me).next().css('color','darkgrey');\n"
+    "            $(me).next().css('cursor','default');\n"
+    "            $(me).css('cursor','default');\n"
+    "            $(me).parent().css('cursor','default');\n"
+    "        }\n"
+    "        if (($(me).attr('type') === 'checkbox' || $(me).attr('type') === 'radio') && $(me).next().is('span') && $(me).next().css('color') == 'rgb(169, 169, 169)' && value == true)\n"
+    "        {\n"
+    "            $(me).next().css('color','black');\n"
+    "            $(me).next().css('cursor','pointer');\n"
+    "            $(me).css('cursor','pointer');\n"
+    "            $(me).parent().css('cursor','pointer');\n"
+    "        }\n"
     "    }\n"
     "    else if (attributeName == 'resource')\n"
     "    {\n"
@@ -13484,6 +13669,52 @@ BOOL isJSBoolean(NSString *s)
     "HTMLInputElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
     "HTMLSelectElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
     "HTMLButtonElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'options'                         //\n"
+    "// INIT-ONLY (deswegen ohne setAttribute_()            //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'options', {\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "\n"
+    "        return $(this).data('options_');\n"
+    "    },\n"
+    "    set : function(newValue){ if (isDOM(this)) $(this).data('options_',newValue); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'styleclass'                      //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'styleclass', {\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "\n"
+    "        return $(this).data('styleclass_');\n"
+    "    },\n"
+    "    set : function(newValue){ if (isDOM(this)) this.setAttribute_('styleclass',newValue,undefined,false); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'transition'                      //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(Object.prototype, 'transition', {\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "\n"
+    "        return $(this).data('transition_');\n"
+    "    },\n"
+    "    set : function(newValue){ $(this).data('transition_',newValue); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
     "\n"
     "\n"
     "\n"
@@ -14387,7 +14618,9 @@ BOOL isJSBoolean(NSString *s)
     "\n"
     "        // Bei einem Window entscheidet der content mit über das breiteste Element!\n"
     "        if ($('#'+el.id+'_content').length > 0)\n"
-    "            widths = widths.concat($('#'+el.id+'_content').children().map(function () { return $(this).outerWidth(true)+$(this).position().left; }).get());\n"
+    //"            widths = widths.concat($('#'+el.id+'_content').children().map(function () { return $(this).outerWidth(true)+$(this).position().left; }).get());\n"
+    // Neu, aber ungetestet (Damit es auch bei unsichtbaren Windows klappt Umstieg von position auf css bei 'left'):
+    "            widths = widths.concat($('#'+el.id+'_content').children().map(function () { return $(this).outerWidth(true)+parseInt($(this).css('left')); }).get());\n"
     "\n"
     "        if (!($(el).hasClass('canvas_standard')))\n"
     "            el.setAttribute_('width',getMaxOfArray(widths))\n"
@@ -14418,7 +14651,13 @@ BOOL isJSBoolean(NSString *s)
     "    if ($(el).hasClass('div_window'))\n"
     "        el = $('#'+el.id+'_content').get(0);\n"
     "\n"
-    "    var widths = $(el).children().map(function () { return $(this).outerWidth(); }).get();\n"
+    "    var widths = $(el).children().map(function () {\n"
+    "        // checkboxen und radiobuttons bestehen aus 2 nebeneinander liegenden Elementen. In so einem Fall die gemeinsame Breite ermitteln\n"
+    "        if ($(this).children().length == 2 && $(this).children().eq(0).is('input'))\n"
+    "            return $(this).children().eq(0).outerWidth(true) + $(this).children().eq(1).outerWidth(true)\n"
+    "\n"
+    "        return $(this).outerWidth(true);\n"
+    "    }).get();\n"
     "    if (el.style.width == '') {\n"
     "        el.setAttribute_('width',getMaxOfArray(widths));\n"
     "    }\n"
@@ -14449,7 +14688,7 @@ BOOL isJSBoolean(NSString *s)
     "    if ($(el).hasClass('div_window'))\n"
     "        el = $('#'+el.id+'_content').get(0);\n"
     "\n"
-    "    var heights = $(el).children().map(function () { return $(this).outerHeight(); }).get();\n"
+    "    var heights = $(el).children().map(function () { return $(this).outerHeight(true); }).get();\n"
     "    if (el.style.height == '') {\n"
     "        el.setAttribute_('height',getMaxOfArray(heights));\n"
     "    }\n"
@@ -14470,7 +14709,7 @@ BOOL isJSBoolean(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// Y-Simplelayout: Deswegen die Höhe aller beinhaltenden Elemente erster Ebene ermitteln und dem umgebenden div die Summe als\n"
     "// Höhe mitgeben (aber nur wenn es NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery)\n"
-    "// (Jedoch bei rudElement MUSS es auto bleiben)\n"
+    "// (Jedoch bei rudElement MUSS es 'auto' bleiben, damit es richtig scrollt)\n"
     "var adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY = function (el,spacing) {\n"
     "    if (el.defaultplacement && el.defaultplacement != '')\n"
     "       el = el[el.defaultplacement];\n"
@@ -14568,7 +14807,7 @@ BOOL isJSBoolean(NSString *s)
     "        {\n"
     "            if (@@positionAbsoluteReplaceMe@@)\n"
     "            {\n"
-    "                var topValue = kind.prev().get(0).offsetTop + kind.prev().outerHeight() + spacing;\n"
+    "                var topValue = parseInt(kind.prev().css('top')) + kind.prev().outerHeight() + spacing;\n"
     "            }\n"
     "            else\n"
     "            {\n"
@@ -14578,10 +14817,10 @@ BOOL isJSBoolean(NSString *s)
     "                    // Wenn wir hinten nicht runter gefallen sind\n"
     "                    if ($(el).children().eq(0).position().left != kind.position().left)\n"
     "                    {\n"
-    "                        // topValue = i * spacing + kind.prev().outerHeight()/* + kind.prev().position().top*/;\n"
+    "                        // topValue = i * spacing + kind.prev().outerHeight()/* + parseInt(kind.prev().css('top'))*/;\n"
     "                        // Nur so klappt es bei Beispiel <basebutton>:\n"
-    "                        topValue = spacing + kind.prev().outerHeight() + kind.prev().position().top;\n"
-    "                        // var leftValue = kind.prev().position().left-kind.prev().outerWidth();\n"
+    "                        topValue = spacing + kind.prev().outerHeight() + parseInt(kind.prev().css('top'));\n"
+    "                        // var leftValue = parseInt(kind.prev().css('left'))-kind.prev().outerWidth();\n"
     "                        // leftValue = leftValue * i;\n"
     "                        // nur so klappt es bei Bsp. 27.1 (Constraints in tags):\n"
     "                        var width = 0;\n"
@@ -14591,7 +14830,11 @@ BOOL isJSBoolean(NSString *s)
     "                    }\n"
     "                }\n"
     "            }\n"
-    "            if (!$(kind.prev()).is(':visible')) { topValue = !isNaN(parseInt(kind.prev().css('top'))) ? parseInt(kind.prev().css('top')) : 0; } // Well... Why does this work? (Bsp. <checkbox>)\n"
+    "            // Wenn Element unsichtbar, dann ohne die Höhe des Elements und ohne spacing-Angabe\n"
+    "            // Ich kann nicht direkt auf die Visibility testen, sondern nur auf die explizit von setAttribute_() gesetzte\n"
+    "            if (typeof kind.data('visible_') === 'boolean' && kind.data('visible_') === false) topValue = parseInt(kind.prev().css('top'));\n"
+    "\n"
+    //"            if (!$(kind.prev()).is(':visible')) { topValue = !isNaN(parseInt(kind.prev().css('top'))) ? parseInt(kind.prev().css('top')) : 0; } // Well... Why does this work? (Bsp. <checkbox>)\n"
     "            kind.get(0).setAttribute_('y',topValue+'px');\n"
     "        }\n"
     "\n"
@@ -14641,13 +14884,17 @@ BOOL isJSBoolean(NSString *s)
     "        if (i > 0)\n"
     "        {\n"
     "            if (@@positionAbsoluteReplaceMe@@) {\n"
-    "                var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + spacing;\n"
+    "                var leftValue = parseInt(kind.prev().css('left')) + kind.prev().outerWidth() + spacing;\n"
     "            }\n"
     "            else {\n"
     "                var leftValue = spacing * i;\n"
     "            }\n"
     "\n"
-    "            if (!$(kind.prev()).is(':visible')) { leftValue = !isNaN(parseInt(kind.prev().css('left'))) ? parseInt(kind.prev().css('left')) : 0; } // Well... Why does this work? (Bsp. <checkbox>)\n"
+    "            // Wenn Element unsichtbar, dann ohne die Breite des Elements und ohne spacing-Angabe\n"
+    "            // Ich kann nicht direkt auf die Visibility testen, sondern nur auf die explizit von setAttribute_() gesetzte\n"
+    "            if (typeof kind.data('visible_') === 'boolean' && kind.data('visible_') === false) leftValue = parseInt(kind.prev().css('left'));\n"
+    "\n"
+    //"            if (!$(kind.prev()).is(':visible')) { leftValue = !isNaN(parseInt(kind.prev().css('left'))) ? parseInt(kind.prev().css('left')) : 0; } // Well... Why does this work? (Bsp. <checkbox>)\n"
     "            kind.get(0).setAttribute_('x',leftValue+'px');\n"
     "        }\n"
     "\n"
@@ -14673,6 +14920,8 @@ BOOL isJSBoolean(NSString *s)
     "// setStableBorderLayoutYIn()                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "var setStableBorderLayoutYIn = function (el) {\n"
+    "    $(el).off('onheight.SBLY');\n"
+    "\n"
     "    if ($(el).children().length == 1)\n"
     "        jQuery.noop(); /* no operation */\n"
     "\n"
@@ -14694,8 +14943,10 @@ BOOL isJSBoolean(NSString *s)
     "        $(el).children().eq(1).get(0).setAttribute_('height',$(el).height()-$(el).children().first().height()-$(el).children().eq(2).height());\n"
     "        $(el).children().eq(2).get(0).setAttribute_('y',$(el).children().eq(0).height()+$(el).children().eq(1).height()+'px');\n"
     "        // Noch die Height vom umgebenden anpassen, damit es so hoch ist, wie auch der Inhalt hoch ist\n"
-    "        $(el).get(0).setAttribute_('height',$(el).children().eq(2).position().top+$(el).children().eq(2).height());\n"
-    "  }\n"
+    "        $(el).get(0).setAttribute_('height',parseInt($(el).children().eq(2).css('top'))+$(el).children().eq(2).height());\n"
+    "    }\n"
+    "\n"
+    "    $(el).on('onheight.SBLY', function() { setStableBorderLayoutYIn(el); } );\n"
     "}"
     "\n"
     "\n"
@@ -14704,6 +14955,8 @@ BOOL isJSBoolean(NSString *s)
     "// setStableBorderLayoutXIn()                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "var setStableBorderLayoutXIn = function (el) {\n"
+    "    $(el).off('onwidth.SBLX');\n"
+    "\n"
     "    if ($(el).children().length == 1)\n"
     "        jQuery.noop(); /* no operation */\n"
     "\n"
@@ -14719,17 +14972,19 @@ BOOL isJSBoolean(NSString *s)
     //[o appendFormat:@"    $('#%@').children().eq(2).css('right','0');\n",idUmgebendesElement];
     // Habe Angst, dass er mir so irgendwas zerhaut, weil ich left auf 'auto' setze, aber andere Stellen sich
     // darauf verlassen, dass in 'left' ein numerischer Wert ist. Deswegen lieber so:
-    "    if (!@@positionAbsoluteReplaceMe@@)\n"
-    "        $(el).children().each(function() { $(this).css('position','absolute'); });\n"
+    "        if (!@@positionAbsoluteReplaceMe@@)\n"
+    "            $(el).children().each(function() { $(this).css('position','absolute'); });\n"
     "\n"
     // So funktioniert es besser?
     // "  $(el).children().eq(2).css('left',$(el).children().eq(0).width()+$(el).children().eq(1).width()+'px');\n"
-    "    $(el).children().eq(1).get(0).setAttribute_('x',$(el).children().first().css('width'));\n"
-    "    $(el).children().eq(1).get(0).setAttribute_('width',$(el).width()-$(el).children().first().width()-$(el).children().eq(2).width());\n"
-    "    $(el).children().eq(2).get(0).setAttribute_('x',$(el).width()-$(el).children().eq(2).width()+'px');\n"
-    "    // Noch die Height vom umgebenden anpassen, damit es so hoch ist, wie auch der Inhalt hoch ist\n"
-    "    $(el).get(0).setAttribute_('height',getHeighestHeightOfChilds(el));\n"
-    "  }\n"
+    "        $(el).children().eq(1).get(0).setAttribute_('x',$(el).children().first().css('width'));\n"
+    "        $(el).children().eq(1).get(0).setAttribute_('width',$(el).width()-$(el).children().first().width()-$(el).children().eq(2).width());\n"
+    "        $(el).children().eq(2).get(0).setAttribute_('x',$(el).width()-$(el).children().eq(2).width()+'px');\n"
+    "        // Noch die Height vom umgebenden anpassen, damit es so hoch ist, wie auch der Inhalt hoch ist\n"
+    "        $(el).get(0).setAttribute_('height',getHeighestHeightOfChilds(el));\n"
+    "    }\n"
+    "\n"
+    "    $(el).on('onwidth.SBLX', function() { setStableBorderLayoutXIn(el); } );\n"
     "}\n"
     "\n"
     "\n"
@@ -15206,7 +15461,7 @@ BOOL isJSBoolean(NSString *s)
     "    }\n"
     "    else\n"
     "    {\n"
-    "        if (av[i].startsWith('$')) // = Constraint value\n"
+    "        if (typeof av[i] === 'string' && av[i].startsWith('$')) // = Constraint value\n"
     "        {\n"
     "            av[i] = av[i].substring(2,av[i].length-1);\n"
     "            av[i] = av[i].replace(/immediateparent/g,'getTheParent(true)');\n"

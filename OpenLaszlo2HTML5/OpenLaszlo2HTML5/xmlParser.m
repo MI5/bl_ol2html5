@@ -2790,6 +2790,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 // und die ID wird global verfügbar gemacht.
 - (NSString*) addIdToElement:(NSDictionary*) attributeDict
 {
+    NSLog([NSString stringWithFormat:@"Setting the (attribute 'id' as) HTML-attribute 'id'. Id = '%@'.",self.zuletztGesetzteID]);
+
+
     // Erstmal auch dann setzen, wenn wir eine gegebene ID von OpenLaszlo haben, evtl. zu ändern
     self.idZaehler++;
 
@@ -2811,13 +2814,12 @@ void OLLog(xmlParser *self, NSString* s,...)
     if (self.ignoreAddingIDsBecauseWeAreInClass && ![attributeDict valueForKey:@"id"])
         self.zuletztGesetzteID = [NSString stringWithFormat:@"%@_%ld",ID_REPLACE_STRING,self.idZaehler];
 
-    [self.output appendString:@" id=\""];
-    [self.output appendString:self.zuletztGesetzteID];
-    [self.output appendString:@"\""];
+
+    [self.output appendFormat:@" id=\"%@\"",self.zuletztGesetzteID];
 
 
-    NSLog([NSString stringWithFormat:@"Setting the (attribute 'id' as) HTML-attribute 'id'. Id = '%@'.",self.zuletztGesetzteID]);
-
+    // Ebenfalls noch Elementnamen als HTML5-Annotation adden
+    [self.output appendFormat:@" data-olel=\"%@\"",[self.enclosingElements lastObject]];
 
 
 
@@ -6032,7 +6034,11 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         element_bearbeitet = YES;
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
-        [self.output appendString:@"<div class=\"div_slider\">\n"];
+        [self.output appendString:@"<div class=\"div_slider\" style=\""];
+
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+        [self.output appendString:@"\">\n"];
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
@@ -6066,11 +6072,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Setting the attribute 'maxvalue' as 'maxvalue' for the slider.");
         }
-        [self.output appendString:@" class=\"input_standard\" style=\""];
+        [self.output appendString:@" class=\"input_standard\""];
 
-        [self.output appendString:[self addCSSAttributes:attributeDict]];
-
-        [self.output appendFormat:@"\" onchange=\"%@_output.value=parseInt(this.value)\" value=\"%@\" min=\"%@\" max=\"%@\" step=\"1\" />\n",self.zuletztGesetzteID,value,minvalue,maxvalue];
+        [self.output appendFormat:@" onchange=\"%@_output.value=parseInt(this.value)\" value=\"%@\" min=\"%@\" max=\"%@\" step=\"1\" />\n",self.zuletztGesetzteID,value,minvalue,maxvalue];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         // id ist Fallback für alte Browser
         [self.output appendFormat:@"<output name=\"%@_output\" id=\"%@_output\" for=\"%@\" style=\"position:absolute;left:150px;top:0px;\"></output>\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
@@ -13459,18 +13463,36 @@ BOOL isJSExpression(NSString *s)
     "        // Ich reiche es erstmal einfach durch:\n"
     "        me.index = value;\n"
     "    }\n"
-    "    else if (attributeName === 'spacing' && ($(me).data('ol_el') == 'vbox' || $(me).data('ol_el') == 'hbox')) // <vbox>/<hbox>\n"
+    "    else if (attributeName === 'spacing' && ($(me).data('olel') == 'vbox' || $(me).data('olel') == 'hbox')) // <vbox>/<hbox>\n"
     "    {\n"
     "        $(me).data('spacing_',value);\n"
-    "        adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY(me,value);\n"
-    "        setSimpleLayoutYIn(me,value);\n"
+    "\n"
+    "        if ($(me).data('olel') == 'vbox')\n"
+    "        {\n"
+    "            adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY(me,value);\n"
+    "            setSimpleLayoutYIn(me,value);\n"
+    "        }\n"
+    "        if ($(me).data('olel') == 'hbox')\n"
+    "        {\n"
+    "            adjustWidthOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutX(me,value);\n"
+    "            setSimpleLayoutXIn(me,value);\n"
+    "        }\n"
     "    }\n"
-    "    else if (attributeName === 'inset' && ($(me).data('ol_el') == 'vbox' || $(me).data('ol_el') == 'hbox')) // <vbox>/<hbox>\n"
+    "    else if (attributeName === 'inset' && ($(me).data('olel') == 'vbox' || $(me).data('olel') == 'hbox')) // <vbox>/<hbox>\n"
     "    {\n"
     "        $(me).data('inset_',value);\n"
     "        // inset noch unimplementiert\n"
-    "        adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY(me,me.spacing);\n"
-    "        setSimpleLayoutYIn(me,me.spacing);\n"
+    "\n"
+    "        if ($(me).data('olel') == 'vbox')\n"
+    "        {\n"
+    "            adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY(me,me.spacing);\n"
+    "            setSimpleLayoutYIn(me,me.spacing);\n"
+    "        }\n"
+    "        if ($(me).data('olel') == 'hbox')\n"
+    "        {\n"
+    "            adjustWidthOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutX(me,me.spacing);\n"
+    "            setSimpleLayoutXIn(me,me.spacing);\n"
+    "        }\n"
     "    }\n"
     "    else\n"
     "    {\n"

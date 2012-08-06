@@ -44,7 +44,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -3188,7 +3188,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 // Muss rückwärts gesetzt werden, weil die Höhe der Kinder ja bereits bekannt sein muss!
--(void) korrigiereHoeheUndBreiteDesUmgebendenDivBeiSimpleLayoutX
+-(void) korrigiereHoeheUndBreiteDesUmgebendenDivBeiSimpleLayoutX:(NSString*)spacing
 {
     NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
@@ -3206,7 +3206,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Auf sowas erstmal zu kommen.... oh man.
     // Neu: Ich richte es immer korrekt aus, selbst bei position:absolute muss ich nachhelfen!
     // Deswegen die Einschränkung auf position:relative unten auskommentiert
-    [s appendFormat:@"  adjustWidthOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutX(%@,%@);\n",self.zuletztGesetzteID,[self.simplelayout_x_spacing lastObject]];
+    [s appendFormat:@"  adjustWidthOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutX(%@,%@);\n",self.zuletztGesetzteID,spacing];
 
 
     // An den Anfang des Strings setzen
@@ -3332,6 +3332,15 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 - (void) becauseOfSimpleLayoutXMoveTheChildrenOfElement:(NSString*)elem withSpacing:(NSString*)spacing andAttributes:(NSDictionary*)attributeDict
 {
+    /*******************/
+    // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe
+    // der beinhaltenden Elemente an.
+    // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
+    // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
+    [self korrigiereHoeheUndBreiteDesUmgebendenDivBeiSimpleLayoutX:spacing];
+    /*******************/
+
+
     // Bricht Beispiel 27.6
     //elem = [self korrigiereElemBeiWindow:elem];
 
@@ -3367,6 +3376,15 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 - (void) becauseOfSimpleLayoutYMoveTheChildrenOfElement:(NSString*)elem withSpacing:(NSString*)spacing andAttributes:(NSDictionary*)attributeDict
 {
+    /*******************/
+    // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe
+    // der beinhaltenden Elemente an.
+    // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
+    // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
+    [self korrigiereBreiteUndHoeheDesUmgebendenDivBeiSimpleLayoutY:spacing];
+    /*******************/
+
+
     // Bricht Beispiel 27.6
     //elem = [self korrigiereElemBeiWindow:elem];
 
@@ -3848,15 +3866,6 @@ didStartElement:(NSString *)elementName
             self.simplelayout_y_tiefe++;
 
 
-            /*******************/
-            // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe
-            // der beinhaltenden Elemente an.
-            // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
-            // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
-            [self korrigiereBreiteUndHoeheDesUmgebendenDivBeiSimpleLayoutY:[self.simplelayout_y_spacing lastObject]];
-            /*******************/
-
-
             [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2] withSpacing:spacing andAttributes:attributeDict];
         }
 
@@ -3878,15 +3887,6 @@ didStartElement:(NSString *)elementName
 
             // SimpleLayout-Tiefenzähler (x) um 1 erhöhen
             self.simplelayout_x_tiefe++;
-
-
-            /*******************/
-            // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe
-            // der beinhaltenden Elemente an.
-            // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
-            // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
-            [self korrigiereHoeheUndBreiteDesUmgebendenDivBeiSimpleLayoutX];
-            /*******************/
 
 
             [self becauseOfSimpleLayoutXMoveTheChildrenOfElement:[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2] withSpacing:spacing andAttributes:attributeDict];
@@ -4903,8 +4903,6 @@ didStartElement:(NSString *)elementName
 
         if (![attributeDict valueForKey:@"layout"])
         {
-            [self korrigiereBreiteUndHoeheDesUmgebendenDivBeiSimpleLayoutY:@"0"];
-
             [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:@"0" andAttributes:attributeDict];
         }
 
@@ -5570,7 +5568,12 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
         // Bei onclick die this-Abfrage damit es keine unendlichkeits-Schleige gibt, falls man gleichzeitig auch auf
         // den Button oder das span innerhalb des divs kommt
-        [self.output appendString:@"<div class=\"div_checkbox\" onclick=\"if (this == event.target) $(this).children(':first').trigger('click');\">\n"];
+        [self.output appendString:@"<div class=\"div_checkbox\" onclick=\"if (this == event.target) $(this).children(':first').trigger('click');\""];
+
+
+        [self.output appendString:@" style=\""];
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+        [self.output appendString:@"\">\n"];
 
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
@@ -5578,18 +5581,14 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
         NSString *theId =[self addIdToElement:attributeDict];
 
+        [self.output appendString:@"/>\n"];
 
 
-        [self.output appendString:@" style=\""];
-        
-        [self.output appendString:[self addCSSAttributes:attributeDict]];
-        
-        [self.output appendString:@"\" />\n"];
 
 
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"<span class=\"div_text\" onclick=\"$(this).prev().trigger('click');\""];
+        [self.output appendString:@"<span class=\"div_text\" onclick=\"$(this).prev().trigger('click');\" style=\"top:2px;left:20px;\""];
         [self.output appendString:[self addTitlewidth:attributeDict]];
         [self.output appendString:@">"];
 
@@ -12072,7 +12071,7 @@ BOOL isJSExpression(NSString *s)
     "            return document.createTextNode(text); // Untested\n"
     "        }\n"
     "        this.setData = function(newdata) {\n"
-    "            this.setAttribute('data',newdata);\n"
+    "            this.setAttribute_('data',newdata);\n"
     "        }\n"
     "\n"
     "        var el = document.createTextNode(s);\n"
@@ -13112,8 +13111,8 @@ BOOL isJSExpression(NSString *s)
     "            value = value + 'px';\n"
     "\n"
     "        $(me).css('width',value);\n"
-    //"        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
-    //"        $(me).get(0).myWidth = value;\n"
+    "\n"
+    "        $(me).data('widthOnlySetByHelperFn',false);\n"
     "    }\n"
     "    else if (attributeName == 'height')\n"
     "    {\n"
@@ -13125,8 +13124,8 @@ BOOL isJSExpression(NSString *s)
     "            value = value + 'px';\n"
     "\n"
     "        $(me).css('height',value);\n"
-    //"        // Zusätzlich den setter setzen, falls die Variable gewatcht wird!\n"
-    //"        $(me).get(0).myHeight = value;\n"
+    "\n"
+    "        $(me).data('heightOnlySetByHelperFn',false);\n"
     "    }\n"
     "    else if (attributeName === 'clip' && value === false)\n"
     "    {\n"
@@ -13454,11 +13453,24 @@ BOOL isJSExpression(NSString *s)
     "            });\n"
     "        }\n"
     "    }\n"
-    "    else if (attributeName == 'index')\n"
+    "    else if (attributeName === 'index')\n"
     "    {\n"
     "        // Noch ka, wird von GFlender benutzt, in der Klasse baserollUpDownContainer. Wo das Attribut herkommt: unklar!\n"
     "        // Ich reiche es erstmal einfach durch:\n"
     "        me.index = value;\n"
+    "    }\n"
+    "    else if (attributeName === 'spacing' && ($(me).data('ol_el') == 'vbox' || $(me).data('ol_el') == 'hbox')) // <vbox>/<hbox>\n"
+    "    {\n"
+    "        $(me).data('spacing_',value);\n"
+    "        adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY(me,value);\n"
+    "        setSimpleLayoutYIn(me,value);\n"
+    "    }\n"
+    "    else if (attributeName === 'inset' && ($(me).data('ol_el') == 'vbox' || $(me).data('ol_el') == 'hbox')) // <vbox>/<hbox>\n"
+    "    {\n"
+    "        $(me).data('inset_',value);\n"
+    "        // inset noch unimplementiert\n"
+    "        adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY(me,me.spacing);\n"
+    "        setSimpleLayoutYIn(me,me.spacing);\n"
     "    }\n"
     "    else\n"
     "    {\n"
@@ -13467,13 +13479,12 @@ BOOL isJSExpression(NSString *s)
     "        // Vorher aber Test ob die Property auch vorher definiert wurde! Sonst läuft wohl etwas schief\n"
     "        if (attributeName === 'zusammenveranlagung' ||\n"
     "            attributeName === 'titlewidth' ||\n"
-    "            attributeName === 'spacing' ||\n"
     "            attributeName === 'controlwidth' ||\n"
     "            attributeName === 'inset_y' ||\n"
     "            attributeName === 'focused' ||\n"
+    "            attributeName === 'spacing' ||\n"
     "            attributeName === 'isopen' ||\n"
     "            attributeName === 'parentnumber' ||\n"
-    "            attributeName === 'index' ||\n"
     "            attributeName === 'season' ||\n"
     "            attributeName === 'avalue')\n"
     "        {\n"
@@ -13602,8 +13613,8 @@ BOOL isJSExpression(NSString *s)
     "var animateFunction = function (prop,to,duration,isRelative,moreArgs) {\n"
     "    if (prop === undefined)\n"
     "        throw new Error('animate() - First argument should not be undefined');\n"
-    "    if (prop !== 'x' && prop !== 'y' && prop !== 'width' && prop !== 'height' && prop !== 'rotation' && prop !== 'alpha')\n"
-    "        throw new Error('animate() - First argument must contain one of the following values: x, y, width, height, rotation or alpha');\n"
+    "    if (prop !== 'x' && prop !== 'y' && prop !== 'width' && prop !== 'height' && prop !== 'rotation' && prop !== 'alpha' && prop !== 'spacing')\n"
+    "        throw new Error('animate() - First argument must contain one of the following values: x, y, width, height, rotation or alpha (or spacing on vbox/hbox)');\n"
     "    if (prop === 'x') prop = 'left';\n"
     "    if (prop === 'y') prop = 'top';\n"
     "\n"
@@ -13627,7 +13638,19 @@ BOOL isJSExpression(NSString *s)
     "    p[prop] = to;\n"
     "\n"
     "    // Der eigentliche Aufruf der Animation:\n"
-    "    $(this).animate(p, duration);\n"
+    "    if (prop !== 'spacing')\n"
+    "    {\n"
+    "        $(this).animate(p, duration);\n"
+    "    }\n"
+    "    else\n"
+    "    {\n"
+    "        var from = this.spacing;\n"
+    "        var delta = from - to;\n"
+    "\n"
+    "        // $(this).animate({ spacing : 1 }, { duration : duration }); // <-- Doesn't work. Iwie landet falsches this im setter\n"
+    "        // opacity, um einfach nur irgendwas (nicht) zu animieren, die eigentliche Animation dann über step\n"
+    "        $(this).animate({ opacity : $(this).css('opacity') }, { duration : duration, step : function(now,fx) { this.setAttribute_('spacing',from - delta * fx.state); } });\n"
+    "    }\n"
     "\n"
     "\n"
     "    return new lz.animator();\n"
@@ -13670,11 +13693,12 @@ BOOL isJSExpression(NSString *s)
     "HTMLSelectElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
     "HTMLButtonElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
     "\n"
+    "// Bricht leider irgendwas in jQuery, deswegen 'myOptions'\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Getter/Setter for 'options'                         //\n"
+    "// Getter/Setter for 'myOptions'                       //\n"
     "// INIT-ONLY (deswegen ohne setAttribute_()            //\n"
     "/////////////////////////////////////////////////////////\n"
-    "Object.defineProperty(Object.prototype, 'options', {\n"
+    "Object.defineProperty(Object.prototype, 'myOptions', {\n"
     "    get : function(){\n"
     "        if (!isDOM(this)) return undefined;\n"
     "\n"
@@ -13716,40 +13740,6 @@ BOOL isJSExpression(NSString *s)
     "});\n"
     "\n"
     "\n"
-    "\n"
-    "\n"
-    "/////////////////////////////////////////////////////////\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// Methoden von <div> (OL: <view>)                     //\n"
-    "/////////////////////////////////////////////////////////\n"
-    "////////////////////////INCOMPLETE///////////////////////\n"
-    "/////////////////////////////////////////////////////////\n"
-    "\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// sendToBack() - nachimplementiert                    //\n"
-    "/////////////////////////////////////////////////////////\n"
-    "var sendToBackFunction = function (oThis) {\n"
-    "    $(this).css('z-index','-1');\n"
-    "}\n"
-    "\n"
-    "HTMLDivElement.prototype.sendToBack = sendToBackFunction;\n"
-    "HTMLInputElement.prototype.sendToBack = sendToBackFunction;\n"
-    "HTMLSelectElement.prototype.sendToBack = sendToBackFunction;\n"
-    "HTMLButtonElement.prototype.sendToBack = sendToBackFunction;\n"
-    "\n"
-    "\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// bringToFront() - nachimplementiert                  //\n"
-    "/////////////////////////////////////////////////////////\n"
-    "var bringToFrontFunction = function (oThis) {\n"
-    "    $(this).css('zIndex',\n"
-    "        Math.max.apply(null, $.map($('div:first').find('*'), function(e,i) { return e.style.zIndex; }))+1);\n"
-    "}\n"
-    "\n"
-    "HTMLDivElement.prototype.bringToFront = bringToFrontFunction;\n"
-    "HTMLInputElement.prototype.bringToFront = bringToFrontFunction;\n"
-    "HTMLSelectElement.prototype.bringToFront = bringToFrontFunction;\n"
-    "HTMLButtonElement.prototype.bringToFront = bringToFrontFunction;\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -14153,6 +14143,8 @@ BOOL isJSExpression(NSString *s)
     "HTMLCanvasElement.prototype.stroke = function() { this.getContext('2d').stroke(); };\n"
     "\n"
     "\n"
+    "\n"
+    "\n"
     "/////////////////////////////////////////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
     "// Attribute/Methoden von <input> (OL: <basevaluecomponent>)//\n"
@@ -14194,6 +14186,79 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Attribute/Methoden von <div> (OL: <vbox> / <hbox>)  //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////COMPLETE////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'inset'                           //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(HTMLElement.prototype, 'inset', {\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "\n"
+    "        return $(this).data('inset_');\n"
+    "    },\n"
+    "    set : function(newValue){ this.setAttribute_('inset',newValue,undefined,false); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'spacing' (HTMLElement.prototype, bricht sonst jQuery) //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(HTMLElement.prototype, 'spacing', {\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "\n"
+    "        return $(this).data('spacing_');\n"
+    "    },\n"
+    "    set : function(newValue){ $(this).data('spacing_',newValue); /* this.setAttribute_('spacing',newValue,undefined,false); */ },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Methoden von <div> (OL: <view>)                     //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "////////////////////////INCOMPLETE///////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// sendToBack() - nachimplementiert                    //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var sendToBackFunction = function (oThis) {\n"
+    "    $(this).css('z-index','-1');\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.sendToBack = sendToBackFunction;\n"
+    "HTMLInputElement.prototype.sendToBack = sendToBackFunction;\n"
+    "HTMLSelectElement.prototype.sendToBack = sendToBackFunction;\n"
+    "HTMLButtonElement.prototype.sendToBack = sendToBackFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// bringToFront() - nachimplementiert                  //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var bringToFrontFunction = function (oThis) {\n"
+    "    $(this).css('zIndex',\n"
+    "        Math.max.apply(null, $.map($('div:first').find('*'), function(e,i) { return e.style.zIndex; }))+1);\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.bringToFront = bringToFrontFunction;\n"
+    "HTMLInputElement.prototype.bringToFront = bringToFrontFunction;\n"
+    "HTMLSelectElement.prototype.bringToFront = bringToFrontFunction;\n"
+    "HTMLButtonElement.prototype.bringToFront = bringToFrontFunction;\n"
     "\n"
     "\n"
     "\n"
@@ -14658,8 +14723,9 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        return $(this).outerWidth(true);\n"
     "    }).get();\n"
-    "    if (el.style.width == '') {\n"
+    "    if (el.style.width == '' || $(el).data('widthOnlySetByHelperFn')) {\n"
     "        el.setAttribute_('width',getMaxOfArray(widths));\n"
+    "        $(el).data('widthOnlySetByHelperFn',true);\n"
     "    }\n"
     "\n"
     "    // Falls es geklonte Geschwister gibt:\n"
@@ -14726,8 +14792,13 @@ BOOL isJSExpression(NSString *s)
     // Keine Ahnung, aber wenn ich es auskommentiere, stimmt es mit dem Original eher überein.
     "    sumH += ($(el).children().length-1) * spacing;\n"
     "    if (!($(el).hasClass('div_rudElement')))\n"
-    "        if (el.style.height == '')\n"
+    "    {\n"
+    "        if (el.style.height == '' || $(el).data('heightOnlySetByHelperFn'))\n"
+    "        {\n"
     "            el.setAttribute_('height',sumH);\n"
+    "            $(el).data('heightOnlySetByHelperFn',true);\n"
+    "        }\n"
+    "    }\n"
     "\n"
     "    // Falls es geklonte Geschwister gibt:\n"
     "    var c = 2;\n"
@@ -14782,6 +14853,9 @@ BOOL isJSExpression(NSString *s)
     "// setSimpleLayoutYIn()                                //\n"
     "/////////////////////////////////////////////////////////\n"
     "var setSimpleLayoutYIn = function (el,spacing) {\n"
+    "    // spacing speichern, z. B. falls spacing animiert wird, brauche ich den aktuellen spacing-Wert\n"
+    "    $(el).data('spacing_',spacing);\n"
+    "\n"
     "    if (el.defaultplacement && el.defaultplacement != '')\n"
     "       el = el[el.defaultplacement];\n"
     "\n"
@@ -14802,41 +14876,38 @@ BOOL isJSExpression(NSString *s)
     "        $(kind).off('onheight.SAY');\n"
     "        $(kind).off('onvisible.SAY');\n"
     "\n"
-    "        // Es soll erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"
-    "        if (i > 0)\n"
+    "        if (@@positionAbsoluteReplaceMe@@)\n"
     "        {\n"
-    "            if (@@positionAbsoluteReplaceMe@@)\n"
+    "            var topValue = parseInt(kind.prev().css('top')) + kind.prev().outerHeight() + spacing;\n"
+    "            if (i == 0) topValue = 0; // Korrektur des ersten Kindes, falls vorher abweichender 'y'-Wert gesetzt wurde\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "            var topValue = i * spacing;\n"
+    "            if (kind.css('position') === 'relative')\n"
     "            {\n"
-    "                var topValue = parseInt(kind.prev().css('top')) + kind.prev().outerHeight() + spacing;\n"
-    "            }\n"
-    "            else\n"
-    "            {\n"
-    "                var topValue = i * spacing;\n"
-    "                if (kind.css('position') === 'relative')\n"
+    "                // Wenn wir hinten nicht runter gefallen sind\n"
+    "                if ($(el).children().eq(0).position().left != kind.position().left)\n"
     "                {\n"
-    "                    // Wenn wir hinten nicht runter gefallen sind\n"
-    "                    if ($(el).children().eq(0).position().left != kind.position().left)\n"
-    "                    {\n"
-    "                        // topValue = i * spacing + kind.prev().outerHeight()/* + parseInt(kind.prev().css('top'))*/;\n"
-    "                        // Nur so klappt es bei Beispiel <basebutton>:\n"
-    "                        topValue = spacing + kind.prev().outerHeight() + parseInt(kind.prev().css('top'));\n"
-    "                        // var leftValue = parseInt(kind.prev().css('left'))-kind.prev().outerWidth();\n"
-    "                        // leftValue = leftValue * i;\n"
-    "                        // nur so klappt es bei Bsp. 27.1 (Constraints in tags):\n"
-    "                        var width = 0;\n"
-    "                        kind.prevAll().each(function() { width += $(this).outerWidth(); });\n"
-    "                        var leftValue = width * -1;\n"
-    "                        kind.get(0).setAttribute_('x',leftValue+'px');\n"
-    "                    }\n"
+    "                    // topValue = i * spacing + kind.prev().outerHeight()/* + parseInt(kind.prev().css('top'))*/;\n"
+    "                    // Nur so klappt es bei Beispiel <basebutton>:\n"
+    "                    topValue = spacing + kind.prev().outerHeight() + parseInt(kind.prev().css('top'));\n"
+    "                    // var leftValue = parseInt(kind.prev().css('left'))-kind.prev().outerWidth();\n"
+    "                    // leftValue = leftValue * i;\n"
+    "                    // nur so klappt es bei Bsp. 27.1 (Constraints in tags):\n"
+    "                    var width = 0;\n"
+    "                    kind.prevAll().each(function() { width += $(this).outerWidth(); });\n"
+    "                    var leftValue = width * -1;\n"
+    "                    kind.get(0).setAttribute_('x',leftValue+'px');\n"
     "                }\n"
     "            }\n"
-    "            // Wenn Element unsichtbar, dann ohne die Höhe des Elements und ohne spacing-Angabe\n"
-    "            // Ich kann nicht direkt auf die Visibility testen, sondern nur auf die explizit von setAttribute_() gesetzte\n"
-    "            if (typeof kind.data('visible_') === 'boolean' && kind.data('visible_') === false) topValue = parseInt(kind.prev().css('top'));\n"
-    "\n"
-    //"            if (!$(kind.prev()).is(':visible')) { topValue = !isNaN(parseInt(kind.prev().css('top'))) ? parseInt(kind.prev().css('top')) : 0; } // Well... Why does this work? (Bsp. <checkbox>)\n"
-    "            kind.get(0).setAttribute_('y',topValue+'px');\n"
     "        }\n"
+    "        // Wenn Element unsichtbar, dann ohne die Höhe des Elements und ohne spacing-Angabe\n"
+    "        // Ich kann nicht direkt auf die Visibility testen, sondern nur auf die explizit von setAttribute_() gesetzte\n"
+    "        if (typeof kind.data('visible_') === 'boolean' && kind.data('visible_') === false) topValue = parseInt(kind.prev().css('top'));\n"
+    "\n"
+    //"        if (!$(kind.prev()).is(':visible')) { topValue = !isNaN(parseInt(kind.prev().css('top'))) ? parseInt(kind.prev().css('top')) : 0; } // Well... Why does this work? (Bsp. <checkbox>)\n"
+    "        kind.get(0).setAttribute_('y',topValue+'px');\n"
     "\n"
     "        // Falls es geklonte Geschwister gibt:\n"
     "        var c = 2;\n"
@@ -14860,6 +14931,9 @@ BOOL isJSExpression(NSString *s)
     "// setSimpleLayoutXIn()                                //\n"
     "/////////////////////////////////////////////////////////\n"
     "var setSimpleLayoutXIn = function (el,spacing) {\n"
+    "    // spacing speichern, z. B. falls spacing animiert wird, brauche ich den aktuellen spacing-Wert\n"
+    "    $(el).data('spacing_',spacing);\n"
+    "\n"
     "    if (el.defaultplacement && el.defaultplacement != '')\n"
     "       el = el[el.defaultplacement];\n"
     "\n"
@@ -14880,23 +14954,20 @@ BOOL isJSExpression(NSString *s)
     "        $(kind).off('onwidth.SAX');\n"
     "        $(kind).off('onvisible.SAX');\n"
     "\n"
-    "        // Es soll erst bei 1 losgehen (Das erste Kind sitzt schon richtig)\n"
-    "        if (i > 0)\n"
-    "        {\n"
-    "            if (@@positionAbsoluteReplaceMe@@) {\n"
-    "                var leftValue = parseInt(kind.prev().css('left')) + kind.prev().outerWidth() + spacing;\n"
-    "            }\n"
-    "            else {\n"
-    "                var leftValue = spacing * i;\n"
-    "            }\n"
+    "        if (@@positionAbsoluteReplaceMe@@) {\n"
+    "            var leftValue = parseInt(kind.prev().css('left')) + kind.prev().outerWidth() + spacing;\n"
+    "            if (i == 0) leftValue = 0; // Korrektur des ersten Kindes, falls vorher abweichender 'x'-Wert gesetzt wurde\n"
+    "        }\n"
+    "        else {\n"
+    "            var leftValue = spacing * i;\n"
+    "        }\n"
     "\n"
-    "            // Wenn Element unsichtbar, dann ohne die Breite des Elements und ohne spacing-Angabe\n"
-    "            // Ich kann nicht direkt auf die Visibility testen, sondern nur auf die explizit von setAttribute_() gesetzte\n"
-    "            if (typeof kind.data('visible_') === 'boolean' && kind.data('visible_') === false) leftValue = parseInt(kind.prev().css('left'));\n"
+    "        // Wenn Element unsichtbar, dann ohne die Breite des Elements und ohne spacing-Angabe\n"
+    "        // Ich kann nicht direkt auf die Visibility testen, sondern nur auf die explizit von setAttribute_() gesetzte\n"
+    "        if (typeof kind.data('visible_') === 'boolean' && kind.data('visible_') === false) leftValue = parseInt(kind.prev().css('left'));\n"
     "\n"
     //"            if (!$(kind.prev()).is(':visible')) { leftValue = !isNaN(parseInt(kind.prev().css('left'))) ? parseInt(kind.prev().css('left')) : 0; } // Well... Why does this work? (Bsp. <checkbox>)\n"
-    "            kind.get(0).setAttribute_('x',leftValue+'px');\n"
-    "        }\n"
+    "        kind.get(0).setAttribute_('x',leftValue+'px');\n"
     "\n"
     "        // Falls es geklonte Geschwister gibt:\n"
     "        var c = 2;\n"

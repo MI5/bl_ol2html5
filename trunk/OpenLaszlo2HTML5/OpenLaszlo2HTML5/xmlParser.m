@@ -1705,6 +1705,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 // titlewidth hier extra setzen, außerhalb addCSS, titlewidth bezieht sich  immer auf den Text VOR
 // einem input-Feld und nicht auf das input-Feld selber.
+// @deprecated (sobald alle Klassen ausgewertet werden)
 - (NSMutableString*) addTitlewidth:(NSDictionary*) attributeDict
 {
     NSMutableString *titlewidth = [[NSMutableString alloc] initWithString:@""];
@@ -1714,15 +1715,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.attributeCount++;
         NSLog(@"Setting the attribute 'titlewidth' as width for the leading text of the input-field.");
 
-        [titlewidth appendString:@" style=\"width:"];
-        [titlewidth appendString:[attributeDict valueForKey:@"titlewidth"]];
-        //[titlewidth appendString:@"px;top:3px;"]; // vom Rand wegrücken damit es zentriert ist
-        [titlewidth appendString:@"px\""];
-    }
-    else
-    {
-        // vom Rand wegrückenm damit es zentriert ist
-        //[titlewidth appendString:@" style=\"top:3px;\""];
+        [titlewidth appendFormat:@"width:%@px;",[attributeDict valueForKey:@"titlewidth"]];
     }
 
     return titlewidth;
@@ -3794,6 +3787,7 @@ didStartElement:(NSString *)elementName
 
     if ([elementName isEqualToString:@"window"] ||
         [elementName isEqualToString:@"view"] ||
+        [elementName isEqualToString:@"videoview"] ||
         [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"hbox"] ||
         [elementName isEqualToString:@"vbox"] ||
@@ -4361,6 +4355,61 @@ didStartElement:(NSString *)elementName
 
 
 
+    if ([elementName isEqualToString:@"videoview"])
+    {
+        element_bearbeitet = YES;
+
+        [self.output appendString:@"<video"];
+
+        [self addIdToElement:attributeDict];
+
+        // width und height werden beim HTML5-video-tag gesondert parallel zu CSS und ohne px-Angabe gesetzt.
+        if ([attributeDict valueForKey:@"width"])
+        {
+            [self.output appendFormat:@" width=\"%@\"",[attributeDict valueForKey:@"width"]];
+        }
+        if ([attributeDict valueForKey:@"height"])
+        {
+            [self.output appendFormat:@" height=\"%@\"",[attributeDict valueForKey:@"height"]];
+        }
+
+        if ([attributeDict valueForKey:@"autoplay"])
+        {
+            self.attributeCount++;
+
+            [self.output appendString:@" autoplay=\"autoplay\""];
+        }
+
+        [self.output appendString:@" controls=\"controls\" class=\"div_standard noPointerEvents\" style=\""];
+
+        [self.output appendString:[self addCSSAttributes:attributeDict]];
+
+        [self.output appendString:@"\">\n"];
+
+        if ([attributeDict valueForKey:@"url"])
+        {
+            self.attributeCount++;
+
+            [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+            [self.output appendFormat:@"<source src=\"%@\" type=\"video/mp4\" />\n",[attributeDict valueForKey:@"url"]];
+            [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+            [self.output appendFormat:@"<source src=\"%@\" type=\"video/ogg\" />\n",[attributeDict valueForKey:@"url"]];
+            [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
+            [self.output appendString:@"Your browser does not support HTML5 (video-tag).\n"];
+        }
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+        [self.output appendString:@"</video>\n"];
+
+
+        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
+
+
+        if ([attributeDict valueForKey:@"type"])
+            self.attributeCount++;
+    }
+
+
 
     if ([elementName isEqualToString:@"resource"] || [elementName isEqualToString:@"audio"])
     {
@@ -4382,7 +4431,10 @@ didStartElement:(NSString *)elementName
 
             src = [self onRecursionEnsureValidPath:src];
 
-            
+            // Aber den mit %20 escapeten String, sonst beschwert sich der HTML5-Validator
+            src = [src stringByAddingPercentEscapesUsingEncoding: NSUTF8StringEncoding];
+
+
             [self.jsHeadOutput appendString:@"var "];
             [self.jsHeadOutput appendString:[attributeDict valueForKey:@"name"]];
             [self.jsHeadOutput appendString:@" = \""];
@@ -4769,6 +4821,8 @@ didStartElement:(NSString *)elementName
 
         src = [self onRecursionEnsureValidPath:src];
 
+        // Aber den mit %20 escapeten String, sonst beschwert sich der HTML5-Validator
+        src = [src stringByAddingPercentEscapesUsingEncoding: NSUTF8StringEncoding];
 
         // Erstmal alle frame-Einträge sammeln, weil wir nicht wissen wie viele noch kommen
         [self.collectedFrameResources addObject:src];
@@ -5015,7 +5069,7 @@ didStartElement:(NSString *)elementName
         NSString *theId = [self addIdToElement:attributeDict];
 
 
-        // width und height werden bei HTML5-Canvas gesondert ohne CSS und ohn px-Angabe gesetzt. Warum auch immer
+        // width und height werden bei HTML5-Canvas gesondert ohne CSS und ohne px-Angabe gesetzt. Warum auch immer
         // Ich lasse die width/height-Angabe parallel unten von CSS auswerten, denke das schadet nicht.
         if ([attributeDict valueForKey:@"width"])
         {
@@ -5243,7 +5297,7 @@ didStartElement:(NSString *)elementName
 
         [self addIdToElement:attributeDict];
 
-        [self.output appendString:@"class=\"input_standard\" style=\""];
+        [self.output appendString:@" class=\"input_standard\" style=\""];
 
         // Die Width ist bei input-Feldern regelmäßig zu lang, vermutlich wegen interner
         // border-/padding-/margin-/Angaben bei OpenLaszlo. Deswegen hier vorher Wert abändern.
@@ -5397,9 +5451,9 @@ didStartElement:(NSString *)elementName
 
 
 
-        [self.output appendString:@"<span"];
+        [self.output appendString:@"<span style=\""];
         [self.output appendString:[self addTitlewidth:attributeDict]];
-        [self.output appendString:@">"];
+        [self.output appendString:@"\">"];
 
 
 
@@ -5590,9 +5644,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"<span class=\"div_text\" onclick=\"$(this).prev().trigger('click');\" style=\"top:2px;left:20px;\""];
+        [self.output appendString:@"<span class=\"div_text\" onclick=\"$(this).prev().trigger('click');\" style=\"top:2px;left:20px;"];
         [self.output appendString:[self addTitlewidth:attributeDict]];
-        [self.output appendString:@">"];
+        [self.output appendString:@"\">"];
 
 
 
@@ -5752,9 +5806,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-        [self.output appendString:@"<span"];
+        [self.output appendString:@"<span style=\""];
         [self.output appendString:[self addTitlewidth:attributeDict]];
-        [self.output appendString:@">"];
+        [self.output appendString:@"\">"];
 
 
 
@@ -5919,9 +5973,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-        [self.output appendString:@"<span"];
+        [self.output appendString:@"<span style=\""];
         [self.output appendString:[self addTitlewidth:attributeDict]];
-        [self.output appendString:@">"];
+        [self.output appendString:@"\">"];
 
 
 
@@ -9122,6 +9176,7 @@ BOOL isJSExpression(NSString *s)
 
 
 
+
     if ([elementName isEqualToString:@"resource"] || [elementName isEqualToString:@"audio"])
     {
         element_geschlossen = YES;
@@ -9208,6 +9263,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"debug"] ||
         [elementName isEqualToString:@"event"] ||
         [elementName isEqualToString:@"slider"] ||
+        [elementName isEqualToString:@"videoview"] ||
         [elementName isEqualToString:@"evaluateclass"])
     {
         element_geschlossen = YES;
@@ -9894,9 +9950,9 @@ BOOL isJSExpression(NSString *s)
 
     // Damit IE 9 auf jeden Fall im IE 9-Modus lädt und nicht irgendeinen Kompatibilitäts-modus
     // Gleichzeitig Fallback auf Google Chrome Frame, sofern installiert.
-    [pre appendString:@"<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge,chrome=1\">\n"];
+    [pre appendString:@"<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge,chrome=1\" />\n"];
 
-    // Nicht HTML5-Konform, aber zum testen um sicherzustellen, dass wir nichts aus dem Cache laden
+    // Die Meta-Angaben sind nicht HTML5-Konform! Aber zum testen um sicherzustellen, dass wir nichts aus dem Cache laden.
     [pre appendString:@"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />\n<meta http-equiv=\"pragma\" content=\"no-cache\" />\n<meta http-equiv=\"cache-control\" content=\"no-cache\" />\n<meta http-equiv=\"expires\" content=\"0\" />\n"];
 
     // Viewport für mobile Devices anpassen...
@@ -9999,9 +10055,10 @@ BOOL isJSExpression(NSString *s)
     for(id object in self.allImgPaths)
     {
         // Falls Flash-Dateien als Resource gesetzt wurde, diese ignorieren
-        if (![object hasSuffix:@".swf"])
+        // Auch mp3-files
+        if (![object hasSuffix:@".swf"] && ![object hasSuffix:@".mp3"])
         {
-            [self.output appendFormat:@"<img class=\"img_preload\" src=\"%@\" />\n",object];
+            [self.output appendFormat:@"<img class=\"img_preload\" alt=\"preload\" src=\"%@\" />\n",object];
         }
     }
     [self.output appendString:@"\n"];

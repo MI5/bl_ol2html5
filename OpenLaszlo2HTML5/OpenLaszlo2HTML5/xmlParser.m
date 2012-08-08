@@ -3547,21 +3547,48 @@ didStartElement:(NSString *)elementName
             return;
         }
 
-        if ([elementName isEqualToString:@"font"] ||
-            [elementName isEqualToString:@"img"])
+        if ([elementName isEqualToString:@"img"])
         {
             NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
             [self.textInProgress appendFormat:@"<%@",elementName];
             for (id e in attributeDict)
             {
-                // Alle Elemente in 'font' (color usw...) oder 'img' (src usw...) einfach ausgeben
-                // Nur bei size muss ich gesondert drauf reagieren. Da die HTML-Logik dahinter eine andere ist
-                if ([e isEqualToString:@"size"])
-                    [self.textInProgress appendFormat:@" style=\"font-size:%@px;\"",[attributeDict valueForKey:e]];
-                else
-                    [self.textInProgress appendFormat:@" %@=\"%@\"",e,[attributeDict valueForKey:e]];
+                // Alle Elemente in 'img' (src usw...) einfach ausgeben
+                [self.textInProgress appendFormat:@" %@=\"%@\"",e,[attributeDict valueForKey:e]];
             }
             [self.textInProgress appendString:@">"];
+            return;
+        }
+
+        if ([elementName isEqualToString:@"font"])
+        {
+            NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
+            // ToDo: Hier noch das Float überschrieben, was global gesetzt wird. Eines Tages sollte das globale Float
+            // verschwinden...
+            [self.textInProgress appendFormat:@"<span style=\"float:none;"];
+            for (id e in attributeDict)
+            {
+                // Alle Elemente in 'font' (color usw...) als css ausgeben, da das <font>-tag deprecated ist
+                // Bei size muss ich gesondert drauf reagieren. Da die HTML-Logik dahinter eine andere ist
+                if ([e isEqualToString:@"size"])
+                {
+                    [self.textInProgress appendFormat:@"font-size:%@px;",[attributeDict valueForKey:e]];
+                }
+                else if ([e isEqualToString:@"face"])
+                {
+                    NSString *v = [attributeDict valueForKey:e];
+                    // Falls die font Leerzeichen beinhaltet (z. B. 'Times New Roman', dann Hochkomma drum herum
+                    if ([v rangeOfString:@" "].location != NSNotFound)
+                        v = [NSString stringWithFormat:@"'%@'",v];
+
+                    [self.textInProgress appendFormat:@"font-family:%@;",v];
+                }
+                else // 'color' insbesondere
+                {
+                    [self.textInProgress appendFormat:@"%@:%@;",e,[attributeDict valueForKey:e]];
+                }
+            }
+            [self.textInProgress appendString:@"\">"];
             return;
         }
     }
@@ -4431,6 +4458,9 @@ didStartElement:(NSString *)elementName
 
             src = [self onRecursionEnsureValidPath:src];
 
+            // Die Res 'btn_weiter_up' hat bei GFlender hinten Leerzeichen in der src-Angabe. Dies scheint OL zu tolerien
+            src = [src stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
             // Aber den mit %20 escapeten String, sonst beschwert sich der HTML5-Validator
             src = [src stringByAddingPercentEscapesUsingEncoding: NSUTF8StringEncoding];
 
@@ -4821,6 +4851,9 @@ didStartElement:(NSString *)elementName
 
         src = [self onRecursionEnsureValidPath:src];
 
+        // Die Res 'btn_weiter_up' hat bei GFlender hinten Leerzeichen in der src-Angabe. Dies scheint OL zu tolerien
+        src = [src stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
         // Aber den mit %20 escapeten String, sonst beschwert sich der HTML5-Validator
         src = [src stringByAddingPercentEscapesUsingEncoding: NSUTF8StringEncoding];
 
@@ -5062,8 +5095,23 @@ didStartElement:(NSString *)elementName
         NSString *canvasWidth = [attributeDict valueForKey:@"width"] ? [attributeDict valueForKey:@"width"] : @"300";
         NSString *canvasHeight = [attributeDict valueForKey:@"height"] ? [attributeDict valueForKey:@"height"] : @"150";
 
+        // Bei constraint, trotzdem erstmal default-werte einsetzen
+        // Die eigentliche constraint wird ja unten in 'addCSS' erkannt und dann mit berücksichtigt von setAttribute_()
+        if ([canvasWidth hasPrefix:@"$"])
+        {
+            canvasWidth = @"300";
+        }
+        if ([canvasHeight hasPrefix:@"$"])
+        {
+            canvasHeight = @"150";
+        }
+
+
         // Weil IN canvas gemäß OL noch Elemente liegen können, ein Extra div drum. Gemäß HTML5 geht das nämlich nicht.
-        [self.output appendFormat:@"<div class=\"canvas_element noPointerEvents\" style=\"width:%@px;height:%@px;\"><canvas",canvasWidth,canvasHeight];
+        [self.output appendFormat:@"<div class=\"canvas_element noPointerEvents\" style=\"width:%@px;height:%@px;\">\n",canvasWidth,canvasHeight];
+
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+        [self.output appendString:@"<canvas"];
 
         // id hinzufügen und gleichzeitg speichern
         NSString *theId = [self addIdToElement:attributeDict];
@@ -5071,14 +5119,9 @@ didStartElement:(NSString *)elementName
 
         // width und height werden bei HTML5-Canvas gesondert ohne CSS und ohne px-Angabe gesetzt. Warum auch immer
         // Ich lasse die width/height-Angabe parallel unten von CSS auswerten, denke das schadet nicht.
-        if ([attributeDict valueForKey:@"width"])
-        {
-            [self.output appendFormat:@" width=\"%@\"",canvasWidth];
-        }
-        if ([attributeDict valueForKey:@"height"])
-        {
-            [self.output appendFormat:@" height=\"%@\"",canvasHeight];
-        }
+        [self.output appendFormat:@" width=\"%@\"",canvasWidth];
+        [self.output appendFormat:@" height=\"%@\"",canvasHeight];
+
 
 
         [self.output appendString:@" class=\"div_standard noPointerEvents\" style=\""];
@@ -7159,7 +7202,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // Hier drin sammle ich erstmal die Ausgabe
         NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
-
         if ([[attributeDict valueForKey:@"axis"] isEqualToString:@"x"])
         {
             [o appendFormat:@"\n  // Setting a 'stableborderlayout' (axis:x) in '%@':\n",idUmgebendesElement];
@@ -7171,10 +7213,46 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             [o appendFormat:@"  setStableBorderLayoutYIn(%@);\n",idUmgebendesElement];
         }
 
-
         [self.jQueryOutput appendString:o];
     }
 
+    if ([elementName isEqualToString:@"constantlayout"])
+    {
+        element_bearbeitet = YES;
+
+        if ([attributeDict valueForKey:@"axis"] && ([[attributeDict valueForKey:@"axis"] isEqualToString:@"x"] || [[attributeDict valueForKey:@"axis"] isEqualToString:@"y"]))
+        {
+            self.attributeCount++;
+            NSLog(@"Using the attribute 'axis' of 'constantlayout' to determine the axis.");
+        }
+
+        NSString *value = @"0";
+        if ([attributeDict valueForKey:@"value"])
+        {
+            self.attributeCount++;
+            NSLog(@"Using the attribute 'value' of 'constantlayout' to determine the spacing.");
+
+            value =[attributeDict valueForKey:@"value"];
+        }
+
+        NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+        // Hier drin sammle ich erstmal die Ausgabe
+        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
+
+        if ([[attributeDict valueForKey:@"axis"] isEqualToString:@"x"])
+        {
+            [o appendFormat:@"\n  // Setting a 'constantlayout' (axis:x) in '%@':\n",idUmgebendesElement];
+            [o appendFormat:@"  setConstantLayoutXIn(%@,%@);\n",idUmgebendesElement,value];
+        }
+        else
+        {
+            [o appendFormat:@"\n  // Setting a 'constantlayout' (axis:y) in '%@':\n",idUmgebendesElement];
+            [o appendFormat:@"  setConstantLayoutYIn(%@,%@);\n",idUmgebendesElement,value];
+        }
+
+        [self.jQueryOutput appendString:o];
+    }
 
     if ([elementName isEqualToString:@"scrollview"])
     {
@@ -8629,7 +8707,7 @@ BOOL isJSExpression(NSString *s)
         {
             element_geschlossen = YES;
 
-            [self.textInProgress appendString:@"</font>"];
+            [self.textInProgress appendString:@"</span>"];
 
             // Für den Fall raus! Sonst überschreibt er weAreCollectingTextAndThereMayBeHTMLTags
             if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
@@ -9257,6 +9335,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"int_vscrollbar"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
         [elementName isEqualToString:@"stableborderlayout"] ||
+        [elementName isEqualToString:@"constantlayout"] ||
         [elementName isEqualToString:@"scrollview"] ||
         [elementName isEqualToString:@"BDStabsheetselected"] ||
         [elementName isEqualToString:@"ftdynamicgrid"] ||
@@ -12964,6 +13043,11 @@ BOOL isJSExpression(NSString *s)
     "        // Das Rud-Element/Window-Element hat ein Zwischen-Element, da muss ich dann eine Ebene höher springen.\n"
     "        p = p.parent();\n"
     "    }\n"
+    "    if (!immediate && $(this).data('olel') == 'drawview')\n"
+    "    {\n"
+    "        // Das canvas-Element hat ein (zwei?) Zwischen-Element(e), da muss ich dann eine Ebene höher springen.\n"
+    "        p = p.parent().parent();\n"
+    "    }\n"
     "\n"
     "    return p.get(0);\n"
     //"    }\n"
@@ -13164,9 +13248,6 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "    else if (attributeName == 'width')\n"
     "    {\n"
-    "        if ($(this).is('canvas')) // Bei 'canvas' wird es direkt im Element gesetzt\n"
-    "            $(this).attr('width',value);\n"
-    "\n"
     "        // jQuery doesn't like plain strings containing a number\n"
     "        if (typeof value === 'string' && !value.endsWith('px') && !value.endsWith('%'))\n"
     "            value = value + 'px';\n"
@@ -13174,12 +13255,17 @@ BOOL isJSExpression(NSString *s)
     "        $(me).css('width',value);\n"
     "\n"
     "        $(me).data('widthOnlySetByHelperFn',false);\n"
+    "\n"
+    "        if ($(me).is('canvas'))\n"
+    "        {\n"
+    "            // Attribut 'width' noch mitsetzen\n"
+    "            $(me).attr('width',value);\n"
+    "            // 'canvas' hat ein umgebendes Div. Dort 'width' parallel mitsetzen\n"
+    "            $(me).parent().css('width',value);\n"
+    "        }\n"
     "    }\n"
     "    else if (attributeName == 'height')\n"
     "    {\n"
-    "        if ($(this).is('canvas')) // Bei 'canvas' wird es direkt im Element gesetzt\n"
-    "            $(this).attr('height',value);\n"
-    "\n"
     "        // jQuery doesn't like plain strings containing a number\n"
     "        if (typeof value === 'string' && !value.endsWith('px') && !value.endsWith('%'))\n"
     "            value = value + 'px';\n"
@@ -13187,6 +13273,31 @@ BOOL isJSExpression(NSString *s)
     "        $(me).css('height',value);\n"
     "\n"
     "        $(me).data('heightOnlySetByHelperFn',false);\n"
+    "\n"
+    "        if ($(me).is('canvas'))\n"
+    "        {\n"
+    "            // Attribut 'height' noch mitsetzen\n"
+    "            $(me).attr('height',value);\n"
+    "            // 'canvas' hat ein umgebendes Div. Dort 'height' parallel mitsetzen\n"
+    "            $(me).parent().css('height',value);\n"
+    "        }\n"
+    "    }\n"
+
+    "    else if (attributeName === 'layout' && !value.contains('class'))\n"
+    "    {\n"
+    "        // Alle 'whitespaces' entfernen (welche erlaubt sind), aber zum testen auf den Inhalt von 'value' nerven\n"
+    "        value = value.replace(/\\s/g,'');\n"
+    "        var spacing = parseInt(value.betterParseInt());\n"
+    "\n"
+    "        // Y ist bei allen Layouts wohl immer der Default-Wert, deswegen auf 'x' testen, ansonsten 'else'-Zweig\n"
+    "        if (value.contains('axis:x'))\n"
+    "        {\n"
+    "            setSimpleLayoutXIn(me,spacing);\n"
+    "        }\n"
+    "        else // if (value.contains('axis:y'))\n"
+    "        {\n"
+    "            setSimpleLayoutYIn(me,spacing);\n"
+    "        }\n"
     "    }\n"
     "    else if (attributeName === 'clip' && value === false)\n"
     "    {\n"
@@ -13202,7 +13313,7 @@ BOOL isJSExpression(NSString *s)
     //  irgendwo unbedingt erforderlich ist, wäre eine Alternative width und height zu watchen.
     "        $(me).css('overflow','hidden');\n"
     "    }\n"
-    "    else if (attributeName == 'rotation')\n"
+    "    else if (attributeName === 'rotation')\n"
     "    {\n"
     "        var v = 'rotate('+value+'deg)';\n"
     "        var w = '0% 0% 0';\n"
@@ -13218,7 +13329,7 @@ BOOL isJSExpression(NSString *s)
     "        $(me).css('-ms-transform-origin',w); // IE\n"
     "        $(me).css('transform-origin',w); // W3C\n"
     "    }\n"
-    "    else if (attributeName == 'clickable')\n"
+    "    else if (attributeName === 'clickable')\n"
     "    {\n"
     "        if (value === true)\n"
     "        {\n"
@@ -13719,7 +13830,8 @@ BOOL isJSExpression(NSString *s)
     "    // Der eigentliche Aufruf der Animation:\n"
     "    if (prop !== 'spacing')\n"
     "    {\n"
-    "        $(this).animate(p, duration);\n"
+    "        // Animationen laufen in jQuery immer parallel ab (s. Bsp. 17.8, deswegen queue = false)\n"
+    "        $(this).animate(p, { duration : duration, queue : false });\n"
     "    }\n"
     "    else\n"
     "    {\n"
@@ -14314,6 +14426,25 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// getAttributeRelative() - nachimplementiert          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var getAttributeRelativeFunction = function (prop, ref) {\n"
+    "        if (typeof prop !== 'string' && prop !== 'x' && prop !== 'y' && prop !== 'width' && prop !== 'height')\n"
+    "            throw new Error('getAttributeRelative() - Unsupported value for first argument.');\n"
+    "    if (prop === 'x') return $(this).offset().left - $(ref).offset().left;\n"
+    "    if (prop === 'y') return $(this).offset().top; - $(ref).offset().top;\n"
+    "    if (prop === 'width') return $(this).width() - $(ref).width();\n"
+    "    if (prop === 'height') return $(this).height() - $(ref).height();\n"
+    "\n"
+    "    return undefined;\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.getAttributeRelative = getAttributeRelativeFunction;\n"
+    "HTMLInputElement.prototype.getAttributeRelative = getAttributeRelativeFunction;\n"
+    "HTMLSelectElement.prototype.getAttributeRelative = getAttributeRelativeFunction;\n"
+    "HTMLButtonElement.prototype.getAttributeRelative = getAttributeRelativeFunction;\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// sendToBack() - nachimplementiert                    //\n"
     "/////////////////////////////////////////////////////////\n"
     "var sendToBackFunction = function (oThis) {\n"
@@ -14324,7 +14455,6 @@ BOOL isJSExpression(NSString *s)
     "HTMLInputElement.prototype.sendToBack = sendToBackFunction;\n"
     "HTMLSelectElement.prototype.sendToBack = sendToBackFunction;\n"
     "HTMLButtonElement.prototype.sendToBack = sendToBackFunction;\n"
-    "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// bringToFront() - nachimplementiert                  //\n"
@@ -14957,6 +15087,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        if (@@positionAbsoluteReplaceMe@@)\n"
     "        {\n"
+    // var topValue = kind.prev().get(0).offsetTop + kind.prev().outerHeight() + spacing; <- Kommt aus der alten interpretObject()-Auswertung
     "            var topValue = parseInt(kind.prev().css('top')) + kind.prev().outerHeight() + spacing;\n"
     "            if (i == 0) topValue = 0; // Korrektur des ersten Kindes, falls vorher abweichender 'y'-Wert gesetzt wurde\n"
     "        }\n"
@@ -15034,6 +15165,7 @@ BOOL isJSExpression(NSString *s)
     "        $(kind).off('onvisible.SAX');\n"
     "\n"
     "        if (@@positionAbsoluteReplaceMe@@) {\n"
+    // var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + spacing; <- Kommt aus der alten interpretObject()-Auswertung
     "            var leftValue = parseInt(kind.prev().css('left')) + kind.prev().outerWidth() + spacing;\n"
     "            if (i == 0) leftValue = 0; // Korrektur des ersten Kindes, falls vorher abweichender 'x'-Wert gesetzt wurde\n"
     "        }\n"
@@ -15536,7 +15668,7 @@ BOOL isJSExpression(NSString *s)
     "  {\n"
     //"    alert(an[i]);\n"
     //"    alert(av[i]);\n"
-    "    var jsAttributes = ['oninit','onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown','layout','text'];\n"
+    "    var jsAttributes = ['oninit','onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown','text'];\n"
     "\n"
     "    if (jQuery.inArray(an[i],jsAttributes) != -1)\n"
     "    {\n"
@@ -15578,36 +15710,14 @@ BOOL isJSExpression(NSString *s)
     "        // damit die Variable direkt verwertet wird.\n"
     "        eval('$(id).on(an[i], function() { with (this) { '+av[i]+'; } });');\n"
     "      }\n"
-    "      else if (an[i] === 'layout' && !av[i].contains('class') &&  av[i].replace(/\\s/g,'').contains('axis:x'))\n"
-    "      {\n"
-    "        var spacing = parseInt(av[i].betterParseInt());\n"
-    "        for (var j = 1; j < $(id).children().length; j++) {\n"
-    "          var kind = $(id).children().eq(j);\n"
-    "          var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + spacing;\n"
-    "          kind.css('left',leftValue+'px');\n"
-    "        }\n"
-    "      }\n"
-    "      else if (an[i] === 'layout' && !av[i].contains('class') &&  av[i].replace(/\\s/g,'').contains('axis:y'))\n"
-    "      {\n"
-    "        var spacing = parseInt(av[i].betterParseInt());\n"
-    "        for (var j = 1; j < $(id).children().length; j++) {\n"
-    "          var kind = $(id).children().eq(j);\n"
-    "          if ($(kind).css('position') === 'absolute')\n"
-    "            var topValue = kind.prev().get(0).offsetTop + kind.prev().outerHeight() + spacing;\n"
-    "          else\n"
-    "            var topValue = spacing;\n"
-    "          kind.css('top',topValue+'px');\n"
-    "        }\n"
-    "      }\n"
     "      else if (an[i] === 'text')\n"
     "      {\n"
     //"        $(id).children().html(av[i]);\n"
     "        // JEDE Klasse hat das Attribut 'text', weil es den Text zwischen öffnendem und schließendem Tag darstellt\n"
-    "        // Deswegen nur dann setzen, wenn auch Text zwischen den Tags war. Sonst werden eventuell andere Tags überschrieben\n"
+    "        // Deswegen bei Objekt-Initialisierung nur dann setzen, wenn auch Text zwischen den Tags war. Sonst werden eventuell andere Tags überschrieben\n"
     "        if (av[i] != '')\n"
     "            id.setAttribute_(an[i],av[i]);\n"
     "      }\n"
-    "      else { alert('Hoppala, \"'+an[i]+'\" (value='+av[i]+') muss noch von interpretObject() als jsAttribute ausgewertet werden.'); }\n"
     "    }\n"
     "    else\n"
     "    {\n"

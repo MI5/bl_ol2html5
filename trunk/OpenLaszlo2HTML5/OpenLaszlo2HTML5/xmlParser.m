@@ -44,7 +44,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -658,6 +658,16 @@ void OLLog(xmlParser *self, NSString* s,...)
     NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
     [o appendFormat:@"\n  // Setting the Attribute '%@' of '%@' with the value '%@'\n",attr,self.zuletztGesetzteID,s];
+
+
+
+    // Example 19.2 - Er sollte die Styles auch so richtig setzen.
+    if ([s hasPrefix:@"$style{"])
+    {
+        return;
+    }
+
+
 
     BOOL nochVorDOMAusfuehren = NO;
     if ([s hasPrefix:@"$immediately{"])
@@ -3842,7 +3852,8 @@ didStartElement:(NSString *)elementName
 
 
 
-    // Sollte als erstes stehen, damit der zuletzt gesetzte Zähler, auf den hier zurückgegriffen wird, noch stimmt.
+    // Sollte als erstes stehen, damit der zuletzt gesetzte Zähler, auf den hier zurückgegriffen wird,
+    // noch stimmt.
     if ([elementName isEqualToString:@"simplelayout"])
     {
         element_bearbeitet = YES;
@@ -3862,10 +3873,20 @@ didStartElement:(NSString *)elementName
 
 
         // Name... puh... dabei hat SimpleLayout gar kein eigenes div..
+        // Es kann darauf zugegriffen werden über das Eltern-Element,
+        // um es z. B. zu locken oder unzulocken (Example 17.16)
         if ([attributeDict valueForKey:@"name"])
         {
             self.attributeCount++;
-            NSLog(@"Skipping the attribute 'name'.");
+            NSLog(@"Setting the attribute 'name' as 'layout'.");
+
+            NSString *elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+            [self.jQueryOutput appendString:@"\n  // Layout-Object:\n"];
+            [self.jQueryOutput appendFormat:@"  %@.%@ = new lz.layout();\n",elem,[attributeDict valueForKey:@"name"]];
+
+            // Auch intern speichern
+            [self.jQueryOutput appendFormat:@"  $(%@).data('layout_',%@.%@);\n",elem,elem,[attributeDict valueForKey:@"name"]];
         }
 
         // Falls kein Wert für axis gesetzt ist, ist es immer y
@@ -4866,6 +4887,18 @@ didStartElement:(NSString *)elementName
 
 
 
+    // ToDo -  Ein state
+    if ([elementName isEqualToString:@"dragstate"])
+    {
+        element_bearbeitet = YES;
+
+        // Ka, für was hier ein 'name' --> Weil es ein state ist. Und der state darüber angesprochen wird
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+    }
+
+
+
     if ([elementName isEqualToString:@"window"])
     {
         element_bearbeitet = YES;
@@ -4927,18 +4960,12 @@ didStartElement:(NSString *)elementName
             NSLog(@"Setting the attribute 'resizable' as resizable window.");
 
             [self.jQueryOutput appendFormat:@"\n  // Window is resizable\n"];
-            [self.jQueryOutput appendFormat:@"  %@.setAttribute_('resizable','true');\n",self.zuletztGesetzteID];
-            /* Code steckt jetzt in setAttrbute_
-            [self.jQueryOutput appendFormat:@"  $('#%@').resizable();\n",self.zuletztGesetzteID];
-            [self.jQueryOutput appendFormat:@"  $('#%@').on('resize', function(event,ui) {\n    %@_content.setAttribute_('width',ui.size.width);\n    %@_content.setAttribute_('height',ui.size.height-20);\n    $(this).triggerHandler('onwidth',ui.size.width);\n    $(this).triggerHandler('onheight',ui.size.height);\n  });\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
-            [self.jQueryOutput appendFormat:@"  $('#%@').on('resizestop', function(event,ui) {\n    %@_content.setAttribute_('width',ui.size.width);\n    %@_content.setAttribute_('height',ui.size.height-20);\n    $(this).triggerHandler('onwidth',ui.size.width);\n    $(this).triggerHandler('onheight',ui.size.height);\n  });\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
-             */
+            [self.jQueryOutput appendFormat:@"  %@.setAttribute_('resizable',true);\n",self.zuletztGesetzteID];
         }
 
+
         [self.jQueryOutput appendFormat:@"\n  // Window is draggable\n"];
-        [self.jQueryOutput appendFormat:@"  $('#%@').draggable();\n",self.zuletztGesetzteID];
-        [self.jQueryOutput appendFormat:@"  $('#%@').on('drag', function(event,ui) {\n    $(this).triggerHandler('ony',ui.position.top);\n    $(this).triggerHandler('onx',ui.position.left);\n  });\n",self.zuletztGesetzteID];
-        [self.jQueryOutput appendFormat:@"  $('#%@').on('dragstop', function(event,ui) {\n    $(this).triggerHandler('ony',ui.position.top);\n    $(this).triggerHandler('onx',ui.position.left);\n  });\n",self.zuletztGesetzteID];
+        [self.jQueryOutput appendFormat:@"  %@.setAttribute_('allowdrag',true);\n",self.zuletztGesetzteID];
 
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
@@ -7220,10 +7247,13 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
     {
         element_bearbeitet = YES;
 
+        NSString *axis = @"y";
         if ([attributeDict valueForKey:@"axis"] && ([[attributeDict valueForKey:@"axis"] isEqualToString:@"x"] || [[attributeDict valueForKey:@"axis"] isEqualToString:@"y"]))
         {
             self.attributeCount++;
             NSLog(@"Using the attribute 'axis' of 'constantlayout' to determine the axis.");
+
+            axis = [attributeDict valueForKey:@"axis"];
         }
 
         NSString *value = @"0";
@@ -7232,7 +7262,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Using the attribute 'value' of 'constantlayout' to determine the spacing.");
 
-            value =[attributeDict valueForKey:@"value"];
+            value = [attributeDict valueForKey:@"value"];
         }
 
         NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
@@ -7240,16 +7270,8 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // Hier drin sammle ich erstmal die Ausgabe
         NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
-        if ([[attributeDict valueForKey:@"axis"] isEqualToString:@"x"])
-        {
-            [o appendFormat:@"\n  // Setting a 'constantlayout' (axis:x) in '%@':\n",idUmgebendesElement];
-            [o appendFormat:@"  setConstantLayoutXIn(%@,%@);\n",idUmgebendesElement,value];
-        }
-        else
-        {
-            [o appendFormat:@"\n  // Setting a 'constantlayout' (axis:y) in '%@':\n",idUmgebendesElement];
-            [o appendFormat:@"  setConstantLayoutYIn(%@,%@);\n",idUmgebendesElement,value];
-        }
+        [o appendFormat:@"\n  // Setting a 'constantlayout' in '%@':\n",idUmgebendesElement];
+        [o appendFormat:@"  %@.setAttribute_('layout','class:constantlayout;axis:%@;spacing:%@');\n",idUmgebendesElement,axis,value];
 
         [self.jQueryOutput appendString:o];
     }
@@ -9315,6 +9337,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"purplestyle"] ||
         [elementName isEqualToString:@"BDSedit"] ||
         [elementName isEqualToString:@"BDSeditdate"] ||
+        [elementName isEqualToString:@"dragstate"] ||
         [elementName isEqualToString:@"frame"] ||
         [elementName isEqualToString:@"font"] ||
         [elementName isEqualToString:@"face"] ||
@@ -9428,6 +9451,63 @@ BOOL isJSExpression(NSString *s)
         element_geschlossen = YES;
 
         NSString *s = [self holDenGesammeltenTextUndLeereIhn];
+
+
+        // Oh man, OL, ich muss massiv in die Stylesheet-Angaben eingreifen
+        // bgcolor ist noch das leichteste...
+        s = [self inString:s searchFor:@"bgcolor" andReplaceWith:@"background-color" ignoringTextInQuotes:YES];
+
+        // ...ich muss aber auch alle Zahlenangaben bei (height|width usw...) um px ergänzen...
+        // (auch unten ergänzen bei Erweiterungen)
+        NSError *error = NULL;
+        // Geklammert, damit nachfolgendes optionales Leerzeichen sich auf alle Oder-Inhalte bezieht
+        NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:@"(height|width)\\s*:\\s*\\d+()\\s*;" options:NSRegularExpressionCaseInsensitive error:&error];
+
+        NSArray *matches = [regexp matchesInString:s options:0 range:NSMakeRange(0, [s length])];
+
+        while ([matches count] > 0)
+        {
+            NSTextCheckingResult *match = [matches lastObject];
+            NSRange r = [match rangeAtIndex:2];
+            NSUInteger pos = r.location;
+            s = [NSString stringWithFormat:@"%@px%@",[s substringToIndex:pos],[s substringFromIndex:pos]];
+
+            // weil es sich intern nun verschoben hat im s, am Ende der Schleife die pos neu ermitteln
+            matches = [regexp matchesInString:s options:0 range:NSMakeRange(0, [s length])];
+        }
+
+
+        /************************************************************************************/
+
+
+        // ...der Attribut-Selektor kann bei OL auch Unter-Attribute vom Attribut 'styles' umfassen
+        // Was für ein großer Quatsch ist das denn?
+        // Ich ändere den '='-Operator in den '*='-Operator (contains-Operator) und mappe alle
+        // css-Angaben auf 'styles' um (trifft die Logik nicht ganz genau, aber für mehr keine Zeit).
+        regexp = [NSRegularExpression regularExpressionWithPattern:@"\\[(height|width)=\"\\d+\"\\]" options:NSRegularExpressionCaseInsensitive error:&error];
+
+        matches = [regexp matchesInString:s options:0 range:NSMakeRange(0, [s length])];
+
+        while ([matches count] > 0)
+        {
+            NSTextCheckingResult *match = [matches lastObject];
+
+            NSString *attributSelektor = [s substringWithRange:[match rangeAtIndex:0]];
+
+            // Anfang und Ende des Unter-Attributs von Style ermitteln und durch 'style' ersetzen
+            NSUInteger posOeffnendeEckigeKlammer = [attributSelektor rangeOfString:@"["].location;
+            NSUInteger posGleichheitsZeichen = [attributSelektor rangeOfString:@"="].location;
+            posOeffnendeEckigeKlammer++;
+            attributSelektor = [NSString stringWithFormat:@"%@style*%@",[attributSelektor substringToIndex:posOeffnendeEckigeKlammer],[attributSelektor substringFromIndex:posGleichheitsZeichen]];
+
+            // Dann den alten attributSelektor komplett ersetzen.
+            s = [regexp stringByReplacingMatchesInString:s options:0 range:NSMakeRange(0, [s length]) withTemplate:attributSelektor];
+
+            // weil es sich intern nun verschoben hat im s, am Ende der Schleife die pos neu ermitteln
+            matches = [regexp matchesInString:s options:0 range:NSMakeRange(0, [s length])];
+        }
+
+
 
         // Hinzufügen von gesammelten Text, falls er zwischen den tags gesetzt wurde
         if ([s length] > 0)
@@ -10096,7 +10176,7 @@ BOOL isJSExpression(NSString *s)
     {
         [pre appendString:@"\n<style type='text/css'>\n"];
         [pre appendString:self.cssOutput];
-        [pre appendString:@"</style>\n"];
+        [pre appendString:@"\n</style>\n"];
     }
 
     [pre appendString:@"\n<script type=\"text/javascript\">\n"];
@@ -11988,6 +12068,20 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "\n"
+    "    this.layout = function() {\n"
+    "        this.locked = false;\n"
+    "\n"
+    "        this.lock = function() {\n"
+    "            this.locked = true;\n"
+    "        }\n"
+    "        this.unlock = function() {\n"
+    "            this.locked = false;\n"
+    "        }\n"
+    "        this.update = function() {\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
     "    this.FocusService = function() {\n"
     "        this.setFocus = function(a) {\n"
     "            $(a).focus();\n"
@@ -12770,9 +12864,6 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "\n"
-    "    this.layout = function() {\n"
-    "        this.update = function() {};\n"
-    "    }\n"
     "\n"
     "    this.view = function(scope,attributes) {\n"
     "        return createObjectFromScript('view',scope,attributes);\n"
@@ -13283,20 +13374,38 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "    }\n"
 
-    "    else if (attributeName === 'layout' && !value.contains('class'))\n"
+    "    else if (attributeName === 'layout')\n"
     "    {\n"
     "        // Alle 'whitespaces' entfernen (welche erlaubt sind), aber zum testen auf den Inhalt von 'value' nerven\n"
     "        value = value.replace(/\\s/g,'');\n"
     "        var spacing = parseInt(value.betterParseInt());\n"
     "\n"
-    "        // Y ist bei allen Layouts wohl immer der Default-Wert, deswegen auf 'x' testen, ansonsten 'else'-Zweig\n"
-    "        if (value.contains('axis:x'))\n"
+    "        if (!value.contains('class') || value.contains('class:simplelayout'))\n"
     "        {\n"
-    "            setSimpleLayoutXIn(me,spacing);\n"
+    "            // Y ist bei allen Layouts wohl immer der Default-Wert, deswegen auf 'x' testen, ansonsten 'else'-Zweig\n"
+    "            if (value.contains('axis:x'))\n"
+    "            {\n"
+    "                setSimpleLayoutXIn(me,spacing);\n"
+    "            }\n"
+    "            else // if (value.contains('axis:y'))\n"
+    "            {\n"
+    "                setSimpleLayoutYIn(me,spacing);\n"
+    "            }\n"
     "        }\n"
-    "        else // if (value.contains('axis:y'))\n"
+    "        else if (value.contains('class:constantlayout'))\n"
     "        {\n"
-    "            setSimpleLayoutYIn(me,spacing);\n"
+    "            if (value.contains('axis:x'))\n"
+    "            {\n"
+    "                $(me).children().each(function() { $(this).setAttribute_('x',spacing+'px'); });\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                $(me).children().each(function() { $(this).setAttribute_('y',spacing+'px'); });\n"
+    "            }\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "            alert('Ein Layout, welches noch ausgwertet werden muss.');\n"
     "        }\n"
     "    }\n"
     "    else if (attributeName === 'clip' && value === false)\n"
@@ -13606,7 +13715,7 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "    else if ($(me).hasClass('div_window') && attributeName == 'resizable') // Nur vom Element 'window' von Haus aus gesetztes Attribut\n"
     "    {\n"
-    "        if (value == 'true')\n"
+    "        if (value == true)\n"
     "        {\n"
     "            $(me).resizable();\n"
     "\n"
@@ -13622,6 +13731,21 @@ BOOL isJSExpression(NSString *s)
     "                $('#'+this.id+'_content').get(0).setAttribute_('height',ui.size.height-20);\n"
     "                $(this).triggerHandler('onwidth',ui.size.width);\n"
     "                $(this).triggerHandler('onheight',ui.size.height);\n"
+    "            });\n"
+    "        }\n"
+    "    }\n"
+    "    else if ($(me).hasClass('div_window') && attributeName == 'allowdrag') // Nur Element 'window'\n"
+    "    {\n"
+    "        if (value == true)\n"
+    "        {\n"
+    "            $(me).draggable();\n"
+    "            $(me).on('drag', function(event,ui) {\n"
+    "                $(this).triggerHandler('ony',ui.position.top);\n"
+    "                $(this).triggerHandler('onx',ui.position.left);\n"
+    "            });\n"
+    "            $(me).on('dragstop', function(event,ui) {\n"
+    "                $(this).triggerHandler('ony',ui.position.top);\n"
+    "                $(this).triggerHandler('onx',ui.position.left);\n"
     "            });\n"
     "        }\n"
     "    }\n"
@@ -15071,6 +15195,9 @@ BOOL isJSExpression(NSString *s)
     "    if ($(el).hasClass('div_window'))\n"
     "        el = $('#'+el.id+'_content').get(0);\n"
     "\n"
+    "    if ($(el).data('layout_') && $(el).data('layout_').locked)\n"
+    "        return;\n"
+    "\n"
     "    // Vor Änderung event wegnehmen, sonst quadratisches Wachstum der Aufrufe!\n"
     "    $(el).off('onaddsubview.SAY');\n"
     "\n"
@@ -15149,6 +15276,9 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    if ($(el).hasClass('div_window'))\n"
     "        el = $('#'+el.id+'_content').get(0);\n"
+    "\n"
+    "    if ($(el).data('layout_') && $(el).data('layout_').locked)\n"
+    "        return;\n"
     "\n"
     "    // Vor Änderung event wegnehmen, sonst quadratisches Wachstum der Aufrufe!\n"
     "    $(el).off('onaddsubview.SAX');\n"
@@ -15723,6 +15853,9 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        if (typeof av[i] === 'string' && av[i].startsWith('$')) // = Constraint value\n"
     "        {\n"
+    "            if (av[i].startsWith('$once{')) // Ist dann gar kein Constraint value\n"
+    "                av[i] = '${' + av[i].substring(6);\n"
+    "\n"
     "            av[i] = av[i].substring(2,av[i].length-1);\n"
     "            av[i] = av[i].replace(/immediateparent/g,'getTheParent(true)');\n"
     "            av[i] = av[i].replace(/parent/g,'getTheParent()');\n"

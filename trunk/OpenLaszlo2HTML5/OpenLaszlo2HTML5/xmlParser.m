@@ -43,7 +43,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -779,81 +779,22 @@ void OLLog(xmlParser *self, NSString* s,...)
         // '__strong', damit ich object modifizieren kann
         for (id __strong object in vars)
         {
-            // Okay, folgendes:
-            // Wenn wir ein Objekt sind dann achten wir auf das onchange-Event
-            // Sind wir aber eine Variable, dann müssen wir watchen
-
             // Falls wir mit 'this.' starten muss ich this durch die aktuelle ID ersetzen.
+            // (sonst würde 'this' auf 'window' verweisen)
             if ([object hasPrefix:@"this."])
             {
                 object = [object substringFromIndex:4];
                 object = [NSString stringWithFormat:@"%@%@",self.zuletztGesetzteID,object];
             }
-            // Falls wir mit 'parent.' oder 'immediateparent' starten, muss ich die aktuelle ID
-            // davor setzen.
+            // Falls wir mit 'parent.' oder 'immediateparent' starten, muss ich die aktuelle ID davor setzen.
             if ([object hasPrefix:@"parent."] || [object hasPrefix:@"immediateparent."])
             {
                 object = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,object];
             }
 
 
-            //[o appendFormat:@"  if (typeof %@ === 'object')\n  {\n",object];
-
-            //[o appendFormat:@"    $(%@).on('change', function() { %@.setAttribute_('%@',%@); } );\n  }\n",object,self.zuletztGesetzteID,attr,s];
-
-
-            //[o appendFormat:@"    window.watch('%@', function() { %@.setAttribute_('%@',%@); } );\n",object,self.zuletztGesetzteID,attr,s];
-            // Das mit dem watchen klappt nicht wirklich...
-            // Neuer Code, indem ich auf die von setAttribute_ abgeschickten Events horche:
-
-            // Erstmal Property von Objekt isolieren
-            NSArray *tempArray = [object componentsSeparatedByString: @"."];
-
-            // wenn es gar keinen . gibt, ist es wohl ein vergessenes this vor der Property z.B.
-            // Wir brauchen also mindestens ein Objekt und eine Property
-            if ([tempArray count] > 1)
-            {
-                NSString *theObject = [tempArray objectAtIndex:0];
-                NSString *theProperty = [tempArray objectAtIndex:[tempArray count]-1];
-
-                // Falls es mehr als 2 Element im Array gibt, alle mittleren Elemente
-                // dem objekt hinzufügen.
-                if ([tempArray count] > 2)
-                {
-                    for (int i=1;i<[tempArray count]-1;i++)
-                    {
-                        theObject = [NSString stringWithFormat:@"%@.%@",theObject,[tempArray objectAtIndex:i]];
-                    }
-                }
-
-
-                // setAttribute_ verschickt events nur an 'onheight' oder an 'onwidth'...
-                if ([theProperty isEqualToString:@"myWidth"])
-                    theProperty = @"width";
-                if ([theProperty isEqualToString:@"myHeight"])
-                    theProperty = @"height";
-                if ([theProperty isEqualToString:@"myDataset"])
-                    theProperty = @"dataset";
-                if ([theProperty isEqualToString:@"myContext"])
-                    theProperty = @"context";
-                if ([theProperty isEqualToString:@"myValue"])
-                    theProperty = @"value";
-
-                // Wenn wir selber wir sind, dann nicht. Darauf brauche ich nicht reagieren
-                // Das dient dann wohl nur der Berechnung. z. B. "irgendwas - this.height".
-                // Nein, dann bricht Beispiel 7.5. Auch auf this müssen wir achten
-                //if (![theObject isEqualToString:@"this"])
-                // Habe weiter oben this durch das aktuelle Element ersetzt, dann ist das 'this auch
-                // schon in der if-abfrage korrigiert (sonst würde 'this' auf 'window' verweisen).
-                //[o appendString:@"  else\n  {\n"];
-                // [o appendFormat:@"    $(%@).on('on%@', function() { %@.setAttribute_('%@',%@); } );\n",theObject,theProperty,self.zuletztGesetzteID,attr,s];
-
-                [o appendFormat:@"  setConstraint(%@,%@,'%@',function() { %@.setAttribute_('%@',%@); });\n",object,theObject,theProperty,self.zuletztGesetzteID,attr,s];
-
-                //[o appendString:@"  }\n"];
-            }
+            [o appendFormat:@"  setConstraint('%@',function() { %@.setAttribute_('%@',%@); });\n",object,self.zuletztGesetzteID,attr,s];
         }
-        
     }
 
     // 'align' / 'valign' muss darauf warten, dass die Breite / Höhe der Eltern korrekt gesetzt wurde.
@@ -1370,32 +1311,24 @@ BEFINDET SICH JETZT IN SETATTRIBUTEFUNC - Das auskommentierte kann gelöscht wer
     }
 
 
-
+    // Damit kann der Ladezeitpunkt von Elementen beeinflusst werden
+    // Letzen Endes spielt nur initstage=defer eine Rolle, weil es dann GAR NICHT
+    // geladen wird, sondern erst später nach Aufruf von 'completeInstantiation'
     if ([attributeDict valueForKey:@"initstage"])
     {
-        // Damit kann der Ladezeitpunkt von Elementen beeinflusst werden
-        // Letzen Endes spielt nur initstage=defer eine Rolle, weil es dann GAR NICHT
-        // geladen wird, sondern erst später nach Aufruf von 'completeInstantiation'
-
+        self.attributeCount++;
 
         if ([[attributeDict valueForKey:@"initstage"] isEqual:@"immediate"] ||
             [[attributeDict valueForKey:@"initstage"] isEqual:@"early"] ||
             [[attributeDict valueForKey:@"initstage"] isEqual:@"normal"] ||
             [[attributeDict valueForKey:@"initstage"] isEqual:@"late"])
         {
-            self.attributeCount++;
             NSLog(@"Skipping the attribute 'initstage'.");
         }
 
         if ([[attributeDict valueForKey:@"initstage"] isEqual:@"defer"])
         {
-            self.attributeCount++;
-
-            NSLog(@"Attribute 'initstage=defer' so hiding the Element, because it shoudn't be loaded right now (trick).");
-
-            [self.jQueryOutput appendString:@"\n  // 'initstage=defer' so hiding the Element, because it shoudn't be loaded right now (trick).\n"];
-            //[self.jQueryOutput appendFormat:@"  $('#%@').hide();\n",self.zuletztGesetzteID];
-            // Noch auskommentiert, zeigt dann noch ganze Tabs nicht an. To Check (ToDo)
+            [self setTheValue:[attributeDict valueForKey:@"initstage"] ofAttribute:@"initstage"];
         }
     }
 
@@ -5316,7 +5249,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
                 [o appendFormat:@"$('#%@').children('option :first').prop('value')",self.zuletztGesetzteID];
                 [o appendString:@"+']').attr('selected',true);\n"];
                 [o appendString:@"  // parallel myValue setzen, damit Constraint den defaultwert richtig auslesen kann\n"];
-                [o appendFormat:@"  %@.myValue = 11;\n",self.zuletztGesetzteID];
+                [o appendFormat:@"  %@.myValue = $('#%@').children('option :first').prop('value');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
             }
             else
             {
@@ -5325,7 +5258,16 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
                 [o appendFormat:@"  $(\"#%@ option[value=",self.zuletztGesetzteID];
                 [o appendString:[attributeDict valueForKey:@"initvalue"]];
                 [o appendString:@"]\").attr('selected',true);\n"];
+                [o appendString:@"  // parallel myValue setzen, damit Constraint den defaultwert richtig auslesen kann\n"];
+                [o appendFormat:@"  %@.myValue = $('#%@').children('option[value=%@]').prop('value');\n",self.zuletztGesetzteID,self.zuletztGesetzteID,[attributeDict valueForKey:@"initvalue"]];
             }
+
+        }
+        else
+        {
+            // Trotzdem eine Vorauswahl treffen (erstes Element), sonst testet constraint auf 'undefined'
+            [o appendString:@"  // parallel myValue setzen, damit Constraint den defaultwert richtig auslesen kann\n"];
+            [o appendFormat:@"  %@.myValue = $('#%@').children('option :first').prop('value');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
         }
 }
 
@@ -8259,6 +8201,10 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [o appendFormat:@"\n  // Instanz erzeugen, id holen, Objekt auswerten"];
         [o appendFormat:@"\n  var id = document.getElementById('%@');",idUmgebendesElement];
         [o appendFormat:@"\n  var obj = new oo.%@('');",elementName];
+
+       // [o appendFormat:@"\n  if (jQuery.inArray('defer',obj.attributeValues) == -1)"]; // try 1 --> Ohne Erfolg...
+       // [o appendFormat:@"\n  if ($(id).is(':visible'))"]; // try 2 --> Ohne Erfolg, bricht viewlose Elemente (swfso z. B.)
+
         [o appendString:@"\n  interpretObject(obj,id);\n"];
 
 
@@ -9936,7 +9882,7 @@ BOOL isJSExpression(NSString *s)
             s = [s stringByReplacingOccurrencesOfString:@"\'" withString:@"\\'"];
             s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n"];
 
-            [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-31];
+            [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-31]; /* MARKER -57 / -28 vom defer-Test */
         }
 
         self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
@@ -13599,9 +13545,13 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        $(me).addClass(value);\n"
     "    }\n"
-    "    else if (attributeName === 'initstage' && value === 'defer')\n"
+    "    else if (attributeName === 'initstage')\n"
     "    {\n"
-    "      //$(me).hide() // ToDo: Bricht Anzeige Kinder;\n"
+    "        if (value === 'defer')\n"
+    "            ;// $(me).hide() // ToDo: Bricht Anzeige Kinder;\n"
+    "\n"
+    "        if (value === 'immediate' || value === 'early' || value === 'normal' || value === 'late')\n"
+    "            jQuery.noop(); /* no operation */\n"
     "    }\n"
     "    else if (attributeName === 'align')\n"
     "    {\n"
@@ -14216,12 +14166,11 @@ BOOL isJSExpression(NSString *s)
     "HTMLSelectElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
     "HTMLButtonElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
     "\n"
-    "// Bricht leider irgendwas in jQuery, deswegen 'myOptions'\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Getter/Setter for 'myOptions'                       //\n"
+    "// Getter/Setter for 'options'                         //\n"
     "// INIT-ONLY (deswegen ohne setAttribute_()            //\n"
     "/////////////////////////////////////////////////////////\n"
-    "Object.defineProperty(HTMLElement.prototype, 'myOptions', {\n"
+    "Object.defineProperty(HTMLElement.prototype, 'options', {\n"
     "    get : function(){\n"
     "        if (!isDOM(this)) return undefined;\n"
     "\n"
@@ -14419,6 +14368,17 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "////////////////////////INCOMPLETE///////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'text'                            //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(HTMLInputElement.prototype, 'text', {\n"
+    "    get : function() { return $(this).val(); },\n"
+    "    set : function(newValue) { $(this).val(newValue); }, \n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// getText() / getvalue() - nachimplementiert          //\n"
@@ -15925,18 +15885,68 @@ BOOL isJSExpression(NSString *s)
     "// Wichtige Hilfsfunktion, um constraints zu setzen    //\n"
     "// setConstraint()                                     //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var setConstraint = function (check4Type,obj,prop,func) {\n"
-    "    if (typeof obj !== 'object' && typeof obj !== 'function' || obj === null) throw new TypeError('setConstraint called on non-object')\n"
-    "    if (typeof prop !== 'string') throw new TypeError('setConstraint - Third arg must be a string')\n"
-    "    if (typeof func !== 'function') throw new TypeError('setConstraint - 4th arg must be a function')\n"
+    "var setConstraint = function (expression,func) {\n"
+    "    if (typeof expression !== 'string' || expression === '') throw new TypeError('setConstraint - first arg must be a non-empty string')\n"
+    "    if (typeof func !== 'function') throw new TypeError('setConstraint - second arg must be a function')\n"
     "\n"
+    "    // Expression ist der Ausdruck, den wir zerlegen müssen in Objekt (alle vorderen Elemente) und prop (letztes Element)\n"
+    "    var tempArray=expression.split('.');\n"
+    "\n"
+    "    // Wenn kein Objekt vorhanden (= Array aus einem Element) ist es implizit 'window' (bzw. 'this')\n"
+    "\n"
+    "    var obj;\n"
+    "    var prop;\n"
+    "\n"
+    "    if (tempArray.length == 1)\n"
+    "    {\n"
+    "        obj = 'window';\n"
+    "        prop = tempArray[0];\n"
+    "    }\n"
+    "\n"
+    "    if (tempArray.length > 1)\n"
+    "    {\n"
+    "        obj = tempArray[0];\n"
+    "        prop = tempArray[tempArray.length-1];\n"
+    "\n"
+    "        // Falls es mehr als 2 Element im Array gibt, alle mittleren Elemente dem Objekt hinzufügen unten.\n"
+    "        if (tempArray.length > 2)\n"
+    "        {\n"
+    "            for (var i=1;i<tempArray.length-1;i++)\n"
+    "            {\n"
+    "                obj = obj + '.' + tempArray[i];\n"
+    "            }\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "    // setAttribute_ verschickt events nur an 'onheight' / 'onwidth' usw...\n"
+    "    if (prop === 'myWidth')\n"
+    "        prop = 'width';\n"
+    "    if (prop === 'myHeight')\n"
+    "        prop = 'height';\n"
+    "    if (prop === 'myDataset')\n"
+    "        prop = 'dataset';\n"
+    "    if (prop === 'myContext')\n"
+    "        prop = 'context';\n"
+    "    if (prop === 'myValue')\n"
+    "        prop = 'value';\n"
+    "\n"
+    //"var vorher = expression;\n"
+    "    // expression-string als echten JS-Ausdruck auflösen\n"
+    "    // Auflösen über window['obj'] klappt nicht... why?\n"
+    "    expression = eval(expression);\n"
+    "    obj = eval(obj);\n"
+    "\n"
+    //"Check-Möglichkeit auf 'undefined'\n"
+    //"if (expression === undefined)\n"
+    //"    alert(vorher);\n"
     "\n"
     "    // Bei change aktualisieren bzw. auf ein event horchen, da constraint-value\n"
-    "    if (typeof check4Type === 'object')\n"
+    "    if (typeof expression === 'object')\n"
     "    {\n"
-    "        $(check4Type).on('change', func);\n"
+    "        $(expression).on('change', func);\n"
     "    }\n"
-    "    else if (typeof check4Type === 'function') // Wegen Bsp. 20.3\n"
+    "    else if (typeof expression === 'function') // Wegen Bsp. 20.3\n"
     "    {\n"
     "        $(obj).on('change', func);\n"
     "    }\n"

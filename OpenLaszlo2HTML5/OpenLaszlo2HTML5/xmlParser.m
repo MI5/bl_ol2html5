@@ -947,56 +947,6 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         self.attributeCount++;
         [self setTheValue:[attributeDict valueForKey:@"valign"] ofAttribute:@"valign"];
-
-
-/*
-
-BEFINDET SICH JETZT IN SETATTRIBUTEFUNC - Das auskommentierte kann gelöscht werden
-
-
-        if ([[attributeDict valueForKey:@"valign"] isEqual:@"middle"])
-        {
-            self.attributeCount++;
-
-            // http://phrogz.net/css/vertical-align/index.html
-            NSLog(@"Setting the attribute 'valign:middle' by computing difference of height of surrounding element and inner element. And setting the half of it as CSS top.");
-            // Dies beides klappt nicht wirklich...
-            // 1) [style appendString:@"position:absolute; top:50%; margin-top:-12px;"];
-            // 2) [style appendString:@"line-height:4em;"];
-            // Ich setze also über jQuery direkt ausgehend von der Höhe des Eltern-Elements
-            [self.jQueryOutput appendString:@"\n  // 'valign=middle' wurde als Attribut gefunden: Richte das Element entsprechend mittig (vertikal) aus\n"];
-
-            // [self.jQueryOutput appendFormat:@"  $('#%@').css('top',toInt((parseInt($('#%@').parent().css('height'))-parseInt($('#%@').css('height')))/3));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
-            // So wohl korrekter:
-            [self.jQueryOutput appendFormat:@"  $('#%@').css('top',toIntFloor((parseInt($('#%@').parent().css('height'))-parseInt($('#%@').outerHeight()))/2));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
-        }
-
-
-        // Bottom heißt es soll am untern Ende des umgebenden divs aufsetzen
-        if ([[attributeDict valueForKey:@"valign"] isEqual:@"bottom"])
-        {
-            self.attributeCount++;
-
-            NSLog(@"Setting the attribute 'valign:bottom' by computing as CSS top.");
-            // Dies beides klappt nicht wirklich...
-            // 1) [style appendString:@"position:absolute; top:50%; margin-top:-12px;"];
-            // 2) [style appendString:@"line-height:4em;"];
-            // Ich setze also über jQuery direkt ausgehend von der Höhe des Eltern-Elements
-            [self.jQueryOutput appendString:@"\n  // 'valign=bottom' wurde als Attribut gefunden: Richte das Element entsprechend am Boden aus\n"];
-            [self.jQueryOutput appendFormat:@"  $('#%@').css('top',toInt((parseInt($('#%@').parent().css('height'))-parseInt($('#%@').outerHeight()))));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
-        }
-
-        // Nichts zu tun, der Ausgangswert
-        if ([[attributeDict valueForKey:@"valign"] isEqual:@"top"])
-        {
-            self.attributeCount++;
-
-            NSLog(@"Setting the attribute 'valign:top' as CSS 'vertical-align:top'.");
-            [style appendString:@"vertical-align:"];
-            [style appendString:[attributeDict valueForKey:@"valign"]];
-            [style appendString:@";"];
-        }
- */
     }
 
     // speichern, falls height schon gesetz wurde (für Attribut resource)
@@ -1023,14 +973,6 @@ BEFINDET SICH JETZT IN SETATTRIBUTEFUNC - Das auskommentierte kann gelöscht wer
             }
         }
 
-        // Diese Sonderbehandlung ist wohl hinfällig:
-        // Wir beobachten sonst ja nicht die Änderungen! ist ja ein Constraint! (bzw. inherit reagiert zu langsam)
-        //if ([s rangeOfString:@"${parent.height}"].location != NSNotFound ||
-        //    [s rangeOfString:@"${immediateparent.height}"].location != NSNotFound)
-        //{
-        //    [style appendString:@"height:inherit;"];
-        //}
-        //else
         if ([s hasPrefix:@"$"])
         {
             [self setTheValue:s ofAttribute:@"height"];
@@ -1054,11 +996,6 @@ BEFINDET SICH JETZT IN SETATTRIBUTEFUNC - Das auskommentierte kann gelöscht wer
 
         NSString *s = [attributeDict valueForKey:@"boxheight"];
 
-        //if ([s rangeOfString:@"${parent.height}"].location != NSNotFound)
-        //{
-        //    [style appendString:@"height:inherit;"];
-        //}
-        //else
         if ([s hasPrefix:@"$"])
         {
             [self setTheValue:s ofAttribute:@"height"];
@@ -1129,11 +1066,6 @@ BEFINDET SICH JETZT IN SETATTRIBUTEFUNC - Das auskommentierte kann gelöscht wer
 
         [style appendString:@"width:"];
 
-        //if ([s rangeOfString:@"${parent.width}"].location != NSNotFound)
-        //{
-        //    [style appendString:@"inherit"];
-        //}
-        //else
         if ([s hasPrefix:@"$"])
         {
             [self setTheValue:s ofAttribute:@"width"];
@@ -1255,43 +1187,8 @@ BEFINDET SICH JETZT IN SETATTRIBUTEFUNC - Das auskommentierte kann gelöscht wer
 
     if ([attributeDict valueForKey:@"align"])
     {
-        /*
-        if ([[attributeDict valueForKey:@"align"] isEqual:@"center"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'align=center' as offset for 'left'.");
-            // Funktioniert leider nicht:
-            //[style appendString:@"margin-left:auto; margin-right:auto;"];
-
-            [self.jQueryOutput appendString:@"\n  // align wurde als Attribut gefunden: Richte das Element entsprechend mittig (horizontale Achse) aus"];
-            [self.jQueryOutput appendFormat:@"\n  $('#%@').css('left',toIntFloor((parseInt($('#%@').parent().css('width'))-parseInt($('#%@').outerWidth()))/2));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
-        }
-
-
-        if ([[attributeDict valueForKey:@"align"] isEqual:@"left"])
-        {
-            self.attributeCount++;
-            [self setTheValue:[attributeDict valueForKey:@"align"] ofAttribute:@"align"];
-        }
-
-
-
-        if ([[attributeDict valueForKey:@"align"] isEqual:@"right"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'align=right' as offset for 'left'.");
-
-            [self.jQueryOutput appendString:@"\n  // align wurde als Attribut gefunden: Richte das Element entsprechend rechts (horizontale Achse) aus"];
-            [self.jQueryOutput appendFormat:@"\n  $('#%@').css('left',toIntFloor((parseInt($('#%@').parent().width())-$('#%@').outerWidth())));\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
-        }
-
-
-        if ([[attributeDict valueForKey:@"align"] hasPrefix:@"$"])
-        */
-        {
-            self.attributeCount++;
-            [self setTheValue:[attributeDict valueForKey:@"align"] ofAttribute:@"align"];
-        }
+        self.attributeCount++;
+        [self setTheValue:[attributeDict valueForKey:@"align"] ofAttribute:@"align"];
     }
 
     if ([attributeDict valueForKey:@"clip"])
@@ -1299,9 +1196,6 @@ BEFINDET SICH JETZT IN SETATTRIBUTEFUNC - Das auskommentierte kann gelöscht wer
         self.attributeCount++;
         [self setTheValue:[attributeDict valueForKey:@"clip"] ofAttribute:@"clip"];
     }
-
-
-
 
 
     if ([attributeDict valueForKey:@"stretches"])
@@ -8054,11 +7948,8 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         }
         else
         {
-            [o appendString:@"\n  // Keine Attribute vorhanden, die gesetzt werden müssen"];
+            [o appendString:@"\n  // Keine Klassen-Attribute vorhanden, die gesetzt werden müssen"];
         }
-
-        //[o appendString:@"\n  // Je nach Verschachtelung kann die tatsächliche Instanzierung erst weiter unten sein\n"];
-        // nicht mehr, seitdem ich das schreiben der Klasse wieder hier her geholt habe.
 
 
         // Erst alle Build-in-Attribute raushauen...
@@ -8136,10 +8027,10 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-        // ...dann die übrig gebliebenen Attribute (die von der Klasse selbst definierten) setzen
+        // ...dann die übrig gebliebenen Attribute (die von der Instanz selbst definierten) setzen
         if ([d count] > 0)
         {
-            [o appendString:@"\n  // Nach dem setzen der Defaultwerte nun setzen der Klassen-Variablen, die diese Angaben überschreiben"];
+            [o appendString:@"\n  // Nach dem setzen der Defaultwerte nun setzen der Instanz-Variablen, die diese Angaben überschreiben"];
 
             // '__strong', damit ich object modifizieren kann
             for (NSString __strong *key in d)

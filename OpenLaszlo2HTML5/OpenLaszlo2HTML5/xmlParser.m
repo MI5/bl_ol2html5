@@ -609,6 +609,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             if ([varName isEqualToString:@"Date"]) continue;
             if ([varName isEqualToString:@"Number"]) continue;
             if ([varName isEqualToString:@"String"]) continue;
+            if ([varName isEqualToString:@"Array"]) continue;
 
             // Funktionsnamen
             if ([varName isEqualToString:@"eval"]) continue;
@@ -646,7 +647,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
             // Falls mehrmals auf den gleichen Wert getestet wird ( z. B. if (x == 2 || x == 3)
-            // brauche (und sollte) ich natürlich auf das 'x' nur einmal zu horchen.
+            // brauche (und sollte) ich natürlich auf das 'x' nur einmal horchen.
             if (![vars containsObject:varName])
                 [vars addObject:varName];
         }
@@ -678,14 +679,16 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+    BOOL weNeedQuotes = YES;
     // Das bedeutet wird müssen es noch vor dem DOM ausführen
     if ([s hasPrefix:@"$immediately{"])
     {
+        s = [s substringFromIndex:12];
+
+
         // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...
         NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s];
 
-
-        s = [s substringFromIndex:12];
 
         // ...s computable machen...
         s = [NSString stringWithFormat:@"$%@",s];
@@ -705,6 +708,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
 
         // Somit ist kein $ mehr davor und er geht automatisch unten richtig rein und setzt die prop ohne constraint
+        weNeedQuotes = NO;
     }
 
     if ([s hasPrefix:@"$once{"])
@@ -716,6 +720,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         s = [self makeTheComputedValueComputable:s];
 
         // Somit ist kein $ mehr davor und er geht automatisch unten richtig rein und setzt die prop ohne constraint
+        weNeedQuotes = NO;
     }
 
     if ([s hasPrefix:@"$always{"])
@@ -771,9 +776,12 @@ void OLLog(xmlParser *self, NSString* s,...)
     else // Übrig bleibt eine ganz normale prop, die gesetzt wird (keine Constraint oder irgendwas)
     {
         if (isJSExpression(s))
-            [o appendFormat:@"  %@.setAttribute_('%@',%@);\n",self.zuletztGesetzteID,attr,s];
-        else
+            weNeedQuotes = NO;
+
+        if (weNeedQuotes)
             [o appendFormat:@"  %@.setAttribute_('%@','%@');\n",self.zuletztGesetzteID,attr,s];
+        else
+            [o appendFormat:@"  %@.setAttribute_('%@',%@);\n",self.zuletztGesetzteID,attr,s];
     }
 
 
@@ -1736,8 +1744,6 @@ void OLLog(xmlParser *self, NSString* s,...)
     // s = [NSString stringWithFormat:@"(function() { with (%@) { return %@; } })()",self.zuletztGesetzteID,s];
     // NOCH NOCH Besser: Zusätzlich noch bind anfügen. Dann wird auch 'this' richtig ausgewertet und muss
     // nicht mehr ersetzt werden!
-    // this von OpenLaszlo musste früher ersetzt werden
-    // s = [s stringByReplacingOccurrencesOfString:@"this" withString:[NSString stringWithFormat:@"$('#%@').get(0)",self.zuletztGesetzteID]];
 
     s = [NSString stringWithFormat:@"(function() { with (%@) { return %@; } }).bind(%@)()",self.zuletztGesetzteID,s,self.zuletztGesetzteID];
 
@@ -13089,9 +13095,14 @@ BOOL isJSExpression(NSString *s)
     "            if (me.resize)\n"
     "            {\n"
     "                // hmmmm, wo kam das her? Wegen Bsp. 21.14 muss ich hier genau nix machen\n"
-    "                // evtl. etwas machen bei 'inputs'? Wegen dem 'parent', aber ka wo das herkommt.\n"
+    "                // Wegen Bsp. 29.17 muss ich hier sehr wohl was machen!.\n"
+    "                // ne, bei Bsp 29.17 betrifft es eher das allgemeine resizen von Elementen, nicht speziell text\n"
     "                //$(me).parent().height($(me).height()+4); // + 4 for the padding of div_text\n"
     "                //$(me).parent().width($(me).width()+4); // + 4 for the padding of div_text\n"
+    "                // Die Lösung ist: Ich muss triggern!\n"
+    "                // Weil sich bei einem neuen Text meist die Breite/Höhe ändert, triggern!\n"
+    "                $(me).triggerHandler('onwidth',me.width);\n"
+    "                $(me).triggerHandler('onheight',me.height);\n"
     "            }\n"
     "        }\n"
     "    }\n"
@@ -15882,7 +15893,7 @@ BOOL isJSExpression(NSString *s)
     "// Mit dieser Funktion werden alle Objekte ausgewertet       //\n"
     "///////////////////////////////////////////////////////////////\n"
     "// Aus obj ziehen wir den ganzen Inhalt raus, wie das Objekt aussehen muss\n"
-    "// und id wird dem entsprechend mit allen Attributen und Methoden erweitert.\n"
+    "// und id wird dem entsprechend mit diesen Attributen und Methoden erweitert.\n"
     "function interpretObject(obj,id)\n"
     "{\n"
     "  // Neu Durchlauf 1: Alle selbst definierten Attribute werden direkt an das Element gebunden\n"
@@ -16105,16 +16116,16 @@ BOOL isJSExpression(NSString *s)
     "  {\n"
     //"    alert(an[i]);\n"
     //"    alert(av[i]);\n"
-    "    var jsAttributes = ['oninit','onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown','text'];\n"
+    "    var eventHandlerAttributes = ['oninit','onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown'];\n"
     "\n"
-    "    if (jQuery.inArray(an[i],jsAttributes) != -1)\n"
+    "    if (jQuery.inArray(an[i],eventHandlerAttributes) != -1)\n"
     "    {\n"
     "      if (an[i] === 'oninit') \n"
     "      {\n"
     "        // Kann erst später ausgeführt, werden, wenn alle Methoden bekannt sind.\n"
     "        onInitFunc = av[i];\n"
     "      }\n"
-    "      else if (an[i].startsWith('on'))\n"
+    "      else\n"
     "      {\n"
     "        // Dann ist es JS-Code, Anpassungen vornehmen.\n"
     "        av[i] = av[i].replace(/setAttribute/g,'setAttribute_');\n"
@@ -16146,14 +16157,6 @@ BOOL isJSExpression(NSString *s)
     "        // Neuer Code: Ich muss den KOMPLETTEN on-Befehl per eval setzen,\n"
     "        // damit die Variable direkt verwertet wird.\n"
     "        eval('$(id).on(an[i], function() { with (this) { '+av[i]+'; } });');\n"
-    "      }\n"
-    "      else if (an[i] === 'text')\n"
-    "      {\n"
-    //"        $(id).children().html(av[i]);\n"
-    "        // JEDE Klasse hat das Attribut 'text', weil es den Text zwischen öffnendem und schließendem Tag darstellt\n"
-    "        // Deswegen bei Objekt-Initialisierung nur dann setzen, wenn auch Text zwischen den Tags war. Sonst werden eventuell andere Tags überschrieben\n"
-    "        if (av[i] != '')\n"
-    "            id.setAttribute_(an[i],av[i]);\n"
     "      }\n"
     "    }\n"
     "    else\n"

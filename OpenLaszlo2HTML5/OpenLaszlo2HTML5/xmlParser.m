@@ -43,7 +43,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -643,7 +643,10 @@ void OLLog(xmlParser *self, NSString* s,...)
             if ([varName isEqualToString:@"while"]) continue;
 
 
-            [vars addObject:varName];
+            // Falls mehrmals auf den gleichen Wert getestet wird ( z. B. if (x == 2 || x == 3)
+            // brauche (und sollte) ich natürlich auf das 'x' nur einmal zu horchen.
+            if (![vars containsObject:varName])
+                [vars addObject:varName];
         }
     }
 
@@ -719,7 +722,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         // Ein relativer Pfad zum vorher gesetzen XPath Ich nehme Bezug zum letzten lastDP und dem dort gesetzten Pfad.
         s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
         // Die Variable 'lastDP' ist bekannt, da die Ausgabe hier in 'jsComputedValuesOutput' erfolgt.
-        // Genau da (und kurz vohrer) erfolgt auch das setzen von lastDP
+        // Genau da (und kurz vorher) erfolgt auch das setzen von lastDP
         [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP,'%@');\n",self.zuletztGesetzteID,s,attr];
     }
     else if ([s hasPrefix:@"$"])
@@ -779,23 +782,10 @@ void OLLog(xmlParser *self, NSString* s,...)
         // '__strong', damit ich object modifizieren kann
         for (id __strong object in vars)
         {
-            // Falls wir mit 'this.' starten muss ich this durch die aktuelle ID ersetzen.
-            // (sonst würde 'this' auf 'window' verweisen)
-            if ([object hasPrefix:@"this."])
-            {
-                object = [object substringFromIndex:4];
-                object = [NSString stringWithFormat:@"%@%@",self.zuletztGesetzteID,object];
-            }
-            // Falls wir mit 'parent.' oder 'immediateparent' starten, muss ich die aktuelle ID davor setzen.
-            if ([object hasPrefix:@"parent."] || [object hasPrefix:@"immediateparent."])
-            {
-                object = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,object];
-            }
-
-
-            [o appendFormat:@"  setConstraint('%@',function() { %@.setAttribute_('%@',%@); });\n",object,self.zuletztGesetzteID,attr,s];
+            [o appendFormat:@"  setConstraint(%@,'%@',function() { %@.setAttribute_('%@',%@); });\n",self.zuletztGesetzteID,object,self.zuletztGesetzteID,attr,s];
         }
     }
+
 
     // 'align' / 'valign' muss darauf warten, dass die Breite / Höhe der Eltern korrekt gesetzt wurde.
     // Kann deswegen erst ganz am Ende ausgewertet werden
@@ -817,7 +807,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 - (NSMutableString*) addCSSAttributes:(NSDictionary*) attributeDict
 {
-    // Egal welcher String da drin steht, hauptsache nicht Canvas
+    // Egal welcher String da drin steht, hauptsache nicht canvas
     // Für canvas muss ich bei bestimmten Attributen anders vorgehen
     // insbesondere font-size wird dann global deklariert usw.
     return [self addCSSAttributes:attributeDict toElement:@"xyz"];
@@ -1818,12 +1808,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     // Ich kann die andere Beudeutung von 'value' (insb. bei checkbox) in OL nicht in JS überschreiben
     s = [self inString:s searchFor:@".value" andReplaceWith:@".myValue" ignoringTextInQuotes:YES];
-
-    // Das OpenLaszlo-'name' muss ersetzt werden (über getter klappt nicht)
-    // Der getter muss neu benannt werden, da intern von jQuery benutzt
-    // und wenn ich den getter probiere zu überschreiben, gibt es eine Rekursion.
-    //s = [self inString:s searchFor:@".name" andReplaceWith:@".myName" ignoringTextInQuotes:YES];
-    // Ne, neu wird in $(el).data('name') gespeichert;
 
     // classroot taucht nur in Klassen auf und bezeichnet die Wurzel der Klasse
     if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
@@ -4766,9 +4750,6 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"multistatebutton"])
     {
         element_bearbeitet = YES;
-
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
-
 
         [self.output appendString:@"<div"];
 
@@ -11036,61 +11017,61 @@ BOOL isJSExpression(NSString *s)
     "};\n"
     "\n"
     "\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// watch/unwatch-Skript um auf Änderungen von Variablen reagieren zu können\n"
-    "/////////////////////////////////////////////////////////\n"
-    "/*\n"
-    "* object.watch polyfill\n"
-    "*\n"
-    "* 2012-04-03\n"
-    "*\n"
-    "* By Eli Grey, http://eligrey.com\n"
-    "* Public Domain.\n"
-    "* NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.\n"
-    "*/\n"
-    "\n"
-    "// object.watch\n"
-    "if (!Object.prototype.watch) {\n"
-    "    Object.defineProperty(Object.prototype, 'watch', {\n"
-    "        enumerable: false,\n"
-    "        configurable: true,\n"
-    "        writable: false,\n"
-    "        value: function (prop, handler) {\n"
-    "            var oldval = this[prop], newval = oldval,\n"
-    "            getter = function () {\n"
-    "                return newval;\n"
-    "            },\n"
-    "            setter = function (val) {\n"
-    "                oldval = newval;\n"
-    "                return newval = handler.call(this, prop, oldval, val);\n"
-    "            };\n"
-    "            if (delete this[prop]) { // can't watch constants\n"
-    "                Object.defineProperty(this, prop, {\n"
-    "                get: getter,\n"
-    "                set: setter,\n"
-    "                enumerable: true,\n"
-    "                configurable: true\n"
-    "                });\n"
-    "            }\n"
-    "        }\n"
-    "    });\n"
-    "}\n"
-    "\n"
-    "// object.unwatch\n"
-    "if (!Object.prototype.unwatch) {\n"
-    "    Object.defineProperty(Object.prototype, 'unwatch', {\n"
-    "        enumerable: false,\n"
-    "        configurable: true,\n"
-    "        writable: false,\n"
-    "        value: function (prop) {\n"
-    "            var val = this[prop];\n"
-    "            delete this[prop]; // remove accessors\n"
-    "            this[prop] = val;\n"
-    "        }\n"
-    "    });\n"
-    "}"
-    "\n"
-    "\n"
+    //"/////////////////////////////////////////////////////////\n"
+    //"// watch/unwatch-Skript um auf Änderungen von Variablen reagieren zu können\n"
+    //"/////////////////////////////////////////////////////////\n"
+    //"/*\n"
+    //"* object.watch polyfill\n"
+    //"*\n"
+    //"* 2012-04-03\n"
+    //"*\n"
+    //"* By Eli Grey, http://eligrey.com\n"
+    //"* Public Domain.\n"
+    //"* NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.\n"
+    //"*/\n"
+    //"\n"
+    //"// object.watch\n"
+    //"if (!Object.prototype.watch) {\n"
+    //"    Object.defineProperty(Object.prototype, 'watch', {\n"
+    //"        enumerable: false,\n"
+    //"        configurable: true,\n"
+    //"        writable: false,\n"
+    //"        value: function (prop, handler) {\n"
+    //"            var oldval = this[prop], newval = oldval,\n"
+    //"            getter = function () {\n"
+    //"                return newval;\n"
+    //"            },\n"
+    //"            setter = function (val) {\n"
+    //"                oldval = newval;\n"
+    //"                return newval = handler.call(this, prop, oldval, val);\n"
+    //"            };\n"
+    //"            if (delete this[prop]) { // can't watch constants\n"
+    //"                Object.defineProperty(this, prop, {\n"
+    //"                get: getter,\n"
+    //"                set: setter,\n"
+    //"                enumerable: true,\n"
+    //"                configurable: true\n"
+    //"                });\n"
+    //"            }\n"
+    //"        }\n"
+    //"    });\n"
+    //"}\n"
+    //"\n"
+    //"// object.unwatch\n"
+    //"if (!Object.prototype.unwatch) {\n"
+    //"    Object.defineProperty(Object.prototype, 'unwatch', {\n"
+    //"        enumerable: false,\n"
+    //"        configurable: true,\n"
+    //"        writable: false,\n"
+    //"        value: function (prop) {\n"
+    //"            var val = this[prop];\n"
+    //"            delete this[prop]; // remove accessors\n"
+    //"            this[prop] = val;\n"
+    //"        }\n"
+    //"    });\n"
+    //"}"
+    //"\n"
+    //"\n"
     //"/*\n"
     //" * jQuery resize event - v1.1 - 3/14/2010\n"
     //" * http://benalman.com/projects/jquery-resize-plugin/\n"
@@ -15776,14 +15757,29 @@ BOOL isJSExpression(NSString *s)
     "// Wichtige Hilfsfunktion, um constraints zu setzen    //\n"
     "// setConstraint()                                     //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var setConstraint = function (expression,func) {\n"
-    "    if (typeof expression !== 'string' || expression === '') throw new TypeError('setConstraint - first arg must be a non-empty string')\n"
-    "    if (typeof func !== 'function') throw new TypeError('setConstraint - second arg must be a function')\n"
+    "var setConstraint = function (el,expression,func) {\n"
+    "    if (typeof expression !== 'string' || expression === '') throw new TypeError('setConstraint - second arg must be a non-empty string')\n"
+    "    if (typeof func !== 'function') throw new TypeError('setConstraint - third arg must be a function')\n"
+    "\n"
+    "\n"
+    "    // Falls wir mit 'this.' starten muss ich this durch die aktuelle ID ersetzen.\n"
+    "    // (sonst würde 'this' auf 'window' verweisen)\n"
+    "    if (expression.startsWith('this.'))\n"
+    "    {\n"
+    "        expression = expression.substring(4);\n"
+    "        expression = el.id + expression;\n"
+    "    }\n"
+    "    // Falls wir mit 'parent.' oder 'immediateparent.' starten, muss ich die aktuelle ID davor setzen.\n"
+    "    if ((expression.startsWith('parent')) || (expression.startsWith('immediateparent')))\n"
+    "    {\n"
+    "        alert('Komme hier zumindestens im Taxango-Code nie rein. Oder? Wenn ja, kann diese Abfrage evtl. weg.');\n"
+    "        expression = el.id + '.' + expression;\n"
+    "    }\n"
     "\n"
     "    // Expression ist der Ausdruck, den wir zerlegen müssen in Objekt (alle vorderen Elemente) und prop (letztes Element)\n"
     "    var tempArray=expression.split('.');\n"
     "\n"
-    "    // Wenn kein Objekt vorhanden (= Array aus einem Element) ist es implizit 'window' (bzw. 'this')\n"
+    "    // Wenn kein Objekt vorhanden (= Array bestehend aus einem Element) ist es implizit 'window' (bzw. 'this')\n"
     "\n"
     "    var obj;\n"
     "    var prop;\n"

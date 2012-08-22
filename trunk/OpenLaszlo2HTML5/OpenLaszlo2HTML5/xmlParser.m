@@ -7,12 +7,9 @@
 // iwie gibt es noch ein Problem mit den pointer-events (globalhelp verdeckt Foren-Button)
 //
 //
-// 'name' Attribute werden global gemacht, aber zumindestens bei input-Feldern
-// überschreiben Sie sich dann gegenseitig. z. B. 'Gewerbesteuerpflicht', 'cbType' oder
-// 'regelmaessig', 'begruendet', 'complete'
-// -> Ja, ist ja auch Unsinn. Aber erst toggleVisibility auf constraints umstellen, dann kann ich
-// die Zeile die 'name'-Attribute global macht, wohl rausnehmen!
-// -> Aber Vorsicht!! Wenn die View auf erster Ebene ist, muss sie weiterhin global bleiben!
+// 'name' Attribute werden global gemacht. Dies ist aber nicht immer korrekt.
+// Ich kann die Zeile die 'name'-Attribute global macht, wohl rausnehmen!
+// -> Aber Vorsicht!! Wenn die View auf erster Ebene ist, muss das name-Attribut weiterhin global bleiben!
 // http://www.openlaszlo.org/lps4.2/docs/developers/program-development.html Dort 2.2.3
 //
 //
@@ -23,8 +20,6 @@
 //
 //- Eigene Klassen müssen als allererstes und nicht als letztes gecheckt werden (Bsp. 15.14 und 15.15)
 // (erst nachdem ich alle ToDos und alle noch nicht selbst ausgewerteten Klassen entfernt habe)
-//
-//- wieso befidnet sich 'certdatepicker' 2 x in collectedclasses ?
 //
 //
 //
@@ -185,6 +180,11 @@ BOOL kompiliereSpeziellFuerTaxango = YES;
 // Gefundene <class>-Tags, die definiert wurden
 @property (strong, nonatomic) NSMutableDictionary *allFoundClasses;
 
+// Gefundene <include>-Tags, die bereits inkludiert wurden (Denn jedes darf nur einmal inkludiert werden,
+// auch wenn es mehrmals aufgerufen wird - z. B. bei 'certdatepicker' der Fall im GFlender-Code)
+@property (strong, nonatomic) NSMutableArray *allIncludedIncludes;
+
+
 
 // Zum internen testen, ob wir alle Attribute erfasst haben
 @property (nonatomic) int attributeCount;
@@ -270,7 +270,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize allJSGlobalVars = _allJSGlobalVars, allImgPaths = _allImgPaths;
 
-@synthesize allFoundClasses = _allFoundClasses;
+@synthesize allFoundClasses = _allFoundClasses, allIncludedIncludes = _allIncludedIncludes;
 
 @synthesize attributeCount = _attributeCount;
 
@@ -433,6 +433,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
         self.allFoundClasses = [[NSMutableDictionary alloc] initWithCapacity:200];
 
+        self.allIncludedIncludes = [[NSMutableArray alloc] init];
+
         self.allImgPaths = [[NSMutableArray alloc] init];
     }
     return self;
@@ -488,7 +490,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Zur Sicherheit mache ich von allem ne Copy.
         // Nicht, dass es beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.allImgPaths copy], nil];
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy], nil];
         return r;
     }
 }
@@ -676,24 +678,44 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    BOOL nochVorDOMAusfuehren = NO;
+    // Das bedeutet wird müssen es noch vor dem DOM ausführen
     if ([s hasPrefix:@"$immediately{"])
     {
-        nochVorDOMAusfuehren = YES;
+        // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...
+        NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s];
+
+
         s = [s substringFromIndex:12];
 
-        // Damit er unten richtig reingeht
+        // ...s computable machen...
         s = [NSString stringWithFormat:@"$%@",s];
+        s = [self makeTheComputedValueComputable:s];
+
+
+        // Dann muss ich undefined-Werte für alle gefunden Vars in den Code injecten.
+        // Denn eigentlich ist der DOM und alle Vars noch gar nicht initialisiert
+        // Den Code aber WIRKLICH vor dem DOM auszuführen würde jetzt zu weit führen
+        for (id object in vars)
+        {
+            // auf jedenfall mit vorangestelltem var, damit nur lokal!
+            NSString *sToInsert = [NSString stringWithFormat:@" var %@ = undefined;", object];
+            NSMutableString *sToInject = [NSMutableString stringWithString:s];
+            [sToInject insertString:sToInsert atIndex:13];
+            s = [NSString stringWithString:sToInject];
+        }
+
+        // Somit ist kein $ mehr davor und er geht automatisch unten richtig rein und setzt die prop ohne constraint
     }
 
-    BOOL nichtWatchen = NO;
     if ([s hasPrefix:@"$once{"])
     {
-        nichtWatchen = YES;
         s = [s substringFromIndex:5];
 
-        // Damit er unten richtig reingeht
+        // ...s computable machen...
         s = [NSString stringWithFormat:@"$%@",s];
+        s = [self makeTheComputedValueComputable:s];
+
+        // Somit ist kein $ mehr davor und er geht automatisch unten richtig rein und setzt die prop ohne constraint
     }
 
     if ([s hasPrefix:@"$always{"])
@@ -706,85 +728,54 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...
-    NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s];
-
-
-
     BOOL constraintValue = NO;
-    BOOL weNeedQuotes = YES;
-    BOOL thatWasAPath = NO;
 
     if ([s hasPrefix:@"$path{"])
     {
-        thatWasAPath = YES;
-
         // Ein relativer Pfad zum vorher gesetzen XPath Ich nehme Bezug zum letzten lastDP und dem dort gesetzten Pfad.
         s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
         // Die Variable 'lastDP' ist bekannt, da die Ausgabe hier in 'jsComputedValuesOutput' erfolgt.
         // Genau da (und kurz vorher) erfolgt auch das setzen von lastDP
         [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP,'%@');\n",self.zuletztGesetzteID,s,attr];
     }
-    else if ([s hasPrefix:@"$"])
+    else if ([s hasPrefix:@"$"]) // = 'sure' constraint Value
     {
         constraintValue = YES;
+
+
+        // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...
+        NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s];
+
+
+
+
+        NSString *e = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
+        e = [self modifySomeExpressionsInJSCode:e];
+
+        // Escape ' in s
+        e = [e stringByReplacingOccurrencesOfString:@"'" withString:@"\\\'"];
+        [o appendFormat:@"  setInitialConstraintValue(%@,'%@','%@');\n",self.zuletztGesetzteID,attr,e];
+
 
 
         // ...jetzt erst s computable machen...
         s = [self makeTheComputedValueComputable:s];
 
 
-        if (nochVorDOMAusfuehren)
-        {
-            // Dann muss ich undefined-Werte für alle gefunden Vars in den Code injecten.
-            // Denn eigentlich ist der DOM und alle Vars noch gar nicht initialisiert
-            // Den Code aber WIRKLICH vor dem DOM auszuführen würde jetzt zu weit führen
-            for (id object in vars)
-            {
-                // auf jedenfall mit vorangestelltem var, damit nur lokal!
-                NSString *sToInsert = [NSString stringWithFormat:@" var %@ = undefined;", object];
-                NSMutableString *sToInject = [NSMutableString stringWithString:s];
-                [sToInject insertString:sToInsert atIndex:13];
-                s = [NSString stringWithString:sToInject];
-            }
-        }
-
-        weNeedQuotes = NO;
-    }
-
-    if (isJSExpression(s))
-        weNeedQuotes = NO;
-
-    if (!thatWasAPath)
-    {
-        // Bei Constraints brauche ich neuerdings einen speziellen Aufruf, um evtl. Klone berücksichtigen zu können
-        if (constraintValue && !nichtWatchen && !nochVorDOMAusfuehren)
-        {
-            // Escape ' in s
-            NSString *e = [s stringByReplacingOccurrencesOfString:@"'" withString:@"\\\'"];
-            [o appendFormat:@"  setInitialConstraintValue(%@,'%@','%@');\n",self.zuletztGesetzteID,attr,e];
-        }
-        else
-        {
-            if (weNeedQuotes)
-                [o appendFormat:@"  %@.setAttribute_('%@','%@');\n",self.zuletztGesetzteID,attr,s];
-            else
-                [o appendFormat:@"  %@.setAttribute_('%@',%@);\n",self.zuletztGesetzteID,attr,s];
-        }
-    }
-
-
-    // Wenn die $once-Angabe erfolgt, ist es gar kein constraint
-    if (constraintValue && !nichtWatchen && !nochVorDOMAusfuehren)
-    {
-        [o appendFormat:@"  // Der zu setzende Wert ist abhängig von %ld woanders gesetzten Variable(n)\n",[vars count]];
-
-        // '__strong', damit ich object modifizieren kann
-        for (id __strong object in vars)
+        [o appendFormat:@"  // Der zu setzende Wert ist abhängig von %ld woanders gesetzten Variable(n)\n",[vars count]];            
+        for (id object in vars)
         {
             [o appendFormat:@"  setConstraint(%@,'%@',function() { %@.setAttribute_('%@',%@); });\n",self.zuletztGesetzteID,object,self.zuletztGesetzteID,attr,s];
         }
     }
+    else // Übrig bleibt eine ganz normale prop, die gesetzt wird (keine Constraint oder irgendwas)
+    {
+        if (isJSExpression(s))
+            [o appendFormat:@"  %@.setAttribute_('%@',%@);\n",self.zuletztGesetzteID,attr,s];
+        else
+            [o appendFormat:@"  %@.setAttribute_('%@','%@');\n",self.zuletztGesetzteID,attr,s];
+    }
+
 
 
     // 'align' / 'valign' muss darauf warten, dass die Breite / Höhe der Eltern korrekt gesetzt wurde.
@@ -1789,22 +1780,10 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    // Das OpenLaszlo-'height' muss ersetzt werden (über getter klappt nicht)
-    // Der getter muss neu benannt werden, da intern von jQuery benutzt
-    // und wenn ich den getter probiere zu überschreiben, gibt es eine Rekursion.
-    // Mit '.' davor, sonst würde er auch Variablen wie 'titlewidth' modifizieren
-    s = [self inString:s searchFor:@".height" andReplaceWith:@".myHeight" ignoringTextInQuotes:YES];
-
-    // Das OpenLaszlo-'width' muss ersetzt werden (über getter klappt nicht)
-    // Der getter muss neu benannt werden, da intern von jQuery benutzt
-    // und wenn ich den getter probiere zu überschreiben, gibt es eine Rekursion.
-    s = [self inString:s searchFor:@".width" andReplaceWith:@".myWidth" ignoringTextInQuotes:YES];
-
     // dataset ist eine interne Property von ECMAScript 5. Keine Property darf so heißen.
+    // Mit '.' davor, sonst würde er auch Variablen wie  z. B. 'complexdataset' modifizieren
     s = [self inString:s searchFor:@".dataset" andReplaceWith:@".myDataset" ignoringTextInQuotes:YES];
 
-    // context scheint iwie intern auch von jQuery genutzt zu werden...
-    s = [self inString:s searchFor:@".context" andReplaceWith:@".myContext" ignoringTextInQuotes:YES];
 
     // Ich kann die andere Beudeutung von 'value' (insb. bei checkbox) in OL nicht in JS überschreiben
     s = [self inString:s searchFor:@".value" andReplaceWith:@".myValue" ignoringTextInQuotes:YES];
@@ -1868,17 +1847,11 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 - (NSString *) somePropertysNeedToBeRenamed:(NSString*)s
 {
-    if ([s isEqualToString:@"height"])
-        s = @"myHeight";
-
-    if ([s isEqualToString:@"width"])
-        s = @"myWidth";
-
     if ([s isEqualToString:@"dataset"])
         s = @"myDataset";
 
-    if ([s isEqualToString:@"context"])
-        s = @"myContext";
+    if ([s isEqualToString:@"value"])
+        s = @"myValue";
 
     return s;
 }
@@ -2745,6 +2718,18 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     NSURL *pathToFile = [NSURL URLWithString:relativePath relativeToURL:path];
 
+    // Test ob wir die Datei schin mal vorher eingebunden haben
+    if ([self.allIncludedIncludes containsObject:pathToFile])
+    {
+        NSLog(@"Aborting recursion, because this file already was included");
+        return;
+    }
+
+
+
+    // Alles bereits eingebunde in Array speichern, damit ich ausversehen <includes> doppelt inkludiere
+    [self.allIncludedIncludes addObject:pathToFile];
+
     xmlParser *x = [[xmlParser alloc] initWith:pathToFile recursiveCall:YES];
 
     // Den Pfad zur base-nicht-rekursiven-Datei muss ich mitspeichern
@@ -2766,8 +2751,11 @@ void OLLog(xmlParser *self, NSString* s,...)
     // x.allJSGlobalVars = self.allJSGlobalVars;
     [x.allJSGlobalVars addEntriesFromDictionary:self.allJSGlobalVars];
 
-    // Die soweit erkannten Klassen müssen auch später rekursiv aufgerufenen Dateien bekannt sein!
+    // Die soweit erkannten Klassen müssen auch rekursiv aufgerufenen Dateien bekannt sein!
     [x.allFoundClasses addEntriesFromDictionary:self.allFoundClasses];
+
+    // Die soweit inkludierten <includes> müssen auch rekursiv aufgerufenen Dateien bekannt sein!
+    x.allIncludedIncludes = [[NSMutableArray alloc] initWithArray:self.allIncludedIncludes];
 
     // id-Zähler übergeben, sonst werden IDs doppelt vergeben!
     x.idZaehler = self.idZaehler;
@@ -2812,9 +2800,11 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jsComputedValuesOutput appendString:[result objectAtIndex:13]];
         [self.jsConstraintValuesOutput appendString:[result objectAtIndex:14]];
 
-        // Hier adden, weil ich NICHT die Werte aus diesem Array mit an die
-        // Rekursions-Stufe übergeben hatte
+        // Hier adden, weil ich NICHT die Werte aus diesem Array mit an die Rekursions-Stufe übergeben hatte
         [self.allImgPaths addObjectsFromArray:[result objectAtIndex:15]];
+
+        // Hier wieder überschreiben, da ich ja die Werte mit übergeben hatte
+        self.allIncludedIncludes = [[NSMutableArray alloc] initWithArray:[result objectAtIndex:16]];
     }
 
     NSLog(@"Leaving recursion");
@@ -4326,7 +4316,6 @@ didStartElement:(NSString *)elementName
             {
                 NSString *orignalValueString = [attributeDict valueForKey:@"value"];
                 orignalValueString = [self removeOccurrencesOfDollarAndCurlyBracketsIn:orignalValueString];
-                // Damit width zu myWidth wird z. B.:
                 orignalValueString = [self modifySomeExpressionsInJSCode:orignalValueString];
 
 
@@ -8643,6 +8632,8 @@ BOOL isJSExpression(NSString *s)
 
         [self.allImgPaths addObjectsFromArray:[result objectAtIndex:15]];
 
+        // Nur Erinnerung, dass es index 16 gibt. Es können in einer Klasse wohl keine includes auftauchen
+        // self.allIncludedIncludes = [[NSMutableArray alloc] initWithArray:[result objectAtIndex:16]];
 
 
 
@@ -11635,9 +11626,9 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
-    "  // Zusatz-Code -  Das hier muss noch zu ECHTEM generierten Code werden\n"
-    "  $(globalhelp_6).height(globalhelp._inner.myHeight+35-35);\n"
-    "  $(globalhelp_10).css('top',globalhelp._inner.myHeight+50-50+15);\n"
+    "  // Zusatz-Code -  Das hier muss noch zu ECHTEM generierten Code werden (ToDo)\n"
+    "  $(globalhelp_6).height(globalhelp._inner.height+35-35);\n"
+    "  $(globalhelp_10).css('top',globalhelp._inner.height+50-50+15);\n"
     "  // Damit der eine blöde Effekt weggeht Hintergrundbild mit sich selbst aktualisieren\n"
     "  $(globalhelp_7).css('background-image',$(globalhelp_7).css('background-image'))\n"
     "  $(globalhelp_8).css('background-image',$(globalhelp_8).css('background-image'))\n"
@@ -11741,22 +11732,6 @@ BOOL isJSExpression(NSString *s)
     "            $('#'+id).get(0).setAttribute_(key,attributes[key]);\n"
     "        });\n"
     "    }\n"
-    "/*\n"
-    "    if (attributes.myHeight !== undefined)\n"
-    "        $('#'+id).css('height', attributes.myHeight);\n"
-    "    if (attributes.myWidth !== undefined)\n"
-    "        $('#'+id).css('width', attributes.myWidth);\n"
-    "    if (attributes.x !== undefined)\n"
-    "        $('#'+id).css('left', attributes.x);\n"
-    "    if (attributes.y !== undefined)\n"
-    "        $('#'+id).css('top', attributes.y);\n"
-    "\n"
-    "    if (attributes.bgcolor !== undefined)\n"
-    "    {\n"
-    "        $('#'+id).setAttribute_('bgcolor',attributes.bgcolor);\n"
-    "    }\n"
-    "*/\n"
-    "\n"
     "\n"
     "\n"
     "\n"
@@ -12932,7 +12907,7 @@ BOOL isJSExpression(NSString *s)
     "$(window).resize(function()\n"
     "{\n"
     "    if (canvas) // falls DOM schon initialisiert\n"
-    "      canvas.myHeight = $(window).height();\n"
+    "      canvas.height = $(window).height();\n"
     "\n"
     "    adjustOffsetOnBrowserResize();\n"
     "});\n"
@@ -13060,13 +13035,6 @@ BOOL isJSExpression(NSString *s)
     "        throw 'Error1 calling setAttribute, no argument attributeName given (this = '+this+').';\n"
     "    if (value === undefined) // Wirklich Triple-= erforderlich, damit er 'null' passieren lässt bei 'text' und 'mask'\n"
     "        throw 'Error2 calling setAttribute, no argument value given or undefined (attributeName = \"'+attributeName+'\" and this = '+this+').';\n"
-    "\n"
-    // Kann auch im Skript aufgetaucht sein und dort geändert worden sein, z. B. Beispiel 28.16
-    // Hier richtig setzen, nicht unten reagieren, damit der getriggerte Handler der richtige ist.
-    "    if (attributeName === 'myWidth') \n"
-    "        attributeName = 'width';\n"
-    "    if (attributeName === 'myHeight') \n"
-    "        attributeName = 'height';\n"
     "\n"
     "\n"
     "\n"
@@ -13794,6 +13762,7 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'isopen' ||\n"
     "            attributeName === 'parentnumber' ||\n"
     "            attributeName === 'season' ||\n"
+    "            attributeName === 'size' ||\n"
     "            attributeName === 'digitcolor' ||\n"
     "            attributeName === 'bezpartnerdbig' ||\n"
     "            attributeName === 'bezpartnerdsmall' ||\n"
@@ -14952,10 +14921,10 @@ BOOL isJSExpression(NSString *s)
     "});\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Getter/Setter for 'myContext'                       //\n"
+    "// Getter/Setter for 'context'                         //\n"
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
-    "Object.defineProperty(HTMLElement.prototype, 'myContext', {\n"
+    "Object.defineProperty(HTMLElement.prototype, 'context', {\n"
     "    get : function(){ if ($(this).is('canvas')) return (this.getContext('2d')); return null; },\n"
     "    // Der triggerHandler() MUSS drin bleiben, sonst aktualisiert sich Drawview nicht richtig bei Animationen\n"
     "    set : function(newValue){ if ($(this).is('canvas')) { this.getContext('2d') = newValue; $(this).triggerHandler('oncontext', newValue); } },\n"
@@ -15014,13 +14983,12 @@ BOOL isJSExpression(NSString *s)
     "});\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Getter/Setter for 'myHeight'                        //\n"
-    "// ('height' is replaced internally, else recursion)   //\n"
+    "// Getter/Setter for 'height'                          //\n"
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
-    "Object.defineProperty(HTMLElement.prototype, 'myHeight', {\n"
+    "Object.defineProperty(HTMLElement.prototype, 'height', {\n"
     //"    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('height'));  },\n"
-    // Gemäß Beispiel 7.4 sind es die outer-Werte... wtf... ob es was bricht?
+    // Gemäß Beispiel 7.4 sind es die outer-Werte!
     "    get : function(){ if (!isDOM(this)) return undefined; return $(this).outerHeight();  },\n"
     "    set : function(newValue){ if (isDOM(this)) $(this).css('height',newValue); $(this).triggerHandler('onheight', newValue); },\n"
     "    enumerable : false,\n"
@@ -15028,13 +14996,12 @@ BOOL isJSExpression(NSString *s)
     "});\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Getter/Setter for 'myWidth'                         //\n"
-    "// ('width' is replaced internally, else recursion)    //\n"
+    "// Getter/Setter for 'width'                           //\n"
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
-    "Object.defineProperty(HTMLElement.prototype, 'myWidth', {\n"
+    "Object.defineProperty(HTMLElement.prototype, 'width', {\n"
     //"    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('width'));  },\n"
-    // Gemäß Beispiel 7.4 ist es outerWidth... wtf... ob es was bricht?
+    // Gemäß Beispiel 7.4 ist es outerWidth!
     "    get : function(){ if (!isDOM(this)) return undefined; return $(this).outerWidth();  },\n"
     "    set : function(newValue){ if (isDOM(this)) $(this).css('width',newValue); $(this).triggerHandler('onwidth', newValue); },\n"
     "    enumerable : false,\n"
@@ -15731,21 +15698,21 @@ BOOL isJSExpression(NSString *s)
     "    if (typeof prop !== 'string') throw new TypeError('setInitialConstraintValue - second arg must be a string')\n"
     "    if (typeof func !== 'string') throw new TypeError('setInitialConstraintValue - third arg must be a string (will be evaluated as a function)')\n"
     "\n"
-    "    // Über 'Function' den String als function ausführen\n"
     "    // Falls es Klone gibt, führt er hier drin auch schon für alle Klone eine Vorbelegung durch.\n"
     "    // Lasse ich erstmal so, bewirkt quasi einen Defaultwert für Klone, der aber sogleich überschrieben wird.\n"
-    "    el.setAttribute_(prop,Function('return ' + func)());\n"
+    "    var s = '(function() { with (' + el.id + ') { return ' + func + '; } }).bind(' + el.id + ')()';\n"
+    //"    // alert(s);\n"
+    //"    el.setAttribute_(prop,eval(s));\n"
+    // Besser ohne eval:
+    "    // Über 'Function' den String als function ausführen (zur Vermeidung von eval)\n"
+    "    el.setAttribute_(prop,Function('return ' + s)());\n"
     "\n"
     "    // Falls es geklonte Geschwister gibt:\n"
     "    var c = 2;\n"
     "    while ($('#'+el.id+'_repl'+c).length)\n"
     "    {\n"
-    "        var s = func;\n"
     "        var newID = el.id+'_repl'+c;\n"
-    "        // Ersetze den Anfang (Funktionskopf)...\n"
-    "        s = '(function() { with (' + newID + ') { ' + s.substr(s.indexOf('return'));\n"
-    "        // und das Ende (bind) mit der richtigen ID.\n"
-    "        s = s.substr(0,s.lastIndexOf('.bind(')) + '.bind(' + newID + ')()';\n"
+    "        var s = '(function() { with (' + newID + ') { return ' + func + '; } }).bind(' + newID + ')()';\n"
     "\n"
     "        $('#'+newID).get(0).setAttribute_(prop,Function('return ' + s)());\n"
     "        c++;\n"
@@ -15772,7 +15739,7 @@ BOOL isJSExpression(NSString *s)
     "    // Falls wir mit 'parent.' oder 'immediateparent.' starten, muss ich die aktuelle ID davor setzen.\n"
     "    if ((expression.startsWith('parent')) || (expression.startsWith('immediateparent')))\n"
     "    {\n"
-    "        alert('Komme hier zumindestens im Taxango-Code nie rein. Oder? Wenn ja, kann diese Abfrage evtl. weg.');\n"
+    "        alert('Komme hier zumindestens im Taxango-Code nie rein. Oder? Kann diese Abfrage evtl. weg.');\n"
     "        expression = el.id + '.' + expression;\n"
     "    }\n"
     "\n"
@@ -15806,15 +15773,9 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "\n"
-    "    // setAttribute_ verschickt events nur an 'onheight' / 'onwidth' usw...\n"
-    "    if (prop === 'myWidth')\n"
-    "        prop = 'width';\n"
-    "    if (prop === 'myHeight')\n"
-    "        prop = 'height';\n"
+    "    // setAttribute_ verschickt events nur an 'onvalue' usw...\n"
     "    if (prop === 'myDataset')\n"
     "        prop = 'dataset';\n"
-    "    if (prop === 'myContext')\n"
-    "        prop = 'context';\n"
     "    if (prop === 'myValue')\n"
     "        prop = 'value';\n"
     "\n"
@@ -16157,8 +16118,8 @@ BOOL isJSExpression(NSString *s)
     "      {\n"
     "        // Dann ist es JS-Code, Anpassungen vornehmen.\n"
     "        av[i] = av[i].replace(/setAttribute/g,'setAttribute_');\n"
-    "        av[i] = av[i].replace(/\\.width/g,'.myWidth');\n"
-    "        av[i] = av[i].replace(/\\.height/g,'.myHeight');\n"
+    "        av[i] = av[i].replace(/\\.dataset/g,'.myDataset');\n"
+    "        av[i] = av[i].replace(/\\.value/g,'.myValue');\n"
     "\n"
     "        // 'on' entfernen\n"
     "        an[i] = an[i].substr(2);\n"
@@ -16210,8 +16171,8 @@ BOOL isJSExpression(NSString *s)
     "            av[i] = av[i].replace(/parent/g,'getTheParent()');\n"
     // --> Neu gelöst über getter, deswegen muss ich nicht mehr ersetzen.
     // --> Neuer: Bricht leider jQueri UI. hmmm, dewegen kein getter für parent möglich
-    "            av[i] = av[i].replace(/\\.width/g,'.myWidth');\n"
-    "            av[i] = av[i].replace(/\\.height/g,'.myHeight');\n"
+    "            av[i] = av[i].replace(/\\.dataset/g,'.myDataset');\n"
+    "            av[i] = av[i].replace(/\\.value/g,'.myValue');\n"
     "\n"
     "            // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
     "            var result = (function() { with (id) { return eval(av[i]); } }).bind(id)();\n"

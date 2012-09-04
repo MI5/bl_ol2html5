@@ -573,7 +573,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    // So get all var-names, that are left
+    // Now get all var-names, that are left
     // Auch per Punkt verkettete Vars erlauben ( _ ist automatisch mit drin bei \W )
     pattern = @"[^\\W\\d](\\w|[.]{1,2}(?=\\w))*";
 
@@ -597,7 +597,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             varName = [self modifySomeExpressionsInJSCode:varName];
 
             // Falls ganz vorne jetzt getTheParent() steht, dann muss ich unser aktuelles Element
-            // davorsetzen. Weil jetzt nochmal extra mit with () {} zu arbeiten ist wohl nicht nötig
+            // davorsetzen. Weil jetzt nochmal extra mit 'with () {}' zu arbeiten ist wohl nicht nötig
             // da wir ja auf Ebene der einzelnen Variable sind und individuell reagieren können.
             if ([varName hasPrefix:@"getTheParent("])
                 varName = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,varName];
@@ -646,7 +646,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             if ([varName isEqualToString:@"while"]) continue;
 
 
-            // Falls mehrmals auf den gleichen Wert getestet wird ( z. B. if (x == 2 || x == 3)
+            // Falls mehrmals auf den gleichen Wert getestet wird (z. B. if (x == 2 || x == 3)
             // brauche (und sollte) ich natürlich auf das 'x' nur einmal horchen.
             if (![vars containsObject:varName])
                 [vars addObject:varName];
@@ -752,15 +752,11 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s];
 
 
-
-
         NSString *e = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
         e = [self modifySomeExpressionsInJSCode:e];
-
-        // Escape ' in s
+        // Escape ' in e
         e = [e stringByReplacingOccurrencesOfString:@"'" withString:@"\\\'"];
         [o appendFormat:@"  setInitialConstraintValue(%@,'%@','%@');\n",self.zuletztGesetzteID,attr,e];
-
 
 
         // ...jetzt erst s computable machen...
@@ -7871,12 +7867,14 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
 
 
-        // Okay, außerdem muss ich alle Variablen der Klasse setzen mit ihren Defaultwerten
-        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
+        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
         [o appendFormat:@"\n  // Klasse '%@' wurde instanziert in '%@'",elementName,self.zuletztGesetzteID];
 
 
+// Die Defaultwerte werden nicht länger vor der Klasse gesetzt, sondern erst in interpretObject
+/*
+        // Okay, außerdem muss ich alle Variablen der Klasse setzen mit ihren Defaultwerten
         NSArray *keys = [self.allFoundClasses objectForKey:elementName];
         if ([keys count] > 0)
         {
@@ -7926,7 +7924,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         {
             [o appendString:@"\n  // Keine Klassen-Attribute vorhanden, die gesetzt werden müssen"];
         }
-
+*/
 
         // Erst alle Build-in-Attribute raushauen...
         NSMutableDictionary *d = [[NSMutableDictionary alloc] initWithDictionary:attributeDict];
@@ -8006,7 +8004,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // ...dann die übrig gebliebenen Attribute (die von der Instanz selbst definierten) setzen
         if ([d count] > 0)
         {
-            [o appendString:@"\n  // Nach dem setzen der Defaultwerte nun setzen der Instanz-Variablen, die diese Angaben überschreiben"];
+            [o appendString:@"\n  // Setzen der Instanz-Variablen, für die nicht die Defaultwerte der Klasse gelten (interpretObject() setzt nur bei hier 'undefined' Werten)"];
 
             // '__strong', damit ich object modifizieren kann
             for (NSString __strong *key in d)
@@ -15700,6 +15698,110 @@ BOOL isJSExpression(NSString *s)
     "}\n"
     "\n"
     "\n"
+    // Diese Methode gibt es aus performance-Gründen sowohl in Objective C, als auch in JS
+    // Alles was ich in Objective C (während dem Konverterlauf) machen kann, spart JS-Rechenzeit beim Laden der Seite
+    // Diese JS-Methode ist im wesentlichen für Klassen, die erst zur Laufzeit constraints auswerten
+    "/////////////////////////////////////////////////////////\n"
+    "// Wichtige Hilfsfunktion, um alle Vars einer constraint zu ermitteln//\n"
+    "// getTheDependingVarsOfTheConstraint()                //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var getTheDependingVarsOfTheConstraint = function (s,scope) {\n"
+    "    vars = [];\n"
+    "\n"
+    "    // Im wesentlichen, um Anfangs- und Endmarkierung der Constraint zu entfernen\n"
+    "    s = s.replace(/\\$/g, '');\n"
+    "    s = s.replace(/\\{/g, '');\n"
+    "    s = s.replace(/\\}/g, '');\n"
+    "\n"
+    "    // Remove everything between ' (including the ')\n"
+    "    s = s.replace(/'[^']*'/g,'');\n"
+    "\n"
+    "    // Remove everything between \" (including the \")\n"
+    "    s = s.replace(/\"[^\"]*\"/g,'');\n"
+    "\n"
+    // Noch nicht nach JS übertragen, aber die Logik dahinter wirkt eh etwas unsauber
+    //"// Okay, falls es ein ? : Ausdruck ist, remove nun alles nach dem ? (inklusive dem ?)\n"
+    //s = [[s componentsSeparatedByString: @"?"] objectAtIndex:0];
+    "\n"
+    "    // Remove leading and ending Whitespaces and NewlineCharacters\n"
+    "    s = $.trim(s);\n"
+    "\n"
+    "    // Now get all var-names, that are left\n"
+    "    // Auch per Punkt verkettete Vars erlauben ( _ ist automatisch mit drin bei \\W )\n"
+    "\n"
+    "    var Ergebnis = s.match(/[^\\W\\d](\\w|[.]{1,2}(?=\\w))*/g);\n"
+    "    if (Ergebnis)\n"
+    "    {\n"
+    "        for (var i = 0; i < Ergebnis.length; ++i)\n"
+    "        {\n"
+    "            var varName = Ergebnis[i];\n"
+    "\n"
+    "            // Dann noch eventuelle spezielle Wörter austauschen\n"
+    "            varName = varName.replace(/immediateparent/g,'getTheParent(true)');\n"
+    "            varName = varName.replace(/parent/g,'getTheParent()');\n"
+    "            varName = varName.replace(/\\.dataset/g,'.myDataset');\n"
+    "            varName = varName.replace(/\\.value/g,'.myValue');\n"
+    "\n"
+    "            // Falls ganz vorne jetzt getTheParent() steht, dann muss ich unser aktuelles Element\n"
+    "            // davorsetzen. Weil jetzt nochmal extra mit 'with () {}' zu arbeiten ist wohl nicht nötig\n"
+    "            // da wir ja auf Ebene der einzelnen Variable sind und individuell reagieren können.\n"
+    "            if (varName.startsWith('getTheParent'))\n"
+    "                varName = scope + '.' + varName;\n"
+    "\n"
+    "            // Gefundene reservierte JS-Wörter muss ich an dieser Stelle fallen lassen. Dies sind keine Var-Namen\n"
+    "\n"
+    "            // Objektnamen\n"
+    "            if (varName == 'Boolean') continue;\n"
+    "            if (varName == 'Date') continue;\n"
+    "            if (varName == 'Number') continue;\n"
+    "            if (varName == 'String') continue;\n"
+    "            if (varName == 'Array') continue;\n"
+    "\n"
+    "            // Funktionsnamen\n"
+    "            if (varName == 'eval') continue;\n"
+    "            if (varName == 'isNaN') continue;\n"
+    "            if (varName == 'parseFloat') continue;\n"
+    "            if (varName == 'parseInt') continue;\n"
+    "\n"
+    "            // reservierte Wörter\n"
+    "            if (varName == 'break') continue;\n"
+    "            if (varName == 'case') continue;\n"
+    "            if (varName == 'catch') continue;\n"
+    "            if (varName == 'continue') continue;\n"
+    "            if (varName == 'default') continue;\n"
+    "            if (varName == 'delete') continue;\n"
+    "            if (varName == 'do') continue;\n"
+    "            if (varName == 'else') continue;\n"
+    "            if (varName == 'false') continue;\n"
+    "            if (varName == 'finally') continue;\n"
+    "            if (varName == 'for') continue;\n"
+    "            if (varName == 'function') continue;\n"
+    "            if (varName == 'if') continue;\n"
+    "            if (varName == 'in') continue;\n"
+    "            if (varName == 'instanceof') continue;\n"
+    "            if (varName == 'new') continue;\n"
+    "            if (varName == 'null') continue;\n"
+    "            if (varName == 'return') continue;\n"
+    "            if (varName == 'switch') continue;\n"
+    "            if (varName == 'throw') continue;\n"
+    "            if (varName == 'true') continue;\n"
+    "            if (varName == 'try') continue;\n"
+    "            if (varName == 'typeof') continue;\n"
+    "            if (varName == 'var') continue;\n"
+    "            if (varName == 'void') continue;\n"
+    "            if (varName == 'while') continue;\n"
+    "\n"
+    "            // Falls mehrmals auf den gleichen Wert getestet wird (z. B. if (x == 2 || x == 3)\n"
+    "            // brauche (und sollte) ich natürlich auf das 'x' nur einmal horchen.\n"
+    "            if (jQuery.inArray(varName,vars) == -1)\n"
+    "                vars.push(varName);\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "    return vars;\n"
+    "}\n"
+    "\n"
+    "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Wichtige Hilfsfunktion, um Startwert von constraints zu setzen (insb. wegen evtl. Klone nötig)//\n"
     "// setInitialConstraintValue()                         //\n"
@@ -15755,7 +15857,7 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "    // Expression ist der Ausdruck, den wir zerlegen müssen in Objekt (alle vorderen Elemente) und prop (letztes Element)\n"
-    "    var tempArray=expression.split('.');\n"
+    "    var tempArray = expression.split('.');\n"
     "\n"
     "    // Wenn kein Objekt vorhanden (= Array bestehend aus einem Element) ist es implizit 'window' (bzw. 'this')\n"
     "\n"
@@ -15857,6 +15959,13 @@ BOOL isJSExpression(NSString *s)
     "// Damit es keine Name-Conflicts gibt, z. B. bei SharedObject//\n"
     "///////////////////////////////////////////////////////////////\n"
     "var oo = {};\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "// Bei diesen Attributen wird nicht setAttribute_ aufgerufen //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "var eventHandlerAttributes = ['oninit','onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown'];\n"
+    "\n"
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
@@ -16072,7 +16181,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "  // Alle per style gegebenen Attribute muss ich ermitteln und später damit vergleichen\n"
-    "  // Denn die per style direkt im Element übergebenen Attribute haben Vorrang vor denen\n"
+    "  // Denn die per style direkt in der Instanz gesetzten Attribute haben Vorrang vor denen\n"
     "  // der Klasse. Ich kann noch nicht hier, sondern erst später vergleichen, weil z.B.\n"
     "  // bgcolor erst noch durch background-color ersetzt werden muss usw.\n"
     "  var css = $(id).attr('style');\n"
@@ -16097,27 +16206,24 @@ BOOL isJSExpression(NSString *s)
     "  var an = obj.attributeNames ? obj.attributeNames : [];\n"
     "  var av = obj.attributeValues ? obj.attributeValues : [];\n"
     "\n"
-    "  // height und width müssen immer als erstes ausgewertet werden\n"
-    "  // z. B. 'layout' verlässt sich darauf, dass 'width' vorher gesetzt wurde\n"
-    "  var posHeightInArray = $.inArray('height', an);\n"
-    "  if (posHeightInArray != -1)\n"
-    "  {\n"
-    "    an.move(posHeightInArray,0);\n"
-    "    av.move(posHeightInArray,0);\n"
-    "  }\n"
-    "  var posWidthInArray = $.inArray('width', an);\n"
-    "  if (posWidthInArray != -1)\n"
-    "  {\n"
-    "    an.move(posWidthInArray,0);\n"
-    "    av.move(posWidthInArray,0);\n"
-    "  }\n"
-    "\n"
+    // Wenn ich es drin lassen würde, wohl 0,1 Sekunden schnelleres Laden (weil ich weniger Constraints habe, die sich ändern)
+    //"  // height und width müssen immer als erstes ausgewertet werden\n"
+    //"  // z. B. 'layout' verlässt sich darauf, dass 'width' vorher gesetzt wurde\n"
+    //"  var posHeightInArray = $.inArray('height', an);\n"
+    //"  if (posHeightInArray != -1)\n"
+    //"  {\n"
+    //"    an.move(posHeightInArray,0);\n"
+    //"    av.move(posHeightInArray,0);\n"
+    //"  }\n"
+    //"  var posWidthInArray = $.inArray('width', an);\n"
+    //"  if (posWidthInArray != -1)\n"
+    //"  {\n"
+    //"    an.move(posWidthInArray,0);\n"
+    //"    av.move(posWidthInArray,0);\n"
+    //"  }\n"
+    //"\n"
     "  for (var i = 0;i<an.length;i++)\n"
     "  {\n"
-    //"    alert(an[i]);\n"
-    //"    alert(av[i]);\n"
-    "    var eventHandlerAttributes = ['oninit','onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown'];\n"
-    "\n"
     "    if (jQuery.inArray(an[i],eventHandlerAttributes) != -1)\n"
     "    {\n"
     "      if (an[i] === 'oninit') \n"
@@ -16127,7 +16233,7 @@ BOOL isJSExpression(NSString *s)
     "      }\n"
     "      else\n"
     "      {\n"
-    "        // Dann ist es JS-Code, Anpassungen vornehmen.\n"
+    "        // Da es JS-Code ist, Anpassungen vornehmen.\n"
     "        av[i] = av[i].replace(/setAttribute/g,'setAttribute_');\n"
     "        av[i] = av[i].replace(/\\.dataset/g,'.myDataset');\n"
     "        av[i] = av[i].replace(/\\.value/g,'.myValue');\n"
@@ -16161,33 +16267,35 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "    else\n"
     "    {\n"
-    "        if (typeof av[i] === 'string' && av[i].startsWith('$')) // = Constraint value\n"
-    "        {\n"
-    "            if (av[i].startsWith('$once{')) // Ist dann gar kein Constraint value\n"
-    "                av[i] = '${' + av[i].substring(6);\n"
-    "\n"
-    "            if (av[i].startsWith('$style{')) // Ist dann gar kein Constraint value\n"
-    "                av[i] = '${' + av[i].substring(7);\n"
-    "\n"
-    "            av[i] = av[i].substring(2,av[i].length-1);\n"
-    "            av[i] = av[i].replace(/immediateparent/g,'getTheParent(true)');\n"
-    "            av[i] = av[i].replace(/parent/g,'getTheParent()');\n"
-    // --> Neu gelöst über getter, deswegen muss ich nicht mehr ersetzen.
-    // --> Neuer: Bricht leider jQueri UI. hmmm, dewegen kein getter für parent möglich
-    "            av[i] = av[i].replace(/\\.dataset/g,'.myDataset');\n"
-    "            av[i] = av[i].replace(/\\.value/g,'.myValue');\n"
-    "\n"
-    "            // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
-    "            var result = (function() { with (id) { return eval(av[i]); } }).bind(id)();\n"
-    "            av[i] = result;\n"
-    "        }\n"
-    "\n"
     "        if (jQuery.inArray(an[i],attrArr) == -1)\n"
+    "        {\n"
+    "            if (typeof av[i] === 'string' && av[i].startsWith('$')) // = Constraint value\n"
+    "            {\n"
+    "                if (av[i].startsWith('$once{')) // Ist dann gar kein Constraint value\n"
+    "                {\n"
+    "                    av[i] = '${' + av[i].substring(6);\n"
+    "                }\n"
+    "\n"
+    "                if (av[i].startsWith('$style{')) // Ist dann gar kein Constraint value\n"
+    "                {\n"
+    "                    av[i] = '${' + av[i].substring(7);\n"
+    "                }\n"
+    "\n"
+    "                av[i] = av[i].substring(2,av[i].length-1);\n"
+    "                av[i] = av[i].replace(/immediateparent/g,'getTheParent(true)');\n"
+    "                av[i] = av[i].replace(/parent/g,'getTheParent()');\n"
+    "                av[i] = av[i].replace(/\\.dataset/g,'.myDataset');\n"
+    "                av[i] = av[i].replace(/\\.value/g,'.myValue');\n"
+    "\n"
+    "                // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
+    "                var result = (function() { with (id) { return eval(av[i]); } }).bind(id)();\n"
+    "                av[i] = result;\n"
+    "            }\n"
+    "\n"
     "            id.setAttribute_(an[i],av[i]);\n"
+    "        }\n"
     "    }\n"
     "  }\n"
-    // "  $(id).css('background-color','black').css('width','200').css('height','5');\n"
-    // "  $(id).attr('style',obj.style);\n"
     "\n"
     "  // Replace-IDs von contentHTML ersetzen\n"
     "  var s = replaceID(obj.contentHTML,$(id).attr('id'));\n"

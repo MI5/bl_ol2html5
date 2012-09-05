@@ -766,7 +766,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         [o appendFormat:@"  // Der zu setzende Wert ist abhängig von %ld woanders gesetzten Variable(n)\n",[vars count]];            
         for (id object in vars)
         {
-            [o appendFormat:@"  setConstraint(%@,'%@',function() { %@.setAttribute_('%@',%@); });\n",self.zuletztGesetzteID,object,self.zuletztGesetzteID,attr,s];
+            [o appendFormat:@"  setConstraint(%@,'%@',\"function() { with (%@) { %@.setAttribute_('%@',%@); } }\");\n",self.zuletztGesetzteID,object,self.zuletztGesetzteID,self.zuletztGesetzteID,attr,e];
         }
     }
     else // Übrig bleibt eine ganz normale prop, die gesetzt wird (keine Constraint oder irgendwas)
@@ -8649,6 +8649,8 @@ BOOL isJSExpression(NSString *s)
         // In manchen JS/jQuery tauchen " auf, die müssen escaped werden
         rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+        rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+
 
 
         // In manchen JS/jQuery tauchen \n auf, die müssen zu <br /> werden
@@ -15806,6 +15808,7 @@ BOOL isJSExpression(NSString *s)
     "// Wichtige Hilfsfunktion, um Startwert von constraints zu setzen (insb. wegen evtl. Klone nötig)//\n"
     "// setInitialConstraintValue()                         //\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Ich brauche func hier als string, damit ich den string wegen der Klone zerlegen kann\n"
     "var setInitialConstraintValue = function (el,prop,func) {\n"
     "    if (typeof el !== 'object') throw new TypeError('setInitialConstraintValue called on non-object')\n"
     "    if (typeof prop !== 'string') throw new TypeError('setInitialConstraintValue - second arg must be a string')\n"
@@ -15837,9 +15840,11 @@ BOOL isJSExpression(NSString *s)
     "// Wichtige Hilfsfunktion, um constraints zu setzen    //\n"
     "// setConstraint()                                     //\n"
     "/////////////////////////////////////////////////////////\n"
+    // Weil setInitialConstraint einen String braucht, jetzt auch hier die Funktion als String
+    // (Ziel: Beide Aufrufe in einer Funktion zusammenfassen)
     "var setConstraint = function (el,expression,func) {\n"
     "    if (typeof expression !== 'string' || expression === '') throw new TypeError('setConstraint - second arg must be a non-empty string')\n"
-    "    if (typeof func !== 'function') throw new TypeError('setConstraint - third arg must be a function')\n"
+    "    if (typeof func !== 'string') throw new TypeError('setConstraint - third arg must be a function (will be evaluated as a function)')\n"
     "\n"
     "\n"
     "    // Falls wir mit 'this.' starten muss ich this durch die aktuelle ID ersetzen.\n"
@@ -15875,7 +15880,7 @@ BOOL isJSExpression(NSString *s)
     "        obj = tempArray[0];\n"
     "        prop = tempArray[tempArray.length-1];\n"
     "\n"
-    "        // Falls es mehr als 2 Element im Array gibt, alle mittleren Elemente dem Objekt hinzufügen unten.\n"
+    "        // Falls es mehr als 2 Element im Array gibt, alle mittleren Elemente dem Objekt hinzufügen.\n"
     "        if (tempArray.length > 2)\n"
     "        {\n"
     "            for (var i=1;i<tempArray.length-1;i++)\n"

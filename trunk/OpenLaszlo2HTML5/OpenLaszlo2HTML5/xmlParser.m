@@ -759,14 +759,15 @@ void OLLog(xmlParser *self, NSString* s,...)
         [o appendFormat:@"  setInitialConstraintValue(%@,'%@','%@');\n",self.zuletztGesetzteID,attr,e];
 
 
+        // Seitdem ich auch bei 'setConstraint' auf e umgestiegen bin, brauche ich s nicht mehr
         // ...jetzt erst s computable machen...
-        s = [self makeTheComputedValueComputable:s];
+        // s = [self makeTheComputedValueComputable:s];
 
 
         [o appendFormat:@"  // Der zu setzende Wert ist abhängig von %ld woanders gesetzten Variable(n)\n",[vars count]];            
         for (id object in vars)
         {
-            [o appendFormat:@"  setConstraint(%@,'%@',\"function() { with (%@) { %@.setAttribute_('%@',%@); } }\");\n",self.zuletztGesetzteID,object,self.zuletztGesetzteID,self.zuletztGesetzteID,attr,e];
+            [o appendFormat:@"  setConstraint(%@,'%@',\"return (function() { with (%@) { %@.setAttribute_('%@',%@); } }).bind(%@)();\");\n",self.zuletztGesetzteID,object,self.zuletztGesetzteID,self.zuletztGesetzteID,attr,e,self.zuletztGesetzteID];
         }
     }
     else // Übrig bleibt eine ganz normale prop, die gesetzt wird (keine Constraint oder irgendwas)
@@ -881,6 +882,18 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         self.attributeCount++;
         [self setTheValue:[attributeDict valueForKey:@"text_y"] ofAttribute:@"text_y"];
+    }
+
+    if ([attributeDict valueForKey:@"text_padding_x"])
+    {
+        self.attributeCount++;
+        [self setTheValue:[attributeDict valueForKey:@"text_padding_x"] ofAttribute:@"text_padding_x"];
+    }
+
+    if ([attributeDict valueForKey:@"text_padding_y"])
+    {
+        self.attributeCount++;
+        [self setTheValue:[attributeDict valueForKey:@"text_padding_y"] ofAttribute:@"text_padding_y"];
     }
 
     if ([attributeDict valueForKey:@"fontstyle"])
@@ -4067,11 +4080,6 @@ didStartElement:(NSString *)elementName
 
         NSString* a = [attributeDict valueForKey:@"name"];
 
-        // Es gibt 2 Attribute, die ich ja austausche, 'height' und 'width', sonst bricht soooo viel
-        // irgendwie greift auch jQuery intern auf diese Werte zu.
-        // Deswegen ersetzen, falls sie per Attribute gesetzt werden.
-        // (wenn sie direkt im tag stehen (<tag width="20">), ist es natürlich okay,
-        // wird ja dann direkt verarbeitet)
         a = [self somePropertysNeedToBeRenamed:a];
 
 
@@ -4316,31 +4324,46 @@ didStartElement:(NSString *)elementName
             // Und erstmal nicht, wenn wir in canvas sind (globale Attribute)
             if (berechneterWert)
             {
-                NSString *orignalValueString = [attributeDict valueForKey:@"value"];
-                orignalValueString = [self removeOccurrencesOfDollarAndCurlyBracketsIn:orignalValueString];
-                orignalValueString = [self modifySomeExpressionsInJSCode:orignalValueString];
+                NSString *s = [attributeDict valueForKey:@"value"];
 
 
-                // ToDo
-                // Wenn ein '+' oder '/' enthalten ist, das wird noch nicht unterstützt
-                // Mögliches Vorgehen: Methode auslagern bei ConstraintValue und hier auch aufrufen
-                if ([orignalValueString rangeOfString:@"+"].location == NSNotFound &&
-                    [orignalValueString rangeOfString:@"/"].location == NSNotFound)
+                // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...
+                NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s];
+
+
+                s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
+                s = [self modifySomeExpressionsInJSCode:s];
+                // Escape ' in s
+                s = [s stringByReplacingOccurrencesOfString:@"'" withString:@"\\\'"];
+
+
+
+                [o appendFormat:@"  setInitialConstraintValue(%@,'%@','%@');\n",self.zuletztGesetzteID,a,s];
+
+                [o appendFormat:@"  // Der zu setzende Wert ist abhängig von %ld woanders gesetzten Variable(n)\n",[vars count]];            
+                for (id object in vars)
                 {
-                    NSArray *tempArray = [orignalValueString componentsSeparatedByString: @"."];
-                    NSString *theObject = [tempArray objectAtIndex:0];
-                    NSString *theProperty = [tempArray objectAtIndex:[tempArray count]-1];
-                    // Falls es mehr als 2 Element im Array gibt, alle mittleren Elemente dem Objekt hinzufügen.
-                    if ([tempArray count] > 2)
-                    {
-                        for (int i=1;i<[tempArray count]-1;i++)
-                        {
-                            theObject = [NSString stringWithFormat:@"%@.%@",theObject,[tempArray objectAtIndex:i]];
-                        }
-                    }
-                    [o appendString:@"  // Zusätzlich auf event horchen, da es ein berechneter Wert ist und triggern, falls jemand auf UNS horcht\n"];
-                    [o appendFormat:@"  $(%@.%@).on('on%@', function(prop, newval) { %@.%@ = newval; $(%@).triggerHandler('on%@',newval); });\n",elem,theObject,theProperty,elem,a,elem,a];
+                    [o appendFormat:@"  setConstraint(%@,'%@',\"return (function() { with (%@) { %@.setAttribute_('%@',%@); } }).bind(%@)();\");\n",self.zuletztGesetzteID,object,self.zuletztGesetzteID,self.zuletztGesetzteID,a,s,self.zuletztGesetzteID];
                 }
+
+
+/*
+ Ersetzt durch die vorherigen Zeilen!
+
+                NSArray *tempArray = [s componentsSeparatedByString: @"."];
+                NSString *theObject = [tempArray objectAtIndex:0];
+                NSString *theProperty = [tempArray objectAtIndex:[tempArray count]-1];
+                // Falls es mehr als 2 Elemente im Array gibt, alle mittleren Elemente dem Objekt hinzufügen.
+                if ([tempArray count] > 2)
+                {
+                    for (int i=1;i<[tempArray count]-1;i++)
+                    {
+                        theObject = [NSString stringWithFormat:@"%@.%@",theObject,[tempArray objectAtIndex:i]];
+                    }
+                }
+                [o appendString:@"  // Zusätzlich auf event horchen, da es ein berechneter Wert ist und triggern, falls jemand auf UNS horcht\n"];
+                [o appendFormat:@"  $(%@.%@).on('on%@', function(prop, newval) { %@.%@ = newval; $(%@).triggerHandler('on%@',newval); });\n",elem,theObject,theProperty,elem,a,elem,a];
+*/
             }
 
 
@@ -4366,6 +4389,7 @@ didStartElement:(NSString *)elementName
         // 'defaultplacement' wird, falls wir in einer Klasse sind, ausgelesen und gesetzt.
         // ToDo: Das ist wohl nicht mehr nötig, seitdem ich ALLE Attribute eh vor dem instanzieren
         // der Klasse schreibe
+        // hmm, ich schreibe jetzt nicht mehr vor der klasse, sondern erst am Anfang von interpretObject (bzw. teils/teils)
         if (self.ignoreAddingIDsBecauseWeAreInClass && [a isEqualToString:@"defaultplacement"])
             self.defaultplacement = [attributeDict valueForKey:@"value"];
 
@@ -4718,13 +4742,6 @@ didStartElement:(NSString *)elementName
             }
         }
 
-        // ToDo: Wird derzeit nicht ausgewertet
-        if ([attributeDict valueForKey:@"text_padding_x"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'text_padding_x' for now.");
-        }
-
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
 
@@ -4938,7 +4955,7 @@ didStartElement:(NSString *)elementName
 
         // datapth-Attribut MUSS zuerst ausgewertet, falls sich Attribut 'text' auf den dort gesetzten Pfad bezieht
         // Andererseits muss Attribut "text_x" wegen Beispiel <textlistitem> vor "text" ausgewertet werden.
-        // Mal schauen ob es was bricht, dass die beiden hier mitten drin falls ja, dann zurück.
+        // Mal schauen ob es was bricht, dass die beiden hier mitten drin. Falls ja, dann zurück.
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
 
         if ([attributeDict valueForKey:@"text"])
@@ -6002,7 +6019,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             } else
             {
                 s = [s substringFromIndex:[s rangeOfString:@"."].location+1];
-                // NSLog(s);
             }
 
             callback = s;
@@ -6872,19 +6888,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
     {
         element_bearbeitet = YES;
     }
-    // ToDo
-    if ([elementName isEqualToString:@"int_vscrollbar"])
-    {
-        element_bearbeitet = YES;
-
-        // ToDo
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-
-        // ToDo
-        if ([attributeDict valueForKey:@"visible"])
-            self.attributeCount++;
-    }
 
 
 
@@ -7011,32 +7014,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [self.jQueryOutput appendString:o];
     }
 
-    if ([elementName isEqualToString:@"scrollview"])
-    {
-        element_bearbeitet = YES;
 
-        // ToDo
-        if ([attributeDict valueForKey:@"height"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"hidescrollbar"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"leftmargin"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"topmargin"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"visible"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"width"])
-            self.attributeCount++;
-    }
     if ([elementName isEqualToString:@"BDStabsheetselected"])
     {
         element_bearbeitet = YES;
@@ -7954,6 +7932,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [d removeObjectForKey:@"debug"];
         [d removeObjectForKey:@"text_x"];
         [d removeObjectForKey:@"text_y"];
+        [d removeObjectForKey:@"text_padding_x"];
+        [d removeObjectForKey:@"text_padding_y"];
+
 
         // von 'text':
         [d removeObjectForKey:@"textalign"];
@@ -9043,11 +9024,9 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"state"] ||
         [elementName isEqualToString:@"animator"] ||
         [elementName isEqualToString:@"datapath"] ||
-        [elementName isEqualToString:@"int_vscrollbar"] ||
         [elementName isEqualToString:@"stableborderlayout"] ||
         [elementName isEqualToString:@"constantlayout"] ||
         [elementName isEqualToString:@"wrappinglayout"] ||
-        [elementName isEqualToString:@"scrollview"] ||
         [elementName isEqualToString:@"BDStabsheetselected"] ||
         [elementName isEqualToString:@"ftdynamicgrid"] ||
         [elementName isEqualToString:@"debug"] ||
@@ -13771,9 +13750,12 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'focused' ||\n"
     "            attributeName === 'spacing' ||\n"
     "            attributeName === 'isopen' ||\n"
+    "            attributeName === 'start' ||\n"
+    "            attributeName === 'ende' ||\n"
     "            attributeName === 'parentnumber' ||\n"
     "            attributeName === 'season' ||\n"
     "            attributeName === 'size' ||\n"
+    "            attributeName === 'isdefault' ||\n"
     "            attributeName === 'digitcolor' ||\n"
     "            attributeName === 'bezpartnerdbig' ||\n"
     "            attributeName === 'bezpartnerdsmall' ||\n"
@@ -15864,15 +15846,16 @@ BOOL isJSExpression(NSString *s)
     "    // Expression ist der Ausdruck, den wir zerlegen müssen in Objekt (alle vorderen Elemente) und prop (letztes Element)\n"
     "    var tempArray = expression.split('.');\n"
     "\n"
-    "    // Wenn kein Objekt vorhanden (= Array bestehend aus einem Element) ist es implizit 'window' (bzw. 'this')\n"
-    "\n"
     "    var obj;\n"
     "    var prop;\n"
     "\n"
+    "    // Wenn kein Objekt vorhanden (= tempArray besteht aus einem Element) ist es implizit 'window' (bzw. 'this')\n"
     "    if (tempArray.length == 1)\n"
     "    {\n"
     "        obj = 'window';\n"
     "        prop = tempArray[0];\n"
+    "\n"
+    "        expression = 'el.' + expression; // Damit er unten den expression-String korrekt in einen JS-Ausdruck umwandeln kann\n"
     "    }\n"
     "\n"
     "    if (tempArray.length > 1)\n"
@@ -15910,15 +15893,24 @@ BOOL isJSExpression(NSString *s)
     "    // Bei change aktualisieren bzw. auf ein event horchen, da constraint-value\n"
     "    if (typeof expression === 'object')\n"
     "    {\n"
-    "        $(expression).on('change', func);\n"
+    // "        $(expression).on('change', func);\n" // <-- Als früher noch direkt die function übergeben wurde
+    //"        eval(\"$(expression).on('change', \"+func+\");\");\n"
+    // Besser ohne eval:
+    "        $(expression).on('change', Function(func));\n"
     "    }\n"
     "    else if (typeof expression === 'function') // Wegen Bsp. 20.3\n"
     "    {\n"
-    "        $(obj).on('change', func);\n"
+    //"        $(obj).on('change', func);\n" // <-- Als früher noch direkt die function übergeben wurde
+    //"        eval(\"$(obj).on('change', \"+func+\");\");\n"
+    // Besser ohne eval:
+    "        $(obj).on('change', Function(func));\n"
     "    }\n"
     "    else\n"
     "    {\n"
-    "        $(obj).on('on'+prop, func);\n"
+    //"        $(obj).on('on'+prop, func);\n" // <-- Als früher noch direkt die function übergeben wurde
+    //"        eval(\"$(obj).on('on'+prop, \"+func+\");\");\n"
+    // Besser ohne eval:
+    "        $(obj).on('on'+prop, Function(func));\n"
     "    }\n"
     "}\n"
     "\n"
@@ -16279,12 +16271,21 @@ BOOL isJSExpression(NSString *s)
     "                if (av[i].startsWith('$once{')) // Ist dann gar kein Constraint value\n"
     "                {\n"
     "                    av[i] = '${' + av[i].substring(6);\n"
+    "                    av[i] = av[i].substring(2,av[i].length-1);\n"
+    "                    id.setAttribute_(an[i],av[i]);\n"
+    "                    continue;\n"
     "                }\n"
     "\n"
     "                if (av[i].startsWith('$style{')) // Ist dann gar kein Constraint value\n"
     "                {\n"
     "                    av[i] = '${' + av[i].substring(7);\n"
+    "                    av[i] = av[i].substring(2,av[i].length-1);\n"
+    "                    id.setAttribute_(an[i],av[i]);\n"
+    "                    continue;\n"
     "                }\n"
+    "\n"
+    "                // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...\n"
+    "                var vars = getTheDependingVarsOfTheConstraint(av[i],id.id);\n"
     "\n"
     "                av[i] = av[i].substring(2,av[i].length-1);\n"
     "                av[i] = av[i].replace(/immediateparent/g,'getTheParent(true)');\n"
@@ -16292,12 +16293,22 @@ BOOL isJSExpression(NSString *s)
     "                av[i] = av[i].replace(/\\.dataset/g,'.myDataset');\n"
     "                av[i] = av[i].replace(/\\.value/g,'.myValue');\n"
     "\n"
-    "                // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
-    "                var result = (function() { with (id) { return eval(av[i]); } }).bind(id)();\n"
-    "                av[i] = result;\n"
-    "            }\n"
+    //"                // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
+    //"                var result = (function() { with (id) { return eval(av[i]); } }).bind(id)();\n"
+    //"                av[i] = result;\n"
+    //"\n"
+    "                setInitialConstraintValue(id,an[i],av[i]);\n"
     "\n"
-    "            id.setAttribute_(an[i],av[i]);\n"
+    "                // Jede var, von der die constraint abhängt, beobachten\n"
+    "                for (var j = 0; j < vars.length; j++)\n"
+    "                {\n"
+    "                    setConstraint(id,vars[j],'return (function() { with ('+id.id+') { '+id.id+'.setAttribute_(\"'+an[i]+'\",'+av[i]+'); } }).bind('+id.id+')();');\n"
+    "                }\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                id.setAttribute_(an[i],av[i]);\n"
+    "            }\n"
     "        }\n"
     "    }\n"
     "  }\n"
@@ -16318,7 +16329,7 @@ BOOL isJSExpression(NSString *s)
     "  {\n"
     "    // Da der 'name' als inherit gesetzt wurde, spreche ich es darüber an\n"
     "    if ($(id[obj.inherit.defaultplacement]).length == 0)\n"
-    "      alert('Kann nicht auf defaultplacement zugreifen. Das sollte nicht passieren.');\n"
+    "      alert('Kann nicht auf defaultplacement zugreifen. Das sollte nicht passieren. Vermutlich erst jene Klasse auswerten, von der diese Klasse erbt!');\n"
     "\n"
     "    $(id[obj.inherit.defaultplacement]).prepend(s);\n"
     "  }\n"

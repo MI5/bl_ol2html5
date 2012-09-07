@@ -38,7 +38,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -7980,12 +7980,12 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-
+        NSMutableString *instanceVars = [[NSMutableString alloc] initWithString:@""];
 
         // ...dann die übrig gebliebenen Attribute (die von der Instanz selbst definierten) setzen
         if ([d count] > 0)
         {
-            [o appendString:@"\n  // Setzen der Instanz-Variablen, für die nicht die Defaultwerte der Klasse gelten (interpretObject() setzt nur bei hier 'undefined' Werten)"];
+            // [o appendString:@"\n  // Setzen der Instanz-Variablen, für die nicht die Defaultwerte der Klasse gelten (interpretObject() setzt nur bei hier 'undefined' Werten)"];
 
             // '__strong', damit ich object modifizieren kann
             for (NSString __strong *key in d)
@@ -8009,15 +8009,20 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
                 if (weNeedQuotes)
                 {
-                    [o appendFormat:@"\n  %@.%@ = '%@';",self.zuletztGesetzteID,key,s];
+                    // [o appendFormat:@"\n  %@.%@ = '%@';",self.zuletztGesetzteID,key,s];
+                    [instanceVars appendFormat:@"%@ : '%@', ",key,s];
                 }
                 else
                 {
-                    [o appendFormat:@"\n  %@.%@ = %@;",self.zuletztGesetzteID,key,s];
+                    // [o appendFormat:@"\n  %@.%@ = %@;",self.zuletztGesetzteID,key,s];
+                    [instanceVars appendFormat:@"%@ : %@, ",key,s];
                 }
             }
 
-            [o appendString:@"\n"];
+            // Letztes Komma wieder raus und Leerzeichen ran:
+            instanceVars = [[NSMutableString alloc] initWithFormat:@"%@ ",[instanceVars substringToIndex:instanceVars.length-2]];
+
+            // [o appendString:@"\n"];
         }
 
 
@@ -8027,7 +8032,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
         // Okay, jQuery-Code mache ich beim schließen, weil ich erst den eventuellen Text der
-        // zwischen den Tags steht, aufsammeln muss, und dann als Parameter übergebe.
+        // zwischen den Tags steht, aufsammeln kann, und dann als Parameter übergebe.
 
         // Okay, das geht so nicht, habe den Code wieder nach vorne geholt, denn sonst würde bei ineinander
         // verschschachtelten Klassen, erst die innere Klasse ausgeführt werden. Aber die innere Klasse muss
@@ -8044,14 +8049,15 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // auslesen aus der JS-Datei collectedClasses.js
 
         //[o appendFormat:@"\n  // Klasse '%@' wurde instanziert in '%@' (Fortsetzung - tatsächliche Instanzierung - vorher wurden nur die Attribute gesetzt)",elementName,idUmgebendesElement];
-        [o appendFormat:@"\n  // Instanz erzeugen, id holen, Objekt auswerten"];
+        [o appendFormat:@"\n  // Instanzvariablen holen, id holen, Instanz erzeugen, Objekt auswerten"];
+        [o appendFormat:@"\n  var iv = { %@};",instanceVars];
         [o appendFormat:@"\n  var id = document.getElementById('%@');",idUmgebendesElement];
         [o appendFormat:@"\n  var obj = new oo.%@('');",elementName];
 
        // [o appendFormat:@"\n  if (jQuery.inArray('defer',obj.attributeValues) == -1)"]; // try 1 --> Ohne Erfolg...
        // [o appendFormat:@"\n  if ($(id).is(':visible'))"]; // try 2 --> Ohne Erfolg, bricht viewlose Elemente (swfso z. B.)
 
-        [o appendString:@"\n  interpretObject(obj,id);\n"];
+        [o appendString:@"\n  interpretObject(obj,id,iv);\n"];
 
 
 
@@ -9730,7 +9736,7 @@ BOOL isJSExpression(NSString *s)
             s = [s stringByReplacingOccurrencesOfString:@"\'" withString:@"\\'"];
             s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n"];
 
-            [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-31]; /* MARKER -57 / -28 vom defer-Test */
+            [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-34]; /* MARKER -60 / -31 vom defer-Test */
         }
 
         self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
@@ -14952,7 +14958,7 @@ BOOL isJSExpression(NSString *s)
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'bgcolor', {\n"
-    "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('background-color')); },\n"
+    "    get : function(){ if (!isDOM(this)) return undefined; return $(this).css('background-color'); },\n"
     "    set : function(newValue){ $(this).css('background-color', newValue); $(this).triggerHandler('onbgcolor', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -15998,9 +16004,13 @@ BOOL isJSExpression(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "// Mit dieser Funktion werden alle Objekte ausgewertet       //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "// Aus obj ziehen wir den ganzen Inhalt raus, wie das Objekt aussehen muss\n"
-    "// und id wird dem entsprechend mit diesen Attributen und Methoden erweitert.\n"
-    "function interpretObject(obj,id)\n"
+    "// Aus 'obj' ziehen wir den ganzen Inhalt raus, wie das Objekt aussehen muss\n"
+    "// und 'id' wird dem entsprechend mit diesen Attributen und Methoden erweitert.\n"
+    "// 'iv' enthält mögliche InstanzVariablen der Instanz\n"
+    // Diese wurden früher vor interpretObject() gesetzt. Später wurde hier beim setzen der 'Klassenwert' der Variablen
+    // getestet, ob dieser undefined war und nur dann gesetzt (um InstanzVariablen nicht zu überschreiben).
+    // Jedoch haben die getter (von z. B. 'bgcolor') das gebrochen, da diese ja nicht undefined zurückliefern.
+    "function interpretObject(obj,id,iv)\n"
     "{\n"
     "  // Neu Durchlauf 1: Alle selbst definierten Attribute werden direkt an das Element gebunden\n"
     "  // Dies muss als allererstes passieren, da in Unterklassen definierte Methoden oder Attrbute bereits darauf zugreifen können\n"
@@ -16022,10 +16032,11 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "      Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
     "      {\n"
-    "        // Bitte nichts überschreiben, was ich gerade erst beim instanzieren der Klasse gesetzt haben\n"
-    "        if (id[key] === undefined)\n"
-    "        {\n"
-    "          var value = obj.selfDefinedAttributes[key]\n"
+    //"        // Bitte nichts überschreiben, was ich gerade erst beim instanzieren der Klasse gesetzt haben\n"
+    //"        // Das klappt so nicht. Weil der Getter von z. B. bgcolor ja nicht undefined zurückliefert.\n"
+    //"        if (id[key] === undefined)\n"
+    //"        {\n"
+    "          var value = obj.selfDefinedAttributes[key];\n"
     "\n"
     "          if (typeof value === 'string' && value.startsWith('@§.BERECHNETERWERT.§@'))\n"
     "          {\n"
@@ -16040,10 +16051,16 @@ BOOL isJSExpression(NSString *s)
     "          {\n"
     "            id[key] = value;\n"
     "          }\n"
-    "        }\n"
+    //"        }\n"
     "      });\n"
     "    }\n"
     "  }\n"
+    "\n"
+    "  // Neu: Hier Setzen der instanzvariablen der Instanz (nicht mehr vor der Klasse)\n"
+    "  Object.keys(iv).forEach(function(key)\n"
+    "  {\n"
+    "    id[key] = iv[key];\n"
+    "  });\n"
     "\n"
     "\n"
     "\n"

@@ -4387,8 +4387,9 @@ didStartElement:(NSString *)elementName
 
 
         // 'defaultplacement' wird, falls wir in einer Klasse sind, ausgelesen und gesetzt.
-        // ToDo: Das ist wohl nicht mehr nötig, seitdem ich ALLE Attribute eh vor dem instanzieren
-        // der Klasse schreibe
+        // Das ist evtl. nicht mehr nötig, seitdem ich ALLE Attribute einer Klasse auslese
+        // Aber wegen Zugriff auf obj.inherit.defaultplacement noch drin (Bei entfernen von defaultplacement, müsste man
+        // auf das selfDefinedAttributes-Objekt zugreifen, und schauen ob da drin eine var 'defaultplacement' steckt)
         // hmm, ich schreibe jetzt nicht mehr vor der klasse, sondern erst am Anfang von interpretObject (bzw. teils/teils)
         if (self.ignoreAddingIDsBecauseWeAreInClass && [a isEqualToString:@"defaultplacement"])
             self.defaultplacement = [attributeDict valueForKey:@"value"];
@@ -6972,7 +6973,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
     {
         element_bearbeitet = YES;
 
-        NSString *axis = @"y";
+        NSString *axis = @"x"; // 'x' ist hier default!! Nicht y, wie bei anderen Layouts!
         if ([attributeDict valueForKey:@"axis"] && ([[attributeDict valueForKey:@"axis"] isEqualToString:@"x"] || [[attributeDict valueForKey:@"axis"] isEqualToString:@"y"]))
         {
             self.attributeCount++;
@@ -7008,7 +7009,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // Hier drin sammle ich erstmal die Ausgabe
         NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
-        [o appendFormat:@"\n  // Setting a 'constantlayout' in '%@':\n",idUmgebendesElement];
+        [o appendFormat:@"\n  // Setting a 'wrappinglayout' in '%@':\n",idUmgebendesElement];
         [o appendFormat:@"  %@.setAttribute_('layout','class:wrappinglayout;axis:%@;spacing:%@');\n",idUmgebendesElement,axis,spacing];
 
         [self.jQueryOutput appendString:o];
@@ -16370,6 +16371,7 @@ BOOL isJSExpression(NSString *s)
     "    var s = replaceID(obj.contentJS,$(id).attr('id'));\n"
     "    evalCode(s);\n"
     "\n"
+    // Zugriff auf 'defaultplacement' per 'id', nicht mehr per 'obj'. Das Attribut wurde ja übertragen in id bereits weiter oben.
     "  if (obj.defaultplacement !== '') // dann die vorher existierenden Kinder korrekt positionieren\n"
     "    $(kinderVorDemAppenden).appendTo($(window[obj.defaultplacement]));\n"
     "\n"

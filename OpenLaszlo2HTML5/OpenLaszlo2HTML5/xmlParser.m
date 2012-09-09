@@ -38,7 +38,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -737,11 +737,11 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([s hasPrefix:@"$path{"])
     {
-        // Ein relativer Pfad zum vorher gesetzen XPath Ich nehme Bezug zum letzten lastDP und dem dort gesetzten Pfad.
+        // Ein relativer Pfad zum vorher gesetzen XPath Ich nehme Bezug zum letzten lastDP_ und dem dort gesetzten Pfad.
         s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
-        // Die Variable 'lastDP' ist bekannt, da die Ausgabe hier in 'jsComputedValuesOutput' erfolgt.
-        // Genau da (und kurz vorher) erfolgt auch das setzen von lastDP
-        [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP,'%@');\n",self.zuletztGesetzteID,s,attr];
+        // Die Variable 'lastDP_' ist bekannt, da die Ausgabe hier in 'jsComputedValuesOutput' erfolgt.
+        // Genau da (und kurz vorher) erfolgt auch das setzen von lastDP_
+        [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'%@');\n",self.zuletztGesetzteID,s,attr];
     }
     else if ([s hasPrefix:@"$"]) // = 'sure' constraint Value
     {
@@ -2231,82 +2231,27 @@ void OLLog(xmlParser *self, NSString* s,...)
         else
             dp = [NSString stringWithFormat:@"'%@'",dp];
 
-        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
+        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
         if ([dp rangeOfString:@":"].location != NSNotFound)
         {
-            [o appendString:@"\n  // datapath-Attribut mit : im String (also ein absoluter XPath). Ich werte die XPath-Angabe über einen temporär angelegten Datapointer aus.\n"];
-            [o appendString:@"  // Das Ergebnis des XPath-Requests wird als text des Elements gesetzt\n"];
-            [o appendString:@"  // Aber nur, wenn es eine Text-Node ist. Denn es kann auch nur ein Pfad angegeben sein, auf den sich dann tiefer verschachtelte Elemente beziehen.\n"];
-            [o appendString:@"  // Liefert der XPath-Request mehrere Ergebnisse zurück, muss ich hingegen das Div entsprechend oft duplizieren.\n"];
-            [o appendString:@"  // Außerdem XPath speichern, damit Kinder darauf zugreifen können.\n"];
-            [o appendFormat:@"  $('#%@').data('XPath',%@);\n",idName,dp];
-            [o appendFormat:@"  var lastDP = new lz.datapointer(%@,false);\n",dp];
-            [o appendString:@"  if (lastDP.getXPathIndex() > 1)\n"];
-            [o appendString:@"  {\n"];
-            [o appendString:@"    // Markieren, weil dies Auswirkungen auf viele Dinge hat...\n"];
-            [o appendFormat:@"    $('#%@').data('IAmAReplicator',true);\n",idName];
-            [o appendString:@"\n"];
-            [o appendString:@"    // Counter\n"];
-            [o appendString:@"    var c = 0;\n"];
-            [o appendString:@"    // Klon erzeugen inklusive Kinder\n"];
-            [o appendFormat:@"    var clone = $('#%@').clone(true);\n",idName];
-            //[o appendString:@"    // Alle Kinder im Orignal-Element löschen\n"];
-            //[o appendFormat:@"    $('#%@').empty();\n",idName];
-            //Neu:
-            [o appendString:@"    // Das komplette Element löschen,vorher parent sichern\n"];
-            [o appendFormat:@"    var p = $('#%@').parent();\n",idName];
-            [o appendFormat:@"    $('#%@').remove();\n",idName];
-            [o appendString:@"\n"];
-            [o appendString:@"    for (var i=0;i<lastDP.getXPathIndex();i++)\n"];
-            [o appendString:@"    {\n"];
-            [o appendString:@"      c++;\n"];
-            [o appendString:@"      // Muss es jedes mal nochmal klonen, sonst wäre der Klon-Vorgang nur 1x erfolgreich\n"];
-            [o appendString:@"      var clone2 = clone.clone(true);\n"];
-            //[o appendString:@"      // Alle id's austauschen, damit es diese nicht doppelt gibt\n"];
-            //[o appendString:@"      clone2.attr('id',clone2.attr('id')+'_repl'+c);\n"];
-            //[o appendString:@"      // Ab dem 2. mal auch die der Kinder austauschen, damit ich später geklonte Zwillinge erkennen kann und damit es id's nicht doppelt gibt\n"];
-            [o appendString:@"      // Ab dem 2. mal alle id's austauschen, damit ich später geklonte Zwillinge erkennen kann und damit es id's nicht doppelt gibt\n"];
-            [o appendString:@"      if (i >= 1)\n"];
-            [o appendString:@"      {\n"];
-            [o appendString:@"          clone2.find('*').andSelf().each(function() {\n"];
-            [o appendString:@"              $(this).attr('id',$(this).attr('id')+'_repl'+c);\n"];
-            [o appendString:@"              // Die neu geschaffene id noch global bekannt machen\n"];
-            [o appendString:@"              window[$(this).attr('id')] = this;\n"];
-            [o appendString:@"          });\n"];
-            [o appendString:@"      }\n"];
-            [o appendString:@"      else\n"];
-            [o appendString:@"      {\n"];
-            [o appendString:@"          // Ansonsten nur die Elemente neu bekannt geben (ohne var, damit global)\n"];
-            [o appendString:@"          clone2.find('*').andSelf().each(function() {\n"];
-            [o appendString:@"              window[$(this).attr('id')] = this;\n"];
-            [o appendString:@"          });\n"];
-            [o appendString:@"\n"];
-            [o appendString:@"      }\n"];
-            //[o appendString:@"      // Den Klon an das Original-Element anfügen\n"];
-            [o appendString:@"      // Den Klon an das parent-Element anfügen\n"];
-            //[o appendFormat:@"      clone2.appendTo('#%@');\n",idName];
-            // Neu:
-            [o appendString:@"      clone2.appendTo(p);\n"];
-            [o appendString:@"    }\n"];
-            [o appendString:@"  }\n"];
-            [o appendString:@"  else\n"];
-            [o appendString:@"  {\n"];
-            [o appendString:@"    if (lastDP.getNodeType() == 3)\n"];
-            [o appendFormat:@"      $('#%@').html(lastDP.getNodeText());\n",idName];
-            [o appendString:@"  }\n"];
+            [o appendString:@"\n  // datapath-Attribut mit ':' im String (also ein absoluter XPath).\n"];
+            [o appendFormat:@"  setAbsoluteDataPathIn(%@,%@);\n",idName,dp];
         }
         else
         {
             if (!kompiliereSpeziellFuerTaxango)
             {
-                [o appendString:@"\n  // Ein relativer Pfad! Dann nehme ich Bezug zum letzten lastDP und dem dort gesetzten Pfad.\n"];
-                [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP,'text');\n",idName,dp];
+                [o appendString:@"\n  // Ein relativer Pfad! Dann nehme ich Bezug zum letzten 'lastDP_' und dem dort gesetzten Pfad.\n"];
+                [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'text');\n",idName,dp];
             }
         }
 
 
+        // Auf jeden Fall müssen absolute und relative Datapaths GLEICH ausgegeben werden,
+        // weil relative sich ja auf die kurz vorher definierten absoluten beziehen.
+        // Diese Analogie gilt wohl auch zum Element 'datapath'.
         [self.jsComputedValuesOutput appendString:o];
     }
 
@@ -3959,6 +3904,60 @@ didStartElement:(NSString *)elementName
 
 
 
+    if ([elementName isEqualToString:@"datapath"])
+    {
+        element_bearbeitet = YES;
+
+        NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+        // Nicht zwingen nötig dieses Attribut... Aber was dann? ...
+        if ([attributeDict valueForKey:@"xpath"])
+            self.attributeCount++;
+
+
+        NSString *dp;
+        if ([attributeDict valueForKey:@"xpath"])
+        {
+            dp = [attributeDict valueForKey:@"xpath"];
+
+            if ([dp hasPrefix:@"$"])
+                dp = [self makeTheComputedValueComputable:dp];
+            else
+                dp = [NSString stringWithFormat:@"'%@'",dp];
+        }
+        else
+        {
+            dp = @""; // ... hmmm ...
+        }
+
+
+
+        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
+
+        if ([dp rangeOfString:@":"].location != NSNotFound)
+        {
+            [o appendString:@"\n  // datapath-Attribut mit ':' im String (also ein absoluter XPath).\n"];
+            [o appendFormat:@"  setAbsoluteDataPathIn(%@,%@);\n",idUmgebendesElement,dp];
+        }
+        else if (dp.length == 0)
+        {
+            ; // ...dann mache ich erstmal nichts.
+        }
+        else
+        {
+
+            [o appendString:@"\n  // Ein relativer Pfad! Dann nehme ich Bezug zum letzten 'lastDP_' und dem dort gesetzten Pfad.\n"];
+            [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'text');\n",idUmgebendesElement,dp];
+        }
+
+        // Auf jeden Fall müssen absolute und relative Datapaths GLEICH ausgegeben werden,
+        // weil relative sich ja auf die kurz vorher definierten absoluten beziehen.
+        // Diese Analogie gilt wohl auch zum Attribut 'datapath'.
+        [self.jsComputedValuesOutput appendString:o];
+    }
+
+
+
     if ([elementName isEqualToString:@"videoview"])
     {
         element_bearbeitet = YES;
@@ -4954,7 +4953,7 @@ didStartElement:(NSString *)elementName
 
 
 
-        // datapth-Attribut MUSS zuerst ausgewertet, falls sich Attribut 'text' auf den dort gesetzten Pfad bezieht
+        // datapath-Attribut MUSS zuerst ausgewertet, falls sich Attribut 'text' auf den dort gesetzten Pfad bezieht
         // Andererseits muss Attribut "text_x" wegen Beispiel <textlistitem> vor "text" ausgewertet werden.
         // Mal schauen ob es was bricht, dass die beiden hier mitten drin. Falls ja, dann zurück.
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
@@ -6884,13 +6883,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-    // ToDo
-    if ([elementName isEqualToString:@"datapath"])
-    {
-        element_bearbeitet = YES;
-    }
-
-
 
     // Erfordert 3 Kind-Elemente. Das erste Element kommt links an die Wand,
     // das 3. Element kommt rechts an die Wand,
@@ -7281,7 +7273,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [o appendFormat:@"\n  // Ich binde eine Methode an das genannte Objekt (Objekttyp: %@)\n", elemTyp];
 
 
-        NSString *benutzMich = @""; // Um nur einen s für dataset und datapointer zu haben
+        NSString *benutzMich = @""; // Um nur einen s für dataset, datapointer und datapath zu haben
         BOOL wirBrauchenWith = NO;
 
         if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
@@ -7305,7 +7297,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             // Denn Datasets werden unter Umständen auch per 'name'-Attribut angesprochen!
             // (und nicht per id)
             // Tja....... sogar Datapointer können auch Methoden haben...
-            // ich nutze bei Datapointer auch die Variable lastUsedDataset heimlich mit.
+            // Und ebenso datapath's... ! (dann eine Ebene weiter zurück springen, um korrektes el zu erwischen)
             if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"])
             {
                 if ([elemTyp isEqualToString:@"dataset"])
@@ -7316,6 +7308,11 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
                 //if ([elemTyp isEqualToString:@"evaluateclass"]) // Weil ich dort rückwärts auswerte
                 //    [o appendFormat:@"  if (%@.%@ == undefined)\n",benutzMich,[attributeDict valueForKey:@"name"]];
                 // Unsinn! Ich wärte vorwärts aus! Methoden sollen BEWUSST überschrieben werden
+                [o appendFormat:@"  %@.",benutzMich];
+            }
+            else if ([elemTyp isEqualToString:@"datapath"])
+            {
+                benutzMich = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-3];
                 [o appendFormat:@"  %@.",benutzMich];
             }
             else
@@ -7341,7 +7338,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [o appendFormat:@" = function(%@)\n  {\n",args];
         if (wirBrauchenWith)
         {
-            if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"])
+            if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"] || [elemTyp isEqualToString:@"datapath"])
                 [o appendFormat:@"    with (%@) {\n",benutzMich];
             else
                 [o appendFormat:@"    with (%@) {\n",elem];
@@ -7380,7 +7377,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         NSString *enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
 
 
-        // Für Drawview:
         NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
 
         // Beim Schließen des Tags dann auf den 'canvas' reagieren
@@ -7389,6 +7385,34 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         {
             self.handlerofDrawview = YES;
         }
+
+
+
+
+        // ToDo: Per 'jQuery' an 'datapointer' und 'dataset' gebundene Handler machen noch keinen Sinn,
+        // da die jQuery-Length 0 ergibt.
+
+
+        // Bei 'datapointer' brauche ich das name-Attribut
+        if ([enclosingElemTyp isEqualToString:@"datapointer"])
+        {
+            enclosingElem = self.lastUsedNameAttributeOfDataPointer;
+        }
+
+
+        // Bei 'dataset' brauche ich das zuletzt benutzte dataset
+        if ([enclosingElemTyp isEqualToString:@"dataset"])
+        {
+            enclosingElem = self.lastUsedDataset;
+        }
+
+
+        // Bei 'datapath' muss ich einen Extrasprung machen
+        if ([enclosingElemTyp isEqualToString:@"datapath"])
+        {
+            enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-3];
+        }
+
 
 
         // Wenn 'reference' gesetzt, dann Bezug nehmen und DARAN binden
@@ -7403,6 +7427,14 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
             enclosingElem = [attributeDict valueForKey:@"reference"];
         }
+
+
+
+
+        // Hier drin sammle ich erstmal die Ausgabe
+        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
+
+
 
 
         [self.jQueryOutput appendString:@"\n  // pointer-events zulassen, da ein Handler an dieses Element gebunden ist."];
@@ -7469,10 +7501,8 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
         if ([name isEqualToString:@"onchanged"] ||
             [name isEqualToString:@"onvalue"] ||
-            [name isEqualToString:@"onnewvalue"] ||
-            [name isEqualToString:@"ondata"])
-            // "The ondata script is executed when the data selected by a view's datapath changes."
-            // Aber auch einmal ganz am Anfang wohl... ToDo.
+            // [name isEqualToString:@"ondata"] || // Lieber als 'Custom'-Handler
+            [name isEqualToString:@"onnewvalue"])
         {
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-change-event.");
@@ -9027,10 +9057,10 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"include"] ||
         [elementName isEqualToString:@"import"] ||
         [elementName isEqualToString:@"datapointer"] ||
+        [elementName isEqualToString:@"datapath"] ||
         [elementName isEqualToString:@"attribute"] ||
         [elementName isEqualToString:@"state"] ||
         [elementName isEqualToString:@"animator"] ||
-        [elementName isEqualToString:@"datapath"] ||
         [elementName isEqualToString:@"stableborderlayout"] ||
         [elementName isEqualToString:@"constantlayout"] ||
         [elementName isEqualToString:@"wrappinglayout"] ||
@@ -11373,6 +11403,9 @@ BOOL isJSExpression(NSString *s)
     "    // einer Grupper geleert wird (und NICHT beim öffnen neu initialisiert). Weil bei verschachtelten\n"
     "    // 'animatorgroups's die inneren, die Attribute der äußeren 'erben'.\n"
     "    animatorgroup_ = { animators : [], doStart : function() { for (var i = 0;i<this.animators.length;i++) { this.animators[i].doStart(); } } };\n"
+    "\n"
+    "    // Der zuletzt angesprochene absolute Datapath für relative Datapaths (bewusst ohne var, damit global)\n"
+    "    lastDP_ = undefined;\n"
     "}\n"
     "\n"
     "\n"
@@ -11871,6 +11904,9 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    this.TimerService = function() {\n"
     "        this.addTimer = function(handler, millisecs) {\n"
+    "            window.setTimeout(function() { handler(); }, millisecs);\n"
+    "        }\n"
+    "        this.resetTimer = function(handler, millisecs) {\n"
     "            window.setTimeout(function() { handler(); }, millisecs);\n"
     "        }\n"
     "    }\n"
@@ -12697,6 +12733,42 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Warum auch immer, hängt gemäß OL formatToString direkt im prototype...\n"
     "    this.text.prototype.formatToString = function() { return sprintf.apply(null, arguments); }\n"
+    "\n"
+    "\n"
+    "\n"
+    "    // Mit unregisterAll können alle zuvor gesetzten Delegates entfernt werden. Dazu hier drin sammeln.\n"
+    "    this.allRegisteredDelegates = [];\n"
+    "\n"
+    "    /////////////////////////////////////////////////////////\n"
+    "    // Delegate scheint es zu ermöglichen eine Methode an einen scope zu binden...\n"
+    "    // ...und dann über register auf ein event zu horchen.\n"
+    "    /////////////////////////////////////////////////////////\n"
+    //    "LzDelegate = function(scope,method) { var fn = window[method]; return fn.bind(scope); }\n"
+    //     Beispiel 2.3 in Chapter 27 klappt nur so:
+    "    this.Delegate = function(scope,method) {\n"
+    "        var fn = scope[method];\n"
+    "        var boundFn = fn.bind(scope)\n"
+    "\n"
+    "        // Durch das binden geht die Funktion register sonst verloren\n"
+    "        // Deswegen erst nach dem binden anfügen\n"
+    "        boundFn.register = function(v,ev) {\n"
+    "            // Das Element intern sichern, damit ich in 'unregisterAll()' darauf zugreifen kann\n"
+    "            lz.allRegisteredDelegates.push(v);\n"
+    "\n"
+    "            // 'onclick' klappt nicht, falls übergeben, es muss das 'on' davor entfernt werden (dies steckt implizit im Funktionsnamen)\n"
+    "            if (ev.startsWith('on'))\n"
+    "                ev = ev.substr(2);\n"
+    "            $(v).on(ev+'.DelegateRegister', this);\n"
+    "        }\n"
+    "\n"
+    "        boundFn.unregisterAll = function() {\n"
+    "            for (var i=0;i<lz.allRegisteredDelegates.length;i++)\n"
+    "                $(lz.allRegisteredDelegates[i]).off('.DelegateRegister');\n"
+    "            lz.allRegisteredDelegates = [];\n"
+    "        }\n"
+    "\n"
+    "        return boundFn;\n"
+    "    }\n"
     "}\n"
     "var lz = new lz_MetaClass();\n"
     "// lz.Focus is the single instance of the class lz.FocusService\n"
@@ -12721,31 +12793,12 @@ BOOL isJSExpression(NSString *s)
     "var LzDatapointer = lz.datapointer;\n"
     "var LzDataElement = lz.DataElement;\n"
     "var LzDataText = lz.DataText;\n"
+    "var LzDelegate = lz.Delegate;\n"
     "\n"
     "// deprecated\n"
     "lz.DataNode = lz.DataElement;\n"
     "var LzDataNode = lz.DataElement;\n"
     "\n"
-    "\n"
-    "\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// LzDelegate scheint es zu ermöglichen eine Methode an einen scope zu binden...\n"
-    "// ...und dann über register auf ein event zu horchen.\n"
-    "/////////////////////////////////////////////////////////\n"
-    //"LzDelegate = function(scope,method) { var fn = window[method]; return fn.bind(scope); }\n"
-    // Beispiel 2.3 in Chapter 27 klappt nur so:
-    "LzDelegate = function(scope,method) {\n"
-    "    var fn = scope[method];\n"
-    "    var boundFn = fn.bind(scope)\n"
-    "\n"
-    "    // Durch das binden geht die Funktion register sonst verloren\n"
-    "    // Deswegen erst nach dem binden anfügen\n"
-    "    boundFn.register = function(v,ev) {\n"
-    "        $(v).on(ev, this);\n"
-    "    }\n"
-    "\n"
-    "    return boundFn;\n"
-    "}\n"
     "\n"
     "\n"
     "document.exitpage = {}; // <-- Taucht in general.js in 'setid' auf\n"
@@ -13226,25 +13279,25 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        else if (value.contains('class:wrappinglayout'))\n"
     "        {\n"
-    "            if (value.contains('axis:x'))\n"
+    "            if (value.contains('axis:y'))\n"
     "            {\n"
-    "                var y = 0; // (0 scheint richtig), alt: parseInt($(me).css('top'));\n"
+    "                var x = 0; // (0 scheint richtig), alt: parseInt($(me).css('left'));\n"
     "\n"
     "                $(me).children().each(function() {\n"
     "                    if ($(this).prev().length > 0) // Das erste Kind sitzt schon richtig\n"
     "                    {\n"
-    "                        var x = $(this).prev().width()+parseInt($(this).prev().css('left'))+spacing;\n"
-    "                        // Check ob wir noch reinpassen, sonst y anpassen für nächste Zeile\n"
-    "                        if (x+$(this).width() > $(me).width())\n"
+    "                        var y = $(this).prev().outerHeight()+parseInt($(this).prev().css('top'))+spacing;\n"
+    "                        // Check ob wir noch reinpassen, sonst x anpassen für nächste Spalte\n"
+    "                        if (y+$(this).outerHeight() > $(me).height())\n"
     "                        {\n"
-    "                            y += $(this).height() + spacing;\n"
-    "                            x = 0;\n"
+    "                            y = 0;\n"
+    "                            x += $(this).outerWidth() + spacing;\n"
     "\n"
     "                            // Auch das umgebende div vergrößern, falls nicht fix\n"
-    "                            if (me.style.height == '' || $(me).data('heightOnlySetByHelperFn'))\n"
+    "                            if (me.style.width == '' || $(me).data('widthOnlySetByHelperFn'))\n"
     "                            {\n"
-    "                                $(me).height($(me).height()+$(this).height()+spacing);\n"
-    "                                $(me).data('heightOnlySetByHelperFn',true);\n"
+    "                                $(me).width($(me).width()+$(this).width()+spacing);\n"
+    "                                $(me).data('widthOnlySetByHelperFn',true);\n"
     "                            }\n"
     "                        }\n"
     "\n"
@@ -13253,25 +13306,26 @@ BOOL isJSExpression(NSString *s)
     "                    }\n"
     "                });\n"
     "            }\n"
-    "            else // axis: y\n"
+    "            else // axis: x (= default bei wrappinglayout)\n"
     "            {\n"
-    "                var x = 0; // (0 scheint richtig), alt: parseInt($(me).css('left'));\n"
+    "                var y = 0; // (0 scheint richtig), alt: parseInt($(me).css('top'));\n"
     "\n"
     "                $(me).children().each(function() {\n"
     "                    if ($(this).prev().length > 0) // Das erste Kind sitzt schon richtig\n"
     "                    {\n"
-    "                        var y = $(this).prev().height()+parseInt($(this).prev().css('top'))+spacing;\n"
-    "                        // Check ob wir noch reinpassen, sonst x anpassen für nächste Spalte\n"
-    "                        if (y+$(this).height() > $(me).height())\n"
+    // Es muss wirklich outerWidth hier usw. sein, wegen Bsp. 30.1
+    "                        var x = $(this).prev().outerWidth()+parseInt($(this).prev().css('left'))+spacing;\n"
+    "                        // Check ob wir noch reinpassen, sonst y anpassen für nächste Zeile\n"
+    "                        if (x+$(this).outerWidth() > $(me).width())\n"
     "                        {\n"
-    "                            y = 0;\n"
-    "                            x += $(this).width() + spacing;\n"
+    "                            y += $(this).outerHeight() + spacing;\n"
+    "                            x = 0;\n"
     "\n"
     "                            // Auch das umgebende div vergrößern, falls nicht fix\n"
-    "                            if (me.style.width == '' || $(me).data('widthOnlySetByHelperFn'))\n"
+    "                            if (me.style.height == '' || $(me).data('heightOnlySetByHelperFn'))\n"
     "                            {\n"
-    "                                $(me).width($(me).width()+$(this).width()+spacing);\n"
-    "                                $(me).data('widthOnlySetByHelperFn',true);\n"
+    "                                $(me).height($(me).height()+$(this).height()+spacing);\n"
+    "                                $(me).data('heightOnlySetByHelperFn',true);\n"
     "                            }\n"
     "                        }\n"
     "\n"
@@ -15588,6 +15642,68 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "    $(el).on('onwidth.SBLX', function() { setStableBorderLayoutXIn(el); } );\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hilfsfunktion, um einen absolut gesetzten Datapath auszuwerten\n"
+    "// setAbsoluteDataPathIn()                             //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Ich werte die XPath-Angabe über einen temporär angelegten Datapointer aus.\n"
+    "// Das Ergebnis des XPath-Requests wird als text des Elements gesetzt\n"
+    "// Aber nur, wenn es eine Text-Node ist. Denn es kann auch nur ein Pfad angegeben sein, auf den sich dann tiefer verschachtelte Elemente beziehen.\n"
+    "// Liefert der XPath-Request mehrere Ergebnisse zurück, muss ich hingegen das Div entsprechend oft duplizieren.\n"
+    "var setAbsoluteDataPathIn = function (el,path) {\n"
+    "    // XPath speichern, damit Kinder darauf zugreifen können.\n"
+    "    $('#'+el.id).data('XPath',path);\n"
+    "    // Letzten Datapointer global speichern, damit evtl. nachfolgende relative Datapointer darauf zugreifen können\n"
+    "    lastDP_ = new lz.datapointer(path,false);\n"
+    "\n"
+    "\n"
+    "    if (lastDP_.getXPathIndex() > 1)\n"
+    "    {\n"
+    "        // Markieren, weil dies Auswirkungen auf viele Dinge hat...\n"
+    "        $('#'+el.id).data('IAmAReplicator',true);\n"
+    "\n"
+    "        // Counter\n"
+    "        var c = 0;\n"
+    "        // Klon erzeugen inklusive Kinder\n"
+    "        var clone = $('#'+el.id).clone(true);\n"
+    "        // Das komplette Element löschen,vorher parent sichern\n"
+    "        var p = $('#'+el.id).parent();\n"
+    "        $('#'+el.id).remove();\n"
+    "\n"
+    "        for (var i=0;i<lastDP_.getXPathIndex();i++)\n"
+    "        {\n"
+    "            c++;\n"
+    "            // Muss es jedes mal nochmal klonen, sonst wäre der Klon-Vorgang nur 1x erfolgreich\n"
+    "            var clone2 = clone.clone(true);\n"
+    "            // Ab dem 2. mal alle id's austauschen, damit ich später geklonte Zwillinge erkennen kann und damit es id's nicht doppelt gibt\n"
+    "            if (i >= 1)\n"
+    "            {\n"
+    "                clone2.find('*').andSelf().each(function() {\n"
+    "                    $(this).attr('id',$(this).attr('id')+'_repl'+c);\n"
+    "                    // Die neu geschaffene id noch global bekannt machen\n"
+    "                    window[$(this).attr('id')] = this;\n"
+    "                });\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                // Ansonsten nur die Elemente neu bekannt geben (ohne var, damit global)\n"
+    "                clone2.find('*').andSelf().each(function() {\n"
+    "                    window[$(this).attr('id')] = this;\n"
+    "                });\n"
+    "\n"
+    "            }\n"
+    "            // Den Klon an das parent-Element anfügen\n"
+    "            clone2.appendTo(p);\n"
+    "        }\n"
+    "    }\n"
+    "    else\n"
+    "    {\n"
+    "        if (lastDP_.getNodeType() == 3)\n"
+    "            $('#'+el.id).html(lastDP_.getNodeText());\n"
+    "    }\n"
     "}\n"
     "\n"
     "\n"

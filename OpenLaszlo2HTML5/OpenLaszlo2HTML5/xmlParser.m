@@ -38,11 +38,11 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
-BOOL kompiliereSpeziellFuerTaxango = YES;
+BOOL kompiliereSpeziellFuerTaxango = NO;
 
 
 
@@ -1655,7 +1655,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jsOutput appendFormat:@"  %@ = document.getElementById('%@');\n",name, self.zuletztGesetzteID];
 
 
-        [self.jsOutput appendString:@"  // All 'name'-attributes, can be referenced by its parent Element...\n"];
+        [self.jsOutput appendString:@"  // All 'name'-attributes can be referenced by its parent Element...\n"];
         // So nicht: !!!!!
         // [self.jsOutput appendFormat:@"  $('#%@').parent().get(0).%@ = %@;\n",self.zuletztGesetzteID,name, name];
         // Denn das jQuery-Parent berücksichtigt ja nicht den Doppelsprung bei <input> und <select>
@@ -1678,7 +1678,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         //[self.jsOutput appendFormat:@"  $(%@).data('name','%@');\n",self.zuletztGesetzteID, name];
         // -> Nicht mehr nötig, weil ich 'name' als HTML5-Annotation setze und somit automatisch in jQuerys data() erscheint
 
-        //[self.jsOutput appendString:@"  // ...and all 'name'-attributes, can be referenced by canvas.*\n"];
+        //[self.jsOutput appendString:@"  // ...and all 'name'-attributes can be referenced by canvas.*\n"];
         //[self.jsOutput appendFormat:@"  canvas.%@ = %@;\n",name, name];
         // Nein... das stimmt nicht so generell. Es kann nur sein, dass sich dies ergibt, weil
         // der parent halt 'canvas' ist. Deswegen musste diese Anweisung raus, hat sonst Sachen
@@ -7437,8 +7437,8 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-        [self.jQueryOutput appendString:@"\n  // pointer-events zulassen, da ein Handler an dieses Element gebunden ist."];
-        [self.jQueryOutput appendFormat:@"\n  $('#%@').css('pointer-events','auto');\n",enclosingElem];
+        [o appendString:@"\n  // pointer-events zulassen, da ein Handler an dieses Element gebunden ist."];
+        [o appendFormat:@"\n  $('#%@').css('pointer-events','auto');\n",enclosingElem];
 
         if (![attributeDict valueForKey:@"name"])
             [self instableXML:@"Ein Handler ohne name-Attribut. Das geht so nicht!"];
@@ -7474,10 +7474,10 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-click-event.");
 
-            [self.jQueryOutput appendFormat:@"\n  // onclick-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"\n  // onclick-Handler für %@\n",enclosingElem];
 
             // 'e', weil 'event' würde wohl das event-Objekt zugreifen. Auf dieses kann man so und so zugreifen.
-            [self.jQueryOutput appendFormat:@"  $('#%@').click(function(e)\n  {\n    ",enclosingElem];
+            [o appendFormat:@"  $('#%@').click(function(e)\n  {\n    ",enclosingElem];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7489,10 +7489,10 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-dblclick-event.");
 
-            [self.jQueryOutput appendFormat:@"\n  // ondblclick-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"\n  // ondblclick-Handler für %@\n",enclosingElem];
 
             // 'e', weil 'event' würde wohl das event-Objekt zugreifen. Auf dieses kann man so und so zugreifen.
-            [self.jQueryOutput appendFormat:@"  $('#%@').dblclick(function(e)\n  {\n    ",enclosingElem];
+            [o appendFormat:@"  $('#%@').dblclick(function(e)\n  {\n    ",enclosingElem];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7507,9 +7507,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-change-event.");
 
-            [self.jQueryOutput appendFormat:@"\n  // change-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"\n  // change-Handler für %@\n",enclosingElem];
 
-            [self.jQueryOutput appendFormat:@"  $('#%@').change(function(e)\n  {\n    ",enclosingElem];
+            [o appendFormat:@"  $('#%@').change(function(e)\n  {\n    ",enclosingElem];
 
 
             // Extra Code, um den alten Value speichern zu können (s. als Erklärung auch
@@ -7517,8 +7517,8 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             if ([name isEqualToString:@"onnewvalue"] ||
                 [name isEqualToString:@"onvalue"])
             {
-                [self.jQueryOutput appendString:@"var oldvalue = $(this).data('oldvalue') || '';\n"];
-                [self.jQueryOutput appendString:@"    $(this).data('oldvalue', $(this).val());\n\n    "];
+                [o appendString:@"var oldvalue = $(this).data('oldvalue') || '';\n"];
+                [o appendString:@"    $(this).data('oldvalue', $(this).val());\n\n    "];
             }
 
             alsBuildInEventBearbeitet = YES;
@@ -7532,9 +7532,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-error-event.");
 
-            [self.jQueryOutput appendFormat:@"\n  // error-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"\n  // error-Handler für %@\n",enclosingElem];
 
-            [self.jQueryOutput appendFormat:@"  $('#%@').error(function(e)\n  {\n    ",enclosingElem];
+            [o appendFormat:@"  $('#%@').error(function(e)\n  {\n    ",enclosingElem];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7553,17 +7553,17 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             // $(window).load(function() aus!
             NSLog(@"NOT Binding the method in this handler. Direct execution of code.");
 
-            [self.jQueryOutput appendFormat:@"\n  // oninit/onconstruct-Handler für %@ (wir führen den Code direkt aus)\n  // Aber korrekten Scope berücksichtigen! Deswegen in einer Funktion mit bind() ausführen\n  // Zusätzlich ist auch noch with (this) {} erforderlich, puh...\n",enclosingElem];
+            [o appendFormat:@"\n  // oninit/onconstruct-Handler für %@ (wir führen den Code direkt aus)\n  // Aber korrekten Scope berücksichtigen! Deswegen in einer Funktion mit bind() ausführen\n  // Zusätzlich ist auch noch with (this) {} erforderlich, puh...\n",enclosingElem];
 
-            // [self.jQueryOutput appendFormat:@"  $('#%@').load(function()\n  {\n    ",self.zuletztGesetzteID];
-            [self.jQueryOutput appendFormat:@"  var bindMeToCorrectScope = function () {\n    with (this) {\n        "];
+            // [o appendFormat:@"  $('#%@').load(function()\n  {\n    ",self.zuletztGesetzteID];
+            [o appendFormat:@"  var bindMeToCorrectScope = function () {\n    with (this) {\n        "];
 
 
             if ([attributeDict valueForKey:@"args"])
             {
                 self.attributeCount++;
 
-                [self.jQueryOutput appendFormat:@"var %@ = this;\n\n      ",[attributeDict valueForKey:@"args"]];
+                [o appendFormat:@"var %@ = this;\n\n      ",[attributeDict valueForKey:@"args"]];
             }
 
 
@@ -7580,9 +7580,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-focus-event.");
 
-            [self.jQueryOutput appendFormat:@"\n  // focus-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"\n  // focus-Handler für %@\n",enclosingElem];
 
-            [self.jQueryOutput appendFormat:@"  $('#%@').focus(function(e)\n  {\n    ",enclosingElem];
+            [o appendFormat:@"  $('#%@').focus(function(e)\n  {\n    ",enclosingElem];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7602,9 +7602,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-select-event.");
 
-            [self.jQueryOutput appendFormat:@"\n  // select-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"\n  // select-Handler für %@\n",enclosingElem];
 
-            [self.jQueryOutput appendFormat:@"  $('#%@').select(function(e%@)\n  {\n    ",enclosingElem,args];
+            [o appendFormat:@"  $('#%@').select(function(e%@)\n  {\n    ",enclosingElem,args];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7623,9 +7623,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-blur-event.");
 
-            [self.jQueryOutput appendFormat:@"\n  // blur-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"\n  // blur-Handler für %@\n",enclosingElem];
 
-            [self.jQueryOutput appendFormat:@"  $('#%@').blur(function(e%@)\n  {\n    ",enclosingElem,args];
+            [o appendFormat:@"  $('#%@').blur(function(e%@)\n  {\n    ",enclosingElem,args];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7639,9 +7639,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-mousedown-event.");
 
-            [self.jQueryOutput appendFormat:@"\n  // mousedown-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"\n  // mousedown-Handler für %@\n",enclosingElem];
 
-            [self.jQueryOutput appendFormat:@"  $('#%@').mousedown(function(e)\n  {\n    ",enclosingElem];
+            [o appendFormat:@"  $('#%@').mousedown(function(e)\n  {\n    ",enclosingElem];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7655,9 +7655,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-mouseup-event.");
 
-            [self.jQueryOutput appendFormat:@"\n  // mouseup-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"\n  // mouseup-Handler für %@\n",enclosingElem];
 
-            [self.jQueryOutput appendFormat:@"  $('#%@').mouseup(function(e)\n  {\n    ",enclosingElem];
+            [o appendFormat:@"  $('#%@').mouseup(function(e)\n  {\n    ",enclosingElem];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7671,9 +7671,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-mouseover-event.");
 
-            [self.jQueryOutput appendFormat:@"\n  // mouseover-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"\n  // mouseover-Handler für %@\n",enclosingElem];
 
-            [self.jQueryOutput appendFormat:@"  $('#%@').mouseover(function(e)\n  {\n    ",enclosingElem];
+            [o appendFormat:@"  $('#%@').mouseover(function(e)\n  {\n    ",enclosingElem];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7687,9 +7687,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-mouseout-event.");
 
-            [self.jQueryOutput appendFormat:@"\n  // mouseout-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"\n  // mouseout-Handler für %@\n",enclosingElem];
 
-            [self.jQueryOutput appendFormat:@"  $('#%@').mouseout(function(e)\n  {\n    ",enclosingElem];
+            [o appendFormat:@"  $('#%@').mouseout(function(e)\n  {\n    ",enclosingElem];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7715,10 +7715,10 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-keyup-event.");
 
-            [self.jQueryOutput appendFormat:@"\n  // keyup-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"\n  // keyup-Handler für %@\n",enclosingElem];
 
             // die Variable k wird von OpenLaszlo einfach so benutzt. Das muss der keycode sein.
-            [self.jQueryOutput appendFormat:@"  $('#%@').keyup(function(e)\n  {\n    var k = e.keyCode;\n    var key = e.keyCode;\n\n    ",enclosingElem];
+            [o appendFormat:@"  $('#%@').keyup(function(e)\n  {\n    var k = e.keyCode;\n    var key = e.keyCode;\n\n    ",enclosingElem];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7745,9 +7745,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-keydown-event.");
 
-            [self.jQueryOutput appendFormat:@"\n  // keydown-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"\n  // keydown-Handler für %@\n",enclosingElem];
 
-            [self.jQueryOutput appendFormat:@"  $('#%@').keydown(function(e)\n  {\n    var k = e.keyCode;\n    var key = e.keyCode;\n\n    ",enclosingElem];
+            [o appendFormat:@"  $('#%@').keydown(function(e)\n  {\n    var k = e.keyCode;\n    var key = e.keyCode;\n\n    ",enclosingElem];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7773,15 +7773,15 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             // ebenso 'setAttribute_'.
             // Das erste Argument (e) ist immer automatisch das event-Objekt.
             // (Siehe Beispiel <event>, Example 28)
-            [self.jQueryOutput appendFormat:@"\n  // 'custom'-Handler für %@\n",enclosingElem];
-            [self.jQueryOutput appendFormat:@"  $('#%@').on('%@',function(e%@)\n  {\n    ",enclosingElem,name,args];
-
+            [o appendFormat:@"\n  // 'custom'-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"  $('#%@').on('%@',function(e%@)\n  {\n    ",enclosingElem,name,args];
 
             // Okay, jetzt Text sammeln und beim schließen einfügen
         }
 
 
-
+        // Falls ich es ändere: Analog auch beim schließenden Tag ändern!
+        [self.jQueryOutput appendString:o];
 
 
         // Wenn args gesetzt ist, wird derzeit nur der Wert 'oldvalue' unterstützt
@@ -9530,13 +9530,18 @@ BOOL isJSExpression(NSString *s)
     {
         element_geschlossen = YES;
 
+
+        // Hier drin sammle ich erstmal die Ausgabe
+        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
+
+
         if ([self.methodAttributeInHandler length] > 0)
         {
-            [self.jQueryOutput appendString:@"if (this == e.target) {\n      "];
+            [o appendString:@"if (this == e.target) {\n      "];
 
-            [self.jQueryOutput appendFormat:@"this.%@();\n    }\n",self.methodAttributeInHandler];
+            [o appendFormat:@"this.%@();\n    }\n",self.methodAttributeInHandler];
 
-            [self.jQueryOutput appendString:@"  });\n"];
+            [o appendString:@"  });\n"];
         }
         else
         {
@@ -9559,7 +9564,6 @@ BOOL isJSExpression(NSString *s)
                 // enclosingElem = [NSString stringWithFormat:@"%@.getContext('2d')",enclosingElem];
                 // Neu: Ich mappe alles direkt in das HTMLCanvasElement. Erklärung siehe dort.
 
-
                 s = [self modifySomeCanvasExpressionsInJSCode:s];
             }
 
@@ -9568,12 +9572,12 @@ BOOL isJSExpression(NSString *s)
             // OL benutzt 'classroot' als Variable für den Zugriff auf das erste in einer Klasse
             // definierte Element. Deswegen, falls wir eine Klasse auswerten, einfach diese Var setzen
             if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-                [self.jQueryOutput appendFormat:@"var classroot = %@;\n    ",ID_REPLACE_STRING];
+                [o appendFormat:@"var classroot = %@;\n    ",ID_REPLACE_STRING];
 
             if (self.onInitInHandler)
             {
-                [self.jQueryOutput appendString:s];
-                [self.jQueryOutput appendFormat:@"\n    }\n  }\n  bindMeToCorrectScope.bind(%@)();\n",enclosingElem];
+                [o appendString:s];
+                [o appendFormat:@"\n    }\n  }\n  bindMeToCorrectScope.bind(%@)();\n",enclosingElem];
             }
             else
             {
@@ -9589,43 +9593,32 @@ BOOL isJSExpression(NSString *s)
                 // e.target testen. Der Witz ist ja gerade, dass es wo anders dran gebunden wurde.
                 if (self.referenceAttributeInHandler)
                 {
-                    [self.jQueryOutput appendString:@"  // Wegen 'reference'-Attribut falsches this. Dieses korrigieren mit selbst ausführender Funktion und bind()\n"];                
-                    [self.jQueryOutput appendString:@"      (function() {\n"];
+                    [o appendString:@"  // Wegen 'reference'-Attribut falsches this. Dieses korrigieren mit selbst ausführender Funktion und bind()\n"];                
+                    [o appendString:@"      (function() {\n"];
                 }
                 else
                 {
-                    [self.jQueryOutput appendString:@"if (this == e.target) {\n"];
+                    [o appendString:@"if (this == e.target) {\n"];
                 }
 
-                if (self.handlerofDrawview)
-                {
-                    // Dann das innere 'this' nochmals korrigieren über selbst ausführende Funktion mit bind
-                    //[self.jQueryOutput appendString:@"      (function() {\n"];
-                    // Neu: Ich mappe alles direkt in das HTMLCanvasElement. Erklärung siehe dort.
-                }
 
-                [self.jQueryOutput appendString:@"      with (this) {\n        "];
+                [o appendString:@"      with (this) {\n        "];
 
-                [self.jQueryOutput appendString:s];
+                [o appendString:s];
 
-                [self.jQueryOutput appendString:@"\n      }\n"];
+                [o appendString:@"\n      }\n"];
 
-                if (self.handlerofDrawview)
-                {
-                    //[self.jQueryOutput appendFormat:@"      }).bind(%@)();\n",enclosingElem];
-                    // Neu: Ich mappe alles direkt in das HTMLCanvasElement. Erklärung siehe dort.
-                }
 
                 if (self.referenceAttributeInHandler)
                 {
-                    [self.jQueryOutput appendFormat:@"    }).bind(%@)();\n",enclosingElem];
+                    [o appendFormat:@"    }).bind(%@)();\n",enclosingElem];
                 }
                 else
                 {
-                    [self.jQueryOutput appendString:@"    }\n"];
+                    [o appendString:@"    }\n"];
                 }
 
-                [self.jQueryOutput appendString:@"  });\n"];
+                [o appendString:@"  });\n"];
             }
         }
 
@@ -9633,8 +9626,15 @@ BOOL isJSExpression(NSString *s)
         if (self.handlerofDrawview)
         {
             // oft ist es an 'oncontext' gebunden. Deswegen dies einfach hinterher triggern.
-            [self.jQueryOutput appendFormat:@"  $(%@).triggerHandler('oncontext');\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1]];
+            [o appendFormat:@"  $(%@).triggerHandler('oncontext');\n",[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1]];
         }
+
+
+
+        // Falls ich es ändere: Analog auch beim öffnenden Tag ändern!
+        [self.jQueryOutput appendString:o];
+
+
 
         // Erkennungszeichen für oninit in jedem Fall zurücksetzen
         self.onInitInHandler = NO;
@@ -12275,9 +12275,15 @@ BOOL isJSExpression(NSString *s)
     "            if (pfad.charAt(pfad.length-1) == '/')\n"
     "                pfad = pfad.substring(0, pfad.length-1);\n"
     "            var xpath = '/' + this.datasetName + pfad;\n"
+    "\n"
     "            // '/text()' kann/muss entfernt werden. Es würde auch mit klappen, nur beim counter nicht.\n"
     "            if (xpath.endsWith('/text()'))\n"
     "                xpath = xpath.substr(0,xpath.length-7);\n"
+    "\n"
+    "            // '/name()' muss entfernt werden. Er will dann den Tagnamen als Result haben (dieser wird dann in 'xpathQuery' zurückgeliefert)\n"
+    "            if (xpath.endsWith('/name()'))\n"
+    "                xpath = xpath.substr(0,xpath.length-7);\n"
+    "\n"
     "\n"
     "            // Gets all nodes: var xpath = '/' + this.datasetName + '//*';\n"
     "\n"
@@ -12515,6 +12521,9 @@ BOOL isJSExpression(NSString *s)
     "            // Wenn Text da ist und es eine Textnode ist\n"
     "            if (this.lastNodeText && this.lastNodeType == 3) \n"
     "                returnValue = this.lastNodeText;\n"
+    "            // Wenn Request mit 'name()' endet, will er immer den Tagnamen haben\n"
+    "            if (query.endsWith('/name()'))\n"
+    "                returnValue = this.lastNodeName;\n"
     "\n"
     "            // alte 'pointer' wiederherstellen\n"
     "            this.lastNode = lastNode;\n"
@@ -12756,7 +12765,8 @@ BOOL isJSExpression(NSString *s)
     "            lz.allRegisteredDelegates.push(v);\n"
     "\n"
     "            // 'onclick' klappt nicht, falls übergeben, es muss das 'on' davor entfernt werden (dies steckt implizit im Funktionsnamen)\n"
-    "            if (ev.startsWith('on'))\n"
+    "            // Aber 'oninit' ist kein JS-event-Handler!\n"
+    "            if (ev.startsWith('on') && ev != 'oninit')\n"
     "                ev = ev.substr(2);\n"
     "            $(v).on(ev+'.DelegateRegister', this);\n"
     "        }\n"
@@ -13848,7 +13858,8 @@ BOOL isJSExpression(NSString *s)
     "    var c = 2;\n"
     "    while ($('#'+me.id+'_repl'+c).length)\n"
     "    {\n"
-    "        $('#'+me.id+'_repl'+c).get(0).setAttribute_(attributeName,value);\n"
+    "        // Gemäß Bsp. 'lz.ReplicationManager' ist das hier falsch... (Deswegen testweise mal hier rausgenommen)\n"
+    "        //$('#'+me.id+'_repl'+c).get(0).setAttribute_(attributeName,value);\n"
     "        c++;\n"
     "    }\n"
     "}\n"
@@ -15665,6 +15676,18 @@ BOOL isJSExpression(NSString *s)
     "        // Markieren, weil dies Auswirkungen auf viele Dinge hat...\n"
     "        $('#'+el.id).data('IAmAReplicator',true);\n"
     "\n"
+    "\n"
+    "\n"
+    "        // Alle hinzugefügten Methoden vorher sichern\n"
+    "        var gesicherteMethoden = {};\n"
+    "        for(var func in el) {\n"
+    "            if (el.hasOwnProperty(func) && typeof el[func] === 'function') {\n"
+    "                gesicherteMethoden[func] = el[func];\n"
+    "            }\n"
+    "        }\n"
+    "\n"
+    "\n"
+    "\n"
     "        // Counter\n"
     "        var c = 0;\n"
     "        // Klon erzeugen inklusive Kinder\n"
@@ -15692,11 +15715,41 @@ BOOL isJSExpression(NSString *s)
     "                // Ansonsten nur die Elemente neu bekannt geben (ohne var, damit global)\n"
     "                clone2.find('*').andSelf().each(function() {\n"
     "                    window[$(this).attr('id')] = this;\n"
-    "                });\n"
     "\n"
+    "                    // Falls es ein 'name'-Attribut gab, sollte ich wohl auch das global neu bekannt machen\n"
+    "                    // (und im Eltern-Element die Referenz darauf neu setzen)\n"
+    "                    if ($(this).data('name'))\n"
+    "                    {\n"
+    "                        window[$(this).data('name')] = this;\n"
+    "                        p.get(0)[$(this).data('name')] = this;\n"
+    "                    }\n"
+    "                });\n"
     "            }\n"
     "            // Den Klon an das parent-Element anfügen\n"
     "            clone2.appendTo(p);\n"
+    "\n"
+    "            // Kann ich erst jetzt setzen, da jetzt erst erst das Element wieder im DOM hängt!\n"
+    "            if (i == 0)\n"
+    "            {\n"
+    "                // Die Replicator-Attribute/Methoden an das Element binden\n"
+    "                $('#'+el.id).get(0).clones = [];\n"
+    "                $('#'+el.id).get(0).getCloneForNode = function(p,dontmake) { }\n"
+    "                $('#'+el.id).get(0).getCloneNumber = function(n) { return this.clones[n]; }\n"
+    "\n"
+    "                // Und die zuvor gesicherten Methoden wieder herstellen\n"
+    "                Object.keys(gesicherteMethoden).forEach(function(key)\n"
+    "                {\n"
+    "                    $('#'+el.id).get(0)[key] = gesicherteMethoden[key];\n"
+    "                });\n"
+    "            }\n"
+    "\n"
+    "\n"
+    "            // Und neu: Den Klon in clones speichern (und dieses per triggerHandler bekannt machen)\n"
+    //"            el.clones.push(clone2.get(0));\n" // <-- geht mit der gleichen Begründung nicht wie das eins drunter.
+    "            $('#'+el.id).get(0).clones.push(clone2.get(0));\n"
+    //"            $(el).triggerHandler('onclones');\n"
+    // Ähmmm, geht nicht?!?! Wtf. I don't understand. Nur so: // Evtl. weil ich 'el' ja aus dem DOM hier entferne / überschreibe
+    "            $('#'+el.id).triggerHandler('onclones');\n"
     "        }\n"
     "    }\n"
     "    else\n"

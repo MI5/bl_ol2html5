@@ -38,11 +38,11 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
-BOOL kompiliereSpeziellFuerTaxango = NO;
+BOOL kompiliereSpeziellFuerTaxango = YES;
 
 
 
@@ -6394,6 +6394,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
         // Auch bei "state" muss ich derzeit noch nen Extra Sprung machen. Ob sich das ändert, wenn ich "state" auswerte?
+        // Nein, es ändert sich nicht! Siehe http://www.openlaszlo.org/lps4.9/docs/developers/states.html 1) 2. Absatz, 2. Satz
 
         NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
         // Wenn wir in einer 'animatorgroup' stecken, muss ich einmal extra springen
@@ -7278,6 +7279,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
         if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
         {
+            [o appendString:@"  "];
             //[o appendFormat:@"  if (window.%@ == undefined)\n  ",[attributeDict valueForKey:@"name"]];
             // Neue Logik: Methoden werden erst nach ausgewerteten Klassen gesetzt.
             // Deswegen MUSS jetzt sogar überschrieben werden
@@ -7542,7 +7544,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         }
 
 
-        if ([name isEqualToString:@"oninit"] || [name isEqualToString:@"onconstruct"])
+        if ( [name isEqualToString:@"oninit"] || [name isEqualToString:@"onconstruct"])
         {
             self.attributeCount++;
             // NSLog(@"Binding the method in this handler to a jQuery-load-event.");
@@ -7551,9 +7553,11 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             // Falls es doch mal das init eines windows (canvas) sein sollte, nicht schlimm,
             // denn wir führen schon von vorne herein den gesamten Code in
             // $(window).load(function() aus!
+            // Hmm, seitdem ich alle handler in jQueryOutput0 ausgebe, sind die in der oninit-Methode benutzten Methoden
+            // noch nicht alle bekannt. Deswegen neu: Ich lasse es als oninit-Handler und triggere dann 'oninit' später
             NSLog(@"NOT Binding the method in this handler. Direct execution of code.");
 
-            [o appendFormat:@"\n  // oninit/onconstruct-Handler für %@ (wir führen den Code direkt aus)\n  // Aber korrekten Scope berücksichtigen! Deswegen in einer Funktion mit bind() ausführen\n  // Zusätzlich ist auch noch with (this) {} erforderlich, puh...\n",enclosingElem];
+            [o appendFormat:@"\n  // oninit/onconstruct-Handler für %@ (wir führen den Code direkt aus)\n  // Aber korrekten Scope berücksichtigen! Deswegen in einer Funktion mit bind() ausführen\n  // Zusätzlich ist auch noch with (this) {} erforderlich.\n",enclosingElem];
 
             // [o appendFormat:@"  $('#%@').load(function()\n  {\n    ",self.zuletztGesetzteID];
             [o appendFormat:@"  var bindMeToCorrectScope = function () {\n    with (this) {\n        "];
@@ -7781,6 +7785,8 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
         // Falls ich es ändere: Analog auch beim schließenden Tag ändern!
+        // jQueryOutput0! Damit die Handler bekannt sind, bevor diese getriggert werden! (Bsp. 30.3)
+        // Problem: Ladezeit verdoppelt sich... weil er dann viel mehr triggern kann... Erst iwie das triggern optimieren
         [self.jQueryOutput appendString:o];
 
 
@@ -9632,6 +9638,8 @@ BOOL isJSExpression(NSString *s)
 
 
         // Falls ich es ändere: Analog auch beim öffnenden Tag ändern!
+        // jQueryOutput0! Damit die Handler bekannt sind, bevor diese getriggert werden! (Bsp. 30.3)
+        // Problem: Ladezeit verdoppelt sich... weil er dann viel mehr triggern kann... Erst iwie das triggern optimieren
         [self.jQueryOutput appendString:o];
 
 
@@ -11315,11 +11323,38 @@ BOOL isJSExpression(NSString *s)
     "    canvas.framerate = 30;\n"
     "    canvas.versionInfoString = function() { return '1.0'; }\n"
     "\n"
+    "\n"
+    "    // Hilfsfunktion, um jederzeit die Mauskoordinaten einlesen zu können\n"
+    "    window.mouseXPos = -1000;\n"
+    "    window.mouseYPos = -1000;\n"
+    "    $(document).ready(function(){\n"
+    "        $(document).mousemove(function(e){\n"
+    "            window.mouseXPos = e.pageX;\n"
+    "            window.mouseYPos = e.pageY;\n"
+    "            $(canvas).triggerHandler('change'); // Etwas geschummelt, aber damit die Examples in Kapitel 32 klappen\n"
+    "        });\n"
+    "    });\n"
+    // Variante mit Delay (um Resourcen zu schonen):
+    //function getMousePosition(timeoutMilliSeconds) {
+    //    // "one" attaches the handler to the event and removes it after it has executed once 
+    //    $(document).one("mousemove", function (event) {
+    //        window.mouseXPos = event.pageX;
+    //        window.mouseYPos = event.pageY;
+    //        // set a timeout so the handler will be attached again after a little while
+    //        setTimeout(function() { getMousePosition(timeoutMilliSeconds) }, timeoutMilliseconds);
+    //    });
+    //}
+    //
+    //// start storing the mouse position every 100 milliseconds
+    //getMousePosition(100);
     "    canvas.getMouse = function(axis) {\n"
     "        if (typeof axis !== 'string' || (axis !== 'x' && axis !== 'y'))\n"
     "            throw new Error('canvas.getMouse() - No axis or wrong axis.');\n"
-    "        return 1;\n"
+    "\n"
+    "        if (axis === 'x') return window.mouseXPos;\n"
+    "        if (axis === 'y') return window.mouseYPos;\n"
     "    }\n"
+    "\n"
     "\n"
     "    canvas.setDefaultContextMenu = function(contextmenu) {};\n"
     "\n"
@@ -12756,6 +12791,8 @@ BOOL isJSExpression(NSString *s)
     //     Beispiel 2.3 in Chapter 27 klappt nur so:
     "    this.Delegate = function(scope,method) {\n"
     "        var fn = scope[method];\n"
+    "        if (fn === undefined)\n"
+    "            throw new TypeError('function lz.Delegate - The given method was not found in the given scope. Method not yet defined?');\n"
     "        var boundFn = fn.bind(scope)\n"
     "\n"
     "        // Durch das binden geht die Funktion register sonst verloren\n"
@@ -15750,6 +15787,8 @@ BOOL isJSExpression(NSString *s)
     //"            $(el).triggerHandler('onclones');\n"
     // Ähmmm, geht nicht?!?! Wtf. I don't understand. Nur so: // Evtl. weil ich 'el' ja aus dem DOM hier entferne / überschreibe
     "            $('#'+el.id).triggerHandler('onclones');\n"
+    "            // Und direkt 'oninit' hinterher triggern (Wegen Bsp. 30.3)\n"
+    "            $('#'+el.id).triggerHandler('oninit');\n"
     "        }\n"
     "    }\n"
     "    else\n"
@@ -16074,7 +16113,7 @@ BOOL isJSExpression(NSString *s)
     // Besser ohne eval:
     "        $(expression).on('change', Function(func));\n"
     "    }\n"
-    "    else if (typeof expression === 'function') // Wegen Bsp. 20.3\n"
+    "    else if (typeof expression === 'function') // Wegen Bsp. 20.3 und 32.1\n"
     "    {\n"
     //"        $(obj).on('change', func);\n" // <-- Als früher noch direkt die function übergeben wurde
     //"        eval(\"$(obj).on('change', \"+func+\");\");\n"

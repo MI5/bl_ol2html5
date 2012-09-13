@@ -224,6 +224,10 @@ BOOL kompiliereSpeziellFuerTaxango = YES;
 // 'method'-Variable in einem Handler
 @property (strong, nonatomic) NSString *methodAttributeInHandler;
 
+// wenn wir in einem 'state' sind, muss ich oft anders reagieren und zeige Sachen nur an, wenn der 'state' 'applied' ist
+@property (strong, nonatomic) NSString *lastUsedNameAttributeOfState;
+
+
 @end
 
 
@@ -283,7 +287,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize weAreCollectingTheCompleteContentInClass = _weAreCollectingTheCompleteContentInClass;
 @synthesize weAreSkippingTheCompleteContentInThisElement = _weAreSkippingTheCompleteContentInThisElement;
 
-@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler, handlerofDrawview = _handlerofDrawview;
+@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler, handlerofDrawview = _handlerofDrawview, lastUsedNameAttributeOfState = _lastUsedNameAttributeOfState;
 
 
 
@@ -429,6 +433,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.referenceAttributeInHandler = NO;
         self.handlerofDrawview = NO;
         self.methodAttributeInHandler = @"";
+        self.lastUsedNameAttributeOfState = @"";
 
         self.allJSGlobalVars = [[NSMutableDictionary alloc] initWithCapacity:200];
         self.allFoundClasses = [[NSMutableDictionary alloc] initWithCapacity:200];
@@ -538,7 +543,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
--(NSMutableArray *) getTheDependingVarsOfTheConstraint:(NSString*)s
+-(NSMutableArray *) getTheDependingVarsOfTheConstraint:(NSString*)s in:(NSString*)currentElem
 {
     NSError *error = NULL;
 
@@ -600,7 +605,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             // davorsetzen. Weil jetzt nochmal extra mit 'with () {}' zu arbeiten ist wohl nicht nötig
             // da wir ja auf Ebene der einzelnen Variable sind und individuell reagieren können.
             if ([varName hasPrefix:@"getTheParent("])
-                varName = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,varName];
+                varName = [NSString stringWithFormat:@"%@.%@",currentElem,varName];
 
             // Gefundene reservierte JS-Wörter muss ich an dieser Stelle fallen lassen. Dies sind keine Var-Namen
 
@@ -687,7 +692,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
         // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...
-        NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s];
+        NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s in:self.zuletztGesetzteID];
 
 
         // ...s computable machen...
@@ -749,7 +754,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
         // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...
-        NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s];
+        NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s in:self.zuletztGesetzteID];
 
 
         NSString *e = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
@@ -1761,6 +1766,18 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+- (NSString*) makeTheComputedValueComputable:(NSString*)s withAndBindEquals:(NSString*)scope
+{
+    s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
+    s = [self modifySomeExpressionsInJSCode:s];
+
+    s = [NSString stringWithFormat:@"(function() { with (%@) { return %@; } }).bind(%@)()",scope,s,scope];
+
+    return s;
+}
+
+
+
 // Ne, wir definieren einfach ein globales setAttribute_ mit defineProperty
 // Dazu muss ich dann nur das this immer aktualisieren, da es auch passieren kann, dass
 // setAttribute ohne vorangehende Variable aufgerufen wird.
@@ -2388,6 +2405,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Falls wir in einem Replicator sind, muss ich wissen welche ID geklont werden soll
     if ([self.collectTheNextIDForReplicator isEqualToString:@"$collectTheID_PLZ$"])
         self.collectTheNextIDForReplicator = self.zuletztGesetzteID;
+
 
     // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein!
     // Insbesondere auch wegen Firefox
@@ -3382,6 +3400,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"hbox"] ||
         [elementName isEqualToString:@"vbox"] ||
+        [elementName isEqualToString:@"state"] ||
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"rotateNumber"] ||
@@ -4157,8 +4176,16 @@ didStartElement:(NSString *)elementName
 
         NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
 
+        // Ein 'state' bewirkt einen Extra-Sprung, da der 'state' selber nicht als Hierachieebene zählt
+        if ([elemTyp isEqualToString:@"state"])
+        {
+            elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-3];
+        }
+
         if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
+        {
             elem = @"canvas";
+        }
 
 
         // Hier drin sammle ich erstmal alle Ausgaben
@@ -4248,7 +4275,7 @@ didStartElement:(NSString *)elementName
         BOOL berechneterWert = NO;
         if ([value hasPrefix:@"$"])
         {
-            value = [self makeTheComputedValueComputable:value];
+            value = [self makeTheComputedValueComputable:value withAndBindEquals:elem];
 
             weNeedQuotes = NO;
 
@@ -4258,8 +4285,8 @@ didStartElement:(NSString *)elementName
 
 
         // Wenn wir in einer Klasse sind, alle Attribute der Klasse intern mitspeichern
-        // Denn sie müssen vor jedem instanzieren der Klasse mit ihren Startwerten
-        // initialisiert werden (spätere Überschreibungen sind möglich).
+        // Denn sie müssen bei jedem instanzieren der Klasse mit ihren Startwerten
+        // initialisiert werden (Überschreibungen durch Instanzvariablen sind möglich).
         if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
         {
             NSString *className = self.lastUsedNameAttributeOfClass;
@@ -4299,12 +4326,12 @@ didStartElement:(NSString *)elementName
             // Denn Datasets werden oft nur per 'name' gesetzt und nicht per 'id'
             if ([elemTyp isEqualToString:@"dataset"])
             {
-                [o appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut des Elements %@ (Objekttyp: %@)", self.lastUsedDataset, elemTyp];
+                [o appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut von '%@' (Objekttyp: %@)", self.lastUsedDataset, elemTyp];
                 [o appendFormat:@"\n  %@.",self.lastUsedDataset];
             }
             else
             {
-                [o appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut des Elements %@ (Objekttyp: %@)", elem, elemTyp];
+                [o appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut von '%@' (Objekttyp: %@)", elem, elemTyp];
                 [o appendFormat:@"\n  %@.",elem];
             }
             
@@ -4327,7 +4354,7 @@ didStartElement:(NSString *)elementName
 
 
                 // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...
-                NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s];
+                NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s in:elem];
 
 
                 s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
@@ -4337,32 +4364,19 @@ didStartElement:(NSString *)elementName
 
 
 
-                [o appendFormat:@"  setInitialConstraintValue(%@,'%@','%@');\n",self.zuletztGesetzteID,a,s];
+                [o appendFormat:@"  setInitialConstraintValue(%@,'%@','%@');\n",elem,a,s];
 
-                [o appendFormat:@"  // Der zu setzende Wert ist abhängig von %ld woanders gesetzten Variable(n)\n",[vars count]];            
+                [o appendFormat:@"  // The constraint value depends on %ld other var(s)\n",[vars count]];            
                 for (id object in vars)
                 {
-                    [o appendFormat:@"  setConstraint(%@,'%@',\"return (function() { with (%@) { %@.setAttribute_('%@',%@); } }).bind(%@)();\");\n",self.zuletztGesetzteID,object,self.zuletztGesetzteID,self.zuletztGesetzteID,a,s,self.zuletztGesetzteID];
-                }
-
-
-/*
- Ersetzt durch die vorherigen Zeilen!
-
-                NSArray *tempArray = [s componentsSeparatedByString: @"."];
-                NSString *theObject = [tempArray objectAtIndex:0];
-                NSString *theProperty = [tempArray objectAtIndex:[tempArray count]-1];
-                // Falls es mehr als 2 Elemente im Array gibt, alle mittleren Elemente dem Objekt hinzufügen.
-                if ([tempArray count] > 2)
-                {
-                    for (int i=1;i<[tempArray count]-1;i++)
+                    [o appendFormat:@"  setConstraint(%@,'%@',\"return (function() { with (%@) { %@.setAttribute_('%@',%@); } }).bind(%@)();\"",elem,object,elem,elem,a,s,elem];
+                    if ([elemTyp isEqualToString:@"state"])
                     {
-                        theObject = [NSString stringWithFormat:@"%@.%@",theObject,[tempArray objectAtIndex:i]];
+                        NSString *idOfState = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+                        [o appendFormat:@",'.state_%@'",idOfState];
                     }
+                    [o appendFormat:@");\n"];
                 }
-                [o appendString:@"  // Zusätzlich auf event horchen, da es ein berechneter Wert ist und triggern, falls jemand auf UNS horcht\n"];
-                [o appendFormat:@"  $(%@.%@).on('on%@', function(prop, newval) { %@.%@ = newval; $(%@).triggerHandler('on%@',newval); });\n",elem,theObject,theProperty,elem,a,elem,a];
-*/
             }
 
 
@@ -4377,7 +4391,33 @@ didStartElement:(NSString *)elementName
             }
             else
             {
-                [self.jQueryOutput0 appendString:o];
+                if ([elemTyp isEqualToString:@"state"])
+                {
+                    NSString *idOfState = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+                    // Das erste Newline wieder entfernen...
+                    o = [NSMutableString stringWithFormat:@"%@",[o substringFromIndex:1]];
+                    // ... und 2 Spaces mehr einrücken.
+                    o = [NSMutableString stringWithFormat:@"%@",[self inString:o searchFor:@"  " andReplaceWith:@"    " ignoringTextInQuotes:YES]];
+
+                    NSString *verdoppeltesO = o;
+
+                    o = [NSMutableString stringWithFormat:@"\n  // Einmal Attribut sofort setzen, wenn 'applied'...\n  if (%@.applied) {\n%@",idOfState,verdoppeltesO];
+                    [o appendString:@"  }\n"];
+
+                    [o appendString:@"  // ...und einmal bei Änderungen von 'applied' darauf reagieren\n"];
+                    // Nochmal 2 Spaces mehr einrücken.
+                    verdoppeltesO = [NSMutableString stringWithFormat:@"%@",[self inString:verdoppeltesO searchFor:@"    " andReplaceWith:@"      " ignoringTextInQuotes:YES]];
+                    [o appendFormat:@"  $('#%@').on('onapplied',function(a,b) {\n    if (b) {\n%@",idOfState,verdoppeltesO];
+                    [o appendFormat:@"    }\n    else {\n      // Von allen Elementen evtl. on's mit diesem namespace entfernen\n      $('.canvas_standard').first().find('*').andSelf().each(function() { $(this).off('.state_%@'); });\n    }\n  });\n",idOfState];
+
+
+                    [self.jQueryOutput0 appendString:o];
+                }
+                else
+                {
+                    [self.jQueryOutput0 appendString:o];
+                }
             }
         }
 
@@ -6861,19 +6901,54 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         self.weAreSkippingTheCompleteContentInThisElement = YES;
     }
 
-    // ToDo
+
     if ([elementName isEqualToString:@"state"])
     {
         element_bearbeitet = YES;
 
-        if ([attributeDict valueForKey:@"applied"])
-            self.attributeCount++;
+        // hmm, ich lege es mal als div an, damit ich für states ohne 'name' eine 'id' erzeugen kann
+        // (und damit ich alle da drin steckenden views mit einem Schlag visible/invisible schalten kann)
 
-        if ([attributeDict valueForKey:@"placement"])
-            self.attributeCount++;
+        [self.output appendString:@"<div"];
+        // id hinzufügen und gleichzeitg speichern
+        NSString *theId = [self addIdToElement:attributeDict];
+
+        [self convertNameAttributeToGlobalJSVar:attributeDict];
+
+        [self.output appendString:@" class=\"div_standard\" >\n"];
+
+
+
+
 
         if ([attributeDict valueForKey:@"name"])
+        {
+            self.lastUsedNameAttributeOfState = [attributeDict valueForKey:@"name"];
+        }
+        else
+        {
+            self.lastUsedNameAttributeOfState = theId;
+        }
+
+        NSString *applied = @"false"; // Default-Wert
+        if ([attributeDict valueForKey:@"applied"])
+        {
             self.attributeCount++;
+
+            applied = [attributeDict valueForKey:@"applied"];
+
+            if ([applied hasPrefix:@"$"])
+                applied = [self makeTheComputedValueComputable:applied];
+        }
+        // Muss ich dann so früh wie möglich bekannt geben, ob applied oder nicht, weil nachfolgende Handler usw. darauf achten
+        // bzw. sogar es modifizieren (sonst beschwert sich setAttribute es sei noch undeclared)
+        [self.jQueryOutput0 appendFormat:@"\n  // %@ repräsentiert einen 'state'...\n",self.zuletztGesetzteID];
+        [self.jQueryOutput0 appendFormat:@"  %@.applied = %@;\n",self.zuletztGesetzteID,applied];
+        [self.jQueryOutput0 appendString:@"  // ...und initial die Visibility setzen...\n"];
+        [self.jQueryOutput0 appendFormat:@"  $('#%@').toggle(%@);\n",self.zuletztGesetzteID,applied];
+        [self.jQueryOutput0 appendString:@"  // ...und auf 'onapplied' horchen und Visibility bei Änderung anpassen\n"];
+        [self.jQueryOutput0 appendFormat:@"  $('#%@').on('onapplied', function(a,b) { $('#%@').toggle(b); } );\n",self.zuletztGesetzteID, self.zuletztGesetzteID];
+
 
         if ([attributeDict valueForKey:@"onremove"])
             self.attributeCount++;
@@ -8953,6 +9028,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"hbox"] ||
         [elementName isEqualToString:@"vbox"] ||
+        [elementName isEqualToString:@"state"] ||
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"rotateNumber"] ||
@@ -9065,7 +9141,6 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"datapointer"] ||
         [elementName isEqualToString:@"datapath"] ||
         [elementName isEqualToString:@"attribute"] ||
-        [elementName isEqualToString:@"state"] ||
         [elementName isEqualToString:@"animator"] ||
         [elementName isEqualToString:@"stableborderlayout"] ||
         [elementName isEqualToString:@"constantlayout"] ||
@@ -9081,6 +9156,16 @@ BOOL isJSExpression(NSString *s)
         element_geschlossen = YES;
     }
 
+
+
+    if ([elementName isEqualToString:@"state"])
+    {
+        element_geschlossen = YES;
+
+        [self.output appendString:@"</div>\n"];
+
+        self.lastUsedNameAttributeOfState = @"";
+    }
 
 
 
@@ -9808,9 +9893,14 @@ BOOL isJSExpression(NSString *s)
     }
 
 
-    if (!element_geschlossen)
-        [self instableXML:[NSString stringWithFormat:@"ERROR: Nicht erfasstes schließendes Element: '%@'", elementName]];
+    if (debugmode)
+    {
+        if (!element_geschlossen)
+            [self instableXML:[NSString stringWithFormat:@"ERROR: Nicht erfasstes schließendes Element: '%@'", elementName]];
+    }
 }
+
+
 
 // This method can get called multiple times for the
 // text in a single element
@@ -9818,6 +9908,8 @@ BOOL isJSExpression(NSString *s)
 {
     [self.textInProgress appendString:string];
 }
+
+
 
 - (void)parser:(NSXMLParser *)parser foundCDATA:(NSData *)CDATABlock
 {
@@ -13864,6 +13956,8 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'season' ||\n"
     "            attributeName === 'size' ||\n"
     "            attributeName === 'isdefault' ||\n"
+    "            attributeName === 'mouseIsDown' ||\n"
+    "            attributeName === 'applied' ||\n"
     "            attributeName === 'digitcolor' ||\n"
     "            attributeName === 'bezpartnerdbig' ||\n"
     "            attributeName === 'bezpartnerdsmall' ||\n"
@@ -13876,7 +13970,7 @@ BOOL isJSExpression(NSString *s)
     "            if (me[attributeName] !== undefined)\n"
     "                me[attributeName] = value;\n"
     "            else\n"
-    "                alert('Trying to set a property that never was declared!');\n"
+    "                alert('Trying to set a property that never was declared! - Propertyname: '+attributeName);\n"
     "        }\n"
     "        else\n"
     "        {\n"
@@ -16039,7 +16133,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     // Weil setInitialConstraint einen String braucht, jetzt auch hier die Funktion als String
     // (Ziel: Beide Aufrufe in einer Funktion zusammenfassen)
-    "var setConstraint = function (el,expression,func) {\n"
+    "var setConstraint = function (el,expression,func,namespace) {\n"
     "    if (typeof expression !== 'string' || expression === '') throw new TypeError('setConstraint - second arg must be a non-empty string')\n"
     "    if (typeof func !== 'string') throw new TypeError('setConstraint - third arg must be a function (will be evaluated as a function)')\n"
     "\n"
@@ -16101,6 +16195,9 @@ BOOL isJSExpression(NSString *s)
     "    expression = eval(expression);\n"
     "    obj = eval(obj);\n"
     "\n"
+    "    if (!namespace)\n"
+    "        namespace = '';\n"
+    "\n"
     //"Check-Möglichkeit auf 'undefined'\n"
     //"if (expression === undefined)\n"
     //"    alert(vorher);\n"
@@ -16111,21 +16208,21 @@ BOOL isJSExpression(NSString *s)
     // "        $(expression).on('change', func);\n" // <-- Als früher noch direkt die function übergeben wurde
     //"        eval(\"$(expression).on('change', \"+func+\");\");\n"
     // Besser ohne eval:
-    "        $(expression).on('change', Function(func));\n"
+    "        $(expression).on('change'+namespace, Function(func));\n"
     "    }\n"
-    "    else if (typeof expression === 'function') // Wegen Bsp. 20.3 und 32.1\n"
+    "    else if (typeof expression === 'function') // Wegen Bsp. 20.3 und 32.1, 32.2\n"
     "    {\n"
     //"        $(obj).on('change', func);\n" // <-- Als früher noch direkt die function übergeben wurde
     //"        eval(\"$(obj).on('change', \"+func+\");\");\n"
     // Besser ohne eval:
-    "        $(obj).on('change', Function(func));\n"
+    "        $(obj).on('change'+namespace, Function(func));\n"
     "    }\n"
     "    else\n"
     "    {\n"
     //"        $(obj).on('on'+prop, func);\n" // <-- Als früher noch direkt die function übergeben wurde
     //"        eval(\"$(obj).on('on'+prop, \"+func+\");\");\n"
     // Besser ohne eval:
-    "        $(obj).on('on'+prop, Function(func));\n"
+    "        $(obj).on('on'+prop+namespace, Function(func));\n"
     "    }\n"
     "}\n"
     "\n"

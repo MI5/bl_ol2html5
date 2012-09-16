@@ -1676,7 +1676,16 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
         else
         {
-            [self.jsOutput appendFormat:@"  document.getElementById('%@').getTheParent().%@ = %@;\n",self.zuletztGesetzteID, name, name];
+            // Wenn wir in einem 'state' sind, müssen wir nen Extrasprung machen.
+            if (self.lastUsedNameAttributeOfState.length > 0)
+            {
+                x;
+                [self.jsOutput appendFormat:@"  document.getElementById('%@').getTheParent().getTheParent().%@ = %@;\n",self.zuletztGesetzteID, name, name];
+            }
+            else
+            {
+                [self.jsOutput appendFormat:@"  document.getElementById('%@').getTheParent().%@ = %@;\n",self.zuletztGesetzteID, name, name];
+            }
         }
 
         //[self.jsOutput appendString:@"  // ...save 'name'-attribute internally, so it can be retrieved by the getter.\n"];
@@ -4275,7 +4284,16 @@ didStartElement:(NSString *)elementName
         BOOL berechneterWert = NO;
         if ([value hasPrefix:@"$"])
         {
-            value = [self makeTheComputedValueComputable:value withAndBindEquals:elem];
+            // Wenn wir in einer Klasse sind, die von state erbt, ist das Eltern-Element nicht der state,
+            // sondern das davon umgebende Element (quasi wie ein Extrasprung)
+            if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && [self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"])
+            {
+                value = [self makeTheComputedValueComputable:value withAndBindEquals:[NSString stringWithFormat:@"%@.getTheParent()",elem]];
+            }
+            else
+            {
+                value = [self makeTheComputedValueComputable:value withAndBindEquals:elem];
+            }
 
             weNeedQuotes = NO;
 
@@ -14807,6 +14825,35 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Methoden von <div> (OL: <state>)                    //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////COMPLETE////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// apply()                                             //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var applyFunction = function () {\n"
+    "    this.setAttribute_('applied', true);\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.apply = applyFunction;\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// remove()                                            //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var removeFunction = function () {\n"
+    "    this.setAttribute_('applied', false);\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.remove = removeFunction;\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
     "// Methoden von <div> (OL: <view>)                     //\n"
     "/////////////////////////////////////////////////////////\n"
     "////////////////////////INCOMPLETE///////////////////////\n"
@@ -14816,8 +14863,8 @@ BOOL isJSExpression(NSString *s)
     "// getAttributeRelative() - nachimplementiert          //\n"
     "/////////////////////////////////////////////////////////\n"
     "var getAttributeRelativeFunction = function (prop, ref) {\n"
-    "        if (typeof prop !== 'string' && prop !== 'x' && prop !== 'y' && prop !== 'width' && prop !== 'height')\n"
-    "            throw new Error('getAttributeRelative() - Unsupported value for first argument.');\n"
+    "    if (typeof prop !== 'string' && prop !== 'x' && prop !== 'y' && prop !== 'width' && prop !== 'height')\n"
+    "        throw new Error('getAttributeRelative() - Unsupported value for first argument.');\n"
     "    if (prop === 'x') return $(this).offset().left - $(ref).offset().left;\n"
     "    if (prop === 'y') return $(this).offset().top; - $(ref).offset().top;\n"
     "    if (prop === 'width') return $(this).width() - $(ref).width();\n"
@@ -16832,6 +16879,20 @@ BOOL isJSExpression(NSString *s)
     "  this.selfDefinedAttributes = { width:300, height:150 }\n"
     "\n"
     "  this.contentHTML = '<div class=\"canvas_element noPointerEvents\"><canvas id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_standard noPointerEvents\"></canvas></div>';\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = state (native class)                             //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.state = function() {\n"
+    "  this.name = 'state';\n"
+    "  this.inherit = new oo.view();\n"
+    "\n"
+    "  this.selfDefinedAttributes = { applied: false, pooling: false }\n"
+    "\n"
+    "  this.contentHTML = '';\n"
     "}\n"
     "\n"
     "\n"

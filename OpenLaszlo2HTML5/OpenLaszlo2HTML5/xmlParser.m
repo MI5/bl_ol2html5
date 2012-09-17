@@ -49,6 +49,10 @@ BOOL kompiliereSpeziellFuerTaxango = YES;
 
 
 
+
+BOOL ownSplashscreen = NO;
+
+
 #import "xmlParser.h"
 
 #import "globalVars.h"
@@ -10097,15 +10101,22 @@ BOOL isJSExpression(NSString *s)
     [pre appendString:self.jsHead2Output];
     [pre appendString:@"\n</script>\n\n</head>\n\n<body>\n"];
 
+
+
     // Splashscreen vorschalten
-    if ([[[self.pathToFile lastPathComponent] stringByDeletingPathExtension] isEqualToString:@"Taxango"])
+    if (ownSplashscreen)
     {
-        [pre appendString:@"<span id=\"splashscreen_\" style=\"position:absolute;top:0px;left:0px;background-color:white;width:100%;height:100%;z-index:10000;background-image:url(resources/logo.png);font-size:80px;text-align:center;\">LOADING...</span>\n\n"];
+        if ([[[self.pathToFile lastPathComponent] stringByDeletingPathExtension] isEqualToString:@"Taxango"])
+        {
+            [pre appendString:@"<span id=\"splashscreen_\" style=\"position:absolute;top:0px;left:0px;background-color:white;width:100%;height:100%;z-index:10000;background-image:url(resources/logo.png);font-size:80px;text-align:center;\">LOADING...</span>\n\n"];
+        }
+        else
+        {
+            [pre appendString:@"<span id=\"splashscreen_\" style=\"position:absolute;top:0px;left:0px;background-color:white;width:100%;height:100%;z-index:10000;font-size:80px;text-align:center;\">LOADING...</span>\n\n"];
+        }
     }
-    else
-    {
-        [pre appendString:@"<span id=\"splashscreen_\" style=\"position:absolute;top:0px;left:0px;background-color:white;width:100%;height:100%;z-index:10000;font-size:80px;text-align:center;\">LOADING...</span>\n\n"];
-    }
+
+
 
     // Kurzer Tausch damit ich den Header davorschalten kann
     NSMutableString *temp = [[NSMutableString alloc] initWithString:self.output];
@@ -10235,9 +10246,10 @@ BOOL isJSExpression(NSString *s)
     }
     // Remove Splashscreen
     [self.output appendString:@"\n  $('#splashtag_').remove(); // The Build-In-SplashTag"];
-    [self.output appendString:@"\n  $('#splashscreen_').remove();\n"];
+    if (ownSplashscreen)
+        [self.output appendString:@"\n  $('#splashscreen_').remove();"];
 
-    [self.output appendString:@"});\n</script>\n\n"];
+    [self.output appendString:@"\n});\n</script>\n\n"];
 
 
 
@@ -14001,6 +14013,7 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'season' ||\n"
     "            attributeName === 'pooling' ||\n"
     "            attributeName === 'size' ||\n"
+    "            attributeName === 'label' ||\n"
     "            attributeName === 'isdefault' ||\n"
     "            attributeName === 'countApplies' ||\n"
     "            attributeName === 'mouseIsDown' ||\n"
@@ -16728,13 +16741,18 @@ BOOL isJSExpression(NSString *s)
     "  {\n"
     "    // Da der 'name' als inherit gesetzt wurde, spreche ich es darüber an\n"
     "    if ($(id[obj.inherit.defaultplacement]).length == 0)\n"
-    "      alert('Kann nicht auf defaultplacement zugreifen. Das sollte nicht passieren. Vermutlich erst jene Klasse auswerten, von der diese Klasse erbt!');\n"
+    "      alert('Kann nicht auf defaultplacement zugreifen. Das sollte nicht passieren. Du musst vermutlich erst jene Klasse auswerten, von der diese Klasse erbt!');\n"
     "\n"
     "    $(id[obj.inherit.defaultplacement]).prepend(s);\n"
+    "    $(id[obj.inherit.defaultplacement]).triggerHandler('onaddsubview');\n" // Weil ich es im anderen Zweig auch triggere
     "  }\n"
     "  else\n"
     "  {\n"
-    "    $(id).prepend(s); // dann den neuen Code anfügen\n"
+    //"    $(id).prepend(s); // dann den neuen Code anfügen\n"
+    // Warum hatte ich mich hier für prepend entschieden? (Sogar entgegen dem Comment...?!)
+    // Gemäß Bsp. 33.2 muss es append sein
+    "    $(id).append(s); // dann den neuen Code anfügen\n"
+    "    $(id).triggerHandler('onaddsubview');\n" // Wegen Bsp. 33.2
     "  }\n"
     "\n"
     "\n"

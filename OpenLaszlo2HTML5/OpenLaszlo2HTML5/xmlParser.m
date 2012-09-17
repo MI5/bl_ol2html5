@@ -757,21 +757,45 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s in:self.zuletztGesetzteID];
 
 
+
         NSString *e = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
         e = [self modifySomeExpressionsInJSCode:e];
         // Escape ' in e
         e = [e stringByReplacingOccurrencesOfString:@"'" withString:@"\\\'"];
+
+
+
+
+        // Wenn wir in einer Klasse sind und state extenden, dann müssen wir einen Doppelsprung
+        // bei parent machen. Weil ich den 'state' überspringen muss.
+        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && [e hasPrefix:@"getTheParent()."])
+        {
+            if ([self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"] || [self.lastUsedExtendsAttributeOfClass isEqualToString:@"dragstate"])
+            {
+                e = [NSString stringWithFormat:@"getTheParent().%@",e];
+            }
+        }
+
+
+
+
         [o appendFormat:@"  setInitialConstraintValue(%@,'%@','%@');\n",self.zuletztGesetzteID,attr,e];
 
-
-        // Seitdem ich auch bei 'setConstraint' auf e umgestiegen bin, brauche ich s nicht mehr
-        // ...jetzt erst s computable machen...
-        // s = [self makeTheComputedValueComputable:s];
-
-
         [o appendFormat:@"  // Der zu setzende Wert ist abhängig von %ld woanders gesetzten Variable(n)\n",[vars count]];            
-        for (id object in vars)
+        for (id __strong object in vars)
         {
+            // Wenn wir in einer Klasse sind und state extenden, dann müssen wir einen Doppelsprung
+            // bei parent machen. Weil ich den 'state' überspringen muss.
+            if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && [e hasPrefix:@"getTheParent()."])
+            {
+                if ([self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"] || [self.lastUsedExtendsAttributeOfClass isEqualToString:@"dragstate"])
+                {
+                    object = [self inString:object searchFor:@"getTheParent()" andReplaceWith:@"getTheParent().getTheParent()" ignoringTextInQuotes:YES];
+                }
+            }
+
+
+
             [o appendFormat:@"  setConstraint(%@,'%@',\"return (function() { with (%@) { %@.setAttribute_('%@',%@); } }).bind(%@)();\");\n",self.zuletztGesetzteID,object,self.zuletztGesetzteID,self.zuletztGesetzteID,attr,e,self.zuletztGesetzteID];
         }
     }
@@ -1677,10 +1701,10 @@ void OLLog(xmlParser *self, NSString* s,...)
         else
         {
             // Wenn wir in einem 'state' sind, müssen wir nen Extrasprung machen.
+            // Aber nur für das DIREKT im 'state' liegende Element
             if (self.lastUsedNameAttributeOfState.length > 0)
             {
-                x;
-                [self.jsOutput appendFormat:@"  document.getElementById('%@').getTheParent().getTheParent().%@ = %@;\n",self.zuletztGesetzteID, name, name];
+                [self.jsOutput appendFormat:@"  ($(document.getElementById('%@').getTheParent()).data('olel') == 'state') ? document.getElementById('%@').getTheParent().getTheParent().%@ = %@ : document.getElementById('%@').getTheParent().%@ = %@;\n",self.zuletztGesetzteID, self.zuletztGesetzteID, name, name, self.zuletztGesetzteID, name, name];
             }
             else
             {
@@ -4232,7 +4256,12 @@ didStartElement:(NSString *)elementName
             // I can't work with REAL JS-setters, else infinite recursion, weil in der setter-Funktion dann Wert gesetzt wird
             // Ich könnte das rausparsen... aber statt dessen einfach eigenen setter erfinden und darauf testen in setAttribute_
             [o appendString:@"\n  // Define a 'setter'... I can't work with real JS-Setters here, else infinite recursion."];
-            setter = [setter substringToIndex:[setter rangeOfString:@"("].location];
+            // Setter können als Methoden angegeben sein (dann taucht eine Klammer im string auf)
+            // oder es kann eine direkte Anweisung vorhanden sein
+            // (dann taucht eher keine Klammer im String auf)
+            if ([setter rangeOfString:@"("].location != NSNotFound)
+                setter = [setter substringToIndex:[setter rangeOfString:@"("].location];
+            
             [o appendFormat:@"\n  %@.mySetterFor_%@_ = '%@'; \n",elem,a,setter];
 
             // Und event mitgeben. Gilt wohl eigentlich für alle Attribute, aber noch anders gelöst, da ich in
@@ -4491,18 +4520,6 @@ didStartElement:(NSString *)elementName
 
         // Für das preloaden auch den Pfad der Bilddatei nochmal extra sichern.
         [self.allImgPaths addObject:src];
-    }
-
-
-
-    // ToDo -  Ein state
-    if ([elementName isEqualToString:@"dragstate"])
-    {
-        element_bearbeitet = YES;
-
-        // Ka, für was hier ein 'name' --> Weil es ein state ist. Und der state darüber angesprochen wird
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
     }
 
 
@@ -6975,6 +6992,16 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
     }
 
+
+
+    // ToDo -  Ein state
+    if ([elementName isEqualToString:@"dragstate"])
+    {
+        element_bearbeitet = YES;
+
+        if ([attributeDict valueForKey:@"name"])
+            self.attributeCount++;
+    }
 
 
 
@@ -13972,8 +13999,10 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'ende' ||\n"
     "            attributeName === 'parentnumber' ||\n"
     "            attributeName === 'season' ||\n"
+    "            attributeName === 'pooling' ||\n"
     "            attributeName === 'size' ||\n"
     "            attributeName === 'isdefault' ||\n"
+    "            attributeName === 'countApplies' ||\n"
     "            attributeName === 'mouseIsDown' ||\n"
     "            attributeName === 'applied' ||\n"
     "            attributeName === 'digitcolor' ||\n"
@@ -16891,6 +16920,20 @@ BOOL isJSExpression(NSString *s)
     "  this.inherit = new oo.view();\n"
     "\n"
     "  this.selfDefinedAttributes = { applied: false, pooling: false }\n"
+    "\n"
+    "  this.contentHTML = '';\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = dragstate (native class)                         //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.dragstate = function() {\n"
+    "  this.name = 'dragstate';\n"
+    "  this.inherit = new oo.state();\n"
+    "\n"
+    "  this.selfDefinedAttributes = { drag_axis: 'both', drag_max_x: null, drag_max_y:null, drag_min_x: null, drag_min_y:null }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"

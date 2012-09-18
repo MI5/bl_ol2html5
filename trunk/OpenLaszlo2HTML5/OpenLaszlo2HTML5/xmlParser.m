@@ -1307,7 +1307,6 @@ void OLLog(xmlParser *self, NSString* s,...)
         NSString *s = @"";
 
 
-        //if ([src rangeOfString:@"classroot"].location != NSNotFound)
         if ([src hasPrefix:@"$"])
         {
             // Dann wurde es per <attribute> gesetzt -
@@ -1358,7 +1357,7 @@ void OLLog(xmlParser *self, NSString* s,...)
  
             // Wenn ein Punkt enthalten ist, ist es wohl eine Datei
             if ([src rangeOfString:@"."].location != NSNotFound ||
-            // ... Keine Ahnung wo diese Res herkommenen sollen. Super nervig sowas.
+            // ... Keine Ahnung wo diese Res herkommenen sollen.
             [src isEqualToString:@"lzgridsortarrow_rsrc"])
             {
                 // Möglichkeit 1: Resource wird direkt als String angegeben!
@@ -1921,6 +1920,17 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([s isEqualToString:@"value"])
         s = @"myValue";
+
+    return s;
+}
+
+
+
+- (NSString *) protectThisSingleQuotedJavaScriptString:(NSString*)s
+{
+    // ' und Newlines müssen escaped werden bei JS-Strings, die in ' stehen:
+    s = [s stringByReplacingOccurrencesOfString:@"\'" withString:@"\\'"];
+    s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n"];
 
     return s;
 }
@@ -8109,6 +8119,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [d removeObjectForKey:@"enabled"];
         [d removeObjectForKey:@"focusable"];
         [d removeObjectForKey:@"layout"];
+        [d removeObjectForKey:@"oninit"];
         [d removeObjectForKey:@"onclick"];
         [d removeObjectForKey:@"ondblclick"];
         [d removeObjectForKey:@"onfocus"];
@@ -8486,8 +8497,7 @@ BOOL isJSExpression(NSString *s)
             if ([self.allFoundClasses objectForKey:enclosingElem] != nil)
             {
                 // Da ich den string mit ' umschlossen habe, muss ich eventuelle ' im String escapen
-                s = [s stringByReplacingOccurrencesOfString:@"\'" withString:@"\\'"];
-                s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n"];
+                s = [self protectThisSingleQuotedJavaScriptString:s];
 
                 // Dann IN den jQueryOutput hinein injecten
                 [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-31];
@@ -8839,28 +8849,6 @@ BOOL isJSExpression(NSString *s)
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
 
 
-/* // Dieser alte Code war zu ungenau, und hat z.B. Arrays nicht als Arrays erkannt, sondern nur als Strings.
-        NSString *newlyIntroducedAttributes = [NSString stringWithFormat:@"%@",[self.allFoundClasses objectForKey:self.lastUsedNameAttributeOfClass]];
-
-        // Alle Newlines außerhalb von String ersetzen, damit es JS-Objekt-konform wird
-        newlyIntroducedAttributes= [self inString:newlyIntroducedAttributes searchFor:@"\n" andReplaceWith:@", " ignoringTextInQuotes:YES];
-
-        // Das Komma ganz am Anfang entfernen
-        newlyIntroducedAttributes= [self inString:newlyIntroducedAttributes searchFor:@"{," andReplaceWith:@"{" ignoringTextInQuotes:YES];
-
-        // Das Komma ganz am Ende entfernen
-        newlyIntroducedAttributes= [self inString:newlyIntroducedAttributes searchFor:@", }" andReplaceWith:@" }" ignoringTextInQuotes:YES];
-
-        // Verbleibende Newlines (auch) IN Strings escapen
-        newlyIntroducedAttributes = [newlyIntroducedAttributes stringByReplacingOccurrencesOfString:@"\n" withString:@"\\\n"];
-        newlyIntroducedAttributes = [newlyIntroducedAttributes stringByReplacingOccurrencesOfString:@"\'" withString:@"\\'"];
-        // Um es zu einem JS-Objekt zu machen:
-        newlyIntroducedAttributes= [self inString:newlyIntroducedAttributes searchFor:@"=" andReplaceWith:@":" ignoringTextInQuotes:YES];
-        newlyIntroducedAttributes= [self inString:newlyIntroducedAttributes searchFor:@";" andReplaceWith:@"" ignoringTextInQuotes:YES];
-        newlyIntroducedAttributes= [self inString:newlyIntroducedAttributes searchFor:@"  " andReplaceWith:@" " ignoringTextInQuotes:YES];
-
-        [self.jsOLClassesOutput appendFormat:@"  this.selfDefinedAttributes = %@;\n\n",newlyIntroducedAttributes];
-*/
 
 
         [self.jsOLClassesOutput appendFormat:@"  this.selfDefinedAttributes = {"];
@@ -8907,9 +8895,8 @@ BOOL isJSExpression(NSString *s)
                 }
                 else
                 {
-                    // ' und Newlines escapen bei Strings:
-                    value = [value stringByReplacingOccurrencesOfString:@"\'" withString:@"\\'"];
-                    value = [value stringByReplacingOccurrencesOfString:@"\n" withString:@"\\\n"];
+                    // ' und Newlines escapen bei JS-Strings:
+                    value = [self protectThisSingleQuotedJavaScriptString:value];
 
                     [self.jsOLClassesOutput appendFormat:@" %@ : '%@',", key, value];
                 }
@@ -8926,8 +8913,8 @@ BOOL isJSExpression(NSString *s)
         [self.jsOLClassesOutput appendFormat:@" };\n\n"];
 
 
-        // defaultplacement immer mit speichern, damit es besser ausgelesen werden kann,
-        // falls gesetzt.
+        // defaultplacement immer mit speichern, damit es besser ausgelesen werden kann, falls gesetzt.
+        self.defaultplacement = [self protectThisSingleQuotedJavaScriptString:self.defaultplacement];
         [self.jsOLClassesOutput appendFormat:@"  this.defaultplacement = '%@';\n\n",self.defaultplacement];
         // Nachdem ausgelesen, wieder zurücksetzen:
         self.defaultplacement = @"";
@@ -9819,7 +9806,9 @@ BOOL isJSExpression(NSString *s)
 
         // super ist nicht erlaubt in JS und gibt es auch nicht.
         // Ich ersetze es erstmal durch this.getTheParent(). Sollte funktionieren.
-        s = [s stringByReplacingOccurrencesOfString:@"super" withString:@"this.getTheParent()"];
+        //s = [s stringByReplacingOccurrencesOfString:@"super" withString:@"this.getTheParent()"];
+        // Nein, das funktioniert nicht:
+        s = [s stringByReplacingOccurrencesOfString:@"super" withString:@"super_"];
 
 
         // Damit er in jeder Code-Zeile korrekt einrückt
@@ -9906,8 +9895,7 @@ BOOL isJSExpression(NSString *s)
         if ([s length] > 0)
         {
             // Da ich den string mit ' umschlossen habe, muss ich eventuelle ' im String escapen
-            s = [s stringByReplacingOccurrencesOfString:@"\'" withString:@"\\'"];
-            s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n"];
+            s = [self protectThisSingleQuotedJavaScriptString:s];
 
             [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-34]; /* MARKER -60 / -31 vom defer-Test */
         }
@@ -11907,7 +11895,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        var obj = new oo[name]('');\n"
     "        var el = document.getElementById(id);\n"
-    "        interpretObject(obj,el);\n"
+    "        interpretObject(obj,el,{});\n"
     "    }\n"
     "    else\n"
     "    {\n"
@@ -11922,6 +11910,9 @@ BOOL isJSExpression(NSString *s)
     "            // Deswegen gibt es dafür keinen getter/setter\n"
     "            var elem = document.getElementById(id);\n"
     "            elem.getTheParent()[attributes.name] = elem;\n"
+    "            // Damit 'remove()' die Referenz entfernen kann, name-Attribut unbedingt intern mitspeichern\n"
+    "            $(elem).data('name',attributes.name);\n"
+    "\n"
     "            // Alle name-Attribute im äußeren Scope sind global. Da <script> immer im\n"
     "            // äußersten Scope sollten eigentlich alle 'name's hier global werden.\n"
     "            window[attributes.name] = elem;\n"
@@ -13449,10 +13440,12 @@ BOOL isJSExpression(NSString *s)
     "        // Alle 'whitespaces' entfernen (welche erlaubt sind), aber zum testen auf den Inhalt von 'value' nerven\n"
     "        value = value.replace(/\\s/g,'');\n"
     "        var spacing = parseInt(value.betterParseInt());\n"
+    "        if (isNaN(spacing))\n"
+    "            spacing = 0;\n"
     "\n"
     "        if (!value.contains('class') || value.contains('class:simplelayout'))\n"
     "        {\n"
-    "            // Y ist bei allen Layouts wohl immer der Default-Wert, deswegen auf 'x' testen, ansonsten 'else'-Zweig\n"
+    "            // Y ist bei Simplelayout der Default-Wert, deswegen auf 'x' testen, ansonsten 'else'-Zweig\n"
     "            if (value.contains('axis:x'))\n"
     "            {\n"
     "                setSimpleLayoutXIn(me,spacing);\n"
@@ -14114,7 +14107,11 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "var destroyFunction = function () {\n"
     "    $(this).triggerHandler('ondestroy');\n"
-    "    $(this).remove;\n"
+    "\n"
+    "    // Referenz auf dieses Element im parent nullen - Wegen Bsp. 33.10\n"
+    "    this.getTheParent()[$(this).data('name')] = null;\n"
+    "\n"
+    "    $(this).remove();\n"
     "}\n"
     "\n"
     "HTMLDivElement.prototype.destroy = destroyFunction;\n"
@@ -15519,7 +15516,7 @@ BOOL isJSExpression(NSString *s)
     "// Eventuelle Kinder wurden vorher gesetzt.\n"
     "// Aber nur wenn Breite NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery.\n"
     "var adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayout = function (el) {\n"
-    "    if (el.defaultplacement && el.defaultplacement != '')\n"
+    "    if (el.defaultplacement && el.defaultplacement != '' && el[el.defaultplacement])\n"
     "       el = el[el.defaultplacement];\n"
     "\n"
     "    if ($(el).hasClass('div_window'))\n"
@@ -15557,7 +15554,7 @@ BOOL isJSExpression(NSString *s)
     "// Aber nur wenn Höhe NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery.\n"
     "// (Jedoch bei rudElement MUSS es auto bleiben)\n"
     "var adjustHeightOfEnclosingDivWithHeighestChildOnSimpleLayout = function (el) {\n"
-    "    if (el.defaultplacement && el.defaultplacement != '')\n"
+    "    if (el.defaultplacement && el.defaultplacement != '' && el[el.defaultplacement])\n"
     "       el = el[el.defaultplacement];\n"
     "\n"
     "    if ($(el).hasClass('div_window'))\n"
@@ -15586,7 +15583,7 @@ BOOL isJSExpression(NSString *s)
     "// Höhe mitgeben (aber nur wenn es NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery)\n"
     "// (Jedoch bei rudElement MUSS es 'auto' bleiben, damit es richtig scrollt)\n"
     "var adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY = function (el,spacing) {\n"
-    "    if (el.defaultplacement && el.defaultplacement != '')\n"
+    "    if (el.defaultplacement && el.defaultplacement != '' && el[el.defaultplacement])\n"
     "       el = el[el.defaultplacement];\n"
     "\n"
     "    if ($(el).hasClass('div_window'))\n"
@@ -15626,7 +15623,7 @@ BOOL isJSExpression(NSString *s)
     "// X-Simplelayout: Deswegen die Breite aller beinhaltenden Elemente erster Ebene ermitteln und dem umgebenden div die Summe als\n"
     "// Breite mitgeben (aber nur wenn es NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery)\n"
     "var adjustWidthOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutX = function (el,spacing) {\n"
-    "    if (el.defaultplacement && el.defaultplacement != '')\n"
+    "    if (el.defaultplacement && el.defaultplacement != '' && el[el.defaultplacement])\n"
     "       el = el[el.defaultplacement];\n"
     "\n"
     "    if ($(el).hasClass('div_window'))\n"
@@ -15665,7 +15662,7 @@ BOOL isJSExpression(NSString *s)
     "    // spacing speichern, z. B. falls spacing animiert wird, brauche ich den aktuellen spacing-Wert\n"
     "    $(el).data('spacing_',spacing);\n"
     "\n"
-    "    if (el.defaultplacement && el.defaultplacement != '')\n"
+    "    if (el.defaultplacement && el.defaultplacement != '' && el[el.defaultplacement])\n"
     "       el = el[el.defaultplacement];\n"
     "\n"
     "    if ($(el).hasClass('div_window'))\n"
@@ -15747,7 +15744,7 @@ BOOL isJSExpression(NSString *s)
     "    // spacing speichern, z. B. falls spacing animiert wird, brauche ich den aktuellen spacing-Wert\n"
     "    $(el).data('spacing_',spacing);\n"
     "\n"
-    "    if (el.defaultplacement && el.defaultplacement != '')\n"
+    "    if (el.defaultplacement && el.defaultplacement != '' && el[el.defaultplacement])\n"
     "       el = el[el.defaultplacement];\n"
     "\n"
     "    if ($(el).hasClass('div_window'))\n"
@@ -16407,6 +16404,10 @@ BOOL isJSExpression(NSString *s)
     // Jedoch haben die getter (von z. B. 'bgcolor') das gebrochen, da diese ja nicht undefined zurückliefern.
     "function interpretObject(obj,id,iv)\n"
     "{\n"
+    "  // http://www.openlaszlo.org/lps4.9/docs/developers/introductory-classes.html#introductory-classes.placement\n"
+    "  // 2.5 Placement -> By default, instances which appear inside a class are made children of the top level instance of the class.\n"
+    "  var kinderVorDemAppenden = $(id).children(); // die existierenden Kinder sichern\n"
+    "\n"
     "  // Neu Durchlauf 1: Alle selbst definierten Attribute werden direkt an das Element gebunden\n"
     "  // Dies muss als allererstes passieren, da in Unterklassen definierte Methoden oder Attrbute bereits darauf zugreifen können\n"
     "  // Muss deswegen auch rückwärts ausgewertet werden\n"
@@ -16589,6 +16590,19 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
+    "  // Alle auf vorherigen Vererbungs-Ebenen hinzugefügten Methoden in das super_Objekt stecken\n"
+    "  var methodenDerVorfahren = {};\n"
+    "  for(var prop in id) {\n"
+    "    if (id.hasOwnProperty(prop) && typeof id[prop] === 'function') {\n"
+    "      methodenDerVorfahren[prop] = id[prop];\n"
+    "    }\n"
+    "  }\n"
+    "  // 'super' wurde durch 'super_' ersetzt und muss im Element bekannt sein, damit überschriebene Methoden erreichbar bleiben\n"
+    "  id.super_ = methodenDerVorfahren;\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
     "  // Alle per style gegebenen Attribute muss ich ermitteln und später damit vergleichen\n"
     "  // Denn die per style direkt in der Instanz gesetzten Attribute haben Vorrang vor denen\n"
     "  // der Klasse. Ich kann noch nicht hier, sondern erst später vergleichen, weil z.B.\n"
@@ -16727,13 +16741,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  // Replace-IDs von contentHTML ersetzen\n"
     "  var s = replaceID(obj.contentHTML,$(id).attr('id'));\n"
-    "  // Dann den HTML-Content hinzufügen\n"
-    //"  // $(id).html(s);\n"
-    //"  $(id).append(s);\n"
-    "  // http://www.openlaszlo.org/lps4.9/docs/developers/introductory-classes.html#introductory-classes.placement\n"
-    "  // 2.5 Placement -> By default, instances which appear inside a class are made children of the top level instance of the class.\n"
-    "  var kinderVorDemAppenden = $(id).children(); // die existierenden Kinder sichern\n"
-    "\n"
     "\n"
     "  // ********* Ich muss jedoch auch MICH selber an die richtige Stelle vom inherit setzen *********\n"
     "  // ********* Wenn der ein defaultplacement hat, muss ich da rein schlüpfen *********\n"
@@ -16741,16 +16748,24 @@ BOOL isJSExpression(NSString *s)
     "  {\n"
     "    // Da der 'name' als inherit gesetzt wurde, spreche ich es darüber an\n"
     "    if ($(id[obj.inherit.defaultplacement]).length == 0)\n"
-    "      alert('Kann nicht auf defaultplacement zugreifen. Das sollte nicht passieren. Du musst vermutlich erst jene Klasse auswerten, von der diese Klasse erbt!');\n"
-    "\n"
-    "    $(id[obj.inherit.defaultplacement]).prepend(s);\n"
-    "    $(id[obj.inherit.defaultplacement]).triggerHandler('onaddsubview');\n" // Weil ich es im anderen Zweig auch triggere
+    "    {\n"
+    "      console.log('Error: Can not access defaultplacement. There is no view with this name in this class.');\n"
+    "      $(id).append(s);\n"
+    "      $(id).triggerHandler('onaddsubview');\n"
+    "    }\n"
+    "    else\n"
+    "    {\n"
+    "      $(id[obj.inherit.defaultplacement]).prepend(s);\n"
+    "      $(id[obj.inherit.defaultplacement]).triggerHandler('onaddsubview');\n" // Weil ich es im anderen Zweig auch triggere
+    "    }\n"
     "  }\n"
     "  else\n"
     "  {\n"
-    //"    $(id).prepend(s); // dann den neuen Code anfügen\n"
     // Warum hatte ich mich hier für prepend entschieden? (Sogar entgegen dem Comment...?!)
     // Gemäß Bsp. 33.2 muss es append sein
+    // Gemäß Bsp. 33.12 muss es aber prepend sein! (Sagt auch die Code-Inspektion!) -> Gelöst über Fallunterscheidung
+    // Total falsch alles: Der Fehler war: Ich muss die 'kinderVorDemAppenden' ganz am Anfang von interpretObject isolieren
+    // sonst adden inherits ja schon wieder neue Kinder und dann kommt alles durcheinaner... :-)
     "    $(id).append(s); // dann den neuen Code anfügen\n"
     "    $(id).triggerHandler('onaddsubview');\n" // Wegen Bsp. 33.2
     "  }\n"
@@ -16771,8 +16786,16 @@ BOOL isJSExpression(NSString *s)
     "    evalCode(s);\n"
     "\n"
     // Zugriff auf 'defaultplacement' per 'id', nicht mehr per 'obj'. Das Attribut wurde ja übertragen in id bereits weiter oben.
-    "  if (obj.defaultplacement !== '') // dann die vorher existierenden Kinder korrekt positionieren\n"
-    "    $(kinderVorDemAppenden).appendTo($(window[obj.defaultplacement]));\n"
+    "  // Abfrage 2 nötig, falls das defaultplacment einen korrupten String enthält (wie in Bsp. 33.16)\n"
+    "  if (obj.defaultplacement !== '' && window[obj.defaultplacement]) // dann die vorher existierenden Kinder korrekt positionieren\n"
+    "  {\n"
+    "      $(kinderVorDemAppenden).appendTo($(window[obj.defaultplacement]));\n"
+    "  }\n"
+    "  else\n"
+    "  {\n"
+    "      // Vorher bereits im Div existierende Kinder dann auf jeden Fall ans Ende verschieben\n"
+    "      $(kinderVorDemAppenden).appendTo(id);\n"
+    "  }\n"
     "\n"
     "\n"
     "  // Kinder können ein eigenes 'placement'-Attribut haben, dann nochmal verschieben des Kindes\n"
@@ -17003,8 +17026,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  this.selfDefinedAttributes = { resize:true, selectable:false, text:textBetweenTags }\n"
     "\n"
-    "  this.defaultplacement = '';\n"
-    "\n"
     "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_text noPointerEvents\">'+textBetweenTags+'</div>';\n"
     "}\n"
     "\n"
@@ -17019,8 +17040,6 @@ BOOL isJSExpression(NSString *s)
     "  this.inherit = new oo.text(textBetweenTags);\n"
     "\n"
     "  this.selfDefinedAttributes = { enabled: true, passowrd: false }\n"
-    "\n"
-    "  this.defaultplacement = '';\n"
     "\n"
     "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_text noPointerEvents\" />';\n"
     "}\n"
@@ -17072,8 +17091,6 @@ BOOL isJSExpression(NSString *s)
     //"\n"
     //"  this.name = 'window';\n"
     //"  this.inherit = new basewindow(textBetweenTags);\n"
-    //"\n"
-    //"  this.defaultplacement = '';\n"
     //"}\n"
     "\n"
     "\n"
@@ -17089,8 +17106,6 @@ BOOL isJSExpression(NSString *s)
     "  this.inherit = new oo.view();\n"
     "\n"
     "  this.selfDefinedAttributes = { text:textBetweenTags }\n"
-    "\n"
-    "  this.defaultplacement = '';\n"
     "\n"
     "  this.contentHTML = '<button type=\"button\" id=\"@@@P-L,A#TZHALTER@@@\" class=\"input_standard\" style=\"\">'+textBetweenTags+'</button>';\n"
     "\n"
@@ -17120,8 +17135,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  this.name = 'basebutton';\n"
     "  this.inherit = new oo.basecomponent();\n"
-    "\n"
-    "  this.defaultplacement = '';\n"
     "\n"
     "  this.contentHTML = '';\n"
     "\n"

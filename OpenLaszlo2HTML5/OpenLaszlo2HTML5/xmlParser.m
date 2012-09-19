@@ -38,7 +38,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -8914,8 +8914,9 @@ BOOL isJSExpression(NSString *s)
 
 
         // defaultplacement immer mit speichern, damit es besser ausgelesen werden kann, falls gesetzt.
-        self.defaultplacement = [self protectThisSingleQuotedJavaScriptString:self.defaultplacement];
-        [self.jsOLClassesOutput appendFormat:@"  this.defaultplacement = '%@';\n\n",self.defaultplacement];
+        // self.defaultplacement = [self protectThisSingleQuotedJavaScriptString:self.defaultplacement];
+        // [self.jsOLClassesOutput appendFormat:@"  this.defaultplacement = '%@';\n\n",self.defaultplacement];
+        // Neu: Wird nicht mehr hier ausgegeben. Steckt als ganz normale Variable in selfDefinedAttributes
         // Nachdem ausgelesen, wieder zurücksetzen:
         self.defaultplacement = @"";
 
@@ -12699,6 +12700,9 @@ BOOL isJSExpression(NSString *s)
     "            // Wenn Request mit 'name()' endet, will er immer den Tagnamen haben\n"
     "            if (query.endsWith('/name()'))\n"
     "                returnValue = this.lastNodeName;\n"
+    "            // Wenn Request mit 'text()' endet, will er auf jeden Fall einen String haben, und sei es ein leerer\n"
+    "            if (query.endsWith('/text()'))\n"
+    "                returnValue = this.lastNodeText ? this.lastNodeText : '';\n"
     "\n"
     "            // alte 'pointer' wiederherstellen\n"
     "            this.lastNode = lastNode;\n"
@@ -12711,10 +12715,10 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        this.setNodeText = function(text) {\n"
     "            // Lieber ohne jQuery, da kein HTML-Dokument, sondern eine Node\n"
-    "            if (this.lastNode)\n"
+    "            if (this.lastNode && typeof text == 'string')\n"
     "            {\n"
     "                this.lastNodeText = text; // Intern aktualisieren\n"
-    "                this.lastNode.childNodes[0].nodeValue = text;   // Extern aktualisieren\n"
+    "                this.lastNode.childNodes[0].nodeValue = text; // Extern aktualisieren\n"
     "            }\n"
     "        }\n"
     "        this.isValid = function() {\n"
@@ -13114,6 +13118,19 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "$(function()\n"
     "{\n"
+    "    /////////////////////////////////////////////////////////\n"
+    "    // Zentriere Anzeige beim resizen der Seite            //\n"
+    "    // + aktualisiere Canvas                               //\n"
+    "    /////////////////////////////////////////////////////////\n"
+    "    $(window).resize(function()\n"
+    "    {\n"
+    "          // Erst, wenn DOM schon initialisiert! Deswegen hier drin\n"
+    "          canvas.height = $(window).height();\n"
+    "\n"
+    "        adjustOffsetOnBrowserResize();\n"
+    "    });\n"
+    "\n"
+    "\n"
     "    adjustOffsetOnBrowserResize();\n"
     "});\n"
     "\n"
@@ -13131,19 +13148,6 @@ BOOL isJSExpression(NSString *s)
     "        $('div:first').css('left', left +'px');\n"
     "    }\n"
     "}\n"
-    "\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// Zentriere Anzeige beim resizen der Seite            //\n"
-    "// + aktualisiere Canvas                               //\n"
-    "/////////////////////////////////////////////////////////\n"
-    "$(window).resize(function()\n"
-    "{\n"
-    "    if (canvas) // falls DOM schon initialisiert\n"
-    "      canvas.height = $(window).height();\n"
-    "\n"
-    "    adjustOffsetOnBrowserResize();\n"
-    "});\n"
-    "\n"
     "\n"
     "//////////////////////////////////////////////////////////\n"
     "// Ersetzt das intern verwendete parent                 //\n"
@@ -16456,6 +16460,7 @@ BOOL isJSExpression(NSString *s)
     "  // Muss deswegen auch rückwärts ausgewertet werden\n"
     "  var currentObj = obj; // Zwischenspeichern\n"
     "  var rueckwaertsArray = [];\n"
+    "  var inherit_defaultplacement = undefined;\n"
     "  while (obj.inherit !== undefined)\n"
     "  {\n"
     "    rueckwaertsArray.push(obj);\n"
@@ -16489,6 +16494,14 @@ BOOL isJSExpression(NSString *s)
     "          else\n"
     "          {\n"
     "            id[key] = value;\n"
+    "          }\n"
+    "\n"
+    "          if (i == rueckwaertsArray.length-2) // zusätzlich -1, weil das Ausgangselement unberücksichtigt bleibt\n"
+    "          {\n"
+    "            if (key == 'defaultplacement')\n"
+    "            {\n"
+    "                inherit_defaultplacement = value;\n"
+    "            }\n"
     "          }\n"
     //"        }\n"
     "      });\n"
@@ -16787,10 +16800,10 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  // ********* Ich muss jedoch auch MICH selber an die richtige Stelle vom inherit setzen *********\n"
     "  // ********* Wenn der ein defaultplacement hat, muss ich da rein schlüpfen *********\n"
-    "  if (obj.inherit && obj.inherit.defaultplacement && obj.inherit.defaultplacement !== '')\n"
+    "  if (inherit_defaultplacement && inherit_defaultplacement !== '')\n"
     "  {\n"
     "    // Da der 'name' als inherit gesetzt wurde, spreche ich es darüber an\n"
-    "    if ($(id[obj.inherit.defaultplacement]).length == 0)\n"
+    "    if ($(id[inherit_defaultplacement]).length == 0)\n"
     "    {\n"
     "      console.log('Error: Can not access defaultplacement. There is no view with this name in this class.');\n"
     "      $(id).append(s);\n"
@@ -16798,8 +16811,8 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "    else\n"
     "    {\n"
-    "      $(id[obj.inherit.defaultplacement]).prepend(s);\n"
-    "      $(id[obj.inherit.defaultplacement]).triggerHandler('onaddsubview');\n" // Weil ich es im anderen Zweig auch triggere
+    "      $(id[inherit_defaultplacement]).prepend(s);\n"
+    "      $(id[inherit_defaultplacement]).triggerHandler('onaddsubview');\n" // Weil ich es im anderen Zweig auch triggere
     "    }\n"
     "  }\n"
     "  else\n"
@@ -17099,9 +17112,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'basewindow';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.selfDefinedAttributes = { text:textBetweenTags }\n"
-    "\n"
-    "  this.defaultplacement = '_content';\n"
+    "  this.selfDefinedAttributes = { text:textBetweenTags, defaultplacement: '_content' }\n"
     "\n"
     "  this.contentHTML = '' +\n"
     "  '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_window ui-corner-all\">\\n' +\n"

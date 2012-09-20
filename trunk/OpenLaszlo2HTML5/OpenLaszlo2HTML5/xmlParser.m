@@ -990,26 +990,27 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"height"];
 
-        // Bei text/inputtext bei px-Werten den margin-Wert abziehen
-        if ([s rangeOfString:@"%"].location == NSNotFound)
-        {
-            NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-1];
-            
-            if ([elemTyp isEqualToString:@"text"] || [elemTyp isEqualToString:@"inputtext"])
-            {
-                int temp = [s intValue];
-                // Nur 2 px abziehen mal. Sonst bricht Beispiel 9.4
-                temp -= 2;
-                s = [NSString stringWithFormat:@"%d",temp];
-            }
-        }
-
         if ([s hasPrefix:@"$"])
         {
             [self setTheValue:s ofAttribute:@"height"];
         }
         else
         {
+            // Bei text/inputtext bei px-Werten den margin-Wert abziehen
+            if ([s rangeOfString:@"%"].location == NSNotFound)
+            {
+                NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-1];
+                
+                if ([elemTyp isEqualToString:@"text"] || [elemTyp isEqualToString:@"inputtext"])
+                {
+                    int temp = [s intValue];
+                    // Nur 2 px abziehen mal. Sonst bricht Beispiel 9.4
+                    temp -= 2;
+                    s = [NSString stringWithFormat:@"%d",temp];
+                }
+            }
+
+
             [style appendString:@"height:"];
             [style appendString:s];
             if ([s rangeOfString:@"%"].location == NSNotFound)
@@ -1050,34 +1051,28 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"width"];
 
-        // Bei text/inputtext bei px-Werten den margin-Wert abziehen
-        if ([s rangeOfString:@"%"].location == NSNotFound)
-        {
-            NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-1];
 
-            if ([elemTyp isEqualToString:@"text"] || [elemTyp isEqualToString:@"inputtext"])
-            {
-                int temp = [s intValue];
-                // Nur 2 px abziehen mal. Sonst bricht Beispiel 9.4
-                temp -= 2;
-                s = [NSString stringWithFormat:@"%d",temp];
-            }
-        }
-
-        // Diese Sonderbehandlung ist wohl hinfällig:
-        // Wir beobachten sonst ja nicht die Änderungen! ist ja ein Constraint! (bzw. inherit reagiert zu langsam)
-        //if ([s rangeOfString:@"${parent.width}"].location != NSNotFound ||
-        //    [s rangeOfString:@"${immediateparent.width}"].location != NSNotFound)
-        //{
-        //    [style appendString:@"width:inherit;"];
-        //}
-        //else
         if ([s hasPrefix:@"$"])
         {
             [self setTheValue:[attributeDict valueForKey:@"width"] ofAttribute:@"width"];
         }
         else
         {
+            // Bei text/inputtext bei px-Werten den margin-Wert abziehen
+            if ([s rangeOfString:@"%"].location == NSNotFound)
+            {
+                NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-1];
+                
+                if ([elemTyp isEqualToString:@"text"] || [elemTyp isEqualToString:@"inputtext"])
+                {
+                    int temp = [s intValue];
+                    // Nur 2 px abziehen mal. Sonst bricht Beispiel 9.4
+                    temp -= 2;
+                    s = [NSString stringWithFormat:@"%d",temp];
+                }
+            }
+
+
             [style appendString:@"width:"];
             [style appendString:s];
             if ([s rangeOfString:@"%"].location == NSNotFound)
@@ -1296,8 +1291,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         if ([src hasPrefix:@"http:"] && ![src hasPrefix:@"http://"])
         {
             // Wenn ich Example 8.6 richtig verstehe, muss ich in diesem Fall das 'http:' entfernen
-            // Es ist bei einer lokalen Datei lediglich  ein Hinweis darauf, dass es erst ab
-            // run-time geladen werden darf.
+            // Es ist bei einer lokalen Datei lediglich  ein Hinweis darauf, dass es erst ab run-time geladen werden darf.
             src = [src substringFromIndex:5];
         }
 
@@ -3153,7 +3147,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 {
     [self.jsHead2Output appendString:@"\n// Dataset wird als XML-Struktur angelegt und in einem JS-String gespeichert.\n"];
     [self.jsHead2Output appendFormat:@"var %@ = new lz.dataset('%@');\n",self.lastUsedDataset,self.lastUsedDataset];
-
     [self.jsHead2Output appendFormat:@"%@.rawdata = '<%@>';\n",self.lastUsedDataset,self.lastUsedDataset];
 }
 
@@ -3589,6 +3582,15 @@ didStartElement:(NSString *)elementName
         // Damit kein Fehler geworfen wird, hier abfangen und nicht rekursiv aufrufen.
         if (![href isEqualToString:@"lz/button.lzx"] &&
             ![href isEqualToString:@"lz/radio.lzx"] &&
+            ![href isEqualToString:@"lz/list.lzx"] &&
+
+            ![href isEqualToString:@"base/basecomponent.lzx"] &&
+            ![href isEqualToString:@"base/basevaluecomponent.lzx"] &&
+            ![href isEqualToString:@"base/baseformitem.lzx"] &&
+            ![href isEqualToString:@"base/baselistitem.lzx"] &&
+            ![href isEqualToString:@"base/baselist.lzx"] &&
+            ![href isEqualToString:@"base/basebutton.lzx"] &&
+
             ![href isEqualToString:@"incubator/base64.lzx"])
             [self callMyselfRecursive:href];
 
@@ -3850,15 +3852,30 @@ didStartElement:(NSString *)elementName
             }
             else
             {
-                NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! So I am calling myself recursive with the file %@",src]);
+                if ([src hasPrefix:@"http://"])
+                {
+                    NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! But it is starting with 'http://'. So I am loading the XML-File (%@) into a string.",src]);
 
-                [self legeDatasetAnUndInitMitOeffnendemTag];
+                    [self.jsHead2Output appendString:@"\n// Dataset wird als XML-Struktur angelegt und in einem JS-String gespeichert.\n"];
+                    [self.jsHead2Output appendFormat:@"var %@ = new lz.dataset('%@');\n",self.lastUsedDataset,self.lastUsedDataset];
+                    [self.jsHead2Output appendFormat:@"%@.rawdata = getXMLDocumentFromFile('%@');\n",self.lastUsedDataset,src];
 
-                [self callMyselfRecursive:src];
+                    // Alle 'äußeren' Datasets stecken auch in 'canvas' (aber 'canvas' ist erst nach DOM bekannt, deswegen jsOutput
+                    [self.jsOutput appendString:@"  // datasets außerhalb von Klassen sind auch in canvas verankert\n"];
+                    [self.jsOutput appendFormat:@"  canvas.%@ = %@;\n",self.lastUsedDataset,self.lastUsedDataset];
+                }
+                else
+                {
+                    NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! So I am calling myself recursive with the file %@",src]);
 
-                // Oh man, was ein Bug... Und natürlich noch das letzte schleßende 'dataset'-Tag anfügen,
-                // damit es keine parser-error beim Einlesen des XML-Strings gibt
-                [self.jsHead2Output appendFormat:@"%@.rawdata += '</%@>';\n",self.lastUsedDataset,self.lastUsedDataset];
+                    [self legeDatasetAnUndInitMitOeffnendemTag];
+
+                    [self callMyselfRecursive:src];
+
+                    // Oh man, was ein Bug... Und natürlich noch das letzte schleßende 'dataset'-Tag anfügen,
+                    // damit es keine parser-error beim Einlesen des XML-Strings gibt
+                    [self.jsHead2Output appendFormat:@"%@.rawdata += '</%@>';\n",self.lastUsedDataset,self.lastUsedDataset];
+                }
             }
 
             // Nach dem Verlassen der Rekursion müssen wir nicht länger ein Dataset auswerten
@@ -8168,7 +8185,11 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
                 BOOL weNeedQuotes = YES;
 
-                if (isNumeric(s) || isJSArray(s))
+                if (isJSExpression(s))
+                    weNeedQuotes = NO;
+
+                // Eventuell sogar in isJSExpression() auslagern?
+                if ([s hasPrefix:@"'"] && [s hasSuffix:@"'"])
                     weNeedQuotes = NO;
 
                 if ([s hasPrefix:@"$"])
@@ -8685,7 +8706,7 @@ BOOL isJSExpression(NSString *s)
 
         // Es muss ein gesamtumfassendes Tag geben, sonst ist es kein valides XML.
         // <library>, weil dies einerseits bereits in OL vorkommt und andererseits neutral ist.
-        // Falsch!! <library> ist nicht neutral! Es beeinflusst ob methods global sind oder nicht!
+        // Falsch!! <library> ist nicht neutral! Es beeinflusst ob Methoden global sind oder nicht!
         // Das war ein ziemlich fieser Bug.
         // Deswegen lieber mit eigenem Tag 'evaluateclass' arbeiten, das ist wirklich neutral.
         self.collectedContentOfClass = [[NSMutableString alloc] initWithFormat:@"<evaluateclass>%@",self.collectedContentOfClass];
@@ -13097,7 +13118,7 @@ BOOL isJSExpression(NSString *s)
     "        $('#debugInnerWindow').append(sprintf(s,v0,v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14,v15,v16,v17,v18,v19));\n"
     "    //alert(s);\n"
     "};\n"
-    "Debug.format = Debug.debug; // I don't c the difference between this methods\n"
+    "Debug.format = Debug.debug; // I don't c the difference between this 2 methods\n"
     "Debug.write = function(s1,v) {\n"
     "    if (v === undefined)\n"
     "        v = '';\n"
@@ -13316,7 +13337,9 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        else\n"
     "        {\n"
-    "            $(me).html(value);\n"
+    //"            $(me).html(value);\n"
+    // Wegen Bsp. 37.2 wohl eher text()
+    "            $(me).text(value);\n"
     "\n"
     "            // Wegen Example 16.1, bei Buttons width mit outerwidth setzen\n"
     "            if ($(me).is('button'))\n"
@@ -16455,7 +16478,7 @@ BOOL isJSExpression(NSString *s)
     "  // 2.5 Placement -> By default, instances which appear inside a class are made children of the top level instance of the class.\n"
     "  var kinderVorDemAppenden = $(id).children(); // die existierenden Kinder sichern\n"
     "\n"
-    "  // Neu Durchlauf 1: Alle selbst definierten Attribute werden direkt an das Element gebunden\n"
+    "  // Neu Durchlauf 1: Alle selbst definierten Attribute (und Methoden) werden direkt an das Element gebunden\n"
     "  // Dies muss als allererstes passieren, da in Unterklassen definierte Methoden oder Attrbute bereits darauf zugreifen können\n"
     "  // Muss deswegen auch rückwärts ausgewertet werden\n"
     "  var currentObj = obj; // Zwischenspeichern\n"
@@ -16476,10 +16499,6 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "      Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
     "      {\n"
-    //"        // Bitte nichts überschreiben, was ich gerade erst beim instanzieren der Klasse gesetzt haben\n"
-    //"        // Das klappt so nicht. Weil der Getter von z. B. bgcolor ja nicht undefined zurückliefert.\n"
-    //"        if (id[key] === undefined)\n"
-    //"        {\n"
     "          var value = obj.selfDefinedAttributes[key];\n"
     "\n"
     "          if (typeof value === 'string' && value.startsWith('@§.BERECHNETERWERT.§@'))\n"
@@ -16503,9 +16522,17 @@ BOOL isJSExpression(NSString *s)
     "                inherit_defaultplacement = value;\n"
     "            }\n"
     "          }\n"
-    //"        }\n"
     "      });\n"
     "    }\n"
+    "\n"
+    "    if (obj.methods)\n"
+    "    {\n"
+    "      Object.keys(obj.methods).forEach(function(key)\n"
+    "      {\n"
+    "          id[key] = obj.methods[key];\n"
+    "      });\n"
+    "    }\n"
+    "\n"
     "  }\n"
     "\n"
     "  // Neu: Hier Setzen der instanzvariablen der Instanz (nicht mehr vor der Klasse)\n"
@@ -16563,8 +16590,6 @@ BOOL isJSExpression(NSString *s)
     "        var gesicherteMethoden = {};\n"
     "        for(var prop in id) {\n"
     "            if (id.hasOwnProperty(prop) && typeof id[prop] === 'function') {\n"
-    //"                alert(id[prop]);\n"
-    //"                alert(prop);\n"
     "                gesicherteMethoden[prop] = id[prop];\n"
     "            }\n"
     "        }\n"
@@ -17260,7 +17285,7 @@ BOOL isJSExpression(NSString *s)
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'basecombobox';\n"
-    "  this.inherit = new oo.baseformitem();\n"
+    "  this.inherit = new oo.baseformitem(textBetweenTags);\n"
     "\n"
     "  this.selfDefinedAttributes = { editable:true }\n"
     "\n"
@@ -17277,7 +17302,7 @@ BOOL isJSExpression(NSString *s)
     "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'baseformitem';\n"
-    "  this.inherit = new oo.basevaluecomponent();\n"
+    "  this.inherit = new oo.basevaluecomponent(textBetweenTags);\n"
     "\n"
     "  this.selfDefinedAttributes = { changed:false, ignoreform:false, rollbackvalue:null, submit:this.inherit.inherit.selfDefinedAttributes.enabled, submitname:'', value:null }\n"
     "\n"
@@ -17290,13 +17315,13 @@ BOOL isJSExpression(NSString *s)
     "//  class = basevaluecomponent (native class)                //\n"
     "///////////////////////////////////////////////////////////////\n"
     "oo.basevaluecomponent = function(textBetweenTags) {\n"
-    "  if(typeof(textBetweenTags) === 'undefined')\n"
-    "    textBetweenTags = '';\n"
     "\n"
     "  this.name = 'basevaluecomponent';\n"
-    "  this.inherit = new oo.basecomponent();\n"
+    "  this.inherit = new oo.basecomponent(textBetweenTags);\n"
     "\n"
-    "  this.selfDefinedAttributes = { type:'none', value:null }\n"
+    "  this.selfDefinedAttributes = { type:'none', myValue:null }\n"
+    "\n"
+    "  this.methods = { getValue: function() { if (this.myValue) return this.myValue; else return this.text; } }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "};\n"

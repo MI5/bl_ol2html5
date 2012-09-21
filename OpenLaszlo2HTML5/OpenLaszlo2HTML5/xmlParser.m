@@ -38,7 +38,7 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -1328,7 +1328,9 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Geht wohl nur dann wenn ich DIESE CSS-Angaben noch vor alles andere setze, sonst
             // ist width und height nicht früh genug gesetzt und SA's verschieben sich!
             [self.jsOutput appendString:@"\n  // Setting 'resource'\n"];
-            if ([src rangeOfString:@"."].location != NSNotFound)
+
+            // 2. Bedingung: Damit er dann wenigstens '' setzt, sonst Absturz
+            if ([src rangeOfString:@"."].location != NSNotFound || src.length == 0)
             {
                 [self.jsOutput appendFormat:@"  %@.setAttribute_('resource', '%@');\n",self.zuletztGesetzteID,src];
             }
@@ -1862,6 +1864,10 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     // Was ist das? Eine Art cast-Anweisung? Da wäre ein Mega-RegExp fällig. Erstmal auskommentieren
     s = [self inString:s searchFor:@" cast " andReplaceWith:@"; // cast " ignoringTextInQuotes:YES];
+
+
+    // super ist nicht erlaubt in JS (reserviert) und gibt es auch noch nicht.
+    s = [self inString:s searchFor:@"super" andReplaceWith:@"super_" ignoringTextInQuotes:YES];
 
 
     // Remove leading and ending Whitespaces and NewlineCharacters
@@ -3443,7 +3449,6 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"state"] ||
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
-        [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
@@ -3583,6 +3588,8 @@ didStartElement:(NSString *)elementName
         if (![href isEqualToString:@"lz/button.lzx"] &&
             ![href isEqualToString:@"lz/radio.lzx"] &&
             ![href isEqualToString:@"lz/list.lzx"] &&
+
+            ![href isEqualToString:@"rpc/ajax.lzx"] &&
 
             ![href isEqualToString:@"base/basecomponent.lzx"] &&
             ![href isEqualToString:@"base/basevaluecomponent.lzx"] &&
@@ -3856,9 +3863,9 @@ didStartElement:(NSString *)elementName
                 {
                     NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! But it is starting with 'http://'. So I am loading the XML-File (%@) into a string.",src]);
 
-                    [self.jsHead2Output appendString:@"\n// Dataset wird als XML-Struktur angelegt und in einem JS-String gespeichert.\n"];
+                    [self.jsHead2Output appendString:@"\n// Externe XML-Datei wird als XML-Struktur ausgelesen und in einem JS-String gespeichert.\n"];
                     [self.jsHead2Output appendFormat:@"var %@ = new lz.dataset('%@');\n",self.lastUsedDataset,self.lastUsedDataset];
-                    [self.jsHead2Output appendFormat:@"%@.rawdata = getXMLDocumentFromFile('%@');\n",self.lastUsedDataset,src];
+                    [self.jsHead2Output appendFormat:@"%@.rawdata = (new XMLSerializer()).serializeToString(getXMLDocumentFromFile('%@'));\n",self.lastUsedDataset,src];
 
                     // Alle 'äußeren' Datasets stecken auch in 'canvas' (aber 'canvas' ist erst nach DOM bekannt, deswegen jsOutput
                     [self.jsOutput appendString:@"  // datasets außerhalb von Klassen sind auch in canvas verankert\n"];
@@ -4689,8 +4696,7 @@ didStartElement:(NSString *)elementName
 
     if ([elementName isEqualToString:@"view"] ||
         [elementName isEqualToString:@"hbox"] ||
-        [elementName isEqualToString:@"vbox"] ||
-        [elementName isEqualToString:@"rotateNumber"])
+        [elementName isEqualToString:@"vbox"])
     {
         element_bearbeitet = YES;
 
@@ -4728,13 +4734,6 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"\">\n"];
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
-
-
-        // ToDo Weg damit
-        if ([attributeDict valueForKey:@"negativecolor"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"positivecolor"])
-            self.attributeCount++;
 
 
         if ([elementName isEqualToString:@"hbox"])
@@ -5477,7 +5476,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
     // ToDo: Bei BDSeditnumber nur Ziffern zulassen als Eingabe inkl. wohl '.' + ','
-    // Aber nochmal checken (To Check).
     if ([elementName isEqualToString:@"edittext"] ||
         [elementName isEqualToString:@"BDSedittext"] ||
         [elementName isEqualToString:@"BDSeditnumber"])
@@ -6905,7 +6903,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
     }
 
     // ToDo
-    if ([elementName isEqualToString:@"certdatepicker"])
+    if ([elementName isEqualToString:@"certdatepickerXXX"])
     {
         element_bearbeitet = YES;
 
@@ -8203,6 +8201,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
                 if (weNeedQuotes)
                 {
                     // [o appendFormat:@"\n  %@.%@ = '%@';",self.zuletztGesetzteID,key,s];
+                    s = [self protectThisSingleQuotedJavaScriptString:s];
                     [instanceVars appendFormat:@"%@ : '%@', ",key,s];
                 }
                 else
@@ -8247,12 +8246,20 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [o appendFormat:@"\n  var id = document.getElementById('%@');",idUmgebendesElement];
         [o appendFormat:@"\n  var obj = new oo.%@('');",elementName];
 
-       // [o appendFormat:@"\n  if (jQuery.inArray('defer',obj.attributeValues) == -1)"]; // try 1 --> Ohne Erfolg...
-       // [o appendFormat:@"\n  if ($(id).is(':visible'))"]; // try 2 --> Ohne Erfolg, bricht viewlose Elemente (swfso z. B.)
+        // [o appendFormat:@"\n  if (jQuery.inArray('defer',obj.attributeValues) == -1)"]; // try 1 --> Ohne Erfolg...
+        // [o appendFormat:@"\n  if ($(id).is(':visible'))"]; // try 2 --> Ohne Erfolg, bricht viewlose Elemente (swfso z. B.)
+
+        if ([elementName isEqualToString:@"deferview"])
+        {
+            //[o appendString:@"/*"];
+        }
 
         [o appendString:@"\n  interpretObject(obj,id,iv);\n"];
 
-
+        if ([elementName isEqualToString:@"deferview"])
+        {
+            //[o appendString:@"*/"];
+        }
 
 
         // in jQueryOutput0! Damit a) keine weiteren Elemente überschrieben werden,
@@ -8498,10 +8505,7 @@ BOOL isJSExpression(NSString *s)
         // Wenn wir gerade eh nur sammeln (und erst später auswerten), dann bitte nicht testen,
         if (!self.weAreCollectingTheCompleteContentInClass)
         {
-            //[self instableXML:[NSString stringWithFormat:@"Hoppala, das sollte aber nicht passieren, dass ich hier noch nicht ausgewerteten Text habe (textInProgress: '%@' - Länge textInProgress: %d - keyInProgress: '%@')",s,[s length],self.keyInProgress]];
-
-            // Okay bei GFlender-Code kommt das zwar nicht vor, aber es kann gemäß OL
-            // trotzdem passieren (Example 28.16.):
+            // Example 28.16.:
             // z.B.: <button>Make window red <handler name="onclick">code</handler></button>
             // wenn so etwas passiert, einfach Text ausgeben... Hoffe das geht in allen Fällen gut
             //[self.output appendString:s];
@@ -8521,7 +8525,7 @@ BOOL isJSExpression(NSString *s)
                 s = [self protectThisSingleQuotedJavaScriptString:s];
 
                 // Dann IN den jQueryOutput hinein injecten
-                [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-31];
+                [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-34];
             }
         }
     }
@@ -9005,7 +9009,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"nicepopup"] ||
         [elementName isEqualToString:@"nicemodaldialog"] ||
         [elementName isEqualToString:@"nicedialog"] ||
-        [elementName isEqualToString:@"certdatepicker"])
+        [elementName isEqualToString:@"certdatepickerXXX"])
     {
         element_geschlossen = YES;
 
@@ -9089,7 +9093,6 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"state"] ||
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
-        [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"tabslider"] ||
@@ -9235,7 +9238,6 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"hbox"] ||
         [elementName isEqualToString:@"vbox"] ||
         [elementName isEqualToString:@"splash"] ||
-        [elementName isEqualToString:@"rotateNumber"] ||
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
@@ -9826,12 +9828,6 @@ BOOL isJSExpression(NSString *s)
         //s = [s stringByReplacingOccurrencesOfString:@"\\n" withString:@"\\\\n"];
         // Puh, das war ein collectedClasses-Problem. Strings müssen untouched bleiben hier.
 
-        // super ist nicht erlaubt in JS und gibt es auch nicht.
-        // Ich ersetze es erstmal durch this.getTheParent(). Sollte funktionieren.
-        //s = [s stringByReplacingOccurrencesOfString:@"super" withString:@"this.getTheParent()"];
-        // Nein, das funktioniert nicht:
-        s = [s stringByReplacingOccurrencesOfString:@"super" withString:@"super_"];
-
 
         // Damit er in jeder Code-Zeile korrekt einrückt
         s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\n   "];
@@ -9856,7 +9852,7 @@ BOOL isJSExpression(NSString *s)
         [o appendString:s];
 
 
-        // Falls wir in canvas/library sind, dann muss es nicht nur global verfügbar sein
+        // Falls wir in canvas/library sind, dann muss es nicht nur global verfügbar sein,
         // sondern auch über 'canvas.' ansprechbar sein.
         if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"canvas"] ||
             [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"library"])
@@ -9921,6 +9917,7 @@ BOOL isJSExpression(NSString *s)
 
             [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-34]; /* MARKER -60 / -31 vom defer-Test */
         }
+
 
         self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
     }
@@ -11845,13 +11842,13 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
-    "  // Zusatz-Code -  Das hier muss noch zu ECHTEM generierten Code werden (ToDo)\n"
-    "  $(globalhelp_6).height(globalhelp._inner.height+35-35);\n"
-    "  $(globalhelp_10).css('top',globalhelp._inner.height+50-50+15);\n"
-    "  // Damit der eine blöde Effekt weggeht Hintergrundbild mit sich selbst aktualisieren\n"
-    "  $(globalhelp_7).css('background-image',$(globalhelp_7).css('background-image'))\n"
-    "  $(globalhelp_8).css('background-image',$(globalhelp_8).css('background-image'))\n"
-    "  $(globalhelp_9).css('background-image',$(globalhelp_9).css('background-image'))\n"
+    //"  // Zusatz-Code -  Das hier muss noch zu ECHTEM generierten Code werden // To Do\n"
+    //"  $(globalhelp_6).height(globalhelp._inner.height+35-35);\n"
+    //"  $(globalhelp_10).css('top',globalhelp._inner.height+50-50+15);\n"
+    //"  // Damit der eine blöde Effekt weggeht Hintergrundbild mit sich selbst aktualisieren\n"
+    //"  $(globalhelp_7).css('background-image',$(globalhelp_7).css('background-image'))\n"
+    //"  $(globalhelp_8).css('background-image',$(globalhelp_8).css('background-image'))\n"
+    //"  $(globalhelp_9).css('background-image',$(globalhelp_9).css('background-image'))\n"
     "}\n"
     "\n"
     "\n"
@@ -12096,6 +12093,11 @@ BOOL isJSExpression(NSString *s)
     "                cursor = 'wait';\n"
     "            $('body').css('cursor', cursor);\n"
     "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "    this.XMLHttpRequest = function() {\n"
+    "        return new XMLHttpRequest();\n"
     "    }\n"
     "\n"
     "\n"
@@ -12408,7 +12410,8 @@ BOOL isJSExpression(NSString *s)
     "        // serialize() aufrufen kann. Diese Methode haben nur Datapointer!\n"
     "        // Aber GFlender ruft serialize() bei Datasets auf.\n"
     "        this.serialize = function() {\n"
-    "           return this.rawdata;\n"
+    // Wegen Bsp. 37.2 'escapeTextFunction' drum herum
+    "            return escapeTextFunction(this.rawdata);\n"
     "        }\n"
     "        // Meiner Meinung nach macht das keinen Sinn, dass ein Dataset die Methode\n"
     "        // setAttr() aufrufen kann. Diese Methode gibt es gemäß OL-Doku nicht\n"
@@ -13022,7 +13025,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
-    "var SonstigeAusgaben = null; //function() {}; //ToDo <-- id von BDSinputgrid, welches noch nicht ausgewertet wird, deswegen muss ich die Var noch manuell bekannt machen\n"
+    "var SonstigeAusgaben = null; //function() {}; // ToDo <-- id von BDSinputgrid, welches noch nicht ausgewertet wird, deswegen muss ich die Var noch manuell bekannt machen\n"
     "\n"
     "\n"
     "\n"
@@ -13339,7 +13342,8 @@ BOOL isJSExpression(NSString *s)
     "        {\n"
     //"            $(me).html(value);\n"
     // Wegen Bsp. 37.2 wohl eher text()
-    "            $(me).text(value);\n"
+    // ne, muss html() bleiben, damit keine <br>'s auftauchen auf der Taxango-Startseite.
+    "            $(me).html(value);\n"
     "\n"
     "            // Wegen Example 16.1, bei Buttons width mit outerwidth setzen\n"
     "            if ($(me).is('button'))\n"
@@ -13660,7 +13664,7 @@ BOOL isJSExpression(NSString *s)
     "    else if (attributeName === 'initstage')\n"
     "    {\n"
     "        if (value === 'defer')\n"
-    "            ;// $(me).hide() // ToDo: Bricht Anzeige Kinder;\n"
+    "            //$(me).hide() // ToDo: Bricht Anzeige Kinder;\n"
     "\n"
     "        if (value === 'immediate' || value === 'early' || value === 'normal' || value === 'late')\n"
     "            jQuery.noop(); /* no operation */\n"
@@ -13744,16 +13748,12 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        if ($.isArray(me.resource))\n"
     "          $(me).css('background-image','url('+me.resource[value]+')');\n"
-    "        else\n"
-    "          throw 'setAttribute_ - Error trying to set frame. (value = '+value+', me.resource = '+me.resource+', me.id = '+me.id+').';\n"
+    //"        else\n"
+    //"          throw 'setAttribute_ - Error trying to set frame. (value = '+value+', me.resource = '+me.resource+', me.id = '+me.id+').';\n"
     "    }\n"
     "    else if (attributeName == 'background-image')\n"
     "    {\n"
-    "       alert('Wer ruft mich denn auf? Seltsam'); $(me).css('background-image','url('+value+')');\n"
-    "    }\n"
-    "    else if (attributeName == 'animduration')\n"
-    "    {\n"
-    "       // ToDo\n"
+    "       alert('Wer ruft mich denn auf? Seltsam.'); $(me).css('background-image','url('+value+')');\n"
     "    }\n"
     "    else if (attributeName == 'stretches')\n"
     "    {\n"
@@ -13848,8 +13848,8 @@ BOOL isJSExpression(NSString *s)
     "                setWidthAndHeightAndBackgroundImage(me,value);\n"
     "            else if (typeof value === 'string' && value != '')\n"
     "                setWidthAndHeightAndBackgroundImage(me,window[value]);\n"
-    "            else\n"
-    "                throw 'setAttribute_ - Error trying to set reource. (value = '+value+', me.id = '+me.id+').';\n"
+    //"            else\n"
+    //"                throw 'setAttribute_ - Error trying to set resource. (value = '+value+', me.id = '+me.id+').';\n"
     "        }\n"
     "    }\n"
     "    else if ($(me).hasClass('select_standard') && attributeName == 'editable') // Nur vom Element 'basecombobox' von Haus aus gesetztes Attribut\n"
@@ -14032,12 +14032,15 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'controlwidth' ||\n"
     "            attributeName === 'inset_y' ||\n"
     "            attributeName === 'focused' ||\n"
+    "            attributeName === 'day' ||\n"
     "            attributeName === 'spacing' ||\n"
     "            attributeName === 'isopen' ||\n"
     "            attributeName === 'start' ||\n"
     "            attributeName === 'ende' ||\n"
+    "            attributeName === 'checked' || // Von BDSCheckbox\n"
     "            attributeName === 'parentnumber' ||\n"
     "            attributeName === 'season' ||\n"
+    "            attributeName === 'animduration' ||\n"
     "            attributeName === 'pooling' ||\n"
     "            attributeName === 'size' ||\n"
     "            attributeName === 'label' ||\n"
@@ -14135,6 +14138,22 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// id = Build-in\n"
     "// name = Build-in\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// addSubview()                                        //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var addSubviewFunction = function (node) {\n"
+    "    $(this).append(node);\n"
+    "\n"
+    "    $(this).triggerHandler('onaddsubview');\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.addSubview = addSubviewFunction;\n"
+    "HTMLInputElement.prototype.addSubview = addSubviewFunction;\n"
+    "HTMLSelectElement.prototype.addSubview = addSubviewFunction;\n"
+    "HTMLButtonElement.prototype.addSubview = addSubviewFunction;\n"
+    "\n"
+    "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// destroy() - nachimplementiert                       //\n"
@@ -14438,7 +14457,7 @@ BOOL isJSExpression(NSString *s)
     "// escapeText() - nachimplementiert                    //\n"
     "/////////////////////////////////////////////////////////\n"
     "var escapeTextFunction = function (s) {\n"
-    "    warnOnWrongClass(this);\n"
+    "    // warnOnWrongClass(this);\n"
     "\n"
     "    var escapedText = s;\n"
     "    if (escapedText == undefined)\n"
@@ -15230,7 +15249,9 @@ BOOL isJSExpression(NSString *s)
     "// READ-ONLY                                           //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'subviews', {\n"
-    "    get : function(){ return $(this).find('*').get(); },\n"
+    // "    get : function(){ return $(this).find('*').get(); },\n"
+    // Damit er rotatenumber auswerten kann, muss es children sein und nicht find!
+    "    get : function(){ return $(this).children('*').get(); },\n"
     "    /* READ-ONLY set : , */\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -16672,7 +16693,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "  // Alle auf vorherigen Vererbungs-Ebenen hinzugefügten Methoden in das super_Objekt stecken\n"
-    "  var methodenDerVorfahren = {};\n"
+    "  var methodenDerVorfahren = { init: function() {} };\n"
     "  for(var prop in id) {\n"
     "    if (id.hasOwnProperty(prop) && typeof id[prop] === 'function') {\n"
     "      methodenDerVorfahren[prop] = id[prop];\n"
@@ -17016,6 +17037,20 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  this.contentHTML = '';\n"
     //"  this.contentHTML = '<div id=\"@!JS,PLZ!REPLACE!ME!@\" class=\"div_standard noPointerEvents\" />';\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = vscrollbar (native class)                        //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.vscrollbar = function() {\n"
+    "  this.name = 'vscrollbar';\n"
+    "  this.inherit = new oo.view();\n"
+    "\n"
+    "  this.selfDefinedAttributes = { }\n"
+    "\n"
+    "  this.contentHTML = '';\n"
     "}\n"
     "\n"
     "\n"

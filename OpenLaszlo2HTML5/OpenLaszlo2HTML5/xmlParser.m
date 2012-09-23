@@ -97,6 +97,8 @@ BOOL ownSplashscreen = NO;
 @property (strong, nonatomic) NSMutableString *jsComputedValuesOutput; // kommt DIREKT nach dem DOM
 @property (strong, nonatomic) NSMutableString *jsConstraintValuesOutput; // kommt ebenfalls direkt nach dem DOM
 
+@property (strong, nonatomic) NSMutableString *jsInitstageDeferOutput;
+@property (strong, nonatomic) NSMutableString *jsToUseLaterOutput;
 
 @property (strong, nonatomic) NSMutableString *cssOutput; // CSS-Ausgaben, die gesammelt werden, derzeit @Font-Face
 
@@ -222,6 +224,7 @@ BOOL ownSplashscreen = NO;
 
 // oninit-Code in einem Handler wird direkt ausgeführt (load-Handler ist unpassend)
 @property (nonatomic) BOOL onInitInHandler;
+@property (nonatomic) BOOL initStageDefer;
 // 'reference'-Variable in einem Handler muss an das korrekte Element gebunden werden
 @property (nonatomic) BOOL referenceAttributeInHandler;
 @property (nonatomic) BOOL handlerofDrawview;
@@ -258,6 +261,8 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize output = _output, jsOutput = _jsOutput, jsOLClassesOutput = _jsOLClassesOutput, jQueryOutput0 = _jQueryOutput0, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output, jsComputedValuesOutput = _jsComputedValuesOutput, jsConstraintValuesOutput = _jsConstraintValuesOutput, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput, collectedContentOfClass = _collectedContentOfClass;
 
+@synthesize jsInitstageDeferOutput = _jsInitstageDeferOutput, jsToUseLaterOutput = _jsToUseLaterOutput;
+
 @synthesize errorParsing = _errorParsing, verschachtelungstiefe = _verschachtelungstiefe, rollUpDownVerschachtelungstiefe = _rollUpDownVerschachtelungstiefe;
 
 @synthesize baselistitemCounter = _baselistitemCounter, idZaehler = _idZaehler, elementeZaehler = _elementeZaehler, element_merker = _element_merker;
@@ -291,7 +296,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize weAreCollectingTheCompleteContentInClass = _weAreCollectingTheCompleteContentInClass;
 @synthesize weAreSkippingTheCompleteContentInThisElement = _weAreSkippingTheCompleteContentInThisElement;
 
-@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler, handlerofDrawview = _handlerofDrawview, lastUsedNameAttributeOfState = _lastUsedNameAttributeOfState;
+@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, initStageDefer = _initStageDefer, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler, handlerofDrawview = _handlerofDrawview, lastUsedNameAttributeOfState = _lastUsedNameAttributeOfState;
 
 
 
@@ -381,6 +386,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.jsComputedValuesOutput = [[NSMutableString alloc] initWithString:@""];
         self.jsConstraintValuesOutput = [[NSMutableString alloc] initWithString:@""];
 
+        self.jsInitstageDeferOutput = [[NSMutableString alloc] initWithString:@""];
+        self.jsToUseLaterOutput = [[NSMutableString alloc] initWithString:@""];
+
         self.cssOutput = [[NSMutableString alloc] initWithString:@""];
         self.externalJSFilesOutput = [[NSMutableString alloc] initWithString:@""];
         self.collectedContentOfClass = [[NSMutableString alloc] initWithString:@""];
@@ -434,6 +442,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.weAreSkippingTheCompleteContentInThisElement = NO;
         self.ignoreAddingIDsBecauseWeAreInClass = NO;
         self.onInitInHandler = NO;
+        self.initStageDefer = NO;
         self.referenceAttributeInHandler = NO;
         self.handlerofDrawview = NO;
         self.methodAttributeInHandler = @"";
@@ -499,7 +508,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Zur Sicherheit mache ich von allem ne Copy.
         // Nicht, dass es beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy], nil];
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.jsInitstageDeferOutput copy],[self.jsToUseLaterOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy], nil];
         return r;
     }
 }
@@ -1982,11 +1991,11 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self setTheValue:[attributeDict valueForKey:@"enabled"] ofAttribute:@"enabled"];
     }
 
-    if ([attributeDict valueForKey:@"isdefault"])
-    {
-        self.attributeCount++;
-        [self setTheValue:[attributeDict valueForKey:@"isdefault"] ofAttribute:@"isdefault"];
-    }
+    //if ([attributeDict valueForKey:@"isdefault"])
+    //{
+    //    self.attributeCount++;
+    //    [self setTheValue:[attributeDict valueForKey:@"isdefault"] ofAttribute:@"isdefault"];
+    //}
 
     if ([attributeDict valueForKey:@"focusable"])
     {
@@ -2825,11 +2834,14 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jsComputedValuesOutput appendString:[result objectAtIndex:13]];
         [self.jsConstraintValuesOutput appendString:[result objectAtIndex:14]];
 
+        [self.jsInitstageDeferOutput appendString:[result objectAtIndex:15]];
+        [self.jsToUseLaterOutput appendString:[result objectAtIndex:16]];
+
         // Hier adden, weil ich NICHT die Werte aus diesem Array mit an die Rekursions-Stufe übergeben hatte
-        [self.allImgPaths addObjectsFromArray:[result objectAtIndex:15]];
+        [self.allImgPaths addObjectsFromArray:[result objectAtIndex:17]];
 
         // Hier wieder überschreiben, da ich ja die Werte mit übergeben hatte
-        self.allIncludedIncludes = [[NSMutableArray alloc] initWithArray:[result objectAtIndex:16]];
+        self.allIncludedIncludes = [[NSMutableArray alloc] initWithArray:[result objectAtIndex:18]];
     }
 
     NSLog(@"Leaving recursion");
@@ -4877,11 +4889,20 @@ didStartElement:(NSString *)elementName
 
 
         // ToDo: Wird derzeit nicht ausgewertet - ist zum ersten mal bei einem imgbutton aufgetaucht (nur da?)
+        // Imgbutton ist ja auch self defind class....
         if ([attributeDict valueForKey:@"text"])
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'text' for now.");
         }
+        if ([attributeDict valueForKey:@"isdefault"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'isdefault' for now.");
+        }
+
+
+
 
         /////////// 'nur'-Multistatebutton-Attribute - To Do //////////////
         if ([attributeDict valueForKey:@"maxstate"])
@@ -6835,18 +6856,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         self.weAreCollectingTheCompleteContentInClass = YES;
     }
 
-    if ([elementName isEqualToString:@"fileUpload"]) // ToDo (ist selbst defnierte Klasse)
-    {
-        element_bearbeitet = YES;
-        self.weAreCollectingTheCompleteContentInClass = YES;
 
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"filter"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"filterdesc"])
-            self.attributeCount++;
-    }
     // ToDo
     if ([elementName isEqualToString:@"nicemodaldialog"])
     {
@@ -6902,31 +6912,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         self.weAreCollectingTheCompleteContentInClass = YES;
     }
 
-    // ToDo
-    if ([elementName isEqualToString:@"certdatepickerXXX"])
-    {
-        element_bearbeitet = YES;
 
-
-        if ([attributeDict valueForKey:@"closeonselect"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"id"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"initstage"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"selecteddate"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"visible"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"x"])
-            self.attributeCount++;
-
-
-
-        // ToDo
-        // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreCollectingTheCompleteContentInClass = YES;
-    }
     // ToDo
     if ([elementName isEqualToString:@"BDSinputgrid"])
     {
@@ -7410,6 +7396,15 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         NSString *elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
         NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
 
+        // Extra-Sprung bei 'when' / 'switch' für elem und elemTyp
+        int z = 3;
+        while ([elemTyp isEqualToString:@"when"] || [elemTyp isEqualToString:@"switch"])
+        {
+            elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-z];
+            elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-z];
+            z++;
+        }
+
 
         // http://www.openlaszlo.org/lps4.9/docs/reference/ <method> => s. Attribut 'name'
         // Deswegen bei canvas und library 'method' als Funktionen global verfügbar machen
@@ -7526,9 +7521,18 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         element_bearbeitet = YES;
 
         NSString *enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
-
-
         NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
+
+
+        // Extra-Sprung bei 'when' / 'switch' für elem und elemTyp
+        int z = 3;
+        while ([enclosingElemTyp isEqualToString:@"when"] || [enclosingElemTyp isEqualToString:@"switch"])
+        {
+            enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-z];
+            enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-z];
+            z++;
+        }
+
 
         // Beim Schließen des Tags dann auf den 'canvas' reagieren
         // Falls wir eine Klasse auswerten, die von drawview erbt, muss er natürlich auch richtig darauf reagieren.
@@ -8121,8 +8125,8 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [d removeObjectForKey:@"text_padding_x"];
         [d removeObjectForKey:@"text_padding_y"];
 
-
         // von 'text':
+        [d removeObjectForKey:@"text"];
         [d removeObjectForKey:@"textalign"];
         [d removeObjectForKey:@"textindent"];
         [d removeObjectForKey:@"letterspacing"];
@@ -8154,7 +8158,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [d removeObjectForKey:@"ignoreplacement"];
 
         /* [d removeObjectForKey:@"value"]; Auskommentieren, bricht sonst Beispiel <basecombobox> */
-        [d removeObjectForKey:@"text"];
 
 
         // Really Build-In-Values??
@@ -8249,16 +8252,11 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // [o appendFormat:@"\n  if (jQuery.inArray('defer',obj.attributeValues) == -1)"]; // try 1 --> Ohne Erfolg...
         // [o appendFormat:@"\n  if ($(id).is(':visible'))"]; // try 2 --> Ohne Erfolg, bricht viewlose Elemente (swfso z. B.)
 
-        if ([elementName isEqualToString:@"deferview"])
-        {
-            //[o appendString:@"/*"];
-        }
-
         [o appendString:@"\n  interpretObject(obj,id,iv);\n"];
 
         if ([elementName isEqualToString:@"deferview"])
         {
-            //[o appendString:@"*/"];
+            self.initStageDefer = YES;
         }
 
 
@@ -8268,7 +8266,14 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // b) damit Simplelayout hiernach NICHT EINMAL ausgeführt werden kann
         // War früher jQueryOutput.
         // analog auch beim beenden beachten. (Falls es hier geändert wird, dort mitändern!)
-        [self.jQueryOutput0 appendString:o];
+        if (self.initStageDefer)
+        {
+            [self.jsInitstageDeferOutput appendString:o];
+        }
+        else
+        {
+            [self.jQueryOutput0 appendString:o];
+        }
 
 
         // Hoffentlich ist das nicht zu lax, aber wir erlauben zwischen Klassen erstmal immer
@@ -8817,10 +8822,22 @@ BOOL isJSExpression(NSString *s)
         if (![rekursiveRueckgabeJsConstraintValuesOutput isEqualToString:@""])
             NSLog(@"String 14 aus der Rekursion wird unser JS-Constraint-Values-content für JS-Objekt");
 
-        [self.allImgPaths addObjectsFromArray:[result objectAtIndex:15]];
 
-        // Nur Erinnerung, dass es index 16 gibt. Es können in einer Klasse wohl keine includes auftauchen
-        // self.allIncludedIncludes = [[NSMutableArray alloc] initWithArray:[result objectAtIndex:16]];
+
+        NSString *rekursiveRueckgabeJsInitstageDeferOutput = [result objectAtIndex:15];
+        if (![rekursiveRueckgabeJsInitstageDeferOutput isEqualToString:@""])
+            NSLog(@"String 15 aus der Rekursion wird unser JS-Initstage-Defer-content für JS-Objekt");
+
+        NSString *rekursiveRueckgabeJsToUseLaterOutput = [result objectAtIndex:16];
+        if (![rekursiveRueckgabeJsToUseLaterOutput isEqualToString:@""])
+            NSLog(@"String 16 aus der Rekursion wird unser To-Use-Later-content für JS-Objekt");
+
+
+
+        [self.allImgPaths addObjectsFromArray:[result objectAtIndex:17]];
+
+        // Nur Erinnerung, dass es index 18 gibt. Es können in einer Klasse wohl keine includes auftauchen
+        // self.allIncludedIncludes = [[NSMutableArray alloc] initWithArray:[result objectAtIndex:18]];
 
 
 
@@ -8828,11 +8845,16 @@ BOOL isJSExpression(NSString *s)
         rekursiveRueckgabeOutput = [rekursiveRueckgabeOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         rekursiveRueckgabeJsComputedValuesOutput = [rekursiveRueckgabeJsComputedValuesOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
+        rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
+        rekursiveRueckgabeJsToUseLaterOutput = [rekursiveRueckgabeJsToUseLaterOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
+
 
         // In manchen JS/jQuery tauchen " auf, die müssen escaped werden
         rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+        rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+        rekursiveRueckgabeJsToUseLaterOutput = [rekursiveRueckgabeJsToUseLaterOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
 
 
 
@@ -8872,7 +8894,8 @@ BOOL isJSExpression(NSString *s)
         rekursiveRueckgabeJsHeadOutput = [rekursiveRueckgabeJsHeadOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJsComputedValuesOutput = [rekursiveRueckgabeJsComputedValuesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
-
+        rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
+        rekursiveRueckgabeJsToUseLaterOutput = [rekursiveRueckgabeJsToUseLaterOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
 
 
 
@@ -8985,10 +9008,18 @@ BOOL isJSExpression(NSString *s)
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsConstraintValuesOutput];
         [self.jsOLClassesOutput appendString:@"\";\n\n"];
 
-
         [self.jsOLClassesOutput appendString:@"  this.contentJQuery = \""];
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJQueryOutput];
+        [self.jsOLClassesOutput appendString:@"\";\n\n"];
+
+        [self.jsOLClassesOutput appendString:@"  this.contentJSInitstageDefer = \""];
+        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsInitstageDeferOutput];
         [self.jsOLClassesOutput appendString:@"\";\n"];
+
+// ToUseLater:
+//        [self.jsOLClassesOutput appendString:@"  this.contentJSToUseLater = \""];
+//        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsToUseLaterOutput];
+//        [self.jsOLClassesOutput appendString:@"\";\n\n"];
 
 
         [self.jsOLClassesOutput appendString:@"};\n"];
@@ -9002,14 +9033,12 @@ BOOL isJSExpression(NSString *s)
     }
 
     if ([elementName isEqualToString:@"class"] ||
-        [elementName isEqualToString:@"fileUpload"] ||
         [elementName isEqualToString:@"dlginfo"] ||
         [elementName isEqualToString:@"dlgwarning"] ||
         [elementName isEqualToString:@"dlgyesno"] ||
         [elementName isEqualToString:@"nicepopup"] ||
         [elementName isEqualToString:@"nicemodaldialog"] ||
-        [elementName isEqualToString:@"nicedialog"] ||
-        [elementName isEqualToString:@"certdatepickerXXX"])
+        [elementName isEqualToString:@"nicedialog"])
     {
         element_geschlossen = YES;
 
@@ -9697,6 +9726,17 @@ BOOL isJSExpression(NSString *s)
         else
         {
             NSString* enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-1];
+            NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-1];
+
+            // Extra-Sprung bei 'when' / 'switch' für elem und elemTyp
+            int z = 2;
+            while ([enclosingElemTyp isEqualToString:@"when"] || [enclosingElemTyp isEqualToString:@"switch"])
+            {
+                enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-z];
+                enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-z];
+                z++;
+            }
+
 
 
             NSString *s = [self holDenGesammeltenTextUndLeereIhn];
@@ -9909,13 +9949,29 @@ BOOL isJSExpression(NSString *s)
         [self.rememberedID4closingSelfDefinedClass removeLastObject];
 
 
+ /* MARKER -60 / -31 vom defer-Test */
         // Wenn wir einen String gefunden haben, dann IN den existierenden Output injecten:
         if ([s length] > 0)
         {
             // Da ich den string mit ' umschlossen habe, muss ich eventuelle ' im String escapen
             s = [self protectThisSingleQuotedJavaScriptString:s];
 
-            [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-34]; /* MARKER -60 / -31 vom defer-Test */
+
+            if (self.initStageDefer)
+            {
+                [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-34];
+            }
+            else
+            {
+                [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-34];
+            }
+        }
+
+
+        NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-1];
+        if ([enclosingElemTyp isEqualToString:@"deferview"])
+        {
+            self.initStageDefer = NO;
         }
 
 
@@ -10030,7 +10086,7 @@ BOOL isJSExpression(NSString *s)
     // initial-scale baut links und rechts einen kleinen Abstand ein. Wollen wir das?
     // Er springt dann etwas immer wegen adjustOffsetOnBrowserResize - To Check
     [pre appendString:@"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n"];
-    //      [pre appendString:@"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.024\" />\n"]; // => Dann perfekte Breite, aber Grafiken wirken etwas verwaschen.ToDo@End
+    //      [pre appendString:@"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.024\" />\n"]; // => Dann perfekte Breite, aber Grafiken wirken etwas verwaschen.To Do@End
     //[pre appendString:@"<meta name=\"viewport\" content=\"\" />\n"];
 
     // Icon für Bookmark bei iOS:
@@ -10163,9 +10219,10 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"$(window).load(function()\n{\n"];
 
 
-    // So lange ich den TabSheetContainer nicht auswerte, diese Methoden nach implementieren (ToDo?)
+    // So lange ich den TabSheetContainer nicht auswerte, muss ich diese Methoden nachimplementieren...
     [self.output appendString:@"  if (window['tabsMain']) tabsMain.selecttab = function(index) { $(this).tabs('select', index ) }\n"];
     [self.output appendString:@"  if (window['tabsMain']) tabsMain.next = function() { $(this).tabs('select', $(this).tabs('option', 'selected')+1) }\n"];
+
 
     [self.output appendString:@"  if (window['rudStpfl']) rudStpfl.rolldown = function() {} // ToDo\n"];
     [self.output appendString:@"  if (window['rudWeitereInfos']) rudWeitereInfos.isvalid = true; // ToDo\n"];
@@ -10175,16 +10232,20 @@ BOOL isJSExpression(NSString *s)
 
     [self.output appendString:@"  var dlgsave = new dlg();"];
     [self.output appendString:@"  var dlgwaitonline = new dlg();"];
-    [self.output appendString:@"  ShowError = function(x) { /* alert(x); */ };\n"];
-    [self.output appendString:@"  // dlgFamilienstandSingle heimlich als Objekt einführen (diesmal direkt im Objekt, ohne prototype)\n"];
+    [self.output appendString:@"  // ShowError = function(x) { /* alert(x); */ };\n"];
     [self.output appendString:@"  function dlg()\n  {\n    // Extern definiert\n    this.open = open;\n    // Intern definiert (beides möglich)\n"];
-    [self.output appendString:@"    // this.completeInstantiation = function completeInstantiation() { };\n  }\n"];
+    [self.output appendString:@"     this.completeInstantiation = function completeInstantiation() { };\n  }\n"];
     [self.output appendString:@"  function open()\n  {\n    alert('Willst du wirklich deine Ehefrau löschen? Usw...');\n  }\n"];
     [self.output appendString:@"  var dlgFamilienstandSingle = new dlg();\n\n"];
 
+    // Seitdem ich die initstage=defer-Klassen nach ganz untenv erschoben habe, taucht das hier auf,
+    // Er erwartet glaube ich die Variable _inner in einem 'BDSReplicator'
+    [self.output appendString:@"  if (element139) element139._inner = element139;\n"];
+    [self.output appendString:@"  if (element139) element139._scrollview = element139;\n"];
+    [self.output appendString:@"  if (element139) element139._innerscroll = element139;\n"];
+    [self.output appendString:@"  if (element139) element139.measureHeight = function() {};\n\n"];
 
-    
-    
+
     // Normale Javascript-Anweisungen
     if (![self.jsOutput isEqualToString:@""])
     {
@@ -10251,10 +10312,38 @@ BOOL isJSExpression(NSString *s)
         [self.output appendString:@"  $('ul').removeClass('ui-corner-all');\n"];
         [self.output appendString:@"  $('ul').addClass('ui-corner-top');\n"];
     }
-    // Remove Splashscreen
-    [self.output appendString:@"\n  $('#splashtag_').remove(); // The Build-In-SplashTag"];
+
+    // Remove Splashscreen(s)
+    [self.output appendString:@"\n  $('#splashtag_').remove(); // The Build-In-SplashTag\n"];
     if (ownSplashscreen)
-        [self.output appendString:@"\n  $('#splashscreen_').remove();"];
+        [self.output appendString:@"\n  $('#splashscreen_').remove();\n"];
+
+
+
+
+
+    if (![self.jsInitstageDeferOutput isEqualToString:@""])
+    {
+        [self.output appendString:@"\n\n  /*******************************************************************/\n"];
+        [self.output appendString:@"  /***************************** Grenze ******************************/\n"];
+        [self.output appendString:@"  /******************* Initstage Defer ist hier nach *****************/\n"];
+        [self.output appendString:@"  /*******************************************************************/\n"];
+
+        [self.output appendString:self.jsInitstageDeferOutput];
+    }
+
+    if (![self.jsToUseLaterOutput isEqualToString:@""])
+    {
+        [self.output appendString:@"\n\n  /*******************************************************************/\n"];
+        [self.output appendString:@"  /***************************** Grenze ******************************/\n"];
+        [self.output appendString:@"  /********************* ToUseLater ist hier nach ********************/\n"];
+        [self.output appendString:@"  /*******************************************************************/\n"];
+
+        [self.output appendString:self.jsToUseLaterOutput];
+    }
+
+
+
 
     [self.output appendString:@"\n});\n</script>\n\n"];
 
@@ -10270,7 +10359,7 @@ BOOL isJSExpression(NSString *s)
     // NSString * path = [[NSString alloc] initWithString:dlDirectory];
     //... deswegen ab jetzt immer im gleichen Verzeichnis wie das OpenLaszlo-input-File
     // Die Dateien dürfen dann nur nicht zufälligerweise genau so heißen wie welche im Verzeichnis
-    // (ToDo bei Public Release)
+    // (To Do bei Public Release)
     NSString *path = [[self.pathToFile URLByDeletingLastPathComponent] relativePath];
 
 
@@ -11480,6 +11569,8 @@ BOOL isJSExpression(NSString *s)
     "    canvas.versionInfoString = function() { return '1.0'; }\n"
     "\n"
     "\n"
+
+    /*
     "    // Hilfsfunktion, um jederzeit die Mauskoordinaten einlesen zu können\n"
     "    window.mouseXPos = -1000;\n"
     "    window.mouseYPos = -1000;\n"
@@ -11490,6 +11581,8 @@ BOOL isJSExpression(NSString *s)
     "            $(canvas).triggerHandler('change'); // Etwas geschummelt, aber damit die Examples in Kapitel 32 klappen\n"
     "        });\n"
     "    });\n"
+     */
+
     // Variante mit Delay (um Resourcen zu schonen):
     //function getMousePosition(timeoutMilliSeconds) {
     //    // "one" attaches the handler to the event and removes it after it has executed once 
@@ -11520,7 +11613,7 @@ BOOL isJSExpression(NSString *s)
     "    $debug = false;\n"
     "    $swf8 = false;\n"
     "\n"
-    "    flash = { net : { FileReference : function() { } } }\n"
+    "    flash = { net : { FileReference : function() { this.addListener = function() {} } } }\n"
     "}\n"
     "\n"
     "\n"
@@ -12050,7 +12143,7 @@ BOOL isJSExpression(NSString *s)
     "            this.el.animate(this.prop,this.to,this.duration,this.isRelative,this.moreArgs,this.motion);\n"
     "        }\n"
     "\n"
-    "       this.stop = function() { /* ToDo, seems to stop the aniamtion */ }\n"
+    "       this.stop = function() { /* ToDo, seems to stop the animation */ }\n"
     "\n"
     "        if (this.start)\n"
     "            this.doStart();\n"
@@ -12136,6 +12229,10 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        this.setClipboard = function(s) {\n"
     "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "    this.contextmenu = function() {\n"
     "    }\n"
     "\n"
     "\n"
@@ -13009,6 +13106,7 @@ BOOL isJSExpression(NSString *s)
     "var LzDataElement = lz.DataElement;\n"
     "var LzDataText = lz.DataText;\n"
     "var LzDelegate = lz.Delegate;\n"
+    "var LzContextMenu = lz.contextmenu;\n"
     "\n"
     "// deprecated\n"
     "lz.DataNode = lz.DataElement;\n"
@@ -13021,11 +13119,11 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "HTMLDivElement.prototype.doroll = function() {}; // ToDo <-- Seitdem ich rollUpDownContainerReplicator auswerte, taucht es auf\n"
     "\n"
-    "function LzContextMenu() { }\n"
     "\n"
     "\n"
     "\n"
-    "var SonstigeAusgaben = null; //function() {}; // ToDo <-- id von BDSinputgrid, welches noch nicht ausgewertet wird, deswegen muss ich die Var noch manuell bekannt machen\n"
+    "\n"
+    "var SonstigeAusgaben = null; // ToDo <-- id von BDSinputgrid, welches noch nicht ausgewertet wird, deswegen muss ich die Var noch manuell bekannt machen\n"
     "\n"
     "\n"
     "\n"
@@ -13777,6 +13875,10 @@ BOOL isJSExpression(NSString *s)
     "        else\n"
     "            alert('unsupported value for stretches. value: '+value);\n"
     "    }\n"
+    "    else if (attributeName == 'isdefault')\n"
+    "    {\n"
+    "       // Give me focus; To Do\n"
+    "    }\n"
     "    else if (attributeName == 'enabled' && ($(me).is('input') || $(me).is('select')))\n"
     "    {\n"
     "        $(me).get(0).disabled = !value;\n"
@@ -14044,7 +14146,6 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'pooling' ||\n"
     "            attributeName === 'size' ||\n"
     "            attributeName === 'label' ||\n"
-    "            attributeName === 'isdefault' ||\n"
     "            attributeName === 'countApplies' ||\n"
     "            attributeName === 'mouseIsDown' ||\n"
     "            attributeName === 'applied' ||\n"
@@ -14399,6 +14500,24 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Attribute/Methoden von <div> (OL: <replicator>)     //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "////////////////////////INCOMPLETE///////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "\n"
+    "//////////////////////////////////////////////////////////\n"
+    "// nodes / ToDo                                         //\n"
+    "//////////////////////////////////////////////////////////\n"
+    "HTMLDivElement.prototype.nodes = [];\n"
+    "HTMLInputElement.prototype.nodes = [];\n"
+    "HTMLSelectElement.prototype.nodes = [];\n"
+    "HTMLButtonElement.prototype.nodes = [];\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
     "// AttributeMethoden von <div class=\"div_text\"> (OL: <text>) //\n"
     "/////////////////////////////////////////////////////////\n"
     "////////////////////////INCOMPLETE///////////////////////\n"
@@ -14417,7 +14536,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "//////////////////////////////////////////////////////////\n"
-    "// addFormat() - nachimplementiert                      //\n"
+    "// addFormat()                                          //\n"
     "//////////////////////////////////////////////////////////\n"
     "HTMLDivElement.prototype.addFormat = function() {\n"
     "    warnOnWrongClass(this);\n"
@@ -14427,7 +14546,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "//////////////////////////////////////////////////////////\n"
-    "// addText() - nachimplementiert                        //\n"
+    "// addText()                                            //\n"
     "//////////////////////////////////////////////////////////\n"
     "HTMLDivElement.prototype.addText = function(s) {\n"
     "    warnOnWrongClass(this);\n"
@@ -14443,7 +14562,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// clearText() - nachimplementiert                     //\n"
+    "// clearText()                                         //\n"
     "/////////////////////////////////////////////////////////\n"
     "var clearTextFunction = function () {\n"
     "    warnOnWrongClass(this);\n"
@@ -14454,7 +14573,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// escapeText() - nachimplementiert                    //\n"
+    "// escapeText()                                        //\n"
     "/////////////////////////////////////////////////////////\n"
     "var escapeTextFunction = function (s) {\n"
     "    // warnOnWrongClass(this);\n"
@@ -16976,6 +17095,12 @@ BOOL isJSExpression(NSString *s)
     "    // Replace-IDs von contentJQuery ersetzen\n"
     "    var s = replaceID(obj.contentJQuery, r, r2);\n"
     "    // Dann den jQuery-Content hinzufügen/auswerten\n"
+    "    if (s.length > 0)\n"
+    "        evalCode(s);\n"
+    "\n"
+    "    // Replace-IDs von contentJSInitstageDefer ersetzen\n"
+    "    var s = replaceID(obj.contentJSInitstageDefer, r, r2);\n"
+    "    // Dann den initstage-Defer-Content hinzufügen/auswerten\n"
     "    if (s.length > 0)\n"
     "        evalCode(s);\n"
     "}\n"

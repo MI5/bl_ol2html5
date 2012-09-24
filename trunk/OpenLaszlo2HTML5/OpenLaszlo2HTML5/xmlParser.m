@@ -30,6 +30,8 @@
 // - auswahl ob $swf8 usw. true oder false
 // - Schalter für 'Writing Log-File to File-System' (search the 'x' string)
 // - Anzahl ausgewertete Elemente anzeigen (self.elementeZaehler)
+// - trigger 'oninit' for all elements 'non-blocking' (May increase display time of elements - not suitable in all situations
+//   e. g. oninit creates new elements)
 //
 //
 //
@@ -989,7 +991,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self setTheValue:[attributeDict valueForKey:@"valign"] ofAttribute:@"valign"];
     }
 
-    // speichern, falls height schon gesetz wurde (für Attribut resource)
+    // speichern, falls height schon gesetzt wurde (für Attribut resource)
     BOOL heightGesetzt = NO;
     if ([attributeDict valueForKey:@"height"])
     {
@@ -5111,9 +5113,24 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Setting the attribute 'value' as jQuerys val().");
 
-            // Muss jQueryOutput0 (nicht jQueryOutput) sein, weil z.B. Constraints den Wert auslesen wollen (Bsp. <combobox>)
-            [self.jQueryOutput0 appendFormat:@"\n  // Setting the value of '%@'\n",self.zuletztGesetzteID];
-            [self.jQueryOutput0 appendFormat:@"  $('#%@').val(%@);\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"value"]];
+
+            NSString* v = [attributeDict valueForKey:@"value"];
+
+
+            if ([v hasPrefix:@"$path{"])
+            {
+                // Ein relativer Pfad zum vorher gesetzen XPath Ich nehme Bezug zum letzten lastDP_ und dem dort gesetzten Pfad.
+                v = [self removeOccurrencesOfDollarAndCurlyBracketsIn:v];
+                // Die Variable 'lastDP_' ist bekannt, da die Ausgabe hier in 'jsComputedValuesOutput' erfolgt.
+                // Genau da (und kurz vorher) erfolgt auch das setzen von lastDP_
+                [self.jsComputedValuesOutput appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'%@');\n",self.zuletztGesetzteID,v,@"value"];
+            }
+            else
+            {
+                // Muss jQueryOutput0 (nicht jQueryOutput) sein, weil z.B. Constraints den Wert auslesen wollen (Bsp. <combobox>)
+                [self.jQueryOutput0 appendFormat:@"\n  // Setting the value of '%@'\n",self.zuletztGesetzteID];
+                [self.jQueryOutput0 appendFormat:@"  $('#%@').val(%@);\n",self.zuletztGesetzteID,v];
+            }
         }
     }
 
@@ -5973,7 +5990,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-    if ([elementName isEqualToString:@"rollUpDown"])
+    if ([elementName isEqualToString:@"rollUpDownXXX"])
     {
         element_bearbeitet = YES;
 
@@ -7697,7 +7714,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         }
 
 
-        if ( [name isEqualToString:@"oninit"] || [name isEqualToString:@"onconstruct"])
+        if ( [name isEqualToString:@"oninitToDoDeleteMe"] || [name isEqualToString:@"onconstructToDoDeleteMe"])
         {
             self.attributeCount++;
             // NSLog(@"Binding the method in this handler to a jQuery-load-event.");
@@ -8162,7 +8179,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
         // Really Build-In-Values??
         [d removeObjectForKey:@"boxheight"];
-        [d removeObjectForKey:@"listwidth"];
         [d removeObjectForKey:@"controlwidth"];
         [d removeObjectForKey:@"title"];
 
@@ -8272,7 +8288,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         }
         else
         {
-            [self.jQueryOutput0 appendString:o];
+            [self.jsToUseLaterOutput appendString:o];
         }
 
 
@@ -8529,8 +8545,16 @@ BOOL isJSExpression(NSString *s)
                 // Da ich den string mit ' umschlossen habe, muss ich eventuelle ' im String escapen
                 s = [self protectThisSingleQuotedJavaScriptString:s];
 
-                // Dann IN den jQueryOutput hinein injecten
-                [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-34];
+                // Dann IN den Output hinein injecten
+                // [self.jQueryOutput insertString:s atIndex:[self.jQueryOutput length]-34];
+                if (self.initStageDefer)
+                {
+                    [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-34];
+                }
+                else
+                {
+                    [self.jsToUseLaterOutput insertString:s atIndex:[self.jsToUseLaterOutput length]-34];
+                }
             }
         }
     }
@@ -9012,14 +9036,14 @@ BOOL isJSExpression(NSString *s)
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJQueryOutput];
         [self.jsOLClassesOutput appendString:@"\";\n\n"];
 
+        [self.jsOLClassesOutput appendString:@"  this.contentJSToUseLater = \""];
+        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsToUseLaterOutput];
+        [self.jsOLClassesOutput appendString:@"\";\n\n"];
+
         [self.jsOLClassesOutput appendString:@"  this.contentJSInitstageDefer = \""];
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsInitstageDeferOutput];
         [self.jsOLClassesOutput appendString:@"\";\n"];
 
-// ToUseLater:
-//        [self.jsOLClassesOutput appendString:@"  this.contentJSToUseLater = \""];
-//        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsToUseLaterOutput];
-//        [self.jsOLClassesOutput appendString:@"\";\n\n"];
 
 
         [self.jsOLClassesOutput appendString:@"};\n"];
@@ -9560,7 +9584,7 @@ BOOL isJSExpression(NSString *s)
 
 
     // Schließen von rollUpDown
-    if ([elementName isEqualToString:@"rollUpDown"])
+    if ([elementName isEqualToString:@"rollUpDownXXX"])
     {
         self.weAreInRollUpDownWithoutSurroundingRUDContainer = NO;
 
@@ -9963,7 +9987,7 @@ BOOL isJSExpression(NSString *s)
             }
             else
             {
-                [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-34];
+                [self.jsToUseLaterOutput insertString:s atIndex:[self.jsToUseLaterOutput length]-34];
             }
         }
 
@@ -10320,18 +10344,6 @@ BOOL isJSExpression(NSString *s)
 
 
 
-
-
-    if (![self.jsInitstageDeferOutput isEqualToString:@""])
-    {
-        [self.output appendString:@"\n\n  /*******************************************************************/\n"];
-        [self.output appendString:@"  /***************************** Grenze ******************************/\n"];
-        [self.output appendString:@"  /******************* Initstage Defer ist hier nach *****************/\n"];
-        [self.output appendString:@"  /*******************************************************************/\n"];
-
-        [self.output appendString:self.jsInitstageDeferOutput];
-    }
-
     if (![self.jsToUseLaterOutput isEqualToString:@""])
     {
         [self.output appendString:@"\n\n  /*******************************************************************/\n"];
@@ -10343,6 +10355,31 @@ BOOL isJSExpression(NSString *s)
     }
 
 
+
+    if (![self.jsInitstageDeferOutput isEqualToString:@""])
+    {
+        [self.output appendString:@"\n\n  /*******************************************************************/\n"];
+        [self.output appendString:@"  /***************************** Grenze ******************************/\n"];
+        [self.output appendString:@"  /******************* Initstage Defer ist hier nach *****************/\n"];
+        [self.output appendString:@"  /*******************************************************************/\n"];
+
+        [self.output appendString:@"  $('#tabsMain').one('mouseenter', function(event) {\n"];
+
+        // ... und 2 Spaces mehr einrücken.
+        self.jsInitstageDeferOutput = [NSMutableString stringWithFormat:@"%@",[self inString:self.jsInitstageDeferOutput searchFor:@"  " andReplaceWith:@"    " ignoringTextInQuotes:YES]];
+
+        [self.output appendString:self.jsInitstageDeferOutput];
+        [self.output appendString:@"  });\n"];
+    }
+
+
+
+    [self.output appendString:@"\n  // To Speed up Loading I will trigger 'oninit' after everything is displayed (not suitable in every situation)\n"];
+    [self.output appendString:@"  // setTimeout()-function with 1 ms delay (setTimeout() is non-blocking, and though shows the Layout immediately)\n"];
+    // 0 oder 1 als ms-Angabe klappt nicht 100 %, dann zeigt er manchmal doch nicht das Layout an.
+    // Vermutlich checkt er intern nicht jede ms, und deswegen kann es u. U. passieren,
+    // dass er direkt weiter den Code ausführt, ka.
+    [self.output appendString:@"  window.setTimeout(function() { triggerOnInitForAllElements() }, 20);\n"];
 
 
     [self.output appendString:@"\n});\n</script>\n\n"];
@@ -11747,6 +11784,17 @@ BOOL isJSExpression(NSString *s)
     "    });\n"
     "\n"
     "    return heighestHeight;\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// wird aufgerufen, nachdem alles geladen wurde        //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function triggerOnInitForAllElements() {\n"
+    "    $('body').find('*').each( function() {\n"
+    "        $(this).triggerHandler('onconstruct');\n"
+    "        $(this).triggerHandler('oninit');\n"
+    "    });\n"
     "}\n"
     "\n"
     "\n"
@@ -13464,9 +13512,17 @@ BOOL isJSExpression(NSString *s)
     "    else if (attributeName == 'value')\n"
     "    {\n"
     "        if ($(me).is('input') && $(me).attr('type') === 'checkbox')\n"
+    "        {\n"
     "            $(me).prop('checked',value);\n"
+    "        }\n"
+    "        else if ($(me).is('option'))\n"
+    "        {\n"
+    "            $(me).val(value);\n"
+    "        }\n"
     "        else\n"
+    "        {\n"
     "            alert('So far unsupported value for value in setAttribute_()');\n"
+    "        }\n"
     "    }\n"
     "    else if (attributeName == 'font')\n"
     "    {\n"
@@ -14135,6 +14191,7 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'inset_y' ||\n"
     "            attributeName === 'focused' ||\n"
     "            attributeName === 'day' ||\n"
+    "            attributeName === 'userchecked' ||\n"
     "            attributeName === 'spacing' ||\n"
     "            attributeName === 'isopen' ||\n"
     "            attributeName === 'start' ||\n"
@@ -14958,6 +15015,16 @@ BOOL isJSExpression(NSString *s)
     "        return $(this).data('value_');\n"
     "    },\n"
     "    set : function(newValue){ $(this).data('value_',newValue); this.value = newValue; },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "Object.defineProperty(HTMLOptionElement.prototype, 'myValue', {\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "\n"
+    "        return $(this).val();\n"
+    "    },\n"
+    "    set : function(newValue){ $(this).val(newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -17094,6 +17161,12 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Replace-IDs von contentJQuery ersetzen\n"
     "    var s = replaceID(obj.contentJQuery, r, r2);\n"
+    "    // Dann den jQuery-Content hinzufügen/auswerten\n"
+    "    if (s.length > 0)\n"
+    "        evalCode(s);\n"
+    "\n"
+    "    // Replace-IDs von contentJSToUseLater ersetzen\n"
+    "    var s = replaceID(obj.contentJSToUseLater, r, r2);\n"
     "    // Dann den jQuery-Content hinzufügen/auswerten\n"
     "    if (s.length > 0)\n"
     "        evalCode(s);\n"

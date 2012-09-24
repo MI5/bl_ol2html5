@@ -1406,7 +1406,8 @@ void OLLog(xmlParser *self, NSString* s,...)
                 NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
 
                 // Schutz gegen Leerzeichen im Pfad
-                s = [s stringByAddingPercentEscapesUsingEncoding: NSUTF8StringEncoding];
+                //s = [s stringByAddingPercentEscapesUsingEncoding: NSUTF8StringEncoding];
+                // auskommentiert, weil sonst in 'class calculator (from calculator.lzx)' die Pfade doppelt escaped werden
 
                 NSURL *pathToImg = [NSURL URLWithString:s relativeToURL:path];
 
@@ -3479,7 +3480,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"tabelement"] ||
         [elementName isEqualToString:@"baselist"] ||
         [elementName isEqualToString:@"list"] ||
-        [elementName isEqualToString:@"rollUpDown"])
+        [elementName isEqualToString:@"rollUpDownXXX"])
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
@@ -4869,6 +4870,18 @@ didStartElement:(NSString *)elementName
     }
 
 
+
+    if ([elementName isEqualToString:@"vscrollbar"])
+    {
+        element_bearbeitet = YES;
+
+        NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+        // Recht spät setzen, damit es nach einem evtl. Clip ist
+        [self.jQueryOutput appendFormat:@"\n  // <vscrollbar>:\n"];
+        [self.jQueryOutput appendFormat:@"  $(%@).css('overflow-y','scroll');\n",idUmgebendesElement];
+        [self.jQueryOutput appendFormat:@"  $(%@).css('pointer-events','auto');\n",idUmgebendesElement];
+    }
 
 
 
@@ -9250,6 +9263,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"face"] ||
         [elementName isEqualToString:@"library"] ||
         [elementName isEqualToString:@"html"] ||
+        [elementName isEqualToString:@"vscrollbar"] ||
         [elementName isEqualToString:@"include"] ||
         [elementName isEqualToString:@"import"] ||
         [elementName isEqualToString:@"datapointer"] ||
@@ -10264,10 +10278,10 @@ BOOL isJSExpression(NSString *s)
 
     // Seitdem ich die initstage=defer-Klassen nach ganz untenv erschoben habe, taucht das hier auf,
     // Er erwartet glaube ich die Variable _inner in einem 'BDSReplicator'
-    [self.output appendString:@"  if (element139) element139._inner = element139;\n"];
-    [self.output appendString:@"  if (element139) element139._scrollview = element139;\n"];
-    [self.output appendString:@"  if (element139) element139._innerscroll = element139;\n"];
-    [self.output appendString:@"  if (element139) element139.measureHeight = function() {};\n\n"];
+    [self.output appendString:@"  if (window.element139) element139._inner = element139;\n"];
+    [self.output appendString:@"  if (window.element139) element139._scrollview = element139;\n"];
+    [self.output appendString:@"  if (window.element139) element139._innerscroll = element139;\n"];
+    [self.output appendString:@"  if (window.element139) element139.measureHeight = function() {};\n\n"];
 
 
     // Normale Javascript-Anweisungen
@@ -16866,6 +16880,19 @@ BOOL isJSExpression(NSString *s)
     "        $(id).prepend(obj.inherit.contentHTML);\n"
     "      }\n"
     "\n"
+    "\n"
+    // Muss auch zusätzlich hier drin vor executeJSCode sein, damit super_ bekannt ist
+    "      // Alle auf vorherigen Vererbungs-Ebenen hinzugefügten Methoden in das super_Objekt stecken\n"
+    "      var methodenDerVorfahren = { init: function() {} };\n"
+    "      for(var prop in id) {\n"
+    "        if (id.hasOwnProperty(prop) && typeof id[prop] === 'function') {\n"
+    "          methodenDerVorfahren[prop] = id[prop];\n"
+    "        }\n"
+    "      }\n"
+    "      // 'super' wurde durch 'super_' ersetzt und muss im Element bekannt sein, damit überschriebene Methoden erreichbar bleiben\n"
+    "      id.super_ = methodenDerVorfahren;\n"
+    "\n"
+    "\n"
     "      // Dann den kompletten JS-Code ausführen\n"
     "      executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id')+'_'+obj.inherit.name, $(id).attr('id'));\n"
     "    }\n"
@@ -17240,13 +17267,27 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
+    "//  class = basescrollbar (native class)                     //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.basescrollbar = function() {\n"
+    "  this.name = 'oo.basescrollbar';\n"
+    "  this.inherit = new oo.view();\n"
+    "\n"
+    "  this.selfDefinedAttributes = { axis : 'y', focusview : null, mousewheelactive : false, mousewheelevent_off : 'onblur', mousewheelevent_on : 'onfocus', pagesize : null, scrollable : true, scrollattr : '', scrollmax : null, scrolltarget : null, stepsize : 10, usemousewheel : true }\n"
+    "\n"
+    "  this.contentHTML = '';\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
     "//  class = vscrollbar (native class)                        //\n"
     "///////////////////////////////////////////////////////////////\n"
     "oo.vscrollbar = function() {\n"
     "  this.name = 'vscrollbar';\n"
-    "  this.inherit = new oo.view();\n"
+    "  this.inherit = new oo.basescrollbar();\n"
     "\n"
-    "  this.selfDefinedAttributes = { }\n"
+    "  this.selfDefinedAttributes = { disabledbgcolor : null }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"

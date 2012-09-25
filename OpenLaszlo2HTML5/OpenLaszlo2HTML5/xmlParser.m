@@ -1556,7 +1556,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         if ([elemName isEqualToString:@"window"])
         {
             [s appendString:@"\n  // Höhe/Breite des umgebenden Elements u. U. vergrößern\n"];
-            [s appendFormat:@"  adjustHeightAndWidth(%@_content);\n",elemName];
+            [s appendFormat:@"  adjustHeightAndWidth(%@_content_);\n",elemName];
         }
 
         [s appendString:@"\n  // Höhe/Breite des umgebenden Elements u. U. vergrößern\n"];
@@ -2986,7 +2986,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         if ([elemTyp isEqualToString:@"window"])
         {
-            s = [NSString stringWithFormat:@"%@_content",s];
+            s = [NSString stringWithFormat:@"%@_content_",s];
         }
     }
 
@@ -3007,23 +3007,30 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
     // Bricht Beispiel 27.6
-    //elem = [self korrigiereElemBeiWindow:elem];
+    // elem = [self korrigiereElemBeiWindow:elem];
 
     NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
+
+
+    [o appendFormat:@"\n  // Setting a 'simplelayout' (axis:x) in '%@':\n",elem];
 
     if ([attributeDict valueForKey:@"inset"])
     {
         self.attributeCount++;
         NSLog(@"Using the attribute 'inset' as spacing for the first element.");
 
-        [o appendString:@"\n  // 'inset' for the first element of this 'simplelayout' (axis:x)\n"];
-        [o appendFormat:@"  $('#%@').children().first().get(0).setAttribute_('x','%@px');\n",elem,[attributeDict valueForKey:@"inset"]];
+        NSString *inset = [attributeDict valueForKey:@"inset"];
+        if ([inset hasPrefix:@"$"])
+        {
+            inset = [self makeTheComputedValueComputable:inset];
+        }
+
+        [o appendFormat:@"  setSimpleLayoutXIn(%@,%@,%@);\n",elem,spacing,inset];
     }
-
-
-
-    [o appendFormat:@"\n  // Setting a 'simplelayout' (axis:x) in '%@':\n",elem];
-    [o appendFormat:@"  setSimpleLayoutXIn(%@,%@);\n",elem,spacing];
+    else
+    {
+        [o appendFormat:@"  setSimpleLayoutXIn(%@,%@);\n",elem,spacing];
+    }
 
 
     // Das war in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
@@ -3035,7 +3042,6 @@ void OLLog(xmlParser *self, NSString* s,...)
     // die nur in JS möglich ist, ob Wert schon gesetzt ist, nicht. (weil ist ja schon gesetzt)
     [self.jQueryOutput appendString:o];
 }
-
 
 
 
@@ -3051,24 +3057,30 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
     // Bricht Beispiel 27.6
-    //elem = [self korrigiereElemBeiWindow:elem];
+    // elem = [self korrigiereElemBeiWindow:elem];
 
     NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
+
+
+    [o appendFormat:@"\n  // Setting a 'simplelayout' (axis:y) in '%@':\n",elem];
 
     if ([attributeDict valueForKey:@"inset"])
     {
         self.attributeCount++;
         NSLog(@"Using the attribute 'inset' as spacing for the first element.");
 
-        [o appendString:@"\n  // 'inset' for the first element of this 'simplelayout' (axis:y)\n"];
-        [o appendFormat:@"  $('#%@').children().first().get(0).setAttribute_('y','%@px');\n",elem,[attributeDict valueForKey:@"inset"]];
+        NSString *inset = [attributeDict valueForKey:@"inset"];
+        if ([inset hasPrefix:@"$"])
+        {
+            inset = [self makeTheComputedValueComputable:inset];
+        }
+
+        [o appendFormat:@"  setSimpleLayoutYIn(%@,%@,%@);\n",elem,spacing,inset];
     }
-
-
-
-    [o appendFormat:@"\n  // Setting a 'simplelayout' (axis:y) in '%@':\n",elem];
-    [o appendFormat:@"  setSimpleLayoutYIn(%@,%@);\n",elem,spacing];
-
+    else
+    {
+        [o appendFormat:@"  setSimpleLayoutYIn(%@,%@);\n",elem,spacing];
+    }
 
 
     // Das war in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
@@ -3994,7 +4006,7 @@ didStartElement:(NSString *)elementName
             name = @"pointerWithoutName";
 
             [o appendString:@"\n  // Ein Datapointer ohne 'name'- oder 'id'-Attribut. Wohl nur um ein Handler daran zu binden oder so... hmmm\n"];
-            [o appendFormat:@" %@ = new lz.datapointer(%@);\n",name,dp];
+            [o appendFormat:@"  %@ = new lz.datapointer(%@);\n",name,dp];
         }
 
         // Falls gleich eine Methode kommt, die sich an diesen Pointer binden möchte
@@ -4605,13 +4617,13 @@ didStartElement:(NSString *)elementName
         [self.output appendFormat:@"<div id=\"%@_title\" class=\"div_text div_windowTitle\">%@</div>\n", self.zuletztGesetzteID, title];
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendFormat:@"<div id=\"%@_content\" class=\"div_windowContent\">\n", self.zuletztGesetzteID];
+        [self.output appendFormat:@"<div id=\"%@_content_\" class=\"div_windowContent\">\n", self.zuletztGesetzteID];
 
         if ([attributeDict valueForKey:@"height"])
         {
             // Ich muss auch von windowContent die Height anpassen, falls diese gesetzt wurde.
             [self.jQueryOutput appendString:@"\n  // Wenn bei <window> die height gesetzt wurde: Auch vom div_windowContent die Height dann anpassen"];
-            [self.jQueryOutput appendFormat:@"\n  $(%@_content).height(%@-25);\n",self.zuletztGesetzteID, [attributeDict valueForKey:@"height"]];
+            [self.jQueryOutput appendFormat:@"\n  $(%@_content_).height(%@-25);\n",self.zuletztGesetzteID, [attributeDict valueForKey:@"height"]];
 
             title = [attributeDict valueForKey:@"title"];
         }
@@ -4620,7 +4632,7 @@ didStartElement:(NSString *)elementName
         {
             // Ich muss auch von windowContent die width anpassen, falls diese gesetzt wurde.
             [self.jQueryOutput appendString:@"\n  // Wenn bei <window> die width gesetzt wurde: Auch vom div_windowContent die width dann anpassen"];
-            [self.jQueryOutput appendFormat:@"\n  $(%@_content).width(%@);\n",self.zuletztGesetzteID, [attributeDict valueForKey:@"width"]];
+            [self.jQueryOutput appendFormat:@"\n  $(%@_content_).width(%@);\n",self.zuletztGesetzteID, [attributeDict valueForKey:@"width"]];
 
             title = [attributeDict valueForKey:@"title"];
         }
@@ -8301,7 +8313,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         }
         else
         {
-            [self.jsToUseLaterOutput appendString:o];
+            [self.jQueryOutput0 appendString:o];
         }
 
 
@@ -8566,7 +8578,7 @@ BOOL isJSExpression(NSString *s)
                 }
                 else
                 {
-                    [self.jsToUseLaterOutput insertString:s atIndex:[self.jsToUseLaterOutput length]-34];
+                    [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-34];
                 }
             }
         }
@@ -10001,7 +10013,7 @@ BOOL isJSExpression(NSString *s)
             }
             else
             {
-                [self.jsToUseLaterOutput insertString:s atIndex:[self.jsToUseLaterOutput length]-34];
+                [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-34];
             }
         }
 
@@ -12811,10 +12823,24 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            this.dataset = window[this.datasetName];\n"
     "\n"
-    "            if (this.dataset && this.dataset.rawdata) // Legacy-Code solange es noch als Array ausgewertete Datasets gibt\n"
+    "            // Standardfall:\n"
+    "            if (this.dataset && this.dataset.rawdata)\n"
+    "            {\n"
     "                this.xml = getXMLDocumentFromString(this.dataset.rawdata);\n"
+    "            }\n"
+    "            // Wolkenfall:\n"
+    "            else if (this.dataset && this.dataset.src)\n"
+    "            {\n"
+    "                // this.xml = getXMLDocumentFromFile(this.dataset.src);\n"
+    "                // Will break due to cross-domain policy in testing environment\n"
+    "                this.xml = getXMLDocumentFromString('<error><crossdomainpolicy></crossdomainpolicy></error>'); // Damit auf jeden Fall ein [Object Document] zurückkommt\n"
+    "            }\n"
     "            else\n"
-    "                this.xml = getXMLDocumentFromString(''); // Damit auf jeden Fall ein [Object Document] zurückkommt\n"
+    "            {\n"
+    //"                this.xml = getXMLDocumentFromString(''); // Damit auf jeden Fall ein [Object Document] zurückkommt\n"
+    // Wirft im FF den Fehler 'Kein Element gefunden', deswegen packe ich nen xml rein:
+    "                this.xml = getXMLDocumentFromString('<error><noxmlfound></noxmlfound></error>'); // Damit auf jeden Fall ein [Object Document] zurückkommt\n"
+    "            }\n"
     "        }\n"
     "\n"
     "\n"
@@ -13772,6 +13798,13 @@ BOOL isJSExpression(NSString *s)
     "            // Maus-Cursor anpassen\n"
     "            $(me).css('cursor','pointer');\n"
     "        }\n"
+    "        else if (value === false)\n"
+    "        {\n"
+    "            // Pointer-Events verhindern\n"
+    "            $(me).css('pointer-events','none');\n"
+    "            // Maus-Cursor zurück auf default\n"
+    "            $(me).css('cursor','auto');\n"
+    "        }\n"
     "        else\n"
     "            alert('So far unsupported value for clickable. value: '+value);\n"
     "    }\n"
@@ -14124,15 +14157,15 @@ BOOL isJSExpression(NSString *s)
     "            $(me).resizable();\n"
     "\n"
     "            $(me).on('resize', function(event,ui) {\n"
-    "                $('#'+this.id+'_content').get(0).setAttribute_('width',ui.size.width /* -10 */);\n"
-    "                $('#'+this.id+'_content').get(0).setAttribute_('height',ui.size.height-20);\n"
+    "                $('#'+this.id+'_content_').get(0).setAttribute_('width',ui.size.width /* -10 */);\n"
+    "                $('#'+this.id+'_content_').get(0).setAttribute_('height',ui.size.height-20);\n"
     "                $(this).triggerHandler('onwidth',ui.size.width);\n"
     "                $(this).triggerHandler('onheight',ui.size.height);\n"
     "            });\n"
     "\n"
     "            $(me).on('resizestop', function(event,ui) {\n"
-    "                $('#'+this.id+'_content').get(0).setAttribute_('width',ui.size.width /* -10 */);\n"
-    "                $('#'+this.id+'_content').get(0).setAttribute_('height',ui.size.height-20);\n"
+    "                $('#'+this.id+'_content_').get(0).setAttribute_('width',ui.size.width /* -10 */);\n"
+    "                $('#'+this.id+'_content_').get(0).setAttribute_('height',ui.size.height-20);\n"
     "                $(this).triggerHandler('onwidth',ui.size.width);\n"
     "                $(this).triggerHandler('onheight',ui.size.height);\n"
     "            });\n"
@@ -14216,6 +14249,7 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'animduration' ||\n"
     "            attributeName === 'pooling' ||\n"
     "            attributeName === 'size' ||\n"
+    "            attributeName === 'text_x' ||\n"
     "            attributeName === 'label' ||\n"
     "            attributeName === 'countApplies' ||\n"
     "            attributeName === 'mouseIsDown' ||\n"
@@ -15755,7 +15789,7 @@ BOOL isJSExpression(NSString *s)
     "            if (($(el).hasClass('div_window')))\n"
     "            {\n"
     "                el.setAttribute_('height',getMaxOfArray(heights)+10);\n"
-    "                $('#'+el.id+'_content').get(0).setAttribute_('height',getMaxOfArray(heights)-10)\n"
+    "                $('#'+el.id+'_content_').get(0).setAttribute_('height',getMaxOfArray(heights)-10)\n"
     "            }\n"
     "            else\n"
     "            {\n"
@@ -15776,10 +15810,10 @@ BOOL isJSExpression(NSString *s)
     "        var widths = $(el).children().map(function () { if (isMultiEl(this)) return $(this).outerWidth(true)+$(this).next().outerWidth(true); return $(this).outerWidth(true)+$(this).position().left; }).get();\n"
     "\n"
     "        // Bei einem Window entscheidet der content mit über das breiteste Element!\n"
-    "        if ($('#'+el.id+'_content').length > 0)\n"
-    //"            widths = widths.concat($('#'+el.id+'_content').children().map(function () { return $(this).outerWidth(true)+$(this).position().left; }).get());\n"
+    "        if ($('#'+el.id+'_content_').length > 0)\n"
+    //"            widths = widths.concat($('#'+el.id+'_content_').children().map(function () { return $(this).outerWidth(true)+$(this).position().left; }).get());\n"
     // Neu, aber ungetestet (Damit es auch bei unsichtbaren Windows klappt Umstieg von position auf css bei 'left'):
-    "            widths = widths.concat($('#'+el.id+'_content').children().map(function () { return $(this).outerWidth(true)+parseInt($(this).css('left')); }).get());\n"
+    "            widths = widths.concat($('#'+el.id+'_content_').children().map(function () { return $(this).outerWidth(true)+parseInt($(this).css('left')); }).get());\n"
     "\n"
     "        if (!($(el).hasClass('canvas_standard')))\n"
     "        {\n"
@@ -15811,7 +15845,7 @@ BOOL isJSExpression(NSString *s)
     "       el = el[el.defaultplacement];\n"
     "\n"
     "    if ($(el).hasClass('div_window'))\n"
-    "        el = $('#'+el.id+'_content').get(0);\n"
+    "        el = $('#'+el.id+'_content_').get(0);\n"
     "\n"
     "    var widths = $(el).children().map(function () {\n"
     "        // checkboxen und radiobuttons bestehen aus 2 nebeneinander liegenden Elementen. In so einem Fall die gemeinsame Breite ermitteln\n"
@@ -15849,7 +15883,7 @@ BOOL isJSExpression(NSString *s)
     "       el = el[el.defaultplacement];\n"
     "\n"
     "    if ($(el).hasClass('div_window'))\n"
-    "        el = $('#'+el.id+'_content').get(0);\n"
+    "        el = $('#'+el.id+'_content_').get(0);\n"
     "\n"
     "    var heights = $(el).children().map(function () { return $(this).outerHeight(true); }).get();\n"
     "    if (el.style.height == '') {\n"
@@ -15878,7 +15912,7 @@ BOOL isJSExpression(NSString *s)
     "       el = el[el.defaultplacement];\n"
     "\n"
     "    if ($(el).hasClass('div_window'))\n"
-    "        el = $('#'+el.id+'_content').get(0);\n"
+    "        el = $('#'+el.id+'_content_').get(0);\n"
     "\n"
     "    var sumH = 0;\n"
     "    $(el).children().each(function() {\n"
@@ -15918,7 +15952,7 @@ BOOL isJSExpression(NSString *s)
     "       el = el[el.defaultplacement];\n"
     "\n"
     "    if ($(el).hasClass('div_window'))\n"
-    "        el = $('#'+el.id+'_content').get(0);\n"
+    "        el = $('#'+el.id+'_content_').get(0);\n"
     "\n"
     "    var sumW = 0;\n"
     "    $(el).children().each(function() {\n"
@@ -15949,7 +15983,7 @@ BOOL isJSExpression(NSString *s)
     "// Hilfsfunktion, um ein SimpleLayout Y zu setzen      //\n"
     "// setSimpleLayoutYIn()                                //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var setSimpleLayoutYIn = function (el,spacing) {\n"
+    "var setSimpleLayoutYIn = function (el,spacing,inset) {\n"
     "    // spacing speichern, z. B. falls spacing animiert wird, brauche ich den aktuellen spacing-Wert\n"
     "    $(el).data('spacing_',spacing);\n"
     "\n"
@@ -15957,7 +15991,7 @@ BOOL isJSExpression(NSString *s)
     "       el = el[el.defaultplacement];\n"
     "\n"
     "    if ($(el).hasClass('div_window'))\n"
-    "        el = $('#'+el.id+'_content').get(0);\n"
+    "        el = $('#'+el.id+'_content_').get(0);\n"
     "\n"
     "    if ($(el).data('layout_') && $(el).data('layout_').locked)\n"
     "        return;\n"
@@ -15975,6 +16009,9 @@ BOOL isJSExpression(NSString *s)
     "        // Auch dieses event wegnehmen, analoge Begründung wie oben\n"
     "        $(kind).off('onheight.SAY');\n"
     "        $(kind).off('onvisible.SAY');\n"
+    "\n"
+    "        if (inset != undefined)\n"
+    "            kind.get(0).setAttribute_('y',inset+'px');\n"
     "\n"
     "        if (@@positionAbsoluteReplaceMe@@)\n"
     "        {\n"
@@ -16014,16 +16051,16 @@ BOOL isJSExpression(NSString *s)
     "        var c = 2;\n"
     "        while ($('#'+el.id+'_repl'+c).length)\n"
     "        {\n"
-    "            setSimpleLayoutYIn($('#'+el.id+'_repl'+c).get(0),spacing);\n"
+    "            setSimpleLayoutYIn($('#'+el.id+'_repl'+c).get(0),spacing,inset);\n"
     "            c++;\n"
     "        }\n"
     "\n"
     "        // Aber auf event lauschen, soll er bei jedem Kind (um u. U. SA zu aktualisieren)\n"
-    "        $(kind).on('onheight.SAY', function() { setSimpleLayoutYIn(el,spacing); } );\n"
-    "        $(kind).on('onvisible.SAY', function() { setSimpleLayoutYIn(el,spacing); } );\n"
+    "        $(kind).on('onheight.SAY', function() { setSimpleLayoutYIn(el,spacing,inset); } );\n"
+    "        $(kind).on('onvisible.SAY', function() { setSimpleLayoutYIn(el,spacing,inset); } );\n"
     "    }\n"
     "\n"
-    "    $(el).on('onaddsubview.SAY', function() { setSimpleLayoutYIn(el,spacing); } );\n"
+    "    $(el).on('onaddsubview.SAY', function() { setSimpleLayoutYIn(el,spacing,inset); } );\n"
     "}\n"
     "\n"
     "\n"
@@ -16031,7 +16068,7 @@ BOOL isJSExpression(NSString *s)
     "// Hilfsfunktion, um ein SimpleLayout X zu setzen      //\n"
     "// setSimpleLayoutXIn()                                //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var setSimpleLayoutXIn = function (el,spacing) {\n"
+    "var setSimpleLayoutXIn = function (el,spacing,inset) {\n"
     "    // spacing speichern, z. B. falls spacing animiert wird, brauche ich den aktuellen spacing-Wert\n"
     "    $(el).data('spacing_',spacing);\n"
     "\n"
@@ -16039,7 +16076,7 @@ BOOL isJSExpression(NSString *s)
     "       el = el[el.defaultplacement];\n"
     "\n"
     "    if ($(el).hasClass('div_window'))\n"
-    "        el = $('#'+el.id+'_content').get(0);\n"
+    "        el = $('#'+el.id+'_content_').get(0);\n"
     "\n"
     "    if ($(el).data('layout_') && $(el).data('layout_').locked)\n"
     "        return;\n"
@@ -16057,6 +16094,9 @@ BOOL isJSExpression(NSString *s)
     "        // Auch dieses event wegnehmen, analoge Begründung wie oben\n"
     "        $(kind).off('onwidth.SAX');\n"
     "        $(kind).off('onvisible.SAX');\n"
+    "\n"
+    "        if (inset != undefined)\n"
+    "            kind.get(0).setAttribute_('x',inset+'px');\n"
     "\n"
     "        if (@@positionAbsoluteReplaceMe@@) {\n"
     // var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + spacing; <- Kommt aus der alten interpretObject()-Auswertung
@@ -16078,16 +16118,16 @@ BOOL isJSExpression(NSString *s)
     "        var c = 2;\n"
     "        while ($('#'+el.id+'_repl'+c).length)\n"
     "        {\n"
-    "            setSimpleLayoutXIn($('#'+el.id+'_repl'+c).get(0),spacing);\n"
+    "            setSimpleLayoutXIn($('#'+el.id+'_repl'+c).get(0),spacing,inset);\n"
     "            c++;\n"
     "        }\n"
     "\n"
     "        // Aber auf event lauschen, soll er bei jedem Kind (um u. U. SA zu aktualisieren)\n"
-    "        $(kind).on('onwidth.SAX', function() { setSimpleLayoutXIn(el,spacing); } );\n"
-    "        $(kind).on('onvisible.SAX', function() { setSimpleLayoutXIn(el,spacing); } );\n"
+    "        $(kind).on('onwidth.SAX', function() { setSimpleLayoutXIn(el,spacing,inset); } );\n"
+    "        $(kind).on('onvisible.SAX', function() { setSimpleLayoutXIn(el,spacing,inset); } );\n"
     "    }\n"
     "\n"
-    "    $(el).on('onaddsubview.SAX', function() { setSimpleLayoutXIn(el,spacing); } );\n"
+    "    $(el).on('onaddsubview.SAX', function() { setSimpleLayoutXIn(el,spacing,inset); } );\n"
     "}\n"
     "\n"
     "\n"
@@ -17411,20 +17451,21 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'basewindow';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.selfDefinedAttributes = { text:textBetweenTags, defaultplacement: '_content' }\n"
+    // kann nicht '_content' heißen, weil fixe property bei Firefox... Halber Tag.... Deswegen um Unterstrich ergänzt
+    "  this.selfDefinedAttributes = { text:textBetweenTags, defaultplacement: '_content_' }\n"
     "\n"
     "  this.contentHTML = '' +\n"
     "  '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_window ui-corner-all\">\\n' +\n"
     "  '  <div id=\"@@@P-L,A#TZHALTER@@@_title\" class=\"div_text div_windowTitle\"></div>\\n' +\n"
-    "  '  <div id=\"@@@P-L,A#TZHALTER@@@_content\" class=\"div_windowContent\">\\n' +\n"
+    "  '  <div id=\"@@@P-L,A#TZHALTER@@@_content_\" class=\"div_windowContent\">\\n' +\n"
     "  '  </div>\\n' +\n"
     "  '</div>\\n' +\n"
     "  '';\n"
     "\n"
     "  this.contentJS = \"\" +\n"
-    "  \"  _content = document.getElementById('@@@P-L,A#TZHALTER@@@_content');\\n\" +\n"
-    "  \"  document.getElementById('@@@P-L,A#TZHALTER@@@_content').getTheParent()._content = _content;\\n\" +\n"
-    "  \"  $(@@@P-L,A#TZHALTER@@@_content).data('name','_content');\\n\" +\n"
+    "  \"  _content_ = document.getElementById('@@@P-L,A#TZHALTER@@@_content_');\\n\" +\n"
+    "  \"  document.getElementById('@@@P-L,A#TZHALTER@@@_content_').getTheParent()._content_ = _content_;\\n\" +\n"
+    "  \"  $(@@@P-L,A#TZHALTER@@@_content_).data('name','_content_');\\n\" +\n"
     "  \"\";\n"
     "\n"
     "  this.contentJQuery = \"\" +\n"

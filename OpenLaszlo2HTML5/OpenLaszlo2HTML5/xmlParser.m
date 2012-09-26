@@ -10288,7 +10288,7 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"  function open()\n  {\n    alert('Willst du wirklich deine Ehefrau löschen? Usw...');\n  }\n"];
     [self.output appendString:@"  var dlgFamilienstandSingle = new dlg();\n\n"];
 
-    // Seitdem ich die initstage=defer-Klassen nach ganz untenv erschoben habe, taucht das hier auf,
+    // Seitdem ich die initstage=defer-Klassen nach ganz unten verschoben habe, taucht das hier auf,
     // Er erwartet glaube ich die Variable _inner in einem 'BDSReplicator'
     [self.output appendString:@"  if (window.element139) element139._inner = element139;\n"];
     [self.output appendString:@"  if (window.element139) element139._scrollview = element139;\n"];

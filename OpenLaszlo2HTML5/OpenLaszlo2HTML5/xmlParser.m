@@ -3492,7 +3492,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"tabelement"] ||
         [elementName isEqualToString:@"baselist"] ||
         [elementName isEqualToString:@"list"] ||
-        [elementName isEqualToString:@"rollUpDownXXX"])
+        [elementName isEqualToString:@"rollUpDown"])
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
@@ -6015,7 +6015,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-    if ([elementName isEqualToString:@"rollUpDownXXX"])
+    if ([elementName isEqualToString:@"rollUpDown"])
     {
         element_bearbeitet = YES;
 
@@ -9610,7 +9610,7 @@ BOOL isJSExpression(NSString *s)
 
 
     // Schließen von rollUpDown
-    if ([elementName isEqualToString:@"rollUpDownXXX"])
+    if ([elementName isEqualToString:@"rollUpDown"])
     {
         self.weAreInRollUpDownWithoutSurroundingRUDContainer = NO;
 
@@ -15846,6 +15846,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    if ($(el).hasClass('div_window'))\n"
     "        el = $('#'+el.id+'_content_').get(0);\n"
+    "\n"
+    "    if ($(el).children().length == 0) return; // Schutz, falls es gar keine Kinder gibt\n"
     "\n"
     "    var widths = $(el).children().map(function () {\n"
     "        // checkboxen und radiobuttons bestehen aus 2 nebeneinander liegenden Elementen. In so einem Fall die gemeinsame Breite ermitteln\n"

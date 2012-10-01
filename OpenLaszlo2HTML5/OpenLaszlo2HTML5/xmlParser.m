@@ -1872,7 +1872,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Diese Doppelpunkt-Syntax muss weg... omg... Wieso kann man sich nicht an ECMAScript-Standards halten?
     // Damit sollen wohl Variablen typisiert werden, dabei ist JS im Grunde typenlos... Hallo?
     s = [self inString:s searchFor:@":FileReference" andReplaceWith:@"" ignoringTextInQuotes:YES];
-
+    s = [self inString:s searchFor:@":Array" andReplaceWith:@"" ignoringTextInQuotes:YES];
 
     // Was ist das? Eine Art cast-Anweisung? Da wäre ein Mega-RegExp fällig. Erstmal auskommentieren
     s = [self inString:s searchFor:@" cast " andReplaceWith:@"; // cast " ignoringTextInQuotes:YES];
@@ -3479,7 +3479,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
-        [elementName isEqualToString:@"BDSedit"] ||
+        [elementName isEqualToString:@"BDSeditXXX"] ||
         [elementName isEqualToString:@"BDStext"] ||
         [elementName isEqualToString:@"statictext"] ||
         [elementName isEqualToString:@"text"] ||
@@ -4975,7 +4975,7 @@ didStartElement:(NSString *)elementName
 
 
     // ToDo ToDo ToDo: Eigentlich sollte das hier selbständig hinzugefügt werden und anhand der definierten Klasse erkannt werden
-    if ([elementName isEqualToString:@"BDSedit"])
+    if ([elementName isEqualToString:@"BDSeditXXX"])
     {
         element_bearbeitet = YES;
 
@@ -9267,7 +9267,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"greenstyle"] ||
         [elementName isEqualToString:@"goldstyle"] ||
         [elementName isEqualToString:@"purplestyle"] ||
-        [elementName isEqualToString:@"BDSedit"] ||
+        [elementName isEqualToString:@"BDSeditXXX"] ||
         [elementName isEqualToString:@"BDSeditdate"] ||
         [elementName isEqualToString:@"dragstate"] ||
         [elementName isEqualToString:@"frame"] ||
@@ -17104,7 +17104,9 @@ BOOL isJSExpression(NSString *s)
     "  if (inherit_defaultplacement && inherit_defaultplacement !== '')\n"
     "  {\n"
     "    // Da der 'name' als inherit gesetzt wurde, spreche ich es darüber an\n"
-    "    if ($(id[inherit_defaultplacement]).length == 0)\n"
+    //"    if ($(id[inherit_defaultplacement]).length == 0)\n"
+    // Neu, damit er "rollUpDown" auswerten kann (da war das elem nicht auf oberster Ebene, sondern steckte in '_scrollview'):
+    "    if ($(id).find(\"[data-name='\"+inherit_defaultplacement+\"']\").length == 0)\n"
     "    {\n"
     "      console.log('Error: Can not access defaultplacement. There is no view with this name in this class.');\n"
     "      $(id).append(s);\n"
@@ -17112,8 +17114,11 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "    else\n"
     "    {\n"
-    "      $(id[inherit_defaultplacement]).prepend(s);\n"
-    "      $(id[inherit_defaultplacement]).triggerHandler('onaddsubview');\n" // Weil ich es im anderen Zweig auch triggere
+    //"      $(id[inherit_defaultplacement]).prepend(s);\n"
+    //"      $(id[inherit_defaultplacement]).triggerHandler('onaddsubview');\n" // Weil ich es im anderen Zweig auch triggere
+    // Neu, Folgeänderung, siehe gerade eben:
+    "      $(id).find(\"[data-name='\"+inherit_defaultplacement+\"']\").prepend(s);\n"
+    "      $(id).find(\"[data-name='\"+inherit_defaultplacement+\"']\").triggerHandler('onaddsubview');\n"
     "    }\n"
     "  }\n"
     "  else\n"
@@ -17229,10 +17234,17 @@ BOOL isJSExpression(NSString *s)
     "        evalCode(s);\n"
     "\n"
     "    // Replace-IDs von contentJQuery ersetzen\n"
-    "    var s = replaceID(obj.contentJQuery, r, r2);\n"
-    "    // Dann den jQuery-Content hinzufügen/auswerten\n"
-    "    if (s.length > 0)\n"
-    "        evalCode(s);\n"
+    "    if (typeof obj.contentJQuery === 'function')\n"
+    "    {\n"
+    "        obj.contentJQuery(id);\n"
+    "    }\n"
+    "    else\n"
+    "    {\n"
+    "        var s = replaceID(obj.contentJQuery, r, r2);\n"
+    "        // Dann den jQuery-Content hinzufügen/auswerten\n"
+    "        if (s.length > 0)\n"
+    "            evalCode(s);\n"
+    "    }\n"
     "\n"
     "    // Replace-IDs von contentJSToUseLater ersetzen\n"
     "    var s = replaceID(obj.contentJSToUseLater, r, r2);\n"
@@ -17424,6 +17436,28 @@ BOOL isJSExpression(NSString *s)
     "  this.selfDefinedAttributes = { resize:true, selectable:false, text:textBetweenTags }\n"
     "\n"
     "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_text noPointerEvents\">'+textBetweenTags+'</div>';\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = edittext (native class)                          //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.edittext = function(textBetweenTags) {\n"
+    "\n"
+    "  this.name = 'edittext';\n"
+    "  this.inherit = new oo.baseformitem(textBetweenTags);\n"
+    "\n"
+    "  this.selfDefinedAttributes = { height: 26, maxlength: null, multiline: false, password: false, pattern: '', resizable:false, text: textBetweenTags, text_y: (this.multiline ? 2 : 2), width: 106 }\n"
+    "\n"
+    "  this.contentHTML = '<input id=\"@@@P-L,A#TZHALTER@@@\" class=\"input_standard\" value=\"'+textBetweenTags+'\" />'\n"
+    "\n"
+    // Hier mal neuer Approach und nicht als String, sondern als Funktion probieren:
+    "  this.contentJQuery = function(el) {\n"
+    "    el.field = el;\n"
+    "\n"
+    "    el.setHTML = function(flag) { el.flagHTML = flag; }// s\n"
+    "  }\n"
     "}\n"
     "\n"
     "\n"

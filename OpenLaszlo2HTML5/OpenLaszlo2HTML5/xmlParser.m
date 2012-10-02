@@ -8141,71 +8141,74 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // CSS
         [d removeObjectForKey:@"id"];
         [d removeObjectForKey:@"name"];
-        [d removeObjectForKey:@"bgcolor"];
-        [d removeObjectForKey:@"fgcolor"];
-        [d removeObjectForKey:@"topmargin"];
-        [d removeObjectForKey:@"valign"];
-        [d removeObjectForKey:@"height"];
-        [d removeObjectForKey:@"width"];
-        [d removeObjectForKey:@"x"];
-        [d removeObjectForKey:@"y"];
-        [d removeObjectForKey:@"yoffset"];
-        [d removeObjectForKey:@"xoffset"];
-        [d removeObjectForKey:@"fontsize"];
-        [d removeObjectForKey:@"fontstyle"];
-        [d removeObjectForKey:@"font"];
-        [d removeObjectForKey:@"align"];
-        [d removeObjectForKey:@"clip"];
-        [d removeObjectForKey:@"scriptlimits"];
-        [d removeObjectForKey:@"stretches"];
-        [d removeObjectForKey:@"initstage"];
-        [d removeObjectForKey:@"resource"];
-        [d removeObjectForKey:@"source"];
-        [d removeObjectForKey:@"debug"];
-        [d removeObjectForKey:@"text_x"];
-        [d removeObjectForKey:@"text_y"];
-        [d removeObjectForKey:@"text_padding_x"];
-        [d removeObjectForKey:@"text_padding_y"];
+
+        // neu: Alle Attribute werden von der Instanz (zusätzlich) ausgewertet, damit defaultwerte überschrieben werden
+        // nur 'id' und 'name' lasse ich mal exklusiv
+
+        //[d removeObjectForKey:@"bgcolor"];
+        //[d removeObjectForKey:@"fgcolor"];
+        //[d removeObjectForKey:@"topmargin"];
+        //[d removeObjectForKey:@"valign"];
+        //[d removeObjectForKey:@"height"];
+        //[d removeObjectForKey:@"width"];
+        //[d removeObjectForKey:@"x"];
+        //[d removeObjectForKey:@"y"];
+        //[d removeObjectForKey:@"yoffset"];
+        //[d removeObjectForKey:@"xoffset"];
+        //[d removeObjectForKey:@"fontsize"];
+        //[d removeObjectForKey:@"fontstyle"];
+        //[d removeObjectForKey:@"font"];
+        //[d removeObjectForKey:@"align"];
+        //[d removeObjectForKey:@"clip"];
+        //[d removeObjectForKey:@"scriptlimits"];
+        //[d removeObjectForKey:@"stretches"];
+        //[d removeObjectForKey:@"initstage"];
+        //[d removeObjectForKey:@"resource"];
+        //[d removeObjectForKey:@"source"];
+        //[d removeObjectForKey:@"debug"];
+        //[d removeObjectForKey:@"text_x"];
+        //[d removeObjectForKey:@"text_y"];
+        //[d removeObjectForKey:@"text_padding_x"];
+        //[d removeObjectForKey:@"text_padding_y"];
 
         // von 'text':
-        [d removeObjectForKey:@"text"];
-        [d removeObjectForKey:@"textalign"];
-        [d removeObjectForKey:@"textindent"];
-        [d removeObjectForKey:@"letterspacing"];
-        [d removeObjectForKey:@"textdecoration"];
-        [d removeObjectForKey:@"multiline"];
+        //[d removeObjectForKey:@"text"];
+        //[d removeObjectForKey:@"textalign"];
+        //[d removeObjectForKey:@"textindent"];
+        //[d removeObjectForKey:@"letterspacing"];
+        //[d removeObjectForKey:@"textdecoration"];
+        //[d removeObjectForKey:@"multiline"];
 
         // JS
-        [d removeObjectForKey:@"visible"];
-        [d removeObjectForKey:@"enabled"];
-        [d removeObjectForKey:@"focusable"];
-        [d removeObjectForKey:@"layout"];
-        [d removeObjectForKey:@"oninit"];
-        [d removeObjectForKey:@"onclick"];
-        [d removeObjectForKey:@"ondblclick"];
-        [d removeObjectForKey:@"onfocus"];
-        [d removeObjectForKey:@"onblur"];
-        [d removeObjectForKey:@"onvalue"];
-        [d removeObjectForKey:@"onmousedown"];
-        [d removeObjectForKey:@"onmouseup"];
-        [d removeObjectForKey:@"onmouseout"];
-        [d removeObjectForKey:@"onmouseover"];
-        [d removeObjectForKey:@"onkeyup"];
-        [d removeObjectForKey:@"onkeydown"];
-        [d removeObjectForKey:@"datapath"];
-        [d removeObjectForKey:@"clickable"];
-        [d removeObjectForKey:@"showhandcursor"];
-        [d removeObjectForKey:@"mask"];
-        [d removeObjectForKey:@"placement"]; // Neu hinzugefügt
-        [d removeObjectForKey:@"ignoreplacement"];
+        //[d removeObjectForKey:@"visible"];
+        //[d removeObjectForKey:@"enabled"];
+        //[d removeObjectForKey:@"focusable"];
+        //[d removeObjectForKey:@"layout"];
+        //[d removeObjectForKey:@"oninit"];
+        //[d removeObjectForKey:@"onclick"];
+        //[d removeObjectForKey:@"ondblclick"];
+        //[d removeObjectForKey:@"onfocus"];
+        //[d removeObjectForKey:@"onblur"];
+        //[d removeObjectForKey:@"onvalue"];
+        //[d removeObjectForKey:@"onmousedown"];
+        //[d removeObjectForKey:@"onmouseup"];
+        //[d removeObjectForKey:@"onmouseout"];
+        //[d removeObjectForKey:@"onmouseover"];
+        //[d removeObjectForKey:@"onkeyup"];
+        //[d removeObjectForKey:@"onkeydown"];
+        //[d removeObjectForKey:@"datapath"];
+        //[d removeObjectForKey:@"clickable"];
+        //[d removeObjectForKey:@"showhandcursor"];
+        //[d removeObjectForKey:@"mask"];
+        //[d removeObjectForKey:@"placement"]; // Neu hinzugefügt
+        //[d removeObjectForKey:@"ignoreplacement"];
 
         /* [d removeObjectForKey:@"value"]; Auskommentieren, bricht sonst Beispiel <basecombobox> */
 
-
         // Really Build-In-Values??
-        [d removeObjectForKey:@"boxheight"];
-        [d removeObjectForKey:@"controlwidth"];
-        [d removeObjectForKey:@"title"];
+        //[d removeObjectForKey:@"boxheight"];
+        //[d removeObjectForKey:@"controlwidth"];
+        //[d removeObjectForKey:@"title"];
 
 
 
@@ -8322,6 +8325,10 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // Klasse von <text> (direkt oder indirekt) erbt. Oder wenn es ein 'text'- oder ein 'html'-
         // Attribut enthält (Example 28.10. Defining new text classes)
         self.weAreCollectingTextAndThereMayBeHTMLTags = YES;
+
+
+        // Trick, damit debug auch bei Klassen klappt. Setzen des korrekten Wertes ohne Überprüfung.
+        self.attributeCount = attributeDict.count;
     }
 
 
@@ -14249,7 +14256,12 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'animduration' ||\n"
     "            attributeName === 'pooling' ||\n"
     "            attributeName === 'size' ||\n"
+    "            attributeName === 'show' ||\n"
     "            attributeName === 'text_x' ||\n"
+    "            attributeName === 'gridFit' ||\n"
+    "            attributeName === 'sharpness' ||\n"
+    "            attributeName === 'thickness' ||\n"
+    "            attributeName === 'antiAliasType' ||\n"
     "            attributeName === 'label' ||\n"
     "            attributeName === 'countApplies' ||\n"
     "            attributeName === 'mouseIsDown' ||\n"
@@ -16705,23 +16717,74 @@ BOOL isJSExpression(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "function replaceID(inString,to,to2)\n"
     "{\n"
-    "  if (inString === undefined || inString === '')\n"
-    "    return '';\n"
+    "    if (inString === undefined || inString === '')\n"
+    "        return '';\n"
     "\n"
-    "  // Wenn in einem s der Platzhalter mit und ohne angehängter Nummer auftaucht,\n"
-    "  // dann nacheinander ersetzen. Ein Platzhalter ohne Nummer darf nicht den Objektnamen\n"
-    "  // angehängt bekommen. Deswegen in so einem Fall Rückgriff auf 'to2'.\n"
-    "  if (to2)\n"
-    "  {\n"
-    "    var from = new RegExp(placeholderID+'_', 'g');\n"
-    "    inString = inString.replace(from, to+'_');\n"
+    "    // Wenn in einem s der Platzhalter mit und ohne angehängter Nummer auftaucht,\n"
+    "    // dann nacheinander ersetzen. Ein Platzhalter ohne Nummer darf nicht den Objektnamen\n"
+    "    // angehängt bekommen. Deswegen in so einem Fall Rückgriff auf 'to2'.\n"
+    "    if (to2)\n"
+    "    {\n"
+    "        var from = new RegExp(placeholderID+'_', 'g');\n"
+    "        inString = inString.replace(from, to+'_');\n"
+    "\n"
+    "        var from = new RegExp(placeholderID, 'g');\n"
+    "        return inString.replace(from, to2);\n"
+    "    }\n"
     "\n"
     "    var from = new RegExp(placeholderID, 'g');\n"
-    "    return inString.replace(from, to2);\n"
-    "  }\n"
+    "    return inString.replace(from, to);\n"
+    "}\n"
     "\n"
-    "  var from = new RegExp(placeholderID, 'g');\n"
-    "  return inString.replace(from, to);\n"
+    "\n"
+    "\n"
+    "// inklusive der geerbten! Das ist das entscheidende\n"
+    "function assignAllDefaultAttributesAndMethods(id, rueckwaertsArray) {\n"
+    "    var inherit_defaultplacement = undefined;\n"
+    "\n"
+    "    for (var i = 0;i<rueckwaertsArray.length;i++)\n"
+    "    {\n"
+    "        var obj = rueckwaertsArray[i];\n"
+    "        if (obj.selfDefinedAttributes)\n"
+    "        {\n"
+    "            Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
+    "            {\n"
+    "                var value = obj.selfDefinedAttributes[key];\n"
+    "\n"
+    "                if (typeof value === 'string' && value.startsWith('@§.BERECHNETERWERT.§@'))\n"
+    "                {\n"
+    "                    value = value.substr(21);\n"
+    "                    value = replaceID(value,''+$(id).attr('id'));\n"
+    "\n"
+    "                    var evalString = 'id[key] = ' + value + ';'\n"
+    "                    //alert(evalString);\n"
+    "                    eval(evalString);\n"
+    "                }\n"
+    "                else\n"
+    "                {\n"
+    "                    id[key] = value;\n"
+    "                }\n"
+    "\n"
+    "                if (i == rueckwaertsArray.length-2) // zusätzlich -1, weil das Ausgangselement unberücksichtigt bleibt\n"
+    "                {\n"
+    "                    if (key == 'defaultplacement')\n"
+    "                    {\n"
+    "                        inherit_defaultplacement = value;\n"
+    "                    }\n"
+    "                }\n"
+    "            });\n"
+    "        }\n"
+    "\n"
+    "        if (obj.methods)\n"
+    "        {\n"
+    "            Object.keys(obj.methods).forEach(function(key)\n"
+    "            {\n"
+    "                id[key] = obj.methods[key];\n"
+    "            });\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "    return inherit_defaultplacement;\n"
     "}\n"
     "\n"
     "\n"
@@ -16746,7 +16809,6 @@ BOOL isJSExpression(NSString *s)
     "  // Muss deswegen auch rückwärts ausgewertet werden\n"
     "  var currentObj = obj; // Zwischenspeichern\n"
     "  var rueckwaertsArray = [];\n"
-    "  var inherit_defaultplacement = undefined;\n"
     "  while (obj.inherit !== undefined)\n"
     "  {\n"
     "    rueckwaertsArray.push(obj);\n"
@@ -16754,49 +16816,7 @@ BOOL isJSExpression(NSString *s)
     "  }\n"
     "  obj = currentObj; // Wieder unser Original-Objekt setzen\n"
     "  rueckwaertsArray.reverse();\n"
-    "\n"
-    "  for (var i = 0;i<rueckwaertsArray.length;i++)\n"
-    "  {\n"
-    "    var obj = rueckwaertsArray[i];\n"
-    "    if (obj.selfDefinedAttributes)\n"
-    "    {\n"
-    "      Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
-    "      {\n"
-    "          var value = obj.selfDefinedAttributes[key];\n"
-    "\n"
-    "          if (typeof value === 'string' && value.startsWith('@§.BERECHNETERWERT.§@'))\n"
-    "          {\n"
-    "            value = value.substr(21);\n"
-    "            value = replaceID(value,''+$(id).attr('id'));\n"
-    "\n"
-    "            var evalString = 'id[key] = ' + value + ';'\n"
-    "            //alert(evalString);\n"
-    "            eval(evalString);\n"
-    "          }\n"
-    "          else\n"
-    "          {\n"
-    "            id[key] = value;\n"
-    "          }\n"
-    "\n"
-    "          if (i == rueckwaertsArray.length-2) // zusätzlich -1, weil das Ausgangselement unberücksichtigt bleibt\n"
-    "          {\n"
-    "            if (key == 'defaultplacement')\n"
-    "            {\n"
-    "                inherit_defaultplacement = value;\n"
-    "            }\n"
-    "          }\n"
-    "      });\n"
-    "    }\n"
-    "\n"
-    "    if (obj.methods)\n"
-    "    {\n"
-    "      Object.keys(obj.methods).forEach(function(key)\n"
-    "      {\n"
-    "          id[key] = obj.methods[key];\n"
-    "      });\n"
-    "    }\n"
-    "\n"
-    "  }\n"
+    "  var inherit_defaultplacement = assignAllDefaultAttributesAndMethods(id,rueckwaertsArray);\n"
     "\n"
     "  // Neu: Hier Setzen der instanzvariablen der Instanz (nicht mehr vor der Klasse)\n"
     "  Object.keys(iv).forEach(function(key)\n"
@@ -16837,18 +16857,18 @@ BOOL isJSExpression(NSString *s)
     "    // Derzeitige Lösung: Bei Text nicht appenden, sondern ersetzen...\n"
     "    // (und die Attribute, Methoden, Events und CSS übernehmen)\n"
     "    if (obj.inherit.name === 'text' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button' || obj.inherit.name === 'basecombobox' || obj.inherit.name === 'baselistitem'\n"
-    "    || obj.inherit.name === 'drawview')\n"
+    "    || obj.inherit.name === 'drawview' || obj.inherit.name === 'edittext')\n"
     "    {\n"
-    "        // Attribute sichern\n"
-    "        var gesicherteAttribute = {};\n"
-    "        if (obj.selfDefinedAttributes) // Schutz gegen Objekte die keine selfDefinedAttributes haben\n"
-    "        {\n"
-    "            Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
-    "            {\n"
-    "                gesicherteAttribute[key] = id[key];\n"
-    "            });\n"
-    "        }\n"
-    "\n"
+    //"        // Attribute sichern\n"
+    //"        var gesicherteAttribute = {};\n"
+    //"        if (obj.selfDefinedAttributes) // Schutz gegen Objekte die keine selfDefinedAttributes haben\n"
+    //"        {\n"
+    //"            Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
+    //"            {\n"
+    //"                gesicherteAttribute[key] = id[key];\n"
+    //"            });\n"
+    //"        }\n"
+    //"\n"
     "        // Alle auf vorherigen Vererbungs-Ebenen hinzugefügten Methoden sichern\n"
     "        var gesicherteMethoden = {};\n"
     "        for(var prop in id) {\n"
@@ -16889,22 +16909,26 @@ BOOL isJSExpression(NSString *s)
     "                });\n"
     "            });\n"
     "        }\n"
-    "\n"
-    "        // Und die Original-Propertys wieder herstellen mit den Nicht-Default-Werten\n"
-    "        if (obj.selfDefinedAttributes) // Schutz gegen Objekte die keine selfDefinedAttributes haben\n"
-    "        {\n"
-    "            Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
-    "            {\n"
-    //"              id[key] = obj.selfDefinedAttributes[key]; // Das sind die Default-Werte.Aber wir wollen Nicht-Default\n"
-    "                id[key] = gesicherteAttribute[key];\n"
-    "            });\n"
-    "        }\n"
+    //"\n"
+    //"        // Und die Original-Propertys wieder herstellen mit den Nicht-Default-Werten\n"
+    //"        if (obj.selfDefinedAttributes) // Schutz gegen Objekte die keine selfDefinedAttributes haben\n"
+    //"        {\n"
+    //"            Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
+    //"            {\n"
+    ////"              id[key] = obj.selfDefinedAttributes[key]; // Das sind die Default-Werte.Aber wir wollen Nicht-Default\n"
+    //"                id[key] = gesicherteAttribute[key];\n"
+    //"            });\n"
+    //"        }\n"
     "\n"
     "        // Und die Methoden wieder herstellen\n"
     "        Object.keys(gesicherteMethoden).forEach(function(key)\n"
     "        {\n"
     "            id[key] = gesicherteMethoden[key];\n"
     "        });\n"
+    "\n"
+    // Muss derzeit iwie nach den Methoden kommen, damit der Kalender funktioniert
+    "        // Und alle Default-Attribute aller Vererbungsstufen wieder herstellen\n"
+    "        assignAllDefaultAttributesAndMethods(id,rueckwaertsArray);\n"
     "\n"
     "        // Und die Kinder wieder herstellen\n"
     "        $(id).append(gesicherteKinder);\n"
@@ -17448,15 +17472,26 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'edittext';\n"
     "  this.inherit = new oo.baseformitem(textBetweenTags);\n"
     "\n"
-    "  this.selfDefinedAttributes = { height: 26, maxlength: null, multiline: false, password: false, pattern: '', resizable:false, text: textBetweenTags, text_y: (this.multiline ? 2 : 2), width: 106 }\n"
+    "  this.selfDefinedAttributes = { height: 26, maxlength: null, multiline: false, password: false, pattern: '', resizable: false, text: textBetweenTags, text_y: (this.multiline ? 2 : 2), width: 106 }\n"
     "\n"
-    "  this.contentHTML = '<input id=\"@@@P-L,A#TZHALTER@@@\" class=\"input_standard\" value=\"'+textBetweenTags+'\" />'\n"
+    "  this.contentHTML = '<input type=\"text\" id=\"@@@P-L,A#TZHALTER@@@\" class=\"input_standard\" value=\"'+textBetweenTags+'\" />'\n"
     "\n"
     // Hier mal neuer Approach und nicht als String, sondern als Funktion probieren:
     "  this.contentJQuery = function(el) {\n"
+    "    el.setAttribute_('width',el.width-12); // margin/border/padding rechts und links iwie korrigieren\n"
+    "    el.setAttribute_('height',el.height-(12+2)) // Wegen FF nochmal 2 extra bei der Höhe abziehen;\n"
+    "\n"
+    // Da wir bewusst kein umbendes div haben, ist unser 'field' wir selber
     "    el.field = el;\n"
     "\n"
-    "    el.setHTML = function(flag) { el.flagHTML = flag; }// s\n"
+    "    el.field.setHTML = function(flag) { el.field.flagHTML = flag; }\n"
+    "    el.field.antiAliasType = '';\n"
+    "    el.field.gridFit = '';\n"
+    "    el.field.sharpness = -300\n"
+    "    el.field.thickness = 100;\n"
+    "\n"
+    "    if (el.maxlength)\n"
+    "        alert(el.maxlength);\n"
     "  }\n"
     "}\n"
     "\n"

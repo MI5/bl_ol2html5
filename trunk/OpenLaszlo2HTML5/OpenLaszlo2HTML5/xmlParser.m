@@ -1861,7 +1861,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     s = [self inString:s searchFor:@".dataset" andReplaceWith:@".myDataset" ignoringTextInQuotes:YES];
 
 
-    // Ich kann die andere Beudeutung von 'value' (insb. bei checkbox) in OL nicht in JS überschreiben
+    // Ich kann die andere Bedeutung von 'value' (insb. bei checkbox) in OL nicht in JS überschreiben
     s = [self inString:s searchFor:@".value" andReplaceWith:@".myValue" ignoringTextInQuotes:YES];
 
     // classroot taucht nur in Klassen auf und bezeichnet die Wurzel der Klasse
@@ -3479,7 +3479,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
-        [elementName isEqualToString:@"BDSeditXXX"] ||
+        [elementName isEqualToString:@"BDSedit___DeleteMe"] ||
         [elementName isEqualToString:@"BDStext"] ||
         [elementName isEqualToString:@"statictext"] ||
         [elementName isEqualToString:@"text"] ||
@@ -4898,7 +4898,7 @@ didStartElement:(NSString *)elementName
 
 
     if ([elementName isEqualToString:@"basebutton"] ||
-        [elementName isEqualToString:@"imgbutton"] ||
+        [elementName isEqualToString:@"imgbutton"] || // ist selfdefined class
         [elementName isEqualToString:@"multistatebutton"])
     {
         element_bearbeitet = YES;
@@ -4916,7 +4916,6 @@ didStartElement:(NSString *)elementName
 
 
         // ToDo: Wird derzeit nicht ausgewertet - ist zum ersten mal bei einem imgbutton aufgetaucht (nur da?)
-        // Imgbutton ist ja auch self defind class....
         if ([attributeDict valueForKey:@"text"])
         {
             self.attributeCount++;
@@ -4974,8 +4973,8 @@ didStartElement:(NSString *)elementName
     }
 
 
-    // ToDo ToDo ToDo: Eigentlich sollte das hier selbständig hinzugefügt werden und anhand der definierten Klasse erkannt werden
-    if ([elementName isEqualToString:@"BDSeditXXX"])
+
+    if ([elementName isEqualToString:@"BDSedit___DeleteMe"])
     {
         element_bearbeitet = YES;
 
@@ -5025,7 +5024,6 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"\" />\n"];
 
 
-        // ToDo: Wird derzeit nicht ausgewertet
         if ([attributeDict valueForKey:@"maxlength"])
         {
             self.attributeCount++;
@@ -5036,6 +5034,8 @@ didStartElement:(NSString *)elementName
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
     }
+
+
 
     if ([elementName isEqualToString:@"tooltip"])
     {
@@ -5049,6 +5049,8 @@ didStartElement:(NSString *)elementName
             [self.textInProgress appendString:[attributeDict valueForKey:@"text"]];
         }
     }
+
+
 
     // Original von OpenLaszlo eingebautes HTML-<select>-Element
     if ([elementName isEqualToString:@"baselist"] || [elementName isEqualToString:@"list"])
@@ -5471,6 +5473,11 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'checked'.");
+        }
+        if ([attributeDict valueForKey:@"infotext"]) // ToDo
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'infotext'.");
         }
 
 
@@ -6113,18 +6120,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
         [self.output appendString:@"\">\n"];
 
-        /* *************CANVAS***************VERWORFEN************* SPÄTER NUTZEN FÜR DIE RUNDEN ECKEN --- NE, DOCH NICHT, JETZT GELÖST ÜBER jQuery UI StyleSheets.
-        [self.output appendString:@"<canvas style=\"position:absolute; top:37px; left:81px;\" id=\"leiste\" width=\"500\" height=\"200\"></canvas>"];
-
-        [self.output appendString:@"<canvas style=\"position:absolute; top:61px; left:81px;\" id=\"details\" width=\"500\" height=\"200\"></canvas>"];
-
-        // <!-- Div für den Klick-Button auf dem Dreieck -->
-        [self.output appendString:@"<div style=\"position:absolute; top:12px; left:82px;\" id=\"container\"></div>"];
-
-        [self.output appendString:@"<div style=\"top:38px;left:82px;height:22px;width:225px;position:absolute;\" onClick=\"touchStart(event)\">"];
-        [self.output appendString:@"<script src=\"jsHelper.js\" type=\"text/javascript\"></script>\n"];
-         */
-
 
 
         // Text für Titelleiste ermitteln
@@ -6174,16 +6169,16 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
             NSString *s = [attributeDict valueForKey:@"onrolleddown"];
 
-            // Hier wird oft setglobalhelp aufgerufen. Derzeit einfach als eigene Funktion
-            // definiert.
+            // Hier wird oft setglobalhelp aufgerufen. Derzeit einfach als eigene Funktion definiert.
             // Ich ersetze erstmal alles genau bis zum und inklusive dem Punkt.
-            // Später hier mit NSRegularExpression arbeiten (ToDo)
+            // Später hier mit NSRegularExpression arbeiten...
             if ([s rangeOfString:@"."].location == NSNotFound)
             {
                 // Ist natürlich gar nicht instable XML hier, aber ich will abbrechen, falls es
                 // ein entsprechendes 'onrolleddown' gibt, welches ohne '.' aufgebaut ist.
                 [self instableXML:(@"string does not contain '.' ('onrolleddown'-Attribute in element 'rollupdown')")];
-            } else
+            }
+            else
             {
                 s = [s substringFromIndex:[s rangeOfString:@"."].location+1];
             }
@@ -6920,15 +6915,13 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         self.weAreCollectingTheCompleteContentInClass = YES;
     }
     // ToDo
-    if ([elementName isEqualToString:@"dlginfo"] || [elementName isEqualToString:@"dlgwarning"] || [elementName isEqualToString:@"dlgyesno"] || [elementName isEqualToString:@"nicepopup"] || [elementName isEqualToString:@"nicedialog"])
+    if ([elementName isEqualToString:@"nicedialog"])
     {
         element_bearbeitet = YES;
 
         if ([attributeDict valueForKey:@"id"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"info"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"initstage"])
             self.attributeCount++;
@@ -6938,13 +6931,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             self.attributeCount++;
         if ([attributeDict valueForKey:@"visible"])
             self.attributeCount++;
-        if ([attributeDict valueForKey:@"question"])
-            self.attributeCount++;
         if ([attributeDict valueForKey:@"x"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"y"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"modal"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"showhandcursor"])
             self.attributeCount++;
@@ -7198,47 +7187,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         if ([attributeDict valueForKey:@"x"])
             self.attributeCount++;
     }
-    if ([elementName isEqualToString:@"ftdynamicgrid"])
-    {
-        element_bearbeitet = YES;
-        
-        
-        // ToDo
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"rowheight"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"trashcol"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"multiselect"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"metadatapath"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"height"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"headerheight"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"focusable"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"datapath"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"contentdatapath"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"_columnclass"])
-            self.attributeCount++;
-    }
-
-
 
 
 
@@ -9089,10 +9037,6 @@ BOOL isJSExpression(NSString *s)
     }
 
     if ([elementName isEqualToString:@"class"] ||
-        [elementName isEqualToString:@"dlginfo"] ||
-        [elementName isEqualToString:@"dlgwarning"] ||
-        [elementName isEqualToString:@"dlgyesno"] ||
-        [elementName isEqualToString:@"nicepopup"] ||
         [elementName isEqualToString:@"nicemodaldialog"] ||
         [elementName isEqualToString:@"nicedialog"])
     {
@@ -9274,7 +9218,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"greenstyle"] ||
         [elementName isEqualToString:@"goldstyle"] ||
         [elementName isEqualToString:@"purplestyle"] ||
-        [elementName isEqualToString:@"BDSeditXXX"] ||
+        [elementName isEqualToString:@"BDSedit___DeleteMe"] ||
         [elementName isEqualToString:@"BDSeditdate"] ||
         [elementName isEqualToString:@"dragstate"] ||
         [elementName isEqualToString:@"frame"] ||
@@ -9293,7 +9237,6 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"constantlayout"] ||
         [elementName isEqualToString:@"wrappinglayout"] ||
         [elementName isEqualToString:@"BDStabsheetselected"] ||
-        [elementName isEqualToString:@"ftdynamicgrid"] ||
         [elementName isEqualToString:@"debug"] ||
         [elementName isEqualToString:@"event"] ||
         [elementName isEqualToString:@"slider"] ||
@@ -12224,7 +12167,7 @@ BOOL isJSExpression(NSString *s)
     "            this.el.animate(this.prop,this.to,this.duration,this.isRelative,this.moreArgs,this.motion);\n"
     "        }\n"
     "\n"
-    "       this.stop = function() { /* ToDo, seems to stop the animation */ }\n"
+    "       this.stop = function() { $(this).stop(); /* ungetestet */ }\n"
     "\n"
     "        if (this.start)\n"
     "            this.doStart();\n"
@@ -13428,7 +13371,7 @@ BOOL isJSExpression(NSString *s)
     "// Eigene setAttribute-Methode für ALLE Objekte (JS+DOM)//\n"
     "//////////////////////////////////////////////////////////\n"
     "// Diese Funktion werde ich gleich 3 mal prototypen müssen um setAttribute in allen Browsern zu überschreiben\n"
-    "// Neu: Leider bricht setAttribute jQuery.attr(), ein Zurückbehalten auf das originale setAttribute hat wirklich nicht geklapopt \n"
+    "// Leider bricht setAttribute jQuery.attr(), ein Zurückbehalten des originalen setAttribute hat wirklich nicht geklappt.\n"
     "// Deswegen arbeite ich nun mit setAttribute_ und replacement dieser Funktionen im OL-Code \n"
     "var setAttributeFunc = function (attributeName, value, ifchanged, triggerMe) {\n"
     "    // So können setter setAttribute_ aufrufen, ohne das getriggert wird\n"
@@ -13485,9 +13428,9 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "    if (attributeName === undefined || attributeName === '')\n"
-    "        throw 'Error1 calling setAttribute, no argument attributeName given (this = '+this+').';\n"
+    "        throw 'Error1 calling setAttribute_, no argument attributeName given (this = '+this+').';\n"
     "    if (value === undefined) // Wirklich Triple-= erforderlich, damit er 'null' passieren lässt bei 'text' und 'mask'\n"
-    "        throw 'Error2 calling setAttribute, no argument value given or undefined (attributeName = \"'+attributeName+'\" and this = '+this+').';\n"
+    "        throw 'Error2 calling setAttribute_, no argument value given or undefined (attributeName = \"'+attributeName+'\" and this = '+this+').';\n"
     "\n"
     "\n"
     "\n"
@@ -14072,6 +14015,10 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        // Flash-Only Attributes, that will be ignored\n"
     "    }\n"
+    "    else if (attributeName == 'pixellock')\n"
+    "    {\n"
+    "        // Not suppoted\n"
+    "    }\n"
     "    else if ($(me).hasClass('div_text') && (attributeName == 'resize')) // Nur vom Element 'text' von Haus aus gesetzt\n"
     "    {\n"
     "        // In jedem Falle speichern. Es wird von addText()/setText() berücksichtigt.\n"
@@ -14256,6 +14203,7 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'animduration' ||\n"
     "            attributeName === 'pooling' ||\n"
     "            attributeName === 'size' ||\n"
+    "            attributeName === 'resourcepic' ||\n"
     "            attributeName === 'show' ||\n"
     "            attributeName === 'text_x' ||\n"
     "            attributeName === 'gridFit' ||\n"
@@ -15900,7 +15848,8 @@ BOOL isJSExpression(NSString *s)
     "        el = $('#'+el.id+'_content_').get(0);\n"
     "\n"
     "    var heights = $(el).children().map(function () { return $(this).outerHeight(true); }).get();\n"
-    "    if (el.style.height == '') {\n"
+    "    // Erste Bedingung, weil 'canvas'-Elemente somehow keine style-Property haben\n"
+    "    if (el.style && el.style.height == '') {\n"
     "        el.setAttribute_('height',getMaxOfArray(heights));\n"
     "    }\n"
     "\n"
@@ -15980,7 +15929,7 @@ BOOL isJSExpression(NSString *s)
     // [s appendString:self.zuletztGesetzteID];
     // [s appendString:@"').css('position') == 'relative'"];
     // [s appendString:@")\n"];
-    "    if (el.style.width == '')\n"
+    "    if (el.style && el.style.width == '')\n"
     "        el.setAttribute_('width',sumW);\n"
     "\n"
     "    // Falls es geklonte Geschwister gibt:\n"
@@ -16789,6 +16738,16 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
+    "// Bei Objekten gilt 'call by reference', deswegen kann ich 'id' in der Funktion erweitern.\n"
+    "function assignAllInstanceAttributes(id, iv) {\n"
+    "    Object.keys(iv).forEach(function(key)\n"
+    "    {\n"
+    "        id[key] = iv[key];\n"
+    "    });\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
     "///////////////////////////////////////////////////////////////\n"
     "// Mit dieser Funktion werden alle Objekte ausgewertet       //\n"
     "///////////////////////////////////////////////////////////////\n"
@@ -16818,11 +16777,8 @@ BOOL isJSExpression(NSString *s)
     "  rueckwaertsArray.reverse();\n"
     "  var inherit_defaultplacement = assignAllDefaultAttributesAndMethods(id,rueckwaertsArray);\n"
     "\n"
-    "  // Neu: Hier Setzen der instanzvariablen der Instanz (nicht mehr vor der Klasse)\n"
-    "  Object.keys(iv).forEach(function(key)\n"
-    "  {\n"
-    "    id[key] = iv[key];\n"
-    "  });\n"
+    "  // Danach setzen der konkreten Instanzvariablen der Instanz\n"
+    "  assignAllInstanceAttributes(id,iv);\n"
     "\n"
     "\n"
     "\n"
@@ -16854,7 +16810,7 @@ BOOL isJSExpression(NSString *s)
     "    // <div class='div_text'> sein. (obwohl 'text' ja eigentlich auch nochmal von view erbt...)\n"
     "    // Dies äußerst sich darin, dass z. B. ein onclick-Handler auf höchster Ebene der Klasse mit 'this' auch\n"
     "    // Methoden von <text> aufrufen kann (2. Beispiel von <text> in OL-Doku)\n"
-    "    // Derzeitige Lösung: Bei Text nicht appenden, sondern ersetzen...\n"
+    "    // Derzeitige Lösung: Bei Text (und einigen anderen...) nicht appenden, sondern ersetzen...\n"
     "    // (und die Attribute, Methoden, Events und CSS übernehmen)\n"
     "    if (obj.inherit.name === 'text' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button' || obj.inherit.name === 'basecombobox' || obj.inherit.name === 'baselistitem'\n"
     "    || obj.inherit.name === 'drawview' || obj.inherit.name === 'edittext')\n"
@@ -16889,6 +16845,18 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        // Da wir ersetzen, bekommt dieses Element den Universal-id-Namen\n"
     "        obj.inherit.contentHTML = replaceID(obj.inherit.contentHTML,''+$(id).attr('id'));\n"
+    "         // Super-Spezialfall bei 'edittext', weil 'type'-property im IE nicht änderbar, deswegen noch im String ändern\n"
+    "        if (obj.inherit.name === 'edittext')\n"
+    "        {\n"
+    "            if (iv.password && iv.password === true)\n"
+    "            {\n"
+    "                obj.inherit.contentHTML = obj.inherit.contentHTML.replace(/text/, 'password'); // ohne 'g'(lobal), nur erster Match\n"
+    "            }\n"
+    "            else if (iv.pattern && iv.pattern === '[0-9a-z@_.\\-]*')\n"
+    "            {\n"
+    "                obj.inherit.contentHTML = obj.inherit.contentHTML.replace(/text/, 'email'); // ohne 'g'\n"
+    "            }\n"
+    "        }\n"
     "        var theSavedCSSFromRemovedElement = $(id).replaceWith(obj.inherit.contentHTML).attr('style');\n"
     "        // Interne ID dieser Funktion neu setzen\n"
     "        id = document.getElementById(id.id);\n"
@@ -16929,6 +16897,8 @@ BOOL isJSExpression(NSString *s)
     // Muss derzeit iwie nach den Methoden kommen, damit der Kalender funktioniert
     "        // Und alle Default-Attribute aller Vererbungsstufen wieder herstellen\n"
     "        assignAllDefaultAttributesAndMethods(id,rueckwaertsArray);\n"
+    "        // Und mit den konkreten Instanzvariablen wieder überschreiben\n"
+    "        assignAllInstanceAttributes(id,iv);\n"
     "\n"
     "        // Und die Kinder wieder herstellen\n"
     "        $(id).append(gesicherteKinder);\n"
@@ -17129,7 +17099,7 @@ BOOL isJSExpression(NSString *s)
     "  {\n"
     "    // Da der 'name' als inherit gesetzt wurde, spreche ich es darüber an\n"
     //"    if ($(id[inherit_defaultplacement]).length == 0)\n"
-    // Neu, damit er "rollUpDown" auswerten kann (da war das elem nicht auf oberster Ebene, sondern steckte in '_scrollview'):
+    // Neu, damit er 'rollUpDown' auswerten kann (da war das elem nicht auf oberster Ebene, sondern steckte in '_scrollview'):
     "    if ($(id).find(\"[data-name='\"+inherit_defaultplacement+\"']\").length == 0)\n"
     "    {\n"
     "      console.log('Error: Can not access defaultplacement. There is no view with this name in this class.');\n"
@@ -17491,7 +17461,7 @@ BOOL isJSExpression(NSString *s)
     "    el.field.thickness = 100;\n"
     "\n"
     "    if (el.maxlength)\n"
-    "        alert(el.maxlength);\n"
+    "        $(el).attr(\"maxlength\", el.maxlength);\n"
     "  }\n"
     "}\n"
     "\n"
@@ -17527,8 +17497,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  this.contentHTML = '' +\n"
     "  '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_window ui-corner-all\">\\n' +\n"
-    "  '  <div id=\"@@@P-L,A#TZHALTER@@@_title\" class=\"div_text div_windowTitle\"></div>\\n' +\n"
-    "  '  <div id=\"@@@P-L,A#TZHALTER@@@_content_\" class=\"div_windowContent\">\\n' +\n"
+    "  '  <div id=\"@@@P-L,A#TZHALTER@@@_title\" data-name=\"_title\" class=\"div_text div_windowTitle\"></div>\\n' +\n"
+    "  '  <div id=\"@@@P-L,A#TZHALTER@@@_content_\" data-name=\"_content_\" class=\"div_windowContent\">\\n' +\n"
     "  '  </div>\\n' +\n"
     "  '</div>\\n' +\n"
     "  '';\n"
@@ -17705,9 +17675,12 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'basevaluecomponent';\n"
     "  this.inherit = new oo.basecomponent(textBetweenTags);\n"
     "\n"
-    "  this.selfDefinedAttributes = { type:'none', myValue:null }\n"
+    // Muss 'myType' sein, sonst bricht er den 'type' von <input>s
+    "  this.selfDefinedAttributes = { myType:'none', myValue:null }\n"
     "\n"
-    "  this.methods = { getValue: function() { if (this.myValue) return this.myValue; else return this.text; } }\n"
+    "  this.methods = {\n"
+    "    getValue: function() { if (this.myValue) return this.myValue; else return this.text; }\n"
+    "  }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "};\n"

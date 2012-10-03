@@ -21,6 +21,7 @@
 //- Eigene Klassen müssen als allererstes und nicht als letztes gecheckt werden (Bsp. 15.14 und 15.15)
 // (erst nachdem ich alle ToDos und alle noch nicht selbst ausgewerteten Klassen entfernt habe)
 //
+// das 'title'-Attribut ist HTML5-eigen...propertys dürfen so nicht heißen dann!
 //
 //
 //
@@ -1873,6 +1874,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Damit sollen wohl Variablen typisiert werden, dabei ist JS im Grunde typenlos... Hallo?
     s = [self inString:s searchFor:@":FileReference" andReplaceWith:@"" ignoringTextInQuotes:YES];
     s = [self inString:s searchFor:@":Array" andReplaceWith:@"" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@": Number" andReplaceWith:@"" ignoringTextInQuotes:YES];
 
     // Was ist das? Eine Art cast-Anweisung? Da wäre ein Mega-RegExp fällig. Erstmal auskommentieren
     s = [self inString:s searchFor:@" cast " andReplaceWith:@"; // cast " ignoringTextInQuotes:YES];
@@ -4946,8 +4948,9 @@ didStartElement:(NSString *)elementName
 
 
 
-    // ToDo: Eigentlich sollte das hier selbständig hinzugefügt werden und anhand
+    // Eigentlich sollte das hier selbständig hinzugefügt werden und anhand
     // der definierten Klasse erkannt werden.
+    // Ich denke ich lasse 'BDSText' für Taxango erstmal so, da es nur ein 'text' mit unnötigen Zusatz-Attributen ist
     if ([elementName isEqualToString:@"BDStext"] || [elementName isEqualToString:@"statictext"])
     {
         element_bearbeitet = YES;
@@ -5721,7 +5724,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-    if ([elementName isEqualToString:@"BDSeditdate"])
+    if ([elementName isEqualToString:@"BDSeditdateXXX"])
     {
         element_bearbeitet = YES;
 
@@ -8007,7 +8010,10 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             NSLog(@"Setting the attribute 'title' as 'textBetweenTags'-Parameter of the object.");
 
             // Wird dann beim schließen ausgelesen
-            self.textInProgress = [[NSMutableString alloc] initWithString:[attributeDict valueForKey:@"title"]];
+            if (![elementName isEqualToString:@"BDSedittext"])
+            {
+                self.textInProgress = [[NSMutableString alloc] initWithString:[attributeDict valueForKey:@"title"]];
+            }
         }
 
         // Ich muss die Stelle einmal markieren...
@@ -8022,7 +8028,11 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [self.output appendString:@"\">\n"];
 
 
-        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
+        // No no! Ich lasse alles erst von der Klasse auswerten, sonst fragen z. B. 'visible'-constraints
+        // Eigenschaften ab, die noch gar nicht bekannt sind.
+        //[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
+        // Nur das 'name'-Attribut muss eben doch schon bekannt sein, falls andere Elemente etwas darüber abfragen
+        [self convertNameAttributeToGlobalJSVar:attributeDict];
 
 
 
@@ -8260,6 +8270,8 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // analog auch beim beenden beachten. (Falls es hier geändert wird, dort mitändern!)
         if (self.initStageDefer)
         {
+            // Dann immer ein 'oninit' hinterher triggern, weil das sonst nichts ausgeführt wird
+            //[o appendString:@"  $(id).triggerHandler('oninit');\n"];
             [self.jsInitstageDeferOutput appendString:o];
         }
         else
@@ -8526,10 +8538,9 @@ BOOL isJSExpression(NSString *s)
                 s = [self protectThisSingleQuotedJavaScriptString:s];
 
                 // Dann IN den Output hinein injecten
-                // [self.jQueryOutput insertString:s atIndex:[self.jQueryOutput length]-34];
                 if (self.initStageDefer)
                 {
-                    [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-34];
+                    [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-(34/*+34*/)];
                 }
                 else
                 {
@@ -9219,7 +9230,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"goldstyle"] ||
         [elementName isEqualToString:@"purplestyle"] ||
         [elementName isEqualToString:@"BDSedit___DeleteMe"] ||
-        [elementName isEqualToString:@"BDSeditdate"] ||
+        [elementName isEqualToString:@"BDSeditdateXXX"] ||
         [elementName isEqualToString:@"dragstate"] ||
         [elementName isEqualToString:@"frame"] ||
         [elementName isEqualToString:@"font"] ||
@@ -9502,7 +9513,7 @@ BOOL isJSExpression(NSString *s)
 
 
 
-    // Schließen von BDStext
+    // Schließen von BDStext und statictext
     if ([elementName isEqualToString:@"BDStext"] || [elementName isEqualToString:@"statictext"])
     {
         element_geschlossen = YES;
@@ -9949,7 +9960,7 @@ BOOL isJSExpression(NSString *s)
         [self.rememberedID4closingSelfDefinedClass removeLastObject];
 
 
- /* MARKER -60 / -31 vom defer-Test */
+
         // Wenn wir einen String gefunden haben, dann IN den existierenden Output injecten:
         if ([s length] > 0)
         {
@@ -9959,7 +9970,7 @@ BOOL isJSExpression(NSString *s)
 
             if (self.initStageDefer)
             {
-                [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-34];
+                [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-(34/*+34*/)];
             }
             else
             {
@@ -9968,8 +9979,10 @@ BOOL isJSExpression(NSString *s)
         }
 
 
-        NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-1];
-        if ([enclosingElemTyp isEqualToString:@"deferview"])
+        //NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-1];
+        //if ([enclosingElemTyp isEqualToString:@"deferview"])
+        // So ist es wohl richtig: So werden auch Objekte IN 'deferview's erst verzögert geladen:
+        if ([elementName isEqualToString:@"deferview"])
         {
             self.initStageDefer = NO;
         }
@@ -10351,7 +10364,7 @@ BOOL isJSExpression(NSString *s)
 
 
     [self.output appendString:@"\n  // To Speed up Loading I will trigger 'oninit' after everything is displayed (not suitable in every situation)\n"];
-    [self.output appendString:@"  // setTimeout()-function with 1 ms delay (setTimeout() is non-blocking, and though shows the Layout immediately)\n"];
+    [self.output appendString:@"  // setTimeout()-function with 20 ms delay (setTimeout() is non-blocking, and though shows the Layout immediately)\n"];
     // 0 oder 1 als ms-Angabe klappt nicht 100 %, dann zeigt er manchmal doch nicht das Layout an.
     // Vermutlich checkt er intern nicht jede ms, und deswegen kann es u. U. passieren,
     // dass er direkt weiter den Code ausführt, ka.
@@ -14011,7 +14024,7 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        // Not supported so far. The items of the select-box are never editable\n"
     "    }\n"
-    "    else if ($(me).hasClass('div_text') && (attributeName == 'thickness' || attributeName == 'sharpness')) // Nur vom Element 'text' von Haus aus gesetztes Attribut\n"
+    "    else if (($(me).data('olel') === 'edittext' || $(me).data('olel') === 'text') && (attributeName === 'thickness' || attributeName === 'sharpness' || attributeName === 'gridFit' || attributeName === 'antiAliasType')) // Nur vom Element 'text' von Haus aus gesetztes Attribut\n"
     "    {\n"
     "        // Flash-Only Attributes, that will be ignored\n"
     "    }\n"
@@ -14206,10 +14219,8 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'resourcepic' ||\n"
     "            attributeName === 'show' ||\n"
     "            attributeName === 'text_x' ||\n"
-    "            attributeName === 'gridFit' ||\n"
     "            attributeName === 'sharpness' ||\n"
     "            attributeName === 'thickness' ||\n"
-    "            attributeName === 'antiAliasType' ||\n"
     "            attributeName === 'label' ||\n"
     "            attributeName === 'countApplies' ||\n"
     "            attributeName === 'mouseIsDown' ||\n"
@@ -17429,7 +17440,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  this.selfDefinedAttributes = { resize:true, selectable:false, text:textBetweenTags }\n"
     "\n"
-    "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_text noPointerEvents\">'+textBetweenTags+'</div>';\n"
+    "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" data-olel=\"text\" class=\"div_text noPointerEvents\">'+textBetweenTags+'</div>';\n"
     "}\n"
     "\n"
     "\n"
@@ -17444,7 +17455,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  this.selfDefinedAttributes = { height: 26, maxlength: null, multiline: false, password: false, pattern: '', resizable: false, text: textBetweenTags, text_y: (this.multiline ? 2 : 2), width: 106 }\n"
     "\n"
-    "  this.contentHTML = '<input type=\"text\" id=\"@@@P-L,A#TZHALTER@@@\" class=\"input_standard\" value=\"'+textBetweenTags+'\" />'\n"
+    // data-olel auch hier setzen, damit er in setAttribute_() bei gridFit usw. richtig abbiegt
+    "  this.contentHTML = '<input type=\"text\" id=\"@@@P-L,A#TZHALTER@@@\" data-olel=\"edittext\" class=\"input_standard\" value=\"'+textBetweenTags+'\" />'\n"
     "\n"
     // Hier mal neuer Approach und nicht als String, sondern als Funktion probieren:
     "  this.contentJQuery = function(el) {\n"

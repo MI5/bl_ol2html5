@@ -15,7 +15,7 @@
 // in '$(window).load(function()' steckt,
 //
 //- Eigene Klassen müssen als allererstes und nicht als letztes gecheckt werden (Bsp. 15.14 und 15.15)
-// (erst nachdem ich alle ToDos und alle noch nicht selbst ausgewerteten Klassen entfernt habe)
+// (erst nachdem ich alle noch nicht selbst ausgewerteten Klassen entfernt habe)
 //
 //
 //
@@ -1091,7 +1091,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
 
-    if ([attributeDict valueForKey:@"controlwidth"]) // ToDo - Seems to be a self defined attribute of BDScombobox / BDSeditdate
+    if ([attributeDict valueForKey:@"controlwidth"]) // ToDo - Seems to be a self defined attribute of BDScombobox
     {
         self.attributeCount++;
         NSLog(@"Setting the attribute 'controlwidth' as CSS 'width'.");
@@ -5740,7 +5740,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-    if ([elementName isEqualToString:@"BDSeditdateXXX"])
+    if ([elementName isEqualToString:@"BDSeditdate___DeleteMe"])
     {
         element_bearbeitet = YES;
 
@@ -5748,14 +5748,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [self.output appendString:@"<div class=\"div_datepicker\" >\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
-
-
-
         [self.output appendString:@"<span style=\""];
         [self.output appendString:[self addTitlewidth:attributeDict]];
         [self.output appendString:@"\">"];
-
-
 
         // Wenn im Attribut title Code auftaucht, dann müssen wir es dynamisch setzen
         // müssen aber erst abwarten bis wir die ID haben, weil wir die für den Zugriff brauchen.
@@ -8024,9 +8019,12 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             NSLog(@"Setting the attribute 'title' as 'textBetweenTags'-Parameter of the object.");
 
             // Wird dann beim schließen ausgelesen
-            if (![elementName isEqualToString:@"BDSedittext"] && ![elementName isEqualToString:@"BDSeditdate"])
+            if (![elementName isEqualToString:@"BDSedittext"] &&
+                ![elementName isEqualToString:@"BDSeditdate"] &&
+                ![elementName isEqualToString:@"BDSFinanzaemter"] &&
+                ![elementName isEqualToString:@"BDSradiobutton"])
             {
-                // ToDo  -> Legacy-Code. Alles was hier an Klassen noch matcht, auswerten
+                // ToDo  -> Legacy-Code. Sollte hier eigentlich nicht mehr reinkommen. Kann wohl ganz rausfliegen.
                 self.textInProgress = [[NSMutableString alloc] initWithString:[attributeDict valueForKey:@"title"]];
             }
         }
@@ -9245,7 +9243,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"goldstyle"] ||
         [elementName isEqualToString:@"purplestyle"] ||
         [elementName isEqualToString:@"BDSedit___DeleteMe"] ||
-        [elementName isEqualToString:@"BDSeditdateXXX"] ||
+        [elementName isEqualToString:@"BDSeditdate___DeleteMe"] ||
         [elementName isEqualToString:@"dragstate"] ||
         [elementName isEqualToString:@"frame"] ||
         [elementName isEqualToString:@"font"] ||
@@ -11805,8 +11803,13 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "function triggerOnInitForAllElements() {\n"
     "    $('body').find('*').each( function() {\n"
-    "        $(this).triggerHandler('onconstruct');\n"
-    "        $(this).triggerHandler('oninit');\n"
+    "        // Nur wenn noch nicht 'inited'. Klassen sind in der Regel z. B. schon initialisiert.\n"
+    "        if (!this.inited)\n"
+    "        {\n"
+    "            $(this).triggerHandler('onconstruct');\n"
+    "            $(this).triggerHandler('oninit');\n"
+    "            this.inited = true;\n"
+    "        }\n"
     "    });\n"
     "}\n"
     "\n"
@@ -17227,6 +17230,13 @@ BOOL isJSExpression(NSString *s)
     "  {\n"
     "    // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
     "    (function() { with (id) { eval(onInitFunc); } }).bind(id)();\n"
+    "  }\n"
+    "\n"
+    "  if (!id.inited)\n"
+    "  {\n"
+    "    $(id).triggerHandler('onconstruct');\n"
+    "    $(id).triggerHandler('oninit');\n"
+    "    id.inited = true;\n"
     "  }\n"
     "}\n"
     "\n"

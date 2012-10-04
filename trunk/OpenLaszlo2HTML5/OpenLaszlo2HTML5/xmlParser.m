@@ -7,10 +7,6 @@
 // iwie gibt es noch ein Problem mit den pointer-events (globalhelp verdeckt Foren-Button)
 //
 //
-// 'name' Attribute werden global gemacht. Dies ist aber nicht immer korrekt.
-// Ich kann die Zeile die 'name'-Attribute global macht, wohl rausnehmen!
-// -> Aber Vorsicht!! Wenn die View auf erster Ebene ist, muss das name-Attribut weiterhin global bleiben!
-// http://www.openlaszlo.org/lps4.2/docs/developers/program-development.html Dort 2.2.3
 //
 //
 //
@@ -21,7 +17,6 @@
 //- Eigene Klassen müssen als allererstes und nicht als letztes gecheckt werden (Bsp. 15.14 und 15.15)
 // (erst nachdem ich alle ToDos und alle noch nicht selbst ausgewerteten Klassen entfernt habe)
 //
-// das 'title'-Attribut ist HTML5-eigen...propertys dürfen so nicht heißen dann!
 //
 //
 //
@@ -1095,6 +1090,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         widthGesetzt = YES;
     }
 
+
     if ([attributeDict valueForKey:@"controlwidth"]) // ToDo - Seems to be a self defined attribute of BDScombobox / BDSeditdate
     {
         self.attributeCount++;
@@ -1681,10 +1677,11 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         NSString *name = [attributeDict valueForKey:@"name"];
 
-        self.attributeCount++;
-        NSLog(@"Setting the attribute 'name' as global JS variable.");
+        NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
 
-        [self.jsOutput appendString:@"\n  // All 'name'-attributes, set by OpenLaszlo, need to be global JS-Variables...\n"];
+        NSLog(@"Setting the attribute 'name' as global JS variable.");
+        self.attributeCount++;
+
         // Das ist Unsinn, weil ich das name-tag ja gerade nicht setze:
         // [self.jsOutput appendFormat:@"  var %@ = document.getElementsByName('%@');\n",name, name];
 
@@ -1693,10 +1690,20 @@ void OLLog(xmlParser *self, NSString* s,...)
         // Mit var davor wird es nur lokal. Ohne var wird es global.
         // Alternative um es global zu machen:
         // "window.Gewerbesteuerpflicht = ...;" bzw. "window['Gewerbesteuerpflicht'] = ...;"
-        [self.jsOutput appendFormat:@"  %@ = document.getElementById('%@');\n",name, self.zuletztGesetzteID];
 
+        // 'name' Attribute wurden bisher immer global gemacht. Dies ist aber nicht per se korrekt und hat Sachen gebrochen.
+        // (edGeburtsdatumPartner gab es sowohl als 'id' als auch woanders als 'name' und hat sich jeweils überschrieben)
 
-        [self.jsOutput appendString:@"  // All 'name'-attributes can be referenced by its parent Element...\n"];
+        // -> Aber Vorsicht!! Wenn die View auf erster Ebene ist, muss das name-Attribut weiterhin global bleiben!
+        // http://www.openlaszlo.org/lps4.2/docs/developers/program-development.html Dort 2.2.3
+        // Deswegen:
+        if ([elemTyp isEqualToString:@"canvas"])
+        {
+            [self.jsOutput appendString:@"\n  // All Objects that are direct children of the canvas and have a 'name'-attribute need to be global JS-Variables\n"];
+            [self.jsOutput appendFormat:@"  %@ = document.getElementById('%@');\n",name, self.zuletztGesetzteID];
+        }
+
+        [self.jsOutput appendString:@"\n  // All 'name'-attributes can be referenced by its parent Element\n"];
         // So nicht: !!!!!
         // [self.jsOutput appendFormat:@"  $('#%@').parent().get(0).%@ = %@;\n",self.zuletztGesetzteID,name, name];
         // Denn das jQuery-Parent berücksichtigt ja nicht den Doppelsprung bei <input> und <select>
@@ -1705,10 +1712,10 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Wenn wir in einer Klasse in der ersten Ebene sind, dann ist der Parent immer das
         // umgebende Element der Klasse
-        NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
+
         if ([elemTyp isEqualToString:@"evaluateclass"])
         {
-            [self.jsOutput appendFormat:@"  %@.%@ = %@;\n",ID_REPLACE_STRING, name, name];
+            [self.jsOutput appendFormat:@"  %@.%@ = document.getElementById('%@');\n",ID_REPLACE_STRING, name, self.zuletztGesetzteID];
         }
         else
         {
@@ -1716,11 +1723,11 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Aber nur für das DIREKT im 'state' liegende Element
             if (self.lastUsedNameAttributeOfState.length > 0)
             {
-                [self.jsOutput appendFormat:@"  ($(document.getElementById('%@').getTheParent()).data('olel') == 'state') ? document.getElementById('%@').getTheParent().getTheParent().%@ = %@ : document.getElementById('%@').getTheParent().%@ = %@;\n",self.zuletztGesetzteID, self.zuletztGesetzteID, name, name, self.zuletztGesetzteID, name, name];
+                [self.jsOutput appendFormat:@"  ($(document.getElementById('%@').getTheParent()).data('olel') == 'state') ? document.getElementById('%@').getTheParent().getTheParent().%@ = document.getElementById('%@') : document.getElementById('%@').getTheParent().%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, self.zuletztGesetzteID, name, self.zuletztGesetzteID, self.zuletztGesetzteID, name, self.zuletztGesetzteID];
             }
             else
             {
-                [self.jsOutput appendFormat:@"  document.getElementById('%@').getTheParent().%@ = %@;\n",self.zuletztGesetzteID, name, name];
+                [self.jsOutput appendFormat:@"  document.getElementById('%@').getTheParent().%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, name, self.zuletztGesetzteID];
             }
         }
 
@@ -1861,6 +1868,12 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Mit '.' davor, sonst würde er auch Variablen wie  z. B. 'complexdataset' modifizieren
     s = [self inString:s searchFor:@".dataset" andReplaceWith:@".myDataset" ignoringTextInQuotes:YES];
 
+    // title ist eine interne Property von HTML 5...
+
+    // Bevor ich 'title' ersetze, muss ich 'titlewidth', welches im Code vorkommen kann, retten...
+    s = [self inString:s searchFor:@".titlewidth" andReplaceWith:@"@@@_prentNode_@@@" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@".title" andReplaceWith:@".myTitle" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@"@@@_prentNode_@@@" andReplaceWith:@".titlewidth" ignoringTextInQuotes:YES];
 
     // Ich kann die andere Bedeutung von 'value' (insb. bei checkbox) in OL nicht in JS überschreiben
     s = [self inString:s searchFor:@".value" andReplaceWith:@".myValue" ignoringTextInQuotes:YES];
@@ -1931,6 +1944,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 {
     if ([s isEqualToString:@"dataset"])
         s = @"myDataset";
+
+    if ([s isEqualToString:@"title"])
+        s = @"myTitle";
 
     if ([s isEqualToString:@"value"])
         s = @"myValue";
@@ -5799,43 +5815,41 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-
-        if ([attributeDict valueForKey:@"dateErrorMaxDate"]) // ToDo
+        if ([attributeDict valueForKey:@"dateErrorMaxDate"])
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'dateErrorMaxDate'.");
         }
-        if ([attributeDict valueForKey:@"maxdate"]) // ToDo
+        if ([attributeDict valueForKey:@"maxdate"])
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'maxdate'.");
         }
-        if ([attributeDict valueForKey:@"mindate"]) // ToDo
+        if ([attributeDict valueForKey:@"mindate"])
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'mindate'.");
         }
-        if ([attributeDict valueForKey:@"restrictyear"]) // ToDo
+        if ([attributeDict valueForKey:@"restrictyear"])
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'restrictyear'.");
         }
-        if ([attributeDict valueForKey:@"datedays"]) // ToDo
+        if ([attributeDict valueForKey:@"datedays"])
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'datedays'.");
         }
-        if ([attributeDict valueForKey:@"allowfuturedate"]) // ToDo
+        if ([attributeDict valueForKey:@"allowfuturedate"])
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'allowfuturedate'.");
         }
-        if ([attributeDict valueForKey:@"simple"]) // ToDo
+        if ([attributeDict valueForKey:@"simple"])
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'simple'.");
         }
-
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
     }
@@ -8010,8 +8024,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             NSLog(@"Setting the attribute 'title' as 'textBetweenTags'-Parameter of the object.");
 
             // Wird dann beim schließen ausgelesen
-            if (![elementName isEqualToString:@"BDSedittext"])
+            if (![elementName isEqualToString:@"BDSedittext"] && ![elementName isEqualToString:@"BDSeditdate"])
             {
+                // ToDo  -> Legacy-Code. Alles was hier an Klassen noch matcht, auswerten
                 self.textInProgress = [[NSMutableString alloc] initWithString:[attributeDict valueForKey:@"title"]];
             }
         }
@@ -8246,7 +8261,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // auslesen aus der JS-Datei collectedClasses.js
 
         //[o appendFormat:@"\n  // Klasse '%@' wurde instanziert in '%@' (Fortsetzung - tatsächliche Instanzierung - vorher wurden nur die Attribute gesetzt)",elementName,idUmgebendesElement];
-        [o appendFormat:@"\n  // Instanzvariablen holen, id holen, Instanz erzeugen, Objekt auswerten"];
+        [o appendFormat:@"\n  // Instanzvariablen holen, id holen, Instanz erzeugen, Objekt auswerten und 'id' entsprechend ergänzen"];
         [o appendFormat:@"\n  var iv = { %@};",instanceVars];
         [o appendFormat:@"\n  var id = document.getElementById('%@');",idUmgebendesElement];
         [o appendFormat:@"\n  var obj = new oo.%@('');",elementName];
@@ -10368,7 +10383,16 @@ BOOL isJSExpression(NSString *s)
     // 0 oder 1 als ms-Angabe klappt nicht 100 %, dann zeigt er manchmal doch nicht das Layout an.
     // Vermutlich checkt er intern nicht jede ms, und deswegen kann es u. U. passieren,
     // dass er direkt weiter den Code ausführt, ka.
-    [self.output appendString:@"  window.setTimeout(function() { triggerOnInitForAllElements() }, 20);\n"];
+    [self.output appendString:@"  window.setTimeout(function() { triggerOnInitForAllElements(); }, 20);\n"];
+
+    // Speziell für Taxango (evtl. als Option mit anbieten?):
+    [self.output appendString:@"\n  // Für alle Date-Felder datePicker() bzw. unter iOS Original-Build-in-Datepicker\n"];
+    [self.output appendString:@"  $(\"[data-olel='BDSeditdate']\").each(function() {\n"];
+    [self.output appendString:@"    if (isiOS())\n"];
+    [self.output appendString:@"      this.setAttribute('type', 'date');\n"];
+    [self.output appendString:@"    else\n"];
+    [self.output appendString:@"      $(this).find('input').datepicker();\n"];
+    [self.output appendString:@"  });\n"];
 
 
     [self.output appendString:@"\n});\n</script>\n\n"];
@@ -13443,7 +13467,7 @@ BOOL isJSExpression(NSString *s)
     "    if (attributeName === undefined || attributeName === '')\n"
     "        throw 'Error1 calling setAttribute_, no argument attributeName given (this = '+this+').';\n"
     "    if (value === undefined) // Wirklich Triple-= erforderlich, damit er 'null' passieren lässt bei 'text' und 'mask'\n"
-    "        throw 'Error2 calling setAttribute_, no argument value given or undefined (attributeName = \"'+attributeName+'\" and this = '+this+').';\n"
+    "        throw 'Error2 calling setAttribute_, no argument value given or undefined (attributeName = \"'+attributeName+'\" and this = '+this+' and this.id = '+this.id+').';\n"
     "\n"
     "\n"
     "\n"
@@ -14216,6 +14240,9 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'animduration' ||\n"
     "            attributeName === 'pooling' ||\n"
     "            attributeName === 'size' ||\n"
+    "            attributeName === 'maxlength' ||\n"
+    "            attributeName === 'pattern' ||\n"
+    "            attributeName === 'livetext' ||\n"
     "            attributeName === 'resourcepic' ||\n"
     "            attributeName === 'show' ||\n"
     "            attributeName === 'text_x' ||\n"
@@ -14246,7 +14273,7 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "    // In jedem Fall: triggern! Das sieht OL so vor\n"
-    "    // Kein bubblen, sondern Point-2-Point-Logik in OL, deswegen triggerHandler\n"
+    "    // Kein bubblen, sondern Point-2-Point-Logik in OL, deswegen triggerHandler()\n"
     "    // der getzte Wert (value) wird als Extra-Parameter mit gesendet\n"
     "    if (triggerMe)\n"
     "        $(me).triggerHandler('on'+attributeName,value);\n"
@@ -15099,13 +15126,14 @@ BOOL isJSExpression(NSString *s)
     "}\n"
     "HTMLInputElement.prototype.presentValue = presentValueFunction;\n"
     "\n"
-    "// field ist der undokumentierte Zugriff auf das eigentliche field\n"
-    "// Zugriff darauf wird derzeit nicht unterstützt bzw,. einfach this\n"
-    "HTMLInputElement.prototype.field = function() { return this; }\n"
-    "\n"
-    "// undokumentierte Zugriff auf ein pattern...\n"
-    "// Zugriff darauf wird derzeit nicht unterstützt\n"
-    "HTMLInputElement.prototype.setPattern = function() { }\n"
+    "// field ist der undokumentierte Zugriff auf das eigentliche input\n"
+    // alt + falsch: "HTMLInputElement.prototype.field = function() { return this; }\n"
+    "// Matcht falls 'this' direkt ein input ist, aber auch, wenn es erst verschachtelt irgendwo weiter drinnen liegt\n"
+    "Object.defineProperty(HTMLElement.prototype, 'field', {\n"
+    "    get : function(){ if (!isDOM(this)) return undefined; return $(this).find('*').andSelf().filter('input').get(0); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
     "\n"
     "\n"
     "\n"
@@ -16424,6 +16452,7 @@ BOOL isJSExpression(NSString *s)
     "            varName = varName.replace(/immediateparent/g,'getTheParent(true)');\n"
     "            varName = varName.replace(/parent/g,'getTheParent()');\n"
     "            varName = varName.replace(/\\.dataset/g,'.myDataset');\n"
+    "            varName = varName.replace(/\\.title/g,'.myTitle');\n"
     "            varName = varName.replace(/\\.value/g,'.myValue');\n"
     "\n"
     "            // Falls ganz vorne jetzt getTheParent() steht, dann muss ich unser aktuelles Element\n"
@@ -16575,10 +16604,9 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "    // setAttribute_ verschickt events nur an 'onvalue' usw...\n"
-    "    if (prop === 'myDataset')\n"
-    "        prop = 'dataset';\n"
-    "    if (prop === 'myValue')\n"
-    "        prop = 'value';\n"
+    "    if (prop === 'myDataset') prop = 'dataset';\n"
+    "    if (prop === 'myTitle') prop = 'title'; // ToDo -> Are you sure with this things?\n"
+    "    if (prop === 'myValue') prop = 'value';\n"
     "\n"
     //"var vorher = expression;\n"
     "    // expression-string als echten JS-Ausdruck auflösen\n"
@@ -16868,11 +16896,23 @@ BOOL isJSExpression(NSString *s)
     "                obj.inherit.contentHTML = obj.inherit.contentHTML.replace(/text/, 'email'); // ohne 'g'\n"
     "            }\n"
     "        }\n"
+    "\n"
+    "        // Kurz vorher olel-name sichern, um gleich im parent den Verweis über den Namen zu korrigieren:\n"
+    "        var nameProperty = $(id).data('name');\n"
+    "        var parentElement = id.getTheParent(); // Muss ich auch vorher speichern, danach iwie nicht erreichbar\n"
+    // direkt 'id.getTheParent()[$(id).data('name')]' in nur einer var zu speichern, klappt nicht, weil sich Änderung nur lokal auswirkt
+    "\n"
     "        var theSavedCSSFromRemovedElement = $(id).replaceWith(obj.inherit.contentHTML).attr('style');\n"
     "        // Interne ID dieser Funktion neu setzen\n"
     "        id = document.getElementById(id.id);\n"
     "        // Und externen Elementnamen neu setzen\n"
-    "        window[id.id] = id; // Falls es irgendwo als parent gesetzt wurde, puh... überlegen, wie ich da dran käme\n"
+    "        window[id.id] = id;\n"
+    "        // nameProperty im übergeordneten parent-Element korrigieren\n"
+    "        if (parentElement && nameProperty)\n"
+    "        {\n"
+    "            parentElement[nameProperty] = id;\n"
+    "        }\n"
+    "\n"
     "\n"
     "        // Und das gerettete CSS wieder einsetzen\n"
     //"        $(id).attr('style',$(id).attr('style') + theSavedCSSFromRemovedElement);\n"
@@ -17021,6 +17061,7 @@ BOOL isJSExpression(NSString *s)
     "        // Da es JS-Code ist, Anpassungen vornehmen.\n"
     "        av[i] = av[i].replace(/setAttribute/g,'setAttribute_');\n"
     "        av[i] = av[i].replace(/\\.dataset/g,'.myDataset');\n"
+    "        av[i] = av[i].replace(/\\.title/g,'.myTitle');\n"
     "        av[i] = av[i].replace(/\\.value/g,'.myValue');\n"
     "\n"
     "        // 'on' entfernen\n"
@@ -17079,6 +17120,7 @@ BOOL isJSExpression(NSString *s)
     "                av[i] = av[i].replace(/immediateparent/g,'getTheParent(true)');\n"
     "                av[i] = av[i].replace(/parent/g,'getTheParent()');\n"
     "                av[i] = av[i].replace(/\\.dataset/g,'.myDataset');\n"
+    "                av[i] = av[i].replace(/\\.title/g,'.myTitle');\n"
     "                av[i] = av[i].replace(/\\.value/g,'.myValue');\n"
     "\n"
     //"                // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
@@ -17455,6 +17497,17 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  this.selfDefinedAttributes = { height: 26, maxlength: null, multiline: false, password: false, pattern: '', resizable: false, text: textBetweenTags, text_y: (this.multiline ? 2 : 2), width: 106 }\n"
     "\n"
+    "  this.methods = {\n"
+    "    setMaxlength: function(v) {\n"
+    "        // Does 'trigger'! Herausgefunden über OL-Test. Deswegen über setAttribute_() gehen\n"
+    "        this.setAttribute_('maxlength',v);\n"
+    "    },\n"
+    "    setPattern: function(v) {\n"
+    "        // Does 'trigger'!\n"
+    "        this.setAttribute_('pattern',v);\n"
+    "    }\n"
+    "  }\n"
+    "\n"
     // data-olel auch hier setzen, damit er in setAttribute_() bei gridFit usw. richtig abbiegt
     "  this.contentHTML = '<input type=\"text\" id=\"@@@P-L,A#TZHALTER@@@\" data-olel=\"edittext\" class=\"input_standard\" value=\"'+textBetweenTags+'\" />'\n"
     "\n"
@@ -17463,9 +17516,7 @@ BOOL isJSExpression(NSString *s)
     "    el.setAttribute_('width',el.width-12); // margin/border/padding rechts und links iwie korrigieren\n"
     "    el.setAttribute_('height',el.height-(12+2)) // Wegen FF nochmal 2 extra bei der Höhe abziehen;\n"
     "\n"
-    // Da wir bewusst kein umbendes div haben, ist unser 'field' wir selber
-    "    el.field = el;\n"
-    "\n"
+    "    // field wurde per prototype in 'jsHelper.js' für alle HTMLElement'e definiert \n"
     "    el.field.setHTML = function(flag) { el.field.flagHTML = flag; }\n"
     "    el.field.antiAliasType = '';\n"
     "    el.field.gridFit = '';\n"
@@ -17691,7 +17742,9 @@ BOOL isJSExpression(NSString *s)
     "  this.selfDefinedAttributes = { myType:'none', myValue:null }\n"
     "\n"
     "  this.methods = {\n"
-    "    getValue: function() { if (this.myValue) return this.myValue; else return this.text; }\n"
+    "    getValue: function() {\n"
+    "        if (this.myValue) return this.myValue; else return this.text;\n"
+    "    }\n"
     "  }\n"
     "\n"
     "  this.contentHTML = '';\n"

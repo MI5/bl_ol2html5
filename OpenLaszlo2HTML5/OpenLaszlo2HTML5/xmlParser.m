@@ -5393,7 +5393,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
     // ToDo: Puh, title ist ein selbst erfundenes Attribut von BDScheckbox!
-    // Das gibt es nämlich gar nicht laut Doku und Test mit OL-Editor!
     if ([elementName isEqualToString:@"BDScheckbox"] ||
         [elementName isEqualToString:@"checkbox"])
     {
@@ -8210,8 +8209,16 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
                 if ([s hasPrefix:@"$"])
                 {
-                    s = [self makeTheComputedValueComputable:s];
-                    weNeedQuotes = NO;
+                    if (false)
+                    {
+                        s = [self makeTheComputedValueComputable:s];
+                        weNeedQuotes = NO;
+                    }
+                    else
+                    {
+                        // Stattdessen nur:
+                        s = [self modifySomeExpressionsInJSCode:s];
+                    }
                 }
 
                 key = [self somePropertysNeedToBeRenamed:key];
@@ -10254,21 +10261,19 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"  if (window['rudWeitereInfos']) rudWeitereInfos.isvalid = true; // ToDo\n"];
     [self.output appendString:@"  if (!window['globalcalendar']) globalcalendar = {}; // ToDo\n"];
     [self.output appendString:@"  globalcalendar.setCurrentdate = function() { return new Date(); };\n"];
-    [self.output appendString:@"  globalcalendar.close = function() {  };\n\n"];
 
-    [self.output appendString:@"  var dlgsave = new dlg();"];
-    [self.output appendString:@"  var dlgwaitonline = new dlg();"];
-    [self.output appendString:@"  // ShowError = function(x) { /* alert(x); */ };\n"];
+    [self.output appendString:@"  var dlgsave = new dlg();\n"];
+    [self.output appendString:@"  var dlgwaitonline = new dlg();\n"];
     [self.output appendString:@"  function dlg()\n  {\n    // Extern definiert\n    this.open = open;\n    // Intern definiert (beides möglich)\n"];
     [self.output appendString:@"     this.completeInstantiation = function completeInstantiation() { };\n  }\n"];
     [self.output appendString:@"  function open()\n  {\n    alert('Willst du wirklich deine Ehefrau löschen? Usw...');\n  }\n"];
     [self.output appendString:@"  var dlgFamilienstandSingle = new dlg();\n\n"];
 
     // Seitdem ich die initstage=defer-Klassen nach ganz unten verschoben habe, taucht das hier auf,
-    // Er erwartet glaube ich die Variable _inner in einem 'BDSReplicator'
+    // Er erwartet glaube ich die Variable '_inner' in einem 'BDSReplicator'
     [self.output appendString:@"  if (window.element139) element139._inner = element139;\n"];
-    [self.output appendString:@"  if (window.element139) element139._scrollview = element139;\n"];
-    [self.output appendString:@"  if (window.element139) element139._innerscroll = element139;\n"];
+    [self.output appendString:@"  // if (window.element139) element139._scrollview = element139;\n"];
+    [self.output appendString:@"  // if (window.element139) element139._innerscroll = element139;\n"];
     [self.output appendString:@"  if (window.element139) element139.measureHeight = function() {};\n\n"];
 
 
@@ -14236,6 +14241,7 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'spacing' ||\n"
     "            attributeName === 'isopen' ||\n"
     "            attributeName === 'start' ||\n"
+    "            attributeName === 'maxdate' ||\n"
     "            attributeName === 'ende' ||\n"
     "            attributeName === 'checked' || // Von BDSCheckbox\n"
     "            attributeName === 'parentnumber' ||\n"
@@ -16524,9 +16530,9 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// Ich brauche func hier als string, damit ich den string wegen der Klone zerlegen kann\n"
     "var setInitialConstraintValue = function (el,prop,func) {\n"
-    "    if (typeof el !== 'object') throw new TypeError('setInitialConstraintValue called on non-object')\n"
-    "    if (typeof prop !== 'string') throw new TypeError('setInitialConstraintValue - second arg must be a string')\n"
-    "    if (typeof func !== 'string') throw new TypeError('setInitialConstraintValue - third arg must be a string (will be evaluated as a function)')\n"
+    "    if (typeof el !== 'object') throw new TypeError('setInitialConstraintValue() called on non-object')\n"
+    "    if (typeof prop !== 'string') throw new TypeError('setInitialConstraintValue() - second arg must be a string')\n"
+    "    if (typeof func !== 'string') throw new TypeError('setInitialConstraintValue() - third arg must be a string (will be evaluated as a function)')\n"
     "\n"
     "    // Falls es Klone gibt, führt er hier drin auch schon für alle Klone eine Vorbelegung durch.\n"
     "    // Lasse ich erstmal so, bewirkt quasi einen Defaultwert für Klone, der aber sogleich überschrieben wird.\n"
@@ -16557,6 +16563,7 @@ BOOL isJSExpression(NSString *s)
     // Weil setInitialConstraint einen String braucht, jetzt auch hier die Funktion als String
     // (Ziel: Beide Aufrufe in einer Funktion zusammenfassen)
     "var setConstraint = function (el,expression,func,namespace) {\n"
+    "    if (el === element676) alert(el.id + ' ### ' + expression + ' ### ' + func + ' ### ' + namespace);\n"
     "    if (typeof expression !== 'string' || expression === '') throw new TypeError('setConstraint - second arg must be a non-empty string')\n"
     "    if (typeof func !== 'string') throw new TypeError('setConstraint - third arg must be a function (will be evaluated as a function)')\n"
     "\n"
@@ -16784,7 +16791,25 @@ BOOL isJSExpression(NSString *s)
     "function assignAllInstanceAttributes(id, iv) {\n"
     "    Object.keys(iv).forEach(function(key)\n"
     "    {\n"
-    "        id[key] = iv[key];\n"
+    "        var value = iv[key];\n"
+//    "\n"
+//    "        if (typeof value === 'string' && value.startsWith('@§.CONSTRAINTVALUE.§@'))\n"
+//    "        {\n"
+//    "            value = value.substr(21);\n"
+//    "            // value = replaceID(value,''+$(id).attr('id')); // <-- Die dort drin befindliche with/bind-Element-Angabe sollte gleich unserem 'id' sein, deswegen kein replace dieser nötig\n"
+//    "\n"
+//    "            var evalString = 'id[key] = ' + value + ';'\n"
+//    "            eval(evalString);\n"
+//    "        }\n"
+    "\n"
+    "        if (typeof value === 'string' && value.startsWith('$')) // = Constraint value\n"
+    "        {\n"
+    "            handleConstraintValue(id,key,value);\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "            id[key] = value;\n"
+    "        }\n"
     "    });\n"
     "}\n"
     "\n"
@@ -16904,6 +16929,21 @@ BOOL isJSExpression(NSString *s)
     "        var nameProperty = $(id).data('name');\n"
     "        var parentElement = id.getTheParent(); // Muss ich auch vorher speichern, danach iwie nicht erreichbar\n"
     // direkt 'id.getTheParent()[$(id).data('name')]' in nur einer var zu speichern, klappt nicht, weil sich Änderung nur lokal auswirkt
+    "        // Bei element321 (BDSedittext) u. a. ist iwie ein Doppelsprung nötig, weil Elternelement eins tiefer verschachtelt. KA warum (iwie weil Klasse in Klasse instanziert wird)\n"
+    "        if (nameProperty && parentElement && !parentElement[nameProperty])\n"
+    "        {\n"
+    "            while (!parentElement[nameProperty])\n"
+    "            {\n"
+    "                // Rein als Schutz, falls er die property in gar keinem Elternelement findet\n"
+    "                if ($(parentElement).length == 0)\n"
+    "                {\n"
+    "                    console.log('Serious problem in interpretObject(): Could not find a parent element with the name attribue '+nameProperty);\n"
+    "                    break;\n"
+    "                }\n"
+    "\n"
+    "                parentElement = parentElement.getTheParent();\n"
+    "            }\n"
+    "        }\n"
     "\n"
     "        var theSavedCSSFromRemovedElement = $(id).replaceWith(obj.inherit.contentHTML).attr('style');\n"
     "        // Interne ID dieser Funktion neu setzen\n"
@@ -17100,43 +17140,7 @@ BOOL isJSExpression(NSString *s)
     "        {\n"
     "            if (typeof av[i] === 'string' && av[i].startsWith('$')) // = Constraint value\n"
     "            {\n"
-    "                if (av[i].startsWith('$once{')) // Ist dann gar kein Constraint value\n"
-    "                {\n"
-    "                    av[i] = '${' + av[i].substring(6);\n"
-    "                    av[i] = av[i].substring(2,av[i].length-1);\n"
-    "                    id.setAttribute_(an[i],av[i]);\n"
-    "                    continue;\n"
-    "                }\n"
-    "\n"
-    "                if (av[i].startsWith('$style{')) // Ist dann gar kein Constraint value\n"
-    "                {\n"
-    "                    av[i] = '${' + av[i].substring(7);\n"
-    "                    av[i] = av[i].substring(2,av[i].length-1);\n"
-    "                    id.setAttribute_(an[i],av[i]);\n"
-    "                    continue;\n"
-    "                }\n"
-    "\n"
-    "                // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...\n"
-    "                var vars = getTheDependingVarsOfTheConstraint(av[i],id.id);\n"
-    "\n"
-    "                av[i] = av[i].substring(2,av[i].length-1);\n"
-    "                av[i] = av[i].replace(/immediateparent/g,'getTheParent(true)');\n"
-    "                av[i] = av[i].replace(/parent/g,'getTheParent()');\n"
-    "                av[i] = av[i].replace(/\\.dataset/g,'.myDataset');\n"
-    "                av[i] = av[i].replace(/\\.title/g,'.myTitle');\n"
-    "                av[i] = av[i].replace(/\\.value/g,'.myValue');\n"
-    "\n"
-    //"                // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
-    //"                var result = (function() { with (id) { return eval(av[i]); } }).bind(id)();\n"
-    //"                av[i] = result;\n"
-    //"\n"
-    "                setInitialConstraintValue(id,an[i],av[i]);\n"
-    "\n"
-    "                // Jede var, von der die constraint abhängt, beobachten\n"
-    "                for (var j = 0; j < vars.length; j++)\n"
-    "                {\n"
-    "                    setConstraint(id,vars[j],'return (function() { with ('+id.id+') { '+id.id+'.setAttribute_(\"'+an[i]+'\",'+av[i]+'); } }).bind('+id.id+')();');\n"
-    "                }\n"
+    "                handleConstraintValue(id,an[i],av[i]);\n"
     "            }\n"
     "            else\n"
     "            {\n"
@@ -17238,6 +17242,55 @@ BOOL isJSExpression(NSString *s)
     "    $(id).triggerHandler('oninit');\n"
     "    id.inited = true;\n"
     "  }\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "// Setzt Variable, unter Berücksichtigung, dass es eine constraint ist//\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "// @arg el = Unser Element\n"
+    "// @arg a = Das Attribut\n"
+    "// @arg v = Der zu setzende value.\n"
+    "function handleConstraintValue(el,a,v)\n"
+    "{\n"
+    "    // Sicherstellen, dass uns auch wirklich eine Constraint Value übergeben wurde\n"
+    "    if (typeof v !== 'string' || !(v.startsWith('$')))\n"
+    "        throw new TypeError('Function handleConstraintValue() - Something totally went wrong... This is not a constraint value!');\n"
+    "\n"
+    "    if (v.startsWith('$once{')) // Ist dann gar kein Constraint value\n"
+    "    {\n"
+    "        v = '${' + v.substring(6);\n"
+    "        v = v.substring(2,v.length-1);\n"
+    "        el.setAttribute_(a,v);\n"
+    "        return;\n"
+    "    }\n"
+    "\n"
+    "    if (v.startsWith('$style{')) // Ist dann gar kein Constraint value\n"
+    "    {\n"
+    "        v = '${' + v.substring(7);\n"
+    "        v = v.substring(2,v.length-1);\n"
+    "        el.setAttribute_(a,v);\n"
+    "        return;\n"
+    "    }\n"
+    "\n"
+    "    // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...\n"
+    "    var vars = getTheDependingVarsOfTheConstraint(v,el.id);\n"
+    "\n"
+    "    v = v.substring(2,v.length-1);\n"
+    "    v = v.replace(/immediateparent/g,'getTheParent(true)');\n"
+    "    v = v.replace(/parent/g,'getTheParent()');\n"
+    "    v = v.replace(/\\.dataset/g,'.myDataset');\n"
+    "    v = v.replace(/\\.title/g,'.myTitle');\n"
+    "    v = v.replace(/\\.value/g,'.myValue');\n"
+    "\n"
+    "    setInitialConstraintValue(el,a,v);\n"
+    "\n"
+    "    // Auf jede var, von der die constraint abhängt, horchen\n"
+    "    for (var j = 0; j < vars.length; j++)\n"
+    "    {\n"
+    "        setConstraint(el,vars[j],'return (function() { with ('+el.id+') { '+el.id+'.setAttribute_(\"'+a+'\",'+v+'); } }).bind('+el.id+')();');\n"
+    "    }\n"
     "}\n"
     "\n"
     "\n"
@@ -17567,6 +17620,12 @@ BOOL isJSExpression(NSString *s)
     "\n"
     // kann nicht '_content' heißen, weil fixe property bei Firefox... Halber Tag.... Deswegen um Unterstrich ergänzt
     "  this.selfDefinedAttributes = { text:textBetweenTags, defaultplacement: '_content_' }\n"
+    "\n"
+    "  this.methods = {\n"
+    "    close: function() {\n"
+    "        this.setAttribute_('visible',false);\n"
+    "    },\n"
+    "  }\n"
     "\n"
     "  this.contentHTML = '' +\n"
     "  '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_window ui-corner-all\">\\n' +\n"

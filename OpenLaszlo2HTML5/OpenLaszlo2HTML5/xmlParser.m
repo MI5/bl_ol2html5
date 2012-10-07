@@ -1090,8 +1090,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         widthGesetzt = YES;
     }
 
-
-    if ([attributeDict valueForKey:@"controlwidth"]) // ToDo - Seems to be a self defined attribute of BDScombobox
+    if ([elemName isEqualToString:@"BDScombobox"] || [elemName isEqualToString:@"BDSedittext"] || [elemName isEqualToString:@"BDSeditnumber"])
+    {
+    if ([attributeDict valueForKey:@"controlwidth"]) // ToDo - Self defined attribute of BDScombobox / BDSedittext / BDSeditnumber
     {
         self.attributeCount++;
         NSLog(@"Setting the attribute 'controlwidth' as CSS 'width'.");
@@ -1111,6 +1112,7 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [style appendString:@"px"];
         }
         [style appendString:@";"];
+    }
     }
 
     if ([attributeDict valueForKey:@"x"])
@@ -1830,11 +1832,17 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
+- (NSString*) modifySomeExpressionsInJSCode:(NSString*)s
+{
+    return [self modifySomeExpressionsInJSCode:s alsoModifyParent:YES];
+}
+
+
 // Ne, wir definieren einfach ein globales setAttribute_ mit defineProperty
 // Dazu muss ich dann nur das this immer aktualisieren, da es auch passieren kann, dass
 // setAttribute ohne vorangehende Variable aufgerufen wird.
 // Neu: Nicht mehr nötig. Wir beachten einfach den Scope von dem aus es aufgerufen wurde.
-- (NSString*) modifySomeExpressionsInJSCode:(NSString*)s
+- (NSString*) modifySomeExpressionsInJSCode:(NSString*)s alsoModifyParent:(BOOL)b
 {
     if (s == nil)
         [self instableXML:@"Sag mal, so kannst du mich nicht aufrufen. Brauche schon nen String!"];
@@ -1845,16 +1853,20 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    // Bevor ich die parents ersetze muss ich das native 'parentNode', welches im Code vorkommen kann, retten
-    s = [self inString:s searchFor:@"parentNode" andReplaceWith:@"@@@_prentNode_@@@" ignoringTextInQuotes:YES];
-    // und 'parentnumber'...
-    s = [self inString:s searchFor:@"parentn" andReplaceWith:@"@@@_prentn_@@@" ignoringTextInQuotes:YES];
+    if (b)
+    {
+        // Bevor ich die parents ersetze muss ich das native 'parentNode', welches im Code vorkommen kann, retten
+        s = [self inString:s searchFor:@"parentNode" andReplaceWith:@"@@@_prentNode_@@@" ignoringTextInQuotes:YES];
+        // und 'parentnumber'...
+        s = [self inString:s searchFor:@"parentn" andReplaceWith:@"@@@_prentn_@@@" ignoringTextInQuotes:YES];
 
-    s = [self inString:s searchFor:@"immediateparent" andReplaceWith:@"getTheParent(true)" ignoringTextInQuotes:YES];
-    // --> Neu als getter gelöst / Ganz neu: Bricht leider jQuery UI...
+        s = [self inString:s searchFor:@"immediateparent" andReplaceWith:@"getTheParent(true)" ignoringTextInQuotes:YES];
+        // --> Neu als getter gelöst / Ganz neu: Bricht leider jQuery UI...
 
-    s = [self inString:s searchFor:@"parent" andReplaceWith:@"getTheParent()" ignoringTextInQuotes:YES];
-    // --> Neu als getter gelöst / Ganz neu: Bricht leider jQuery UI...
+        s = [self inString:s searchFor:@"parent" andReplaceWith:@"getTheParent()" ignoringTextInQuotes:YES];
+        // --> Neu als getter gelöst / Ganz neu: Bricht leider jQuery UI...
+    }
+
 
 
     // Und das native 'parentNode' wieder herstellen.
@@ -5260,7 +5272,7 @@ didStartElement:(NSString *)elementName
 
 
         // Im Prinzip nur wegen controlwidth
-        [self.output appendString:[self addCSSAttributes:attributeDict]];
+        [self.output appendString:[self addCSSAttributes:attributeDict toElement:elementName]];
 
         [self.output appendString:@"\">\n"];
 
@@ -5642,7 +5654,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         }
 
 
-        [self.output appendString:[self addCSSAttributes:attributeDict]];
+        [self.output appendString:[self addCSSAttributes:attributeDict toElement:elementName]];
 
 
         if ([attributeDict valueForKey:@"multiline"] && [[attributeDict valueForKey:@"multiline"] isEqualToString:@"true"])
@@ -5793,7 +5805,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [self.output appendString:@" style=\""];
 
 
-        // Im Prinzip nur wegen controlwidth
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
         [self.output appendString:@"margin-left:4px;\" />\n"];
@@ -8007,10 +8018,13 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         if ([attributeDict valueForKey:@"text"])
         {
             self.attributeCount++;
-            NSLog(@"Setting the attribute 'text' as 'textBetweenTags'-Parameter of the object.");
+            // NSLog(@"Setting the attribute 'text' as 'textBetweenTags'-Parameter of the object.");
 
             // Wird dann beim schließen ausgelesen
-            self.textInProgress = [[NSMutableString alloc] initWithString:[attributeDict valueForKey:@"text"]];
+            // self.textInProgress = [[NSMutableString alloc] initWithString:[attributeDict valueForKey:@"text"]];
+
+            // Neu: Ne, mache ich nicht mehr. Wenn ich doch das Attribut 'text' habe, wieso soll ich es dann nochmal
+            // als textBetweenTags setzen?
         }
         if ([attributeDict valueForKey:@"title"])
         {
@@ -8217,7 +8231,10 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
                     else
                     {
                         // Stattdessen nur:
-                        s = [self modifySomeExpressionsInJSCode:s];
+                        s = [self modifySomeExpressionsInJSCode:s alsoModifyParent:NO];
+                        // classroot usw. muss ich ersetzen, ja
+                        // Aber ich darf nicht 'parent' durch getTheParent() ersetzen, weil sonst die Klammer am Ende
+                        // einen constraint value falsch trennt! oh man...
                     }
                 }
 
@@ -10396,6 +10413,18 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"    else\n"];
     [self.output appendString:@"      $(this).find('input').datepicker();\n"];
     [self.output appendString:@"  });\n"];
+
+
+    [self.output appendString:@"\n"];
+    [self.output appendString:@"\n"];
+    [self.output appendString:@"  // Layoutanpassungen speziell für Taxango\n"];
+    [self.output appendString:@"  $(\"[data-olel='BDSeditdate']\").css('height','27px');\n"];
+    [self.output appendString:@"  $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_title']\").css('left','0px');\n"];
+    [self.output appendString:@"  $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_control']\").css('left','100px');\n"];
+    [self.output appendString:@"\n"];
+    [self.output appendString:@"\n"];
+
+
 
 
     [self.output appendString:@"\n});\n</script>\n\n"];
@@ -13556,7 +13585,7 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        else\n"
     "        {\n"
-    "            alert('So far unsupported value for value in setAttribute_()');\n"
+    "            alert('So far unsupported value for value in setAttribute_() - value = '+value);\n"
     "        }\n"
     "    }\n"
     "    else if (attributeName == 'font')\n"
@@ -14236,12 +14265,19 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'controlwidth' ||\n"
     "            attributeName === 'inset_y' ||\n"
     "            attributeName === 'focused' ||\n"
+    "            attributeName === 'myTitle' ||\n"
+    "            attributeName === 'newdp' ||\n"
+    "            attributeName === 'datedays' ||\n"
+    "            attributeName === 'restrictyear' ||\n"
     "            attributeName === 'day' ||\n"
     "            attributeName === 'userchecked' ||\n"
     "            attributeName === 'spacing' ||\n"
     "            attributeName === 'isopen' ||\n"
     "            attributeName === 'start' ||\n"
     "            attributeName === 'maxdate' ||\n"
+    "            attributeName === 'selecteddate' ||\n"
+    "            attributeName === 'toobigErrorstring' ||\n"
+    "            attributeName === 'plausicheck' ||\n"
     "            attributeName === 'ende' ||\n"
     "            attributeName === 'checked' || // Von BDSCheckbox\n"
     "            attributeName === 'parentnumber' ||\n"
@@ -14254,6 +14290,8 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'livetext' ||\n"
     "            attributeName === 'resourcepic' ||\n"
     "            attributeName === 'show' ||\n"
+    "            attributeName === 'required' ||\n"
+    "            attributeName === 'infotext' ||\n"
     "            attributeName === 'text_x' ||\n"
     "            attributeName === 'sharpness' ||\n"
     "            attributeName === 'thickness' ||\n"
@@ -16563,7 +16601,7 @@ BOOL isJSExpression(NSString *s)
     // Weil setInitialConstraint einen String braucht, jetzt auch hier die Funktion als String
     // (Ziel: Beide Aufrufe in einer Funktion zusammenfassen)
     "var setConstraint = function (el,expression,func,namespace) {\n"
-    "    if (el === element676) alert(el.id + ' ### ' + expression + ' ### ' + func + ' ### ' + namespace);\n"
+    //"    if (el === element674) alert(el.id + ' ### ' + expression + ' ### ' + func + ' ### ' + namespace);\n"
     "    if (typeof expression !== 'string' || expression === '') throw new TypeError('setConstraint - second arg must be a non-empty string')\n"
     "    if (typeof func !== 'string') throw new TypeError('setConstraint - third arg must be a function (will be evaluated as a function)')\n"
     "\n"
@@ -16618,7 +16656,11 @@ BOOL isJSExpression(NSString *s)
     "    if (prop === 'myTitle') prop = 'title'; // ToDo -> Are you sure with this things?\n"
     "    if (prop === 'myValue') prop = 'value';\n"
     "\n"
-    //"var vorher = expression;\n"
+    "    // Falls er z. B. über das 'name'-Attribut geht, muss ich ein with() darum packen\n"
+    "    // gilt sowohl für expression als auch für obj\n"
+    "    expression = 'with (' +el.id+') { ' + expression + ' }';\n"
+    "    obj = 'with (' +el.id+') { ' + obj + ' }';\n"
+    "\n"
     "    // expression-string als echten JS-Ausdruck auflösen\n"
     "    // Auflösen über window['obj'] klappt nicht... why?\n"
     "    expression = eval(expression);\n"
@@ -16629,7 +16671,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     //"Check-Möglichkeit auf 'undefined'\n"
     //"if (expression === undefined)\n"
-    //"    alert(vorher);\n"
+    //"    alert('damn');\n"
     "\n"
     "    // Bei change aktualisieren bzw. auf ein event horchen, da constraint-value\n"
     "    if (typeof expression === 'object')\n"
@@ -16792,15 +16834,6 @@ BOOL isJSExpression(NSString *s)
     "    Object.keys(iv).forEach(function(key)\n"
     "    {\n"
     "        var value = iv[key];\n"
-//    "\n"
-//    "        if (typeof value === 'string' && value.startsWith('@§.CONSTRAINTVALUE.§@'))\n"
-//    "        {\n"
-//    "            value = value.substr(21);\n"
-//    "            // value = replaceID(value,''+$(id).attr('id')); // <-- Die dort drin befindliche with/bind-Element-Angabe sollte gleich unserem 'id' sein, deswegen kein replace dieser nötig\n"
-//    "\n"
-//    "            var evalString = 'id[key] = ' + value + ';'\n"
-//    "            eval(evalString);\n"
-//    "        }\n"
     "\n"
     "        if (typeof value === 'string' && value.startsWith('$')) // = Constraint value\n"
     "        {\n"
@@ -16811,6 +16844,19 @@ BOOL isJSExpression(NSString *s)
     "            id[key] = value;\n"
     "        }\n"
     "    });\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "function hasValidDefaultplacement(el,obj) {\n"
+    "    if (!obj.inherit) return false;\n"
+    "    if (!obj.inherit.inherit) return false;\n"
+    "    if (!obj.inherit.inherit.selfDefinedAttributes) return false;\n"
+    "    if (!obj.inherit.inherit.selfDefinedAttributes.defaultplacement) return false;\n"
+    "    if (obj.inherit.inherit.selfDefinedAttributes.defaultplacement == '') return false;\n"
+    "    if ($(el).find(\"[data-name='\"+obj.inherit.inherit.selfDefinedAttributes.defaultplacement+\"']\").length == 0) return false\n"
+    "\n"
+    "    return true;\n"
     "}\n"
     "\n"
     "\n"
@@ -16841,7 +16887,7 @@ BOOL isJSExpression(NSString *s)
     "    obj = obj.inherit;\n"
     "  }\n"
     "  obj = currentObj; // Wieder unser Original-Objekt setzen\n"
-    "  rueckwaertsArray.reverse();\n"
+    "  rueckwaertsArray.reverse(); // Enthält nun alle Objekte der Vererbungshierachie, beginnend mit dem entferntesten\n"
     "  var inherit_defaultplacement = assignAllDefaultAttributesAndMethods(id,rueckwaertsArray);\n"
     "\n"
     "  // Danach setzen der konkreten Instanzvariablen der Instanz\n"
@@ -16854,8 +16900,14 @@ BOOL isJSExpression(NSString *s)
     "  // und die Attribute übernehmen (bei gleichen gelten die hierachiemäßig allernächsten).\n"
     "  // Außerdem den HTML-Content von Vorfahren einfügen und individuelle ID vergeben.\n"
     "  var currentObj = obj; // Zwischenspeichern\n"
-    "  while (obj.inherit !== undefined)\n"
+    // Warum werte ich dies hier vorwärts aus. Ich denke, dass ich beim allerletzten Objekt anfangen muss
+    // und mich dann über die Vererbungshierachie bis zum aktuellen Objekt durchhangeln muss.
+    // Deswegen arbeite ich hier ab jetzt einfach auch mit dem rueckwaertsArray
+    //"  while (obj.inherit !== undefined)\n"
+    "  for (var i = 0;i<rueckwaertsArray.length;i++)\n"
     "  {\n"
+    "    var obj = rueckwaertsArray[i];\n" // <-- Auch neu jetzt dadurch.
+    "\n"
     "    // Doppelte Einträge von Attributen entfernen\n"
     "    obj.inherit = deleteAttributesPreviousDeclared(currentObj.attributeNames,obj.inherit);\n"
     "\n"
@@ -16870,6 +16922,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Dann den HTML-Content des Vorfahren einfügen\n"
     "    // Prepend! Da es der OpenLaszlo-Logik entspricht, tiefer verschachtelte Vorfahren immer davor zu setzen\n"
+    "    // Bzw. neu jetzt append! Weil ich die Vorfahren vom Ende beginnend, auswerte.\n"
     "    // Vorher aber die ID ersetzen\n"
     "    // Irgendwas stimmt in der Logik noch nicht... Nach meinem Verständnis erben alle Klassen von view\n"
     "    // So steht es auch in der Doku. Deswegen ist um alle Klassen eine View <div class='div-standard'> herumgebaut, an welche dann immer prepended wird.\n"
@@ -17007,7 +17060,15 @@ BOOL isJSExpression(NSString *s)
     "        // Damit es die IDs nicht doppelt gibt, hänge ich 'inherit.name' dran.\n"
     "        obj.inherit.contentHTML = replaceID(obj.inherit.contentHTML,''+$(id).attr('id')+'_'+obj.inherit.name);\n"
     //"        obj.inherit.contentHTML = replaceID(obj.inherit.contentHTML,''+$(id).attr('id'));\n"
-    "        $(id).prepend(obj.inherit.contentHTML);\n"
+    //"        $(id).prepend(obj.inherit.contentHTML);\n"
+    "        if (hasValidDefaultplacement(id,obj))\n"
+    "        {\n"
+    "          $(id).find(\"[data-name='\"+obj.inherit.inherit.selfDefinedAttributes.defaultplacement+\"']\").prepend(obj.inherit.contentHTML);\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "          $(id).append(obj.inherit.contentHTML);\n"
+    "        }\n"
     "      }\n"
     "\n"
     "\n"
@@ -17026,9 +17087,9 @@ BOOL isJSExpression(NSString *s)
     "      // Dann den kompletten JS-Code ausführen\n"
     "      executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id')+'_'+obj.inherit.name, $(id).attr('id'));\n"
     "    }\n"
-    "\n"
-    "    // Objekt der nächsten Vererbungs-Stufe holen\n"
-    "    obj = obj.inherit;\n"
+    // "\n"
+    // "    // Objekt der nächsten Vererbungs-Stufe holen\n"
+    // "    obj = obj.inherit;\n" // <-- Nein, wir gehen neuerdings ja über das 'rueckwaertsArray'
     "  }\n"
     "  obj = currentObj; // Wieder unser Original-Objekt setzen\n"
     "\n"
@@ -17262,7 +17323,10 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        v = '${' + v.substring(6);\n"
     "        v = v.substring(2,v.length-1);\n"
-    "        el.setAttribute_(a,v);\n"
+    "        v = eval(v); // Sonst sind JS-Ausdrücke einfach nur strings\n"
+    //"        el.setAttribute_(a,v);\n"
+    // So, damit kein "Trying to set a property that never was declared"-Fehler kommt:
+    "        el[a] = v;\n"
     "        return;\n"
     "    }\n"
     "\n"
@@ -17270,7 +17334,9 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        v = '${' + v.substring(7);\n"
     "        v = v.substring(2,v.length-1);\n"
-    "        el.setAttribute_(a,v);\n"
+    //"        el.setAttribute_(a,v);\n"
+    // So, damit kein "Trying to set a property that never was declared"-Fehler kommt:
+    "        el[a] = v;\n"
     "        return;\n"
     "    }\n"
     "\n"

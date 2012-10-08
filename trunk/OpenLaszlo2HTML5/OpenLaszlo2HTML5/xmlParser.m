@@ -2024,11 +2024,11 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self setTheValue:[attributeDict valueForKey:@"enabled"] ofAttribute:@"enabled"];
     }
 
-    //if ([attributeDict valueForKey:@"isdefault"])
-    //{
-    //    self.attributeCount++;
-    //    [self setTheValue:[attributeDict valueForKey:@"isdefault"] ofAttribute:@"isdefault"];
-    //}
+    if ([attributeDict valueForKey:@"isdefault"])
+    {
+        self.attributeCount++;
+        [self setTheValue:[attributeDict valueForKey:@"isdefault"] ofAttribute:@"isdefault"];
+    }
 
     if ([attributeDict valueForKey:@"focusable"])
     {
@@ -3500,6 +3500,7 @@ didStartElement:(NSString *)elementName
     if ([elementName isEqualToString:@"window"] ||
         [elementName isEqualToString:@"view"] ||
         [elementName isEqualToString:@"videoview"] ||
+        [elementName isEqualToString:@"html"] ||
         [elementName isEqualToString:@"radiogroup"] ||
         [elementName isEqualToString:@"hbox"] ||
         [elementName isEqualToString:@"vbox"] ||
@@ -4710,7 +4711,7 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
-        [self.output appendString:@"\" />\n"];
+        [self.output appendString:@"\"></div>\n"];
 
         if ([attributeDict valueForKey:@"history"])
         {
@@ -4950,11 +4951,6 @@ didStartElement:(NSString *)elementName
         {
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'text' for now.");
-        }
-        if ([attributeDict valueForKey:@"isdefault"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'isdefault' for now.");
         }
 
 
@@ -5989,10 +5985,10 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-
+    // Historisch bedingt, dass ich hier im Code noch was mache, obwohl es eine self-Defined class ist.
     if ([elementName isEqualToString:@"rollUpDownContainer"])
     {
-        element_bearbeitet = YES;
+        //element_bearbeitet = YES;
 
 
         self.weAreInRollUpDownWithoutSurroundingRUDContainer = NO;
@@ -6005,7 +6001,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // weil es ja verschachtelte rollUpDownContainer geben kann
         // Beim Betreten Element dazunehmen, beim Verlassen entfernen
         [self.rollupDownElementeCounter addObject:[NSNumber numberWithInt:0]];
-
+/*
         [self.output appendString:@"<!-- Container für RollUpDown: -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
@@ -6026,7 +6022,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // Javascript aufrufen hier, im Prinzip nur wegen name
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
 
-
+ */
         // Setz die MiliSekunden für die Animationszeit, damit die 'rollUpDown'-Elemente darauf zugreifen können
         if ([attributeDict valueForKey:@"animduration"])
         {
@@ -6037,6 +6033,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         {
             self.animDuration = @"slow";
         }
+
     }
 
 
@@ -6391,11 +6388,14 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             NSLog(@"Skipping the attribute 'datapath' for now.");
         }
 
-        // ToDo: Wird derzeit nicht ausgewertet
+
         if ([attributeDict valueForKey:@"showinfo"])
         {
             self.attributeCount++;
-            NSLog(@"Skipping the attribute 'showinfo' for now.");
+            NSLog(@"Setting the attribute 'showinfo' as JS-Variable.");
+
+            [self.jsOutput appendString:@"\n  // Attribut 'showinfo' setzen\n"];
+            [self.jsOutput appendFormat:@"  %@.showinfo = %@;\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"showinfo"]];
         }
     }
 
@@ -6936,34 +6936,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
         self.weAreCollectingTheCompleteContentInClass = YES;
     }
-    // ToDo
-    if ([elementName isEqualToString:@"nicedialog"])
-    {
-        element_bearbeitet = YES;
-
-        if ([attributeDict valueForKey:@"id"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"initstage"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"width"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"height"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"visible"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"x"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"y"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"showhandcursor"])
-            self.attributeCount++;
-
-        // ToDo
-        // Alles was in diesen Dialogen definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreCollectingTheCompleteContentInClass = YES;
-    }
 
 
     // ToDo
@@ -7195,22 +7167,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
         [self.jQueryOutput appendString:o];
     }
-
-
-    if ([elementName isEqualToString:@"BDStabsheetselected"])
-    {
-        element_bearbeitet = YES;
-
-
-        // ToDo
-        if ([attributeDict valueForKey:@"name"])
-            self.attributeCount++;
-        // ToDo
-        if ([attributeDict valueForKey:@"x"])
-            self.attributeCount++;
-    }
-
-
 
 
 
@@ -7709,7 +7665,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         }
 
 
-        if ( [name isEqualToString:@"oninitToDoDeleteMe"] || [name isEqualToString:@"onconstructToDoDeleteMe"])
+        if ( [name isEqualToString:@"oninit__DeleteMe"] || [name isEqualToString:@"onconstruct__DeleteMe"])
         {
             self.attributeCount++;
             // NSLog(@"Binding the method in this handler to a jQuery-load-event.");
@@ -8026,21 +7982,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             // Neu: Ne, mache ich nicht mehr. Wenn ich doch das Attribut 'text' habe, wieso soll ich es dann nochmal
             // als textBetweenTags setzen?
         }
-        if ([attributeDict valueForKey:@"title"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'title' as 'textBetweenTags'-Parameter of the object.");
 
-            // Wird dann beim schließen ausgelesen
-            if (![elementName isEqualToString:@"BDSedittext"] &&
-                ![elementName isEqualToString:@"BDSeditdate"] &&
-                ![elementName isEqualToString:@"BDSFinanzaemter"] &&
-                ![elementName isEqualToString:@"BDSradiobutton"])
-            {
-                // ToDo  -> Legacy-Code. Sollte hier eigentlich nicht mehr reinkommen. Kann wohl ganz rausfliegen.
-                self.textInProgress = [[NSMutableString alloc] initWithString:[attributeDict valueForKey:@"title"]];
-            }
-        }
 
         // Ich muss die Stelle einmal markieren...
         // standardmäßig wird immer von 'view' geerbt, deswegen hier als class 'div_standard'.
@@ -8188,11 +8130,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         //[d removeObjectForKey:@"ignoreplacement"];
 
         /* [d removeObjectForKey:@"value"]; Auskommentieren, bricht sonst Beispiel <basecombobox> */
-
-        // Really Build-In-Values??
-        //[d removeObjectForKey:@"boxheight"];
-        //[d removeObjectForKey:@"controlwidth"];
-        //[d removeObjectForKey:@"title"];
 
 
 
@@ -9085,14 +9022,13 @@ BOOL isJSExpression(NSString *s)
     }
 
     if ([elementName isEqualToString:@"class"] ||
-        [elementName isEqualToString:@"nicemodaldialog"] ||
-        [elementName isEqualToString:@"nicedialog"])
+        [elementName isEqualToString:@"nicemodaldialog"])
     {
         element_geschlossen = YES;
 
         self.weAreCollectingTheCompleteContentInClass = NO;
     }
-    // If we are still skipping All Elements, let's return here
+    // If we are still skipping all Elements, let's return here
     if (self.weAreCollectingTheCompleteContentInClass)
     {
         // Wenn wir in <class> sind, sammeln wir alles (wird erst später rekursiv ausgewertet)
@@ -9284,7 +9220,6 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"stableborderlayout"] ||
         [elementName isEqualToString:@"constantlayout"] ||
         [elementName isEqualToString:@"wrappinglayout"] ||
-        [elementName isEqualToString:@"BDStabsheetselected"] ||
         [elementName isEqualToString:@"debug"] ||
         [elementName isEqualToString:@"event"] ||
         [elementName isEqualToString:@"slider"] ||
@@ -9591,6 +9526,7 @@ BOOL isJSExpression(NSString *s)
 
 
 
+    // Historisch bedingt, dass ich hier im Code noch was mache, obwohl es eine self-Defined class ist.
     // Schließen von rollUpDownContainer
     if ([elementName isEqualToString:@"rollUpDownContainer"])
     {
@@ -9598,10 +9534,11 @@ BOOL isJSExpression(NSString *s)
         self.rollUpDownVerschachtelungstiefe--;
         // Beim Betreten Element dazunehmen, beim Verlassen entfernen
         [self.rollupDownElementeCounter removeLastObject];
-        
+        /*
         element_geschlossen = YES;
         
         [self.output appendString:@"</div>\n"];
+         */
     }
 
 
@@ -10393,6 +10330,25 @@ BOOL isJSExpression(NSString *s)
         self.jsInitstageDeferOutput = [NSMutableString stringWithFormat:@"%@",[self inString:self.jsInitstageDeferOutput searchFor:@"  " andReplaceWith:@"    " ignoringTextInQuotes:YES]];
 
         [self.output appendString:self.jsInitstageDeferOutput];
+
+
+        [self.output appendString:@"\n"];
+        [self.output appendString:@"\n"];
+        [self.output appendString:@"    // Layoutanpassungen speziell für Taxango\n"];
+        [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").css('height','27px');\n"];
+        [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_title']\").css('left','0px');\n"];
+        [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_control']\").css('left','100px');\n"];
+        [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").each( function() {\n"];
+        [self.output appendString:@"      $('<div id=\"___removeMeFromDOM___\">'+$(this).find('*').filter(\"[data-name='_title']\").html()+'</div>').appendTo('body')\n"];
+        [self.output appendString:@"      var textWidth = $('#___removeMeFromDOM___').width();\n"];
+        [self.output appendString:@"      $('#___removeMeFromDOM___').remove();\n"];
+        [self.output appendString:@"      $(this).find('*').filter(\"[data-name='_control']\").css('left',textWidth+10+'px');\n"];
+        [self.output appendString:@"    });\n"];
+        [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_pic']\").remove();\n"];
+        [self.output appendString:@"\n"];
+        [self.output appendString:@"\n"];
+
+
         [self.output appendString:@"  });\n"];
     }
 
@@ -10414,15 +10370,6 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"      $(this).find('input').datepicker();\n"];
     [self.output appendString:@"  });\n"];
 
-
-    [self.output appendString:@"\n"];
-    [self.output appendString:@"\n"];
-    [self.output appendString:@"  // Layoutanpassungen speziell für Taxango\n"];
-    [self.output appendString:@"  $(\"[data-olel='BDSeditdate']\").css('height','27px');\n"];
-    [self.output appendString:@"  $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_title']\").css('left','0px');\n"];
-    [self.output appendString:@"  $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_control']\").css('left','100px');\n"];
-    [self.output appendString:@"\n"];
-    [self.output appendString:@"\n"];
 
 
 
@@ -14276,6 +14223,7 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'start' ||\n"
     "            attributeName === 'maxdate' ||\n"
     "            attributeName === 'selecteddate' ||\n"
+    "            attributeName === 'boxheight' ||\n"
     "            attributeName === 'toobigErrorstring' ||\n"
     "            attributeName === 'plausicheck' ||\n"
     "            attributeName === 'ende' ||\n"
@@ -14298,6 +14246,7 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'label' ||\n"
     "            attributeName === 'countApplies' ||\n"
     "            attributeName === 'mouseIsDown' ||\n"
+    "            attributeName === 'showinfo' ||\n"
     "            attributeName === 'applied' ||\n"
     "            attributeName === 'digitcolor' ||\n"
     "            attributeName === 'bezpartnerdbig' ||\n"
@@ -16995,6 +16944,8 @@ BOOL isJSExpression(NSString *s)
     "                }\n"
     "\n"
     "                parentElement = parentElement.getTheParent();\n"
+    "                if (parentElement === undefined)\n"
+    "                    break;\n"
     "            }\n"
     "        }\n"
     "\n"

@@ -5177,6 +5177,7 @@ didStartElement:(NSString *)elementName
                 v = [self removeOccurrencesOfDollarAndCurlyBracketsIn:v];
                 // Die Variable 'lastDP_' ist bekannt, da die Ausgabe hier in 'jsComputedValuesOutput' erfolgt.
                 // Genau da (und kurz vorher) erfolgt auch das setzen von lastDP_
+                [self.jsComputedValuesOutput appendString:@"\n  // Ein relativer Pfad für 'value'! Dann nehme ich Bezug zum letzten 'lastDP_' und dem dort gesetzten Pfad.\n"];
                 [self.jsComputedValuesOutput appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'%@');\n",self.zuletztGesetzteID,v,@"value"];
             }
             else
@@ -14230,6 +14231,7 @@ BOOL isJSExpression(NSString *s)
     "            attributeName === 'checked' || // Von BDSCheckbox\n"
     "            attributeName === 'parentnumber' ||\n"
     "            attributeName === 'season' ||\n"
+    "            attributeName === 'myDataset' ||\n"
     "            attributeName === 'animduration' ||\n"
     "            attributeName === 'pooling' ||\n"
     "            attributeName === 'size' ||\n"

@@ -1090,9 +1090,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         widthGesetzt = YES;
     }
 
-    if ([elemName isEqualToString:@"BDScombobox"] || [elemName isEqualToString:@"BDSedittext"] || [elemName isEqualToString:@"BDSeditnumber"])
+    if ([elemName isEqualToString:@"BDScombobox"])
     {
-    if ([attributeDict valueForKey:@"controlwidth"]) // ToDo - Self defined attribute of BDScombobox / BDSedittext / BDSeditnumber
+    if ([attributeDict valueForKey:@"controlwidth"]) // ToDo - Self defined attribute of BDScombobox
     {
         self.attributeCount++;
         NSLog(@"Setting the attribute 'controlwidth' as CSS 'width'.");
@@ -3516,7 +3516,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"text"] ||
         [elementName isEqualToString:@"inputtext"] ||
         [elementName isEqualToString:@"button"] ||
-        [elementName isEqualToString:@"rollUpDownContainer"] ||
+        //[elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"tabslider"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
@@ -4058,7 +4058,7 @@ didStartElement:(NSString *)elementName
 
         NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
 
-        // Nicht zwingen nötig dieses Attribut... Aber was dann? ...
+        // Nicht zwingend nötig dieses Attribut... Aber was dann? ...
         if ([attributeDict valueForKey:@"xpath"])
             self.attributeCount++;
 
@@ -4407,23 +4407,35 @@ didStartElement:(NSString *)elementName
         // Kann auch ein berechneter Werte sein ($ davor). Wenn ja dann $ usw. entfernen
         // und wir arbeiten dann natürlich ohne Quotes.
         BOOL berechneterWert = NO;
-        if ([value hasPrefix:@"$"])
+        if (true)
         {
-            // Wenn wir in einer Klasse sind, die von state erbt, ist das Eltern-Element nicht der state,
-            // sondern das davon umgebende Element (quasi wie ein Extrasprung)
-            if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && [self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"])
+            if ([value hasPrefix:@"$"])
             {
-                value = [self makeTheComputedValueComputable:value withAndBindEquals:[NSString stringWithFormat:@"%@.getTheParent()",elem]];
-            }
-            else
-            {
-                value = [self makeTheComputedValueComputable:value withAndBindEquals:elem];
-            }
+                // Wenn wir in einer Klasse sind, die von state erbt, ist das Eltern-Element nicht der state,
+                // sondern das davon umgebende Element (quasi wie ein Extrasprung)
+                if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && [self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"])
+                {
+                    value = [self makeTheComputedValueComputable:value withAndBindEquals:[NSString stringWithFormat:@"%@.getTheParent()",elem]];
+                }
+                else
+                {
+                    value = [self makeTheComputedValueComputable:value withAndBindEquals:elem];
+                }
 
-            weNeedQuotes = NO;
+                weNeedQuotes = NO;
 
-            berechneterWert = YES;
+                berechneterWert = YES;
+            }
         }
+        else
+        {
+            // Das hier ist eigentlich richtig:
+            if ([value hasPrefix:@"$"])
+            {
+                value = [self modifySomeExpressionsInJSCode:value alsoModifyParent:NO];
+            }
+        }
+
 
 
 
@@ -5424,7 +5436,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
         NSString *theId =[self addIdToElement:attributeDict];
 
-        [self.output appendString:@"/>\n"];
+        [self.output appendString:@" />\n"];
 
 
 
@@ -5572,24 +5584,15 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-    // ToDo: Bei BDSeditnumber nur Ziffern zulassen als Eingabe inkl. wohl '.' + ','
-    if ([elementName isEqualToString:@"edittext"] ||
-        [elementName isEqualToString:@"BDSedittext"] ||
-        [elementName isEqualToString:@"BDSeditnumber"])
+    if ([elementName isEqualToString:@"edittext"])
     {
         element_bearbeitet = YES;
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
-        if ([attributeDict valueForKey:@"title"])
-            [self.output appendString:@"<div class=\"div_textfield\">\n"];
-        else
-            [self.output appendString:@"<div class=\"div_textfield_ohne_vorangehenden_text\">\n"];
+        [self.output appendString:@"<div class=\"div_textfield_ohne_vorangehenden_text\">\n"];
 
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-
-
-
 
 
         [self.output appendString:@"<span style=\""];
@@ -5597,46 +5600,19 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [self.output appendString:@"\">"];
 
 
-
-        // Wenn im Attribut title Code auftaucht, dann müssen wir es dynamisch setzen
-        // müssen aber erst abwarten bis wir die ID haben, weil wir die für den Zugriff brauchen.
-        // <span> drum herum, damit ich per jQuery darauf zugreifen kann
-        BOOL titelDynamischSetzen = NO;
-        if ([attributeDict valueForKey:@"title"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'title' in <span>-tags as text in front of textfield.");
-            if ([[attributeDict valueForKey:@"title"] hasPrefix:@"$"])
-            {
-                titelDynamischSetzen = YES;
-                [self.output appendString:@"CODE! - Wird dynamisch mit jQuery ersetzt."];
-            }
-            else
-            {
-                [self.output appendString:[attributeDict valueForKey:@"title"]];
-            }
-        }
         [self.output appendString:@"</span>\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
         if ([attributeDict valueForKey:@"multiline"] && [[attributeDict valueForKey:@"multiline"] isEqualToString:@"true"])
-            [self.output appendString:@"<textarea class=\"input_textfield\" type=\"text\""];
-        else
-            [self.output appendString:@"<input class=\"input_textfield\" type=\"text\""];
-
-        NSString *id =[self addIdToElement:attributeDict];
-
-
-        // Jetzt erst haben wir die ID und können diese nutzen für den jQuery-Code
-        if (titelDynamischSetzen)
         {
-            NSString *code = [attributeDict valueForKey:@"title"];
-
-            code = [self makeTheComputedValueComputable:code];
-
-            [self.jQueryOutput appendString:@"\n  // textfield-Text wird hier dynamisch gesetzt\n"];
-            [self.jQueryOutput appendFormat:@"  $('#%@').prev().text(%@);\n",id,code];
+            [self.output appendString:@"<textarea class=\"input_textfield\" type=\"text\""];
         }
+        else
+        {
+            [self.output appendString:@"<input class=\"input_textfield\" type=\"text\""];
+        }
+
+        NSString *theId =[self addIdToElement:attributeDict];
 
 
         [self.output appendString:@" style=\""];
@@ -5661,85 +5637,10 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
 
-        if ([attributeDict valueForKey:@"required"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'required'.");
-        }
-        if ([attributeDict valueForKey:@"requiredErrorstring"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'requiredErrorstring'.");
-        }
-        if ([attributeDict valueForKey:@"infotext"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'infotext'.");
-        }
-        if ([attributeDict valueForKey:@"maxlength"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'maxlength'.");
-        }
-        if ([attributeDict valueForKey:@"pattern"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'pattern'.");
-        }
-
-
-
-        // Diese Attribute sind eigentlich nur für BDSeditnumber
-        if ([attributeDict valueForKey:@"minvalue"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'minvalue'.");
-        }
-        if ([attributeDict valueForKey:@"maxvalue"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'maxvalue'.");
-        }
-        if ([attributeDict valueForKey:@"domain"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'domain'.");
-        }
-        if ([attributeDict valueForKey:@"minlength"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'minlength'.");
-        }
-        if ([attributeDict valueForKey:@"simple"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'simple'.");
-        }
-        if ([attributeDict valueForKey:@"toobigErrorstring"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'toobigErrorstring'.");
-        }
-        if ([attributeDict valueForKey:@"toosmallErrorstring"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'toosmallErrorstring'.");
-        }
-        if ([attributeDict valueForKey:@"plausicheck"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'plausicheck'.");
-        }
-        if ([attributeDict valueForKey:@"plausiinfo"]) // ToDo
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'plausiinfo'.");
-        }
-
 
         [self evaluateTextInputOnlyAttributes:attributeDict];
 
-        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",id]];
+        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
     }
 
 
@@ -6382,13 +6283,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [self.jQueryOutput appendFormat:@"  $('#%@').tabs();\n",self.lastUsedTabSheetContainerID];
 
 
-        // ToDo: Wird derzeit nicht ausgewertet
-        if ([attributeDict valueForKey:@"datapath"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'datapath' for now.");
-        }
-
 
         if ([attributeDict valueForKey:@"showinfo"])
         {
@@ -6398,6 +6292,8 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             [self.jsOutput appendString:@"\n  // Attribut 'showinfo' setzen\n"];
             [self.jsOutput appendFormat:@"  %@.showinfo = %@;\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"showinfo"]];
         }
+
+        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
     }
 
 
@@ -8911,21 +8807,6 @@ BOOL isJSExpression(NSString *s)
                     weNeedQuotes = NO;
 
 
-                // Falls es ein berechneter Wert war, erkennen wir es an der Markierung
-                // Dann Markierung raushauen und wir brauchen dann keine Quotes
-                // Außerdem das korrekte Element für this ersetzen
-                if ([value hasPrefix:@"@§.BERECHNETERWERT.§@"])
-                {
-                    //value = [value substringFromIndex:21];
-
-                    // Wieder zurück an 'this' binden. Ka. Alternative wäre es zu lassen und zur Laufzeit auszuwerten
-                    //value = [value stringByReplacingOccurrencesOfString:ID_REPLACE_STRING withString:@"this"];
-
-                    //weNeedQuotes = NO;
-                    // Neu: Nichts machen. Wir müssen es erst zur Laufzeit auswerten, weil wir erst
-                    // dann this korrekt setzen können (this == das aktuelle Objekt)
-                }
-
 
                 if (!weNeedQuotes)
                 {
@@ -9107,7 +8988,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"state"] ||
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
-        [elementName isEqualToString:@"rollUpDownContainer"] ||
+        //[elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"tabslider"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
@@ -9507,8 +9388,6 @@ BOOL isJSExpression(NSString *s)
 
     // Schließen von Elementen, in denen u. U. Text gesammelt wurde
     if ([elementName isEqualToString:@"edittext"] ||
-        [elementName isEqualToString:@"BDSedittext"] ||
-        [elementName isEqualToString:@"BDSeditnumber"] ||
         [elementName isEqualToString:@"BDScheckbox"] ||
         [elementName isEqualToString:@"checkbox"] ||
         [elementName isEqualToString:@"radiobutton"])
@@ -10336,14 +10215,15 @@ BOOL isJSExpression(NSString *s)
         [self.output appendString:@"\n"];
         [self.output appendString:@"\n"];
         [self.output appendString:@"    // Layoutanpassungen speziell für Taxango\n"];
+        [self.output appendString:@"    $(\"[data-olel='BDSeditnumber']\").css('height','33px');\n"];
+        [self.output appendString:@"\n"];
+        [self.output appendString:@"    $(\"[data-olel='BDSedittext']\").css('height','33px');\n"];
+        [self.output appendString:@"\n"];
         [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").css('height','27px');\n"];
         [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_title']\").css('left','0px');\n"];
-        [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_control']\").css('left','100px');\n"];
         [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").each( function() {\n"];
-        [self.output appendString:@"      $('<div id=\"___removeMeFromDOM___\">'+$(this).find('*').filter(\"[data-name='_title']\").html()+'</div>').appendTo('body')\n"];
-        [self.output appendString:@"      var textWidth = $('#___removeMeFromDOM___').width();\n"];
-        [self.output appendString:@"      $('#___removeMeFromDOM___').remove();\n"];
-        [self.output appendString:@"      $(this).find('*').filter(\"[data-name='_control']\").css('left',textWidth+10+'px');\n"];
+        [self.output appendString:@"      var textWidth = getTheTextWidth($(this).find('*').filter(\"[data-name='_title']\").html());\n"];
+        [self.output appendString:@"      $(this).find('*').filter(\"[data-name='_control']\").css('left',(textWidth+10)+'px');\n"];
         [self.output appendString:@"    });\n"];
         [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_pic']\").remove();\n"];
         [self.output appendString:@"\n"];
@@ -11874,6 +11754,18 @@ BOOL isJSExpression(NSString *s)
     "            (navigator.platform.indexOf('iPod') != -1) ||\n"
     "            (navigator.platform.indexOf('iPad') != -1) ||\n"
     "            (navigator.userAgent.match(/(iPhone|iPod|iPad)/i) != null));\n"
+    "}\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////\n"
+    "// Ermittle die 'width' auch von nicht sichtbarem Text   //\n"
+    "///////////////////////////////////////////////////////////\n"
+    "function getTheTextWidth(s)\n"
+    "{\n"
+    "    $('<div id=\"___removeMeFromDOM___\">'+s+'</div>').appendTo('body');\n"
+    "    var textWidth = $('#___removeMeFromDOM___').outerWidth();\n"
+    "    $('#___removeMeFromDOM___').remove();\n"
+    "    return textWidth;\n"
     "}\n"
     "\n"
     "\n"
@@ -13854,7 +13746,12 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        else if (value === 'right')\n"
     "        {\n"
-    "            $(me).css('left',$(me).parent().width()-$(me).outerWidth());\n"
+    "            // Fehler, der somehow mit BDStext auftaucht, ich denke mal weil es nicht sichtbar ist, und jQuery dann nicht korrekt die Breite berechnen kann\n"
+    "            // Lösung: Wenn Wir Text haben, aber die width trotzdem gleich 0 ist (was iwie unlogisch ist), dann ermittle die width des Textes gesondert\n"
+    "            if ($(me).width() == 0 && $(me).html().length > 0)\n"
+    "                $(me).css('left',$(me).parent().width()-getTheTextWidth($(me).html()));\n"
+    "            else\n"
+    "                $(me).css('left',$(me).parent().width()-$(me).outerWidth());\n"
     "        }\n"
     "        else if (value === 'left')\n"
     "        {\n"
@@ -14206,67 +14103,14 @@ BOOL isJSExpression(NSString *s)
     "    else\n"
     "    {\n"
     "        // Wenn es vorher nicht matcht, dann einfach die Property setzen, dann ist es eine selbst definierte Variable\n"
-    "        // Aber erstmal noch sammeln der Vars, die gesetzt werden sollen. Später lockern\n"
     "        // Vorher aber Test ob die Property auch vorher definiert wurde! Sonst läuft wohl etwas schief\n"
-    "        if (attributeName === 'zusammenveranlagung' ||\n"
-    "            attributeName === 'titlewidth' ||\n"
-    "            attributeName === 'controlwidth' ||\n"
-    "            attributeName === 'inset_y' ||\n"
-    "            attributeName === 'focused' ||\n"
-    "            attributeName === 'myTitle' ||\n"
-    "            attributeName === 'newdp' ||\n"
-    "            attributeName === 'datedays' ||\n"
-    "            attributeName === 'restrictyear' ||\n"
-    "            attributeName === 'day' ||\n"
-    "            attributeName === 'userchecked' ||\n"
-    "            attributeName === 'spacing' ||\n"
-    "            attributeName === 'isopen' ||\n"
-    "            attributeName === 'start' ||\n"
-    "            attributeName === 'maxdate' ||\n"
-    "            attributeName === 'selecteddate' ||\n"
-    "            attributeName === 'boxheight' ||\n"
-    "            attributeName === 'toobigErrorstring' ||\n"
-    "            attributeName === 'plausicheck' ||\n"
-    "            attributeName === 'ende' ||\n"
-    "            attributeName === 'checked' || // Von BDSCheckbox\n"
-    "            attributeName === 'parentnumber' ||\n"
-    "            attributeName === 'season' ||\n"
-    "            attributeName === 'myDataset' ||\n"
-    "            attributeName === 'animduration' ||\n"
-    "            attributeName === 'pooling' ||\n"
-    "            attributeName === 'size' ||\n"
-    "            attributeName === 'maxlength' ||\n"
-    "            attributeName === 'pattern' ||\n"
-    "            attributeName === 'livetext' ||\n"
-    "            attributeName === 'resourcepic' ||\n"
-    "            attributeName === 'show' ||\n"
-    "            attributeName === 'required' ||\n"
-    "            attributeName === 'infotext' ||\n"
-    "            attributeName === 'text_x' ||\n"
-    "            attributeName === 'sharpness' ||\n"
-    "            attributeName === 'thickness' ||\n"
-    "            attributeName === 'label' ||\n"
-    "            attributeName === 'countApplies' ||\n"
-    "            attributeName === 'mouseIsDown' ||\n"
-    "            attributeName === 'showinfo' ||\n"
-    "            attributeName === 'applied' ||\n"
-    "            attributeName === 'digitcolor' ||\n"
-    "            attributeName === 'bezpartnerdbig' ||\n"
-    "            attributeName === 'bezpartnerdsmall' ||\n"
-    "            attributeName === 'bezpartnermsmall' ||\n"
-    "            attributeName === 'bezpartnermbig' ||\n"
-    "            attributeName === 'bezpartnerpr' ||\n"
-    "            attributeName === 'bezpartnerpronom_nominativ_gross' ||\n"
-    "            attributeName === 'avalue')\n"
+    "        if (me[attributeName] !== undefined)\n"
     "        {\n"
-    "            if (me[attributeName] !== undefined)\n"
-    "                me[attributeName] = value;\n"
-    "            else\n"
-    "                alert('Trying to set a property that never was declared! - Propertyname: '+attributeName);\n"
+    "            me[attributeName] = value;\n"
     "        }\n"
     "        else\n"
     "        {\n"
-    "            alert('Aufruf von setAttribute_, der noch ausgewertet werden muss.\\n\\nattributeName: ' + attributeName + '\\n\\nvalue: ' + value + '\\n\\nolel:' + $(me).data('olel'));\n"
+    "            alert('Trying to set a property that never was declared! - Propertyname: '+attributeName);\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -16712,7 +16556,7 @@ BOOL isJSExpression(NSString *s)
     "        return '';\n"
     "\n"
     "    // Wenn in einem s der Platzhalter mit und ohne angehängter Nummer auftaucht,\n"
-    "    // dann nacheinander ersetzen. Ein Platzhalter ohne Nummer darf nicht den Objektnamen\n"
+    "    // dann nacheinander ersetzen. Ein Platzhalter ohne Nummer darf nicht den Objektnamen!!!!!\n"
     "    // angehängt bekommen. Deswegen in so einem Fall Rückgriff auf 'to2'.\n"
     "    if (to2)\n"
     "    {\n"
@@ -16742,13 +16586,16 @@ BOOL isJSExpression(NSString *s)
     "            {\n"
     "                var value = obj.selfDefinedAttributes[key];\n"
     "\n"
-    "                if (typeof value === 'string' && value.startsWith('@§.BERECHNETERWERT.§@'))\n"
+    "                if (typeof value === 'string' && value.startsWith('$')) // = Constraint value\n"
+    "                {\n"
+    "                    handleConstraintValue(id,key,value);\n"
+    "                }\n"
+    "                else if (typeof value === 'string' && value.startsWith('@§.BERECHNETERWERT.§@')) // = historisch, ToDo weg!\n"
     "                {\n"
     "                    value = value.substr(21);\n"
     "                    value = replaceID(value,''+$(id).attr('id'));\n"
     "\n"
     "                    var evalString = 'id[key] = ' + value + ';'\n"
-    "                    //alert(evalString);\n"
     "                    eval(evalString);\n"
     "                }\n"
     "                else\n"
@@ -17040,6 +16887,12 @@ BOOL isJSExpression(NSString *s)
     "      // Dann den kompletten JS-Code ausführen\n"
     "      executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id')+'_'+obj.inherit.name, $(id).attr('id'));\n"
     "    }\n"
+    "\n"
+    "    // Falls hier schon von einem Vorfahren eine oninit() hinzugefügt wurde, diese jetzt schon ausführen\n"
+    "    // Aber nicht 'inited' auf true setzen, sonst würde er am Ende ja nicht mehr reingehen\n"
+    "    // Evtl. nachfolgende oninit()-Methoden überschrieben diese. Aber nicht schlimm, schon ausgeführt.\n"
+    "    $(id).triggerHandler('onconstruct');\n"
+    "    $(id).triggerHandler('oninit');\n"
     // "\n"
     // "    // Objekt der nächsten Vererbungs-Stufe holen\n"
     // "    obj = obj.inherit;\n" // <-- Nein, wir gehen neuerdings ja über das 'rueckwaertsArray'
@@ -17362,13 +17215,13 @@ BOOL isJSExpression(NSString *s)
     "    if (s.length > 0)\n"
     "        evalCode(s);\n"
     "\n"
-    "    // Replace-IDs von contentJQuery ersetzen\n"
     "    if (typeof obj.contentJQuery === 'function')\n"
     "    {\n"
     "        obj.contentJQuery(id);\n"
     "    }\n"
     "    else\n"
     "    {\n"
+    "        // Replace-IDs von contentJQuery ersetzen\n"
     "        var s = replaceID(obj.contentJQuery, r, r2);\n"
     "        // Dann den jQuery-Content hinzufügen/auswerten\n"
     "        if (s.length > 0)\n"

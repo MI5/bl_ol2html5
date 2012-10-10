@@ -40,7 +40,7 @@ BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, 
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
-BOOL kompiliereSpeziellFuerTaxango = YES;
+BOOL kompiliereSpeziellFuerTaxango = NO;
 
 
 
@@ -1090,7 +1090,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         widthGesetzt = YES;
     }
 
-    if ([elemName isEqualToString:@"BDScombobox"])
+    if ([elemName isEqualToString:@"BDScomboboxXXX"])
     {
     if ([attributeDict valueForKey:@"controlwidth"]) // ToDo - Self defined attribute of BDScombobox
     {
@@ -4013,9 +4013,22 @@ didStartElement:(NSString *)elementName
         }
 
         NSString *dp = [attributeDict valueForKey:@"xpath"];
-        // In Anführungszeichen setzen:
-        if ([dp length] > 0)
-            dp = [NSString stringWithFormat:@"'%@'",dp];
+
+        if ([dp hasPrefix:@"${"])
+        {
+            // dp = [self makeTheComputedValueComputable:dp];
+            // Hmmm, lieber so: Wir haben hier ja keine zuletzt benutzte id:
+            dp = [self removeOccurrencesOfDollarAndCurlyBracketsIn:dp];
+            dp = [self modifySomeExpressionsInJSCode:dp];
+        }
+        else
+        {
+            // Dann in Anführungszeichen setzen:
+            if ([dp length] > 0)
+            {
+                dp = [NSString stringWithFormat:@"'%@'",dp];
+            }
+        }
 
 
         // Den Namen für den Datapointer ermitteln. Entweder anhand 'name' oder 'id'.
@@ -4025,6 +4038,7 @@ didStartElement:(NSString *)elementName
             name = [attributeDict valueForKey:@"name"];
         if ([attributeDict valueForKey:@"id"])
             name = [attributeDict valueForKey:@"id"];
+
 
         // Ich lege jeden datapointer als globales Objekt an, auf welches zugegriffen werden kann
         if ([name length] > 0)
@@ -4292,6 +4306,9 @@ didStartElement:(NSString *)elementName
 
                 // Wenn bei einer 'expression', 'string', 'number' kein value gesetzt ist, ist es gemäß OL-Test immer undefined
                 value = @"undefined";
+                // Ist das sicher???? -> Mein "trying to set a property that never was declared"-Test, geht nur auf,
+                // wenn ich es auf null setze.
+                value = @"null";
 
                 // Text vor Example 28.10:
                 if ([a isEqualToString:@"text"] && ([type_ isEqualToString:@"text"] || [type_ isEqualToString:@"html"]))
@@ -5203,7 +5220,7 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"BDScombobox"] || // ToDo -  als Klasse auslesen
+    if ([elementName isEqualToString:@"BDScomboboxXXX"] || // ToDo -  als Klasse auslesen
         [elementName isEqualToString:@"combobox"] ||
         [elementName isEqualToString:@"datacombobox"])
     {
@@ -5334,7 +5351,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
             if ([[attributeDict valueForKey:@"initvalue"] isEqual:@"false"])
             {
-                // 'false' heißt wohl es gibt keinen Init-Wert
+                // 'false' heißt wohl es gibt keinen init-Wert
                 // Aber wegen Kirchensteuer-Combobox muss ich trotzdem das erste Element anwählen (keine KiSt-Pflicht)
 
                 [o appendString:@"  // Keine Vorauswahl für diese Combobox getroffen, deswegen erstes Element\n"];
@@ -9167,7 +9184,7 @@ BOOL isJSExpression(NSString *s)
 
 
 
-    if ([elementName isEqualToString:@"BDScombobox"] ||
+    if ([elementName isEqualToString:@"BDScomboboxXXX"] ||
         [elementName isEqualToString:@"combobox"] ||
         [elementName isEqualToString:@"datacombobox"])
     {
@@ -10219,6 +10236,8 @@ BOOL isJSExpression(NSString *s)
         [self.output appendString:@"\n"];
         [self.output appendString:@"    $(\"[data-olel='BDSedittext']\").css('height','33px');\n"];
         [self.output appendString:@"\n"];
+        [self.output appendString:@"    $(\"[data-olel='BDScombobox']\").css('height','40px');\n"];
+        [self.output appendString:@"\n"];
         [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").css('height','27px');\n"];
         [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_title']\").css('left','0px');\n"];
         [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").each( function() {\n"];
@@ -10913,6 +10932,17 @@ BOOL isJSExpression(NSString *s)
 - (void) createJSFile:(NSString*)path
 {
     NSString *js = @"/* FILE: jsHelper.js */\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Soll einen datapath ( = this) mit dem als Arg übergebenem Wert updaten //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "if (typeof String.prototype.updateData != 'function') {\n"
+    "    String.prototype.updateData = function(str) {\n"
+    "        // Somewhat dringend ToDo\n"
+    "        // Und warum steckt das überhaupt im String-Objekt?\n"
+    "    };\n"
+    "}\n"
+    "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// jQuery UI Datepicker auf Deutsch setzen               \n"
@@ -13764,12 +13794,22 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        else if (value === 'right')\n"
     "        {\n"
-    "            // Fehler, der somehow mit BDStext auftaucht, ich denke mal weil es nicht sichtbar ist, und jQuery dann nicht korrekt die Breite berechnen kann\n"
-    "            // Lösung: Wenn Wir Text haben, aber die width trotzdem gleich 0 ist (was iwie unlogisch ist), dann ermittle die width des Textes gesondert\n"
-    "            if ($(me).width() == 0 && $(me).html().length > 0)\n"
-    "                $(me).css('left',$(me).parent().width()-getTheTextWidth($(me).html()));\n"
+    "            // Wenn unsere Elternbreite gleich 0 ist, dann heißt das im Regelfall, dass es keine Geschwisterelemente gibt\n"
+    "            // und/oder sich, weil wir nicht position:relative sind oder unser Elterelement nicht auf width:auto steht\n"
+    "            // Aber das ist egal: Wenn wir das einzige Kindelement sind, dann einfach auf 0 setzen:\n"
+    "            if ($(me).parent().width() == 0)\n"
+    "            {\n"
+    "                $(me).css('left',0);\n"
+    "            }\n"
     "            else\n"
-    "                $(me).css('left',$(me).parent().width()-$(me).outerWidth());\n"
+    "            {\n"
+    "                // Fehler, der somehow mit BDStext auftaucht, ich denke mal weil es nicht sichtbar ist, und jQuery dann nicht korrekt die Breite berechnen kann\n"
+    "                // Lösung: Wenn Wir Text haben, aber die width trotzdem gleich 0 ist (was iwie unlogisch ist), dann ermittle die width des Textes gesondert\n"
+    "                if ($(me).width() == 0 && $(me).html().length > 0)\n"
+    "                    $(me).css('left',$(me).parent().width()-getTheTextWidth($(me).html()));\n"
+    "                else\n"
+    "                    $(me).css('left',$(me).parent().width()-$(me).outerWidth());\n"
+    "            }\n"
     "        }\n"
     "        else if (value === 'left')\n"
     "        {\n"
@@ -14128,7 +14168,7 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        else\n"
     "        {\n"
-    "            alert('Trying to set a property that never was declared! - Propertyname: '+attributeName);\n"
+    "            alert('Trying to set a property that never was declared! - Propertyname: '+attributeName + ' - me.id: ' + me.id + ' - me.olel:' + $(me).data('olel') + ' - Value: ' + value);\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -14253,7 +14293,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// inited - nachimplementiert\n"
+    "// inited - nachimplementiert                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "HTMLDivElement.prototype.inited = false;\n"
     "HTMLInputElement.prototype.inited = false;\n"
@@ -14268,6 +14308,26 @@ BOOL isJSExpression(NSString *s)
     "HTMLInputElement.prototype.isinited = true;\n"
     "HTMLSelectElement.prototype.isinited = true;\n"
     "HTMLButtonElement.prototype.isinited = true;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// datapath                                            //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "HTMLDivElement.prototype.datapath = '';\n"
+    "HTMLInputElement.prototype.datapath = '';\n"
+    "HTMLSelectElement.prototype.datapath = '';\n"
+    "HTMLButtonElement.prototype.datapath = '';\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// und somehow seit auswerten grid kann man über diesen String einen xPathQuery auslösen??//\n"
+    "// String.prototype.xpathQuery im String-prototype...  //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "if (typeof String.prototype.xpathQuery != 'function') {\n"
+    "    String.prototype.xpathQuery = function(s) {\n"
+    "        var dp = new lz.datapointer(this);\n"
+    "\n"
+    "        return dp.xpathQuery(s);\n"
+    "    };\n"
+    "}\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -16895,7 +16955,8 @@ BOOL isJSExpression(NSString *s)
     "      var methodenDerVorfahren = { init: function() {} };\n"
     "      for(var prop in id) {\n"
     "        if (id.hasOwnProperty(prop) && typeof id[prop] === 'function') {\n"
-    "          methodenDerVorfahren[prop] = id[prop];\n"
+    "          // Mit korrigiertem this!!! Ein evtl. benutztes 'this' verweist sonst noch auf den Vorfahren.\n"
+    "          methodenDerVorfahren[prop] = id[prop].bind(id);\n"
     "        }\n"
     "      }\n"
     "      // 'super' wurde durch 'super_' ersetzt und muss im Element bekannt sein, damit überschriebene Methoden erreichbar bleiben\n"
@@ -16924,7 +16985,8 @@ BOOL isJSExpression(NSString *s)
     "  var methodenDerVorfahren = { init: function() {} };\n"
     "  for(var prop in id) {\n"
     "    if (id.hasOwnProperty(prop) && typeof id[prop] === 'function') {\n"
-    "      methodenDerVorfahren[prop] = id[prop];\n"
+    "      // Mit korrigiertem this!!! Ein evtl. benutztes 'this' verweist sonst noch auf den Vorfahren.\n"
+    "      methodenDerVorfahren[prop] = id[prop].bind(id);\n"
     "    }\n"
     "  }\n"
     "  // 'super' wurde durch 'super_' ersetzt und muss im Element bekannt sein, damit überschriebene Methoden erreichbar bleiben\n"
@@ -17316,6 +17378,34 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  this.contentHTML = '';\n"
     //"  this.contentHTML = '<div id=\"@!JS,PLZ!REPLACE!ME!@\" class=\"div_standard noPointerEvents\" />';\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = grid (native class) - To Do                      //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.grid = function() {\n"
+    "  this.name = 'grid';\n"
+    "  this.inherit = new oo.basegrid();\n"
+    "\n"
+    "  this.selfDefinedAttributes = { layout: 'placement:hcontent;axis:x;spacing:-1', showhscroll: true, showvscroll: true }\n"
+    "\n"
+    "  this.contentHTML = '';\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "//  class = basegrid (native class) - To Do                  //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.basegrid = function() {\n"
+    "  this.name = 'basegrid';\n"
+    "  this.inherit = new oo.basecomponent();\n"
+    "\n"
+    "  this.selfDefinedAttributes = { bgcolor0: null, bgcolor1: null, columns: null, contentdatapath: '*', hilite: null, multiselect: true, rowheight: null, selectable: true, showhlines: false, shownitems: -1, showvlines: false, sizetoheader: null, spacing: 0 }\n"
+    "\n"
+    "  this.contentHTML = '';\n"
     "}\n"
     "\n"
     "\n"

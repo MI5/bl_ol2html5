@@ -10239,10 +10239,14 @@ BOOL isJSExpression(NSString *s)
         [self.output appendString:@"    $(\"[data-olel='BDScombobox']\").css('height','40px');\n"];
         [self.output appendString:@"\n"];
         [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").css('height','27px');\n"];
-        [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_title']\").css('left','0px');\n"];
-        [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").each( function() {\n"];
-        [self.output appendString:@"      var textWidth = getTheTextWidth($(this).find('*').filter(\"[data-name='_title']\").html());\n"];
-        [self.output appendString:@"      $(this).find('*').filter(\"[data-name='_control']\").css('left',(textWidth+10)+'px');\n"];
+
+        [self.output appendString:@"    $(\"[data-olel='BDSeditdate'], [data-olel='BDScombobox']\").each( function() {\n"];
+        [self.output appendString:@"      // Wenn die titlewidth UND die controlwidth nicht gesetzt wurde, gibt es noch Probs. Dann muss ich nachkorrigieren\n"];
+        [self.output appendString:@"      if (this.titlewidth == 0 || this.controlwidth == 0)\n"];
+        [self.output appendString:@"      {\n"];
+        [self.output appendString:@"        var textWidth = getTheTextWidth($(this).find('*').filter(\"[data-name='_title']\").html());\n"];
+        [self.output appendString:@"        $(this).find('*').filter(\"[data-name='_control']\").css('left',(textWidth+10)+'px');\n"];
+        [self.output appendString:@"      }\n"];
         [self.output appendString:@"    });\n"];
         [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_pic']\").remove();\n"];
         [self.output appendString:@"\n"];
@@ -13796,8 +13800,9 @@ BOOL isJSExpression(NSString *s)
     "        {\n"
     "            // Wenn unsere Elternbreite gleich 0 ist, dann heißt das im Regelfall, dass es keine Geschwisterelemente gibt\n"
     "            // und/oder sich, weil wir nicht position:relative sind oder unser Elterelement nicht auf width:auto steht\n"
-    "            // Aber das ist egal: Wenn wir das einzige Kindelement sind, dann einfach auf 0 setzen:\n"
-    "            if ($(me).parent().width() == 0)\n"
+    "            // Aber das ist egal: Wenn wir einziges Kindelement sind, dann einfach auf 0 setzen, sind ja dann ganz links\n"
+    "            // Falls dann immer noch probs, evtl. sogar 2. Bedingung fallen lassen.\n"
+    "            if ($(me).parent().width() == 0 && $(me).parent().children().length == 1)\n"
     "            {\n"
     "                $(me).css('left',0);\n"
     "            }\n"

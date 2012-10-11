@@ -8128,7 +8128,8 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
         [o appendString:@"\n  interpretObject(obj,id,iv);\n"];
 
-        if ([elementName isEqualToString:@"deferview"])
+        // To Do: Nicht 'deferview', sondern das vorhandene attribut initstage=defer ist hier eigentlich entscheidend
+        if ([elementName isEqualToString:@"deferview"] || [elementName isEqualToString:@"nicemodaldialog"])
         {
             self.initStageDefer = YES;
         }
@@ -9837,7 +9838,7 @@ BOOL isJSExpression(NSString *s)
         //NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-1];
         //if ([enclosingElemTyp isEqualToString:@"deferview"])
         // So ist es wohl richtig: So werden auch Objekte IN 'deferview's erst verzögert geladen:
-        if ([elementName isEqualToString:@"deferview"])
+        if ([elementName isEqualToString:@"deferview"] || [elementName isEqualToString:@"nicemodaldialog"])
         {
             self.initStageDefer = NO;
         }

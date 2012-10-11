@@ -612,11 +612,13 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Dann noch eventuelle spezielle Wörter austauschen
             varName = [self modifySomeExpressionsInJSCode:varName];
 
-            // Falls ganz vorne jetzt getTheParent() steht, dann muss ich unser aktuelles Element
+            // Falls ganz vorne jetzt 'immediateparent.' / 'parent.' steht, dann muss ich unser aktuelles Element
             // davorsetzen. Weil jetzt nochmal extra mit 'with () {}' zu arbeiten ist wohl nicht nötig
             // da wir ja auf Ebene der einzelnen Variable sind und individuell reagieren können.
-            if ([varName hasPrefix:@"getTheParent("])
+            if ([varName hasPrefix:@"immediateparent."] || [varName hasPrefix:@"parent."])
+            {
                 varName = [NSString stringWithFormat:@"%@.%@",currentElem,varName];
+            }
 
             // Gefundene reservierte JS-Wörter muss ich an dieser Stelle fallen lassen. Dies sind keine Var-Namen
 
@@ -779,11 +781,11 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Wenn wir in einer Klasse sind und state extenden, dann müssen wir einen Doppelsprung
         // bei parent machen. Weil ich den 'state' überspringen muss.
-        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && [e hasPrefix:@"getTheParent()."])
+        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && ([e hasPrefix:@"immediateparent."] || [e hasPrefix:@"parent."]))
         {
             if ([self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"] || [self.lastUsedExtendsAttributeOfClass isEqualToString:@"dragstate"])
             {
-                e = [NSString stringWithFormat:@"getTheParent().%@",e];
+                e = [NSString stringWithFormat:@"parent.%@",e];
             }
         }
 
@@ -797,11 +799,11 @@ void OLLog(xmlParser *self, NSString* s,...)
         {
             // Wenn wir in einer Klasse sind und state extenden, dann müssen wir einen Doppelsprung
             // bei parent machen. Weil ich den 'state' überspringen muss.
-            if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && [e hasPrefix:@"getTheParent()."])
+            if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && ([e hasPrefix:@"immediateparent."] || [e hasPrefix:@"parent."]))
             {
                 if ([self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"] || [self.lastUsedExtendsAttributeOfClass isEqualToString:@"dragstate"])
                 {
-                    object = [self inString:object searchFor:@"getTheParent()" andReplaceWith:@"getTheParent().getTheParent()" ignoringTextInQuotes:YES];
+                    object = [self inString:object searchFor:@"parent" andReplaceWith:@"parent.parent" ignoringTextInQuotes:YES];
                 }
             }
 
@@ -1706,11 +1708,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
 
         [self.jsOutput appendString:@"\n  // All 'name'-attributes can be referenced by its parent Element\n"];
-        // So nicht: !!!!!
-        // [self.jsOutput appendFormat:@"  $('#%@').parent().get(0).%@ = %@;\n",self.zuletztGesetzteID,name, name];
-        // Denn das jQuery-Parent berücksichtigt ja nicht den Doppelsprung bei <input> und <select>
-        // Deswegen getTheParent benutzen. (Was ja intern auch jQuery-parent nimmt, aber notfalls
-        // auch doppelt!)
+
 
         // Wenn wir in einer Klasse in der ersten Ebene sind, dann ist der Parent immer das
         // umgebende Element der Klasse
@@ -1725,11 +1723,14 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Aber nur für das DIREKT im 'state' liegende Element
             if (self.lastUsedNameAttributeOfState.length > 0)
             {
-                [self.jsOutput appendFormat:@"  ($(document.getElementById('%@').getTheParent()).data('olel') == 'state') ? document.getElementById('%@').getTheParent().getTheParent().%@ = document.getElementById('%@') : document.getElementById('%@').getTheParent().%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, self.zuletztGesetzteID, name, self.zuletztGesetzteID, self.zuletztGesetzteID, name, self.zuletztGesetzteID];
+                [self.jsOutput appendFormat:@"  ($(document.getElementById('%@').parent).data('olel') == 'state') ? document.getElementById('%@').parent.parent.%@ = document.getElementById('%@') : document.getElementById('%@').parent.%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, self.zuletztGesetzteID, name, self.zuletztGesetzteID, self.zuletztGesetzteID, name, self.zuletztGesetzteID];
             }
             else
             {
-                [self.jsOutput appendFormat:@"  document.getElementById('%@').getTheParent().%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, name, self.zuletztGesetzteID];
+                // nach OL-Test: parent UND immediateparent kriegen die Referenz über das Name-Attribut gesetzt...
+                [self.jsOutput appendFormat:@"  document.getElementById('%@').parent.%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, name, self.zuletztGesetzteID];
+                // Wirkt sich hier noch nicht aus! Erst wenn ich ne Klasse instanziere
+                //[self.jsOutput appendFormat:@"  document.getElementById('%@').immediateparent.%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, name, self.zuletztGesetzteID];
             }
         }
 
@@ -1832,17 +1833,11 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-- (NSString*) modifySomeExpressionsInJSCode:(NSString*)s
-{
-    return [self modifySomeExpressionsInJSCode:s alsoModifyParent:YES];
-}
-
-
 // Ne, wir definieren einfach ein globales setAttribute_ mit defineProperty
 // Dazu muss ich dann nur das this immer aktualisieren, da es auch passieren kann, dass
 // setAttribute ohne vorangehende Variable aufgerufen wird.
 // Neu: Nicht mehr nötig. Wir beachten einfach den Scope von dem aus es aufgerufen wurde.
-- (NSString*) modifySomeExpressionsInJSCode:(NSString*)s alsoModifyParent:(BOOL)b
+- (NSString*) modifySomeExpressionsInJSCode:(NSString*)s
 {
     if (s == nil)
         [self instableXML:@"Sag mal, so kannst du mich nicht aufrufen. Brauche schon nen String!"];
@@ -1853,26 +1848,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    if (b)
-    {
-        // Bevor ich die parents ersetze muss ich das native 'parentNode', welches im Code vorkommen kann, retten
-        s = [self inString:s searchFor:@"parentNode" andReplaceWith:@"@@@_prentNode_@@@" ignoringTextInQuotes:YES];
-        // und 'parentnumber'...
-        s = [self inString:s searchFor:@"parentn" andReplaceWith:@"@@@_prentn_@@@" ignoringTextInQuotes:YES];
-
-        s = [self inString:s searchFor:@"immediateparent" andReplaceWith:@"getTheParent(true)" ignoringTextInQuotes:YES];
-        // --> Neu als getter gelöst / Ganz neu: Bricht leider jQuery UI...
-
-        s = [self inString:s searchFor:@"parent" andReplaceWith:@"getTheParent()" ignoringTextInQuotes:YES];
-        // --> Neu als getter gelöst / Ganz neu: Bricht leider jQuery UI...
-    }
-
-
-
-    // Und das native 'parentNode' wieder herstellen.
-    s = [self inString:s searchFor:@"@@@_prentNode_@@@" andReplaceWith:@"parentNode" ignoringTextInQuotes:YES];
-    // und 'parentnumber'...
-    s = [self inString:s searchFor:@"@@@_prentn_@@@" andReplaceWith:@"parentn" ignoringTextInQuotes:YES];
 
 
 
@@ -1880,12 +1855,24 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Mit '.' davor, sonst würde er auch Variablen wie  z. B. 'complexdataset' modifizieren
     s = [self inString:s searchFor:@".dataset" andReplaceWith:@".myDataset" ignoringTextInQuotes:YES];
 
+
+
     // title ist eine interne Property von HTML 5...
 
     // Bevor ich 'title' ersetze, muss ich 'titlewidth', welches im Code vorkommen kann, retten...
     s = [self inString:s searchFor:@".titlewidth" andReplaceWith:@"@@@_prentNode_@@@" ignoringTextInQuotes:YES];
+    // und auch 'titleshift'
+    s = [self inString:s searchFor:@".titleshift" andReplaceWith:@"@@@_prentn_@@@" ignoringTextInQuotes:YES];
+
     s = [self inString:s searchFor:@".title" andReplaceWith:@".myTitle" ignoringTextInQuotes:YES];
+
+    // Und 'titlewidth' wieder herstellen.
     s = [self inString:s searchFor:@"@@@_prentNode_@@@" andReplaceWith:@".titlewidth" ignoringTextInQuotes:YES];
+    // und 'titleshift'...
+    s = [self inString:s searchFor:@"@@@_prentn_@@@" andReplaceWith:@".titleshift" ignoringTextInQuotes:YES];
+
+
+
 
     // Ich kann die andere Bedeutung von 'value' (insb. bei checkbox) in OL nicht in JS überschreiben
     s = [self inString:s searchFor:@".value" andReplaceWith:@".myValue" ignoringTextInQuotes:YES];
@@ -4449,7 +4436,7 @@ didStartElement:(NSString *)elementName
             // Das hier ist eigentlich richtig:
             if ([value hasPrefix:@"$"])
             {
-                value = [self modifySomeExpressionsInJSCode:value alsoModifyParent:NO];
+                value = [self modifySomeExpressionsInJSCode:value];
             }
         }
 
@@ -8082,10 +8069,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
                     else
                     {
                         // Stattdessen nur:
-                        s = [self modifySomeExpressionsInJSCode:s alsoModifyParent:NO];
-                        // classroot usw. muss ich ersetzen, ja
-                        // Aber ich darf nicht 'parent' durch getTheParent() ersetzen, weil sonst die Klammer am Ende
-                        // einen constraint value falsch trennt! oh man...
+                        s = [self modifySomeExpressionsInJSCode:s];
                     }
                 }
 
@@ -12011,7 +11995,7 @@ BOOL isJSExpression(NSString *s)
     "            // 'name'-Attribut ist initialize-only und kann später nicht geändert werden\n"
     "            // Deswegen gibt es dafür keinen getter/setter\n"
     "            var elem = document.getElementById(id);\n"
-    "            elem.getTheParent()[attributes.name] = elem;\n"
+    "            elem.parent[attributes.name] = elem;\n"
     "            // Damit 'remove()' die Referenz entfernen kann, name-Attribut unbedingt intern mitspeichern\n"
     "            $(elem).data('name',attributes.name);\n"
     "\n"
@@ -13283,27 +13267,6 @@ BOOL isJSExpression(NSString *s)
     "configurable: true,\n"
     "writable: false,\n"
     "value: function(immediate) {\n"
-    //"value: function(reference) {\n"
-    //"    if ($(this).get(0).nodeName === undefined && (typeof reference === 'undefined'))\n"
-    //"        throw \"getTheParent() von 'DOMWindow' aus aufgerufen und kein Argument übergeben. Dies ist Unsinn: DOMWindow hat keinen parent + Argument, von dem einer ermittelt werden könnte, ist nicht vorhanden.\";\n"
-    //"\n"
-    //"    if ($(this).get(0).nodeName === undefined) /*sprich: this=DOMWindow*/\n"
-    //"    {\n"
-    //"        var p = $(reference).parent();\n"
-    //"        if ($(reference).is('input') || $(reference).is('select'))\n"
-    //"        {\n"
-    //"            // input's und select's haben ein umgebendes id-loses div. Das müssen wir überspringen.\n"
-    //"            p = p.parent();\n"
-    //"        }\n"
-    //"        if ($(p).hasClass('div_rudPanel') || $(p).hasClass('div_windowContent'))\n"
-    //"        {\n"
-    //"            // Das Rud-Element/Window-Element hat ein Zwischen-Element, da muss ich dann eine Ebene höher springen.\n"
-    //"            p = p.parent();\n"
-    //"        }\n"
-    //"        return p.get(0);\n"
-    //"    }\n"
-    //"    else\n"
-    //"    {\n"
     "    if(typeof(immediate) === 'undefined')\n"
     "        immediate = false;\n"
     "\n"
@@ -13672,7 +13635,6 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "    else if (attributeName === 'defaultplacement')\n"
     "    {\n"
-    //"        $(me).data('defaultplacement_',value);\n"
     "        me.defaultplacement = value;\n"
     "    }\n"
     "    else if (attributeName === 'clip' && value === false)\n"
@@ -13962,19 +13924,22 @@ BOOL isJSExpression(NSString *s)
     // touchstart = mousedown
     // touchend = mouseup
     // (touchmove = mousemove)
-    "            if (imgpath1 != undefined && imgpath2 != undefined)\n"
-    "            {\n"
-    "                // hover löst regelmäßig auch aus, wenn man kurz antoucht. Aber kann man wohl so lassen\n"
-    "                $(me).hover(function() { $(me).css('background-image','url(\\''+imgpath1+'\\')') }, function() { $(me).css('background-image','url(\\''+imgpath0+'\\')') });\n"
-    "                if ('ontouchstart' in document.documentElement)\n"
+    // Taxango-Fix- Quatsch... Take out this condition when we throw Taxango away. To Do
+    "            if (($(me).parent().parent().parent().data('olel') != 'nicebox') && ($(me).parent().parent().parent().data('olel') != 'infobox_notsupported')) {\n"
+    "                if (imgpath1 != undefined && imgpath2 != undefined)\n"
     "                {\n"
-    "                    $(me).on('touchstart',function() { $(me).css('background-image','url(\\''+imgpath2+'\\')') });\n"
-    "                    $(me).on('touchend',function() { $(me).css('background-image','url(\\''+imgpath0+'\\')') });\n"
-    "                }\n"
-    "                else\n"
-    "                {\n"
-    "                    $(me).on('mousedown',function() { $(me).css('background-image','url(\\''+imgpath2+'\\')') });\n"
-    "                    $(me).on('mouseup',function() { $(me).css('background-image','url(\\''+imgpath0+'\\')') });\n"
+    "                    // hover löst regelmäßig auch aus, wenn man kurz antoucht. Aber kann man wohl so lassen\n"
+    "                    $(me).hover(function() { $(me).css('background-image','url(\\''+imgpath1+'\\')') }, function() { $(me).css('background-image','url(\\''+imgpath0+'\\')') });\n"
+    "                    if ('ontouchstart' in document.documentElement)\n"
+    "                    {\n"
+    "                        $(me).on('touchstart',function() { $(me).css('background-image','url(\\''+imgpath2+'\\')') });\n"
+    "                        $(me).on('touchend',function() { $(me).css('background-image','url(\\''+imgpath0+'\\')') });\n"
+    "                    }\n"
+    "                    else\n"
+    "                    {\n"
+    "                        $(me).on('mousedown',function() { $(me).css('background-image','url(\\''+imgpath2+'\\')') });\n"
+    "                        $(me).on('mouseup',function() { $(me).css('background-image','url(\\''+imgpath0+'\\')') });\n"
+    "                    }\n"
     "                }\n"
     "            }\n"
 
@@ -14271,7 +14236,9 @@ BOOL isJSExpression(NSString *s)
     "    $(this).triggerHandler('ondestroy');\n"
     "\n"
     "    // Referenz auf dieses Element im parent nullen - Wegen Bsp. 33.10\n"
-    "    this.getTheParent()[$(this).data('name')] = null;\n"
+    "    this.parent[$(this).data('name')] = null;\n"
+    "    if (this.immediateparent[$(this).data('name')])\n"
+    "        this.immediateparent[$(this).data('name')] = null;\n"
     "\n"
     "    $(this).remove();\n"
     "}\n"
@@ -14624,7 +14591,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// getText() - nachimplementiert - deprecated!         //\n"
+    "// getText() - deprecated!                             //\n"
     "/////////////////////////////////////////////////////////\n"
     "var getTextFunction = function () {\n"
     "    warnOnWrongClass(this);\n"
@@ -14635,7 +14602,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// getTextHeight() - nachimplementiert                 //\n"
+    "// getTextHeight()                                     //\n"
     "/////////////////////////////////////////////////////////\n"
     "var getTextHeightFunction = function () {\n"
     "    warnOnWrongClass(this);\n"
@@ -14647,7 +14614,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// getTextWidth() - nachimplementiert                  //\n"
+    "// getTextWidth()                                      //\n"
     "/////////////////////////////////////////////////////////\n"
     "var getTextWidthFunction = function () {\n"
     "    warnOnWrongClass(this);\n"
@@ -14659,7 +14626,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// setText() - nachimplementiert - deprecated!         //\n"
+    "// setText() - deprecated!                             //\n"
     "/////////////////////////////////////////////////////////\n"
     "var setTextFunction = function (s) {\n"
     "    warnOnWrongClass(this);\n"
@@ -14677,7 +14644,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// format() - nachimplementiert                        //\n"
+    "// format()                                            //\n"
     "/////////////////////////////////////////////////////////\n"
     "var formatFunction = function () {\n"
     "    warnOnWrongClass(this);\n"
@@ -14711,7 +14678,7 @@ BOOL isJSExpression(NSString *s)
     "});\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// getText() / getvalue() - nachimplementiert          //\n"
+    "// getText() / getvalue()                              //\n"
     "/////////////////////////////////////////////////////////\n"
     "var getTextFunction = function () {\n"
     "    return $(this).val();\n"
@@ -14724,7 +14691,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// clearText() - nachimplementiert                     //\n"
+    "// clearText()                                         //\n"
     "/////////////////////////////////////////////////////////\n"
     "var clearTextFunction = function () {\n"
     "    $(this).val('');\n"
@@ -14735,7 +14702,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// setSelection() - nachimplementiert                  //\n"
+    "// setSelection()                                      //\n"
     "/////////////////////////////////////////////////////////\n"
     "var setSelectionFunction = function (start, end) {\n"
     "    $(this).prop('selectionStart',start);\n"
@@ -14748,7 +14715,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// updateText() - nachimplementiert                    //\n"
+    "// updateText()                                        //\n"
     "/////////////////////////////////////////////////////////\n"
     "var updateTextFunction = function () {\n"
     "    this.text = $(this).val();\n"
@@ -14790,6 +14757,17 @@ BOOL isJSExpression(NSString *s)
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// selectItem()                                        //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var selectItemFunction = function (item) {\n"
+    "    $(this).val(item);\n"
+    "}\n"
+    "\n"
+    "// Nur für Select! Da es die Methode nur bei <select> gibt\n"
+    "HTMLSelectElement.prototype.selectItem = selectItemFunction;\n"
     "\n"
     "\n"
     "\n"
@@ -15426,15 +15404,14 @@ BOOL isJSExpression(NSString *s)
     "    configurable : true\n"
     "});\n"
     "\n"
-    "// bei jQueri UI gibt es auch parent. Um Kompatibilität damit aufrecht zu erhalten, myParent\n"
-    "// Umstieg auf HTMLElement.prototype! Evtl. jetzt kompatibel?\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Getter/Setter for 'myParent'                        //\n"
+    "// Getter/Setter for 'parent'                          //\n"
     "// READ-ONLY                                           //\n"
     "/////////////////////////////////////////////////////////\n"
-    "Object.defineProperty(HTMLElement.prototype, 'myParent', {\n"
+    "Object.defineProperty(HTMLElement.prototype, 'parent', {\n"
     "    get : function(){\n"
     "        if (!isDOM(this)) return undefined;\n"
+    "        if ($(this).data('defaultparent_')) return $('#' + $(this).data('defaultparent_')).get(0);\n"
     "        return this.getTheParent();\n"
     "    },\n"
     "    enumerable : false,\n"
@@ -15446,7 +15423,10 @@ BOOL isJSExpression(NSString *s)
     "// READ-ONLY                                           //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'immediateparent', {\n"
-    "    get : function(){ if (!isDOM(this)) return undefined; return this.getTheParent(true); },\n"
+    "    get : function(){\n"
+    "        if (!isDOM(this)) return undefined;\n"
+    "        return this.getTheParent(true);\n"
+    "    },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -16374,17 +16354,17 @@ BOOL isJSExpression(NSString *s)
     "            var varName = Ergebnis[i];\n"
     "\n"
     "            // Dann noch eventuelle spezielle Wörter austauschen\n"
-    "            varName = varName.replace(/immediateparent/g,'getTheParent(true)');\n"
-    "            varName = varName.replace(/parent/g,'getTheParent()');\n"
     "            varName = varName.replace(/\\.dataset/g,'.myDataset');\n"
     "            varName = varName.replace(/\\.title/g,'.myTitle');\n"
     "            varName = varName.replace(/\\.value/g,'.myValue');\n"
     "\n"
-    "            // Falls ganz vorne jetzt getTheParent() steht, dann muss ich unser aktuelles Element\n"
+    "            // Falls ganz vorne jetzt 'immediateparent.' oder 'parent.' steht, dann muss ich unser aktuelles Element\n"
     "            // davorsetzen. Weil jetzt nochmal extra mit 'with () {}' zu arbeiten ist wohl nicht nötig\n"
     "            // da wir ja auf Ebene der einzelnen Variable sind und individuell reagieren können.\n"
-    "            if (varName.startsWith('getTheParent'))\n"
+    "            if (varName.startsWith('immediateparent.') || varName.startsWith('parent.'))\n"
+    "            {\n"
     "                varName = scope + '.' + varName;\n"
+    "            }\n"
     "\n"
     "            // Gefundene reservierte JS-Wörter muss ich an dieser Stelle fallen lassen. Dies sind keine Var-Namen\n"
     "\n"
@@ -16494,7 +16474,8 @@ BOOL isJSExpression(NSString *s)
     "    // Falls wir mit 'parent.' oder 'immediateparent.' starten, muss ich die aktuelle ID davor setzen.\n"
     "    if ((expression.startsWith('parent')) || (expression.startsWith('immediateparent')))\n"
     "    {\n"
-    "        alert('Komme hier zumindestens im Taxango-Code nie rein. Oder? Kann diese Abfrage evtl. weg.');\n"
+    "        // alert('Komme hier zumindestens im Taxango-Code nie rein. Oder? Kann diese Abfrage evtl. weg.');\n"
+    "        // Doch, komme rein. Seit Umstieg auf getter/setter bei parent/immediateparent\n"
     "        expression = el.id + '.' + expression;\n"
     "    }\n"
     "\n"
@@ -16861,8 +16842,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        // Kurz vorher olel-name sichern, um gleich im parent den Verweis über den Namen zu korrigieren:\n"
     "        var nameProperty = $(id).data('name');\n"
-    "        var parentElement = id.getTheParent(); // Muss ich auch vorher speichern, danach iwie nicht erreichbar\n"
-    // direkt 'id.getTheParent()[$(id).data('name')]' in nur einer var zu speichern, klappt nicht, weil sich Änderung nur lokal auswirkt
+    "        var parentElement = id.parent; // Muss ich auch vorher speichern, danach iwie nicht erreichbar\n"
+    "        var parentElement2 = id.immediateparent;\n"
     "        // Bei element321 (BDSedittext) u. a. ist iwie ein Doppelsprung nötig, weil Elternelement eins tiefer verschachtelt. KA warum (iwie weil Klasse in Klasse instanziert wird)\n"
     "        if (nameProperty && parentElement && !parentElement[nameProperty])\n"
     "        {\n"
@@ -16875,7 +16856,7 @@ BOOL isJSExpression(NSString *s)
     "                    break;\n"
     "                }\n"
     "\n"
-    "                parentElement = parentElement.getTheParent();\n"
+    "                parentElement = parentElement.immediateparent;\n"
     "                if (parentElement === undefined)\n"
     "                    break;\n"
     "            }\n"
@@ -16890,6 +16871,9 @@ BOOL isJSExpression(NSString *s)
     "        if (parentElement && nameProperty)\n"
     "        {\n"
     "            parentElement[nameProperty] = id;\n"
+    "\n"
+    "            if (parentElement2)\n"
+    "                parentElement2[nameProperty] = id;\n"
     "        }\n"
     "\n"
     "\n"
@@ -16946,11 +16930,18 @@ BOOL isJSExpression(NSString *s)
     //"        $(id).prepend(obj.inherit.contentHTML);\n"
     "        if (hasValidDefaultplacement(id,obj))\n"
     "        {\n"
-    "          $(id).find(\"[data-name='\"+obj.inherit.inherit.selfDefinedAttributes.defaultplacement+\"']\").prepend(obj.inherit.contentHTML);\n"
+    "          var place = obj.inherit.inherit.selfDefinedAttributes.defaultplacement;\n"
+    "          $(id).find(\"[data-name='\"+place+\"']\").prepend(obj.inherit.contentHTML);\n"
+    "\n"
+    "          // Den ursprünglichen parent noch sichern im ersten Element mit id (für Unterscheidung parent/immediateparent)\n"
+    "          $(id).find(\"[data-name='\"+place+\"']\").find('[id]:first').data('defaultparent_',id.id)\n"
+    "\n"
+    "          $(id).find(\"[data-name='\"+place+\"']\").triggerHandler('onaddsubview');\n"
     "        }\n"
     "        else\n"
     "        {\n"
     "          $(id).append(obj.inherit.contentHTML);\n"
+    "          $(id).triggerHandler('onaddsubview');\n"
     "        }\n"
     "      }\n"
     "\n"
@@ -17124,6 +17115,10 @@ BOOL isJSExpression(NSString *s)
     //"      $(id[inherit_defaultplacement]).triggerHandler('onaddsubview');\n" // Weil ich es im anderen Zweig auch triggere
     // Neu, Folgeänderung, siehe gerade eben:
     "      $(id).find(\"[data-name='\"+inherit_defaultplacement+\"']\").prepend(s);\n"
+    "\n"
+    "      // Den ursprünglichen parent noch sichern im ersten Element mit id (für Unterscheidung parent/immediateparent)\n"
+    "      $(id).find(\"[data-name='\"+inherit_defaultplacement+\"']\").find('[id]:first').data('defaultparent_',id.id)\n"
+    "\n"
     "      $(id).find(\"[data-name='\"+inherit_defaultplacement+\"']\").triggerHandler('onaddsubview');\n"
     "    }\n"
     "  }\n"
@@ -17154,27 +17149,35 @@ BOOL isJSExpression(NSString *s)
     "    evalCode(s);\n"
     "\n"
     // Zugriff auf 'defaultplacement' per 'id', nicht mehr per 'obj'. Das Attribut wurde ja übertragen in id bereits weiter oben.
-    "  // Abfrage 2 nötig, falls das defaultplacment einen korrupten String enthält (wie in Bsp. 33.16)\n"
-    "  if (id.defaultplacement !== '' && window[id.defaultplacement]) // dann die vorher existierenden Kinder korrekt positionieren\n"
+    "  if (kinderVorDemAppenden.length > 0)\n"
     "  {\n"
-    "      $(kinderVorDemAppenden).appendTo($(window[id.defaultplacement]));\n"
-    "  }\n"
-    "  else\n"
-    "  {\n"
-    "      // Vorher bereits im Div existierende Kinder dann auf jeden Fall ans Ende verschieben\n"
-    "      $(kinderVorDemAppenden).appendTo(id);\n"
-    "  }\n"
-    "\n"
-    "\n"
-    "  // Kinder können ein eigenes 'placement'-Attribut haben, dann nochmal verschieben des Kindes\n"
-    "  // Gemäß Code-Inspektion Example 26.22 wirklich mit 'appendTo()' verschieben und nicht mit 'replaceWith()'\n"
-    "  // Jedes Kind einzeln überprüfen\n"
-    "  kinderVorDemAppenden.each(function() {\n"
-    "    if ($(this).data('placement'))\n"
+    "    // Abfrage 2 nötig, falls das defaultplacment einen korrupten String enthält (wie in Bsp. 33.16)\n"
+    "    if (id.defaultplacement !== '' && $(id).find(\"[data-name='\"+id.defaultplacement+\"']\").length > 0) // dann die vorher existierenden Kinder korrekt positionieren\n"
     "    {\n"
-    "      $(this).appendTo(window[$(this).data('placement')]);\n"
+    "        $(kinderVorDemAppenden).appendTo($(id).find(\"[data-name='\"+id.defaultplacement+\"']\").get(0));\n"
+    "\n"
+    "        // Referenz auf immediateparent in diesem Fall korrigieren\n"
+    "        kinderVorDemAppenden.each(function() {\n"
+    "            $(kinderVorDemAppenden).parent().get(0)[$(this).data('name')] = this;\n"
+    "        });\n"
     "    }\n"
-    "  });\n"
+    "    else\n"
+    "    {\n"
+    "        // Vorher bereits im Div existierende Kinder dann auf jeden Fall ans Ende verschieben\n"
+    "        $(kinderVorDemAppenden).appendTo(id);\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "    // Kinder können ein eigenes 'placement'-Attribut haben, dann nochmal verschieben des Kindes\n"
+    "    // Gemäß Code-Inspektion Example 26.22 wirklich mit 'appendTo()' verschieben und nicht mit 'replaceWith()'\n"
+    "    // Jedes Kind einzeln überprüfen\n"
+    "    kinderVorDemAppenden.each(function() {\n"
+    "      if ($(this).data('placement'))\n"
+    "      {\n"
+    "        $(this).appendTo(window[$(this).data('placement')]);\n"
+    "      }\n"
+    "    });\n"
+    "  }\n"
     "\n"
     "\n"
     "  // JS erst jetzt ausführen, sonst stimmen bestimmte width/height's nicht, weil ja etwas verschoben wurde\n"
@@ -17235,8 +17238,6 @@ BOOL isJSExpression(NSString *s)
     "    var vars = getTheDependingVarsOfTheConstraint(v,el.id);\n"
     "\n"
     "    v = v.substring(2,v.length-1);\n"
-    "    v = v.replace(/immediateparent/g,'getTheParent(true)');\n"
-    "    v = v.replace(/parent/g,'getTheParent()');\n"
     "    v = v.replace(/\\.dataset/g,'.myDataset');\n"
     "    v = v.replace(/\\.title/g,'.myTitle');\n"
     "    v = v.replace(/\\.value/g,'.myValue');\n"
@@ -17497,8 +17498,8 @@ BOOL isJSExpression(NSString *s)
     "  this.contentHTML = '';\n"
     "\n"
     "  this.contentJQuery = \"\" +\n"
-    "  \"  @@@P-L,A#TZHALTER@@@.container = @@@P-L,A#TZHALTER@@@.getTheParent(true);\\n\" +\n"
-    "  \"  @@@P-L,A#TZHALTER@@@.mask = @@@P-L,A#TZHALTER@@@.getTheParent(true).getTheParent(true);\\n\" +\n"
+    "  \"  @@@P-L,A#TZHALTER@@@.container = @@@P-L,A#TZHALTER@@@.parent;\\n\" +\n"
+    "  \"  @@@P-L,A#TZHALTER@@@.mask = @@@P-L,A#TZHALTER@@@.parent.parent;\\n\" +\n"
     "  \"\";\n"
     "}\n"
     "\n"
@@ -17622,7 +17623,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  this.contentJS = \"\" +\n"
     "  \"  _content_ = document.getElementById('@@@P-L,A#TZHALTER@@@_content_');\\n\" +\n"
-    "  \"  document.getElementById('@@@P-L,A#TZHALTER@@@_content_').getTheParent()._content_ = _content_;\\n\" +\n"
+    "  \"  document.getElementById('@@@P-L,A#TZHALTER@@@_content_').parent._content_ = _content_;\\n\" +\n"
     "  \"  $(@@@P-L,A#TZHALTER@@@_content_).data('name','_content_');\\n\" +\n"
     "  \"\";\n"
     "\n"

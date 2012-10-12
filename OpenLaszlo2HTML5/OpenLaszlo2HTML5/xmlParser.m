@@ -40,7 +40,7 @@ BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, 
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
-BOOL kompiliereSpeziellFuerTaxango = NO;
+BOOL kompiliereSpeziellFuerTaxango = YES;
 
 
 
@@ -1092,7 +1092,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         widthGesetzt = YES;
     }
 
-    if ([elemName isEqualToString:@"BDScomboboxXXX"])
+    if ([elemName isEqualToString:@"BDScombobox"])
     {
     if ([attributeDict valueForKey:@"controlwidth"]) // ToDo - Self defined attribute of BDScombobox
     {
@@ -1201,7 +1201,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 
             // Die Eigenschaft font-size überträgt sich auf alle Kinder und Enkel
             [s appendString:@"  // Alle Kinder und Enkel kriegen ebenfalls die font-size-Eigenschaft mit\n"];
-            [s appendFormat:@"  $('#%@').find('.div_text').css('font-size','%@px');\n\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"fontsize"]];
+            // Früher war es anstatt 'div' '.div_text'.
+            // Das geht nicht, falls der Text eine Klasse ist. Klassen sind immer 'div_standard', nicht 'div_text'
+            [s appendFormat:@"  $('#%@').find('div').css('font-size','%@px');\n\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"fontsize"]];
 
             // Muss GANZ Am Anfang stehen, da die width-eigenschaft, die ausgelesen wird,
             // von der Schriftgröße abhängt. Diese muss aber vorher korrekt gesetzt werden!!
@@ -2928,23 +2930,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-// Bindestriche werden intern bei der css-width-Berechnung anscheinend umgebrochen.
-// Deswegen wird der Bindestrich hier durch einen non breaking hyphen ersetzt.
-// Alternative wäre per css eine '.nobr { white-space: nowrap;}'-Angabe
-// http://stackoverflow.com/questions/8753296/how-to-prevent-line-break-at-hyphens-on-all-browsers
-// Wird von BDSText beim gesammelten und bei der direkten Text-Eingabe aufgerufen
-- (NSString *) replaceHyphenWithNonBreakingHyphen:(NSString*)s
-{
-    return s;
-    // Update: Diese Methode ist seit 'white-space:nowrap' in CSS '.div_text' nicht mehr nötig!
-
-    // Verkürzt den Bindestrich dann leider um einen Pixel.
-    s = [s stringByReplacingOccurrencesOfString:@"-" withString:@"&#8209;"];
-    return s;
-}
-
-
-
 -(void) erhoeheVerschachtelungstiefe:(NSString *)elementName merkeDirID:(NSString *)theId
 {
     self.verschachtelungstiefe++;
@@ -3498,7 +3483,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
         [elementName isEqualToString:@"BDSedit___DeleteMe"] ||
-        [elementName isEqualToString:@"BDStext"] ||
+        [elementName isEqualToString:@"BDStext___DeleteMe"] ||
         [elementName isEqualToString:@"statictext"] ||
         [elementName isEqualToString:@"text"] ||
         [elementName isEqualToString:@"inputtext"] ||
@@ -4433,7 +4418,7 @@ didStartElement:(NSString *)elementName
         }
         else
         {
-            // Das hier ist eigentlich richtig:
+            // Das hier ist eigentlich richtig: // To Do
             if ([value hasPrefix:@"$"])
             {
                 value = [self modifySomeExpressionsInJSCode:value];
@@ -4575,7 +4560,19 @@ didStartElement:(NSString *)elementName
                 }
                 else
                 {
-                    [self.jQueryOutput0 appendString:o];
+                    // Spezialbehandlung für Taxango, weil initstage=defer erst verzögert aufgerufen wird, auch die Attribute
+                    // dieser Klasseninstanz verzögert setzen. Korrekte Lösung hier wohl: Abfrage nach initstage=defer einbauen.
+                    if ([elemTyp isEqualToString:@"nicemodaldialog"])
+                    {
+                        [self.jQueryOutput0 appendString:o];
+
+                        // Zusätzlich, um die Werte zu erneuern!! (Weil vorher wird die Var iwie auch schon gebraucht
+                        [self.jsInitstageDeferOutput appendString:o];
+                    }
+                    else
+                    {
+                        [self.jQueryOutput0 appendString:o];
+                    }
                 }
             }
         }
@@ -4990,8 +4987,9 @@ didStartElement:(NSString *)elementName
 
     // Eigentlich sollte das hier selbständig hinzugefügt werden und anhand
     // der definierten Klasse erkannt werden.
-    // Ich denke ich lasse 'BDSText' für Taxango erstmal so, da es nur ein 'text' mit unnötigen Zusatz-Attributen ist
-    if ([elementName isEqualToString:@"BDStext"] || [elementName isEqualToString:@"statictext"])
+    // Ich denke ich lasse 'BDStext' für Taxango erstmal so, da es nur ein 'text' mit unnötigen Zusatz-Attributen ist
+    // Neu: Ich muss 'BDStext' zwingend auswerten, damit ich darauf visible-Eigenschaften korrekt anwenden kann
+    if ([elementName isEqualToString:@"BDStext___DeleteMe"] || [elementName isEqualToString:@"statictext"])
     {
         element_bearbeitet = YES;
 
@@ -5207,7 +5205,7 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"BDScomboboxXXX"] || // ToDo -  als Klasse auslesen
+    if ([elementName isEqualToString:@"BDScombobox"] || // ToDo -  als Klasse auslesen
         [elementName isEqualToString:@"combobox"] ||
         [elementName isEqualToString:@"datacombobox"])
     {
@@ -6818,7 +6816,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
     // ToDo
-    if ([elementName isEqualToString:@"nicemodaldialog"])
+    if ([elementName isEqualToString:@"nicemodaldialogXXX"])
     {
         element_bearbeitet = YES;
 
@@ -8731,6 +8729,7 @@ BOOL isJSExpression(NSString *s)
 
         // Falls im HTML-Code Text mit ' auftaucht, müssen wir das escapen.
         rekursiveRueckgabeOutput = [rekursiveRueckgabeOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
+        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         rekursiveRueckgabeJsComputedValuesOutput = [rekursiveRueckgabeJsComputedValuesOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
@@ -8906,7 +8905,7 @@ BOOL isJSExpression(NSString *s)
     }
 
     if ([elementName isEqualToString:@"class"] ||
-        [elementName isEqualToString:@"nicemodaldialog"])
+        [elementName isEqualToString:@"nicemodaldialogXXX"])
     {
         element_geschlossen = YES;
 
@@ -9169,7 +9168,7 @@ BOOL isJSExpression(NSString *s)
 
 
 
-    if ([elementName isEqualToString:@"BDScomboboxXXX"] ||
+    if ([elementName isEqualToString:@"BDScombobox"] ||
         [elementName isEqualToString:@"combobox"] ||
         [elementName isEqualToString:@"datacombobox"])
     {
@@ -9369,8 +9368,8 @@ BOOL isJSExpression(NSString *s)
 
 
 
-    // Schließen von BDStext und statictext
-    if ([elementName isEqualToString:@"BDStext"] || [elementName isEqualToString:@"statictext"])
+    // Schließen von statictext
+    if ([elementName isEqualToString:@"BDStext___DeleteMe"] || [elementName isEqualToString:@"statictext"])
     {
         element_geschlossen = YES;
 
@@ -9381,7 +9380,7 @@ BOOL isJSExpression(NSString *s)
 
         // Ab jetzt dürfen wieder Tags gesetzt werden.
         self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
-        NSLog(@"BDStext/statictext was closed. I will not any longer skip HTML-tags.");
+        NSLog(@"statictext was closed. I will not any longer skip HTML-tags.");
 
         [self.output appendString:@"</div>\n"];
     }
@@ -10093,23 +10092,26 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"  if (window['tabsMain']) tabsMain.next = function() { $(this).tabs('select', $(this).tabs('option', 'selected')+1) }\n"];
 
 
-    [self.output appendString:@"  if (window['rudStpfl']) rudStpfl.rolldown = function() {} // ToDo\n"];
-    [self.output appendString:@"  if (window['rudWeitereInfos']) rudWeitereInfos.isvalid = true; // ToDo\n"];
-    [self.output appendString:@"  if (!window['globalcalendar']) globalcalendar = {}; // ToDo\n"];
+    [self.output appendString:@"  if (window['rudStpfl']) rudStpfl.rolldown = function() {} // ToDo\n\n"];
+
+    [self.output appendString:@"  // ToDo:\n"];
+    [self.output appendString:@"  if (window['rudWeitereInfos']) rudWeitereInfos.isvalid = true;\n"];
+    [self.output appendString:@"  if (window['rudcZurPerson']) rudcZurPerson.isvalid = true;\n"];
+    [self.output appendString:@"  if (window['rudcEinnahmen']) rudcEinnahmen.isvalid = true;\n"];
+    [self.output appendString:@"  if (window['rudcAusgaben']) rudcAusgaben.isvalid = true;\n"];
+
+    [self.output appendString:@"\n  if (!window['globalcalendar']) globalcalendar = {}; // ToDo\n"];
     [self.output appendString:@"  globalcalendar.setCurrentdate = function() { return new Date(); };\n"];
 
-    [self.output appendString:@"  var dlgsave = new dlg();\n"];
-    [self.output appendString:@"  var dlgwaitonline = new dlg();\n"];
     [self.output appendString:@"  function dlg()\n  {\n    // Extern definiert\n    this.open = open;\n    // Intern definiert (beides möglich)\n"];
+    // Name kann auch doppelt auftauchen beim definieren einer JS-Function
     [self.output appendString:@"     this.completeInstantiation = function completeInstantiation() { };\n  }\n"];
     [self.output appendString:@"  function open()\n  {\n    alert('Willst du wirklich deine Ehefrau löschen? Usw...');\n  }\n"];
-    [self.output appendString:@"  var dlgFamilienstandSingle = new dlg();\n\n"];
+    [self.output appendString:@"  //var dlgFamilienstandSingle = new dlg();\n\n"];
 
     // Seitdem ich die initstage=defer-Klassen nach ganz unten verschoben habe, taucht das hier auf,
     // Er erwartet glaube ich die Variable '_inner' in einem 'BDSReplicator'
     [self.output appendString:@"  if (window.element139) element139._inner = element139;\n"];
-    [self.output appendString:@"  // if (window.element139) element139._scrollview = element139;\n"];
-    [self.output appendString:@"  // if (window.element139) element139._innerscroll = element139;\n"];
     [self.output appendString:@"  if (window.element139) element139.measureHeight = function() {};\n\n"];
 
 
@@ -12125,6 +12127,13 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "\n"
+    "    this.ModeManagerService = function() {\n"
+    "        this.makeModal = function() {\n"
+    "            alert('ToDo - makeModal!!');\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
     "    this.layout = function() {\n"
     "        this.locked = false;\n"
     "\n"
@@ -13085,6 +13094,8 @@ BOOL isJSExpression(NSString *s)
     "// lz.History is the single instance of the class lz.HistoryService.\n"
     "lz.History = new lz.HistoryService();\n"
     "\n"
+    "lz.ModeManager = new lz.ModeManagerService();\n"
+    "\n"
     "// Viele Objekte können auch mit vorangestellten Lz aufgerufen werden\n"
     "var LzBrowser = lz.Browser;\n"
     "var LzEvent = lz.event;\n"
@@ -13448,13 +13459,15 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        $(me).css('font-family',value+',Verdana,sans-serif');\n"
     "        // Die Eigenschaft font-family überträgt sich auf alle Kinder und Enkel\n"
-    "        $(me).find('.div_text').css('font-family',value+',Verdana,sans-serif')\n"
+    "        $(me).find('div').css('font-family',value+',Verdana,sans-serif')\n"
     "    }\n"
     "    else if (attributeName == 'fontsize')\n"
     "    {\n"
     "        $(me).css('font-size',value+'px');\n"
     "        // Die Eigenschaft font-size überträgt sich auf alle Kinder und Enkel\n"
-    "        $(me).find('.div_text').css('font-size',value+'px')\n"
+    // Früher war es anstatt 'div' '.div_text'.
+    // Das geht nicht, falls der Text eine Klasse ist. Klassen sind immer 'div_standard', nicht 'div_text'
+    "        $(me).find('div').css('font-size',value+'px')\n"
     "    }\n"
     "    else if (attributeName == 'fontstyle')\n"
     "    {\n"
@@ -13463,18 +13476,18 @@ BOOL isJSExpression(NSString *s)
     "            $(me).css('font-style','normal');\n"
     "            $(me).find('.div_text').css('font-style','normal')\n"
     "            $(me).css('font-weight','normal');\n"
-    "            $(me).find('.div_text').css('font-weight','normal')\n"
+    "            $(me).find('div').css('font-weight','normal')\n"
     "        }\n"
     "        // contains() und nicht ===, weil mit der Angabe 'bolditalic' auch beides auf einmal gelten kann\n"
     "        if (value.contains('bold'))\n"
     "        {\n"
     "            $(me).css('font-weight','bold');\n"
-    "            $(me).find('.div_text').css('font-weight','bold')\n"
+    "            $(me).find('div').css('font-weight','bold')\n"
     "        }\n"
     "        if (value.contains('italic'))\n"
     "        {\n"
     "            $(me).css('font-style','italic');\n"
-    "            $(me).find('.div_text').css('font-style','italic')\n"
+    "            $(me).find('div').css('font-style','italic')\n"
     "        }\n"
     "    }\n"
     "    else if (attributeName == 'bgcolor')\n"
@@ -13984,7 +13997,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        }\n"
     "    }\n"
-    "    else if ($(me).hasClass('div_text') && (attributeName == 'multiline')) // Nur vom Element 'text' von Haus aus gesetzt\n"
+    "    // Musste ich lockern/entfernen die erste Abfrage, seitdem ich BDStext auswerte\n"
+    "    else if (/*$(me).hasClass('div_text') && */ (attributeName == 'multiline')) // Nur vom Element 'text' von Haus aus gesetzt\n"
     "    {\n"
     "        if (value === false)\n"
     "        {\n"
@@ -13996,7 +14010,7 @@ BOOL isJSExpression(NSString *s)
     "            $(me).css('white-space','normal');\n"
     "        }\n"
     "    }\n"
-    "    else if ($(me).hasClass('div_text') && (attributeName == 'selectable')) // Nur vom Element 'text' von Haus aus gesetzt\n"
+    "    else if (/*$(me).hasClass('div_text') && */ (attributeName == 'selectable')) // Nur vom Element 'text' von Haus aus gesetzt\n"
     "    {\n"
     "        if (value === false)\n"
     "        {\n"
@@ -14380,7 +14394,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// applyConstraintMethod() - nachimplementiert         //\n"
+    "// applyConstraintMethod()                             //\n"
     "/////////////////////////////////////////////////////////\n"
     "var applyConstraintMethodFunction = function (constraintMethod,dependencies) {\n"
     "    if (constraintMethod === undefined)\n"
@@ -14409,6 +14423,17 @@ BOOL isJSExpression(NSString *s)
     "HTMLInputElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
     "HTMLSelectElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
     "HTMLButtonElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// completeInstantiation()                             //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var completeInstantiationFunction = function() {\n"
+    "    // ToDo\n"
+    "}\n"
+    "HTMLDivElement.prototype.completeInstantiation = completeInstantiationFunction;\n"
+    "HTMLInputElement.prototype.completeInstantiation = completeInstantiationFunction;\n"
+    "HTMLSelectElement.prototype.completeInstantiation = completeInstantiationFunction;\n"
+    "HTMLButtonElement.prototype.completeInstantiation = completeInstantiationFunction;\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Getter/Setter for 'options'                         //\n"
@@ -15125,7 +15150,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// getAttributeRelative() - nachimplementiert          //\n"
+    "// getAttributeRelative()                              //\n"
     "/////////////////////////////////////////////////////////\n"
     "var getAttributeRelativeFunction = function (prop, ref) {\n"
     "    if (typeof prop !== 'string' && prop !== 'x' && prop !== 'y' && prop !== 'width' && prop !== 'height')\n"
@@ -15144,7 +15169,43 @@ BOOL isJSExpression(NSString *s)
     "HTMLButtonElement.prototype.getAttributeRelative = getAttributeRelativeFunction;\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// sendToBack() - nachimplementiert                    //\n"
+    "// measureHeight()                                     //\n"
+    "// Reports the 'natural' height of the contents of the view. That is, the height the view would have if it did not have an explicit height.\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var measureHeightFunction = function () {\n"
+    //"    var cssProp = $(this).css('height');\n"
+    //"    // $(this).css('height','auto');\n"
+    //"    var returnValue = $(this).height();\n"
+    //"    // $(this).css('height',cssProp);\n"
+    //"    return returnValue;\n"
+    "      return getHeighestHeightOfChildren(this);\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.measureHeight = measureHeightFunction;\n"
+    "HTMLInputElement.prototype.measureHeight = measureHeightFunction;\n"
+    "HTMLSelectElement.prototype.measureHeight = measureHeightFunction;\n"
+    "HTMLButtonElement.prototype.measureHeight = measureHeightFunction;\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// measureWidth()                                      //\n"
+    "// Reports the 'natural' width of the contents of the view. That is, the height the view would have if it did not have an explicit height.\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var measureWidthFunction = function () {\n"
+    //"    var cssProp = $(this).css('width');\n"
+    //"    // $(this).css('width','auto');\n"
+    //"    var returnValue = $(this).width();\n"
+    //"    // $(this).css('width',cssProp);\n"
+    //"    return returnValue;\n"
+    "    return getWidestWidthOfChildren(this);\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.measureWidth = measureWidthFunction;\n"
+    "HTMLInputElement.prototype.measureWidth = measureWidthFunction;\n"
+    "HTMLSelectElement.prototype.measureWidth = measureWidthFunction;\n"
+    "HTMLButtonElement.prototype.measureWidth = measureWidthFunction;\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// sendToBack()                                        //\n"
     "/////////////////////////////////////////////////////////\n"
     "var sendToBackFunction = function (oThis) {\n"
     "    $(this).css('z-index','-1');\n"
@@ -16876,6 +16937,11 @@ BOOL isJSExpression(NSString *s)
     "            if (parentElement2)\n"
     "                parentElement2[nameProperty] = id;\n"
     "        }\n"
+    "        if (nameProperty)\n"
+    "        {\n"
+    "            // Auch data-name wieder herstellen, weil viele jQuery-Abfragen über dieses Attribut gehen und nicht über $.data()\n"
+    "            $(id).attr('data-name',nameProperty)\n"
+    "        }\n"
     "\n"
     "\n"
     "        // Und das gerettete CSS wieder einsetzen\n"
@@ -17235,6 +17301,14 @@ BOOL isJSExpression(NSString *s)
     "        return;\n"
     "    }\n"
     "\n"
+    "    if (v.startsWith('$path{')) // Ist dann gar kein Constraint value\n"
+    "    {\n"
+    "        v = '${' + v.substring(6);\n"
+    "        v = v.substring(2,v.length-1);\n"
+    "        // setRelativeDataPathIn(el,v,lastDP_,a); // ToDo\n"
+    "        return;\n"
+    "    }\n"
+    "\n"
     "    // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...\n"
     "    var vars = getTheDependingVarsOfTheConstraint(v,el.id);\n"
     "\n"
@@ -17533,6 +17607,12 @@ BOOL isJSExpression(NSString *s)
     "  this.selfDefinedAttributes = { resize:true, selectable:false, text:textBetweenTags }\n"
     "\n"
     "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" data-olel=\"text\" class=\"div_text noPointerEvents\">'+textBetweenTags+'</div>';\n"
+    "\n"
+    "  this.contentJQuery = function(el) {\n"
+    "      // Ein evtl. Text-Attribut überschreibt immer textBetweenTags\n"
+    "      if (el.text)\n"
+    "          el.setAttribute_('text', el.text);\n"
+    "}\n"
     "}\n"
     "\n"
     "\n"

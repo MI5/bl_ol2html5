@@ -223,6 +223,7 @@ BOOL ownSplashscreen = NO;
 // oninit-Code in einem Handler wird direkt ausgeführt (load-Handler ist unpassend)
 @property (nonatomic) BOOL onInitInHandler;
 @property (nonatomic) BOOL initStageDefer;
+@property (nonatomic) BOOL initStageDeferThatWillBeCalledByCompleteInstantiation;
 // 'reference'-Variable in einem Handler muss an das korrekte Element gebunden werden
 @property (nonatomic) BOOL referenceAttributeInHandler;
 @property (nonatomic) BOOL handlerofDrawview;
@@ -294,7 +295,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize weAreCollectingTheCompleteContentInClass = _weAreCollectingTheCompleteContentInClass;
 @synthesize weAreSkippingTheCompleteContentInThisElement = _weAreSkippingTheCompleteContentInThisElement;
 
-@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, initStageDefer = _initStageDefer, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler, handlerofDrawview = _handlerofDrawview, lastUsedNameAttributeOfState = _lastUsedNameAttributeOfState;
+@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, initStageDefer = _initStageDefer, initStageDeferThatWillBeCalledByCompleteInstantiation =_initStageDeferThatWillBeCalledByCompleteInstantiation, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler, handlerofDrawview = _handlerofDrawview, lastUsedNameAttributeOfState = _lastUsedNameAttributeOfState;
 
 
 
@@ -441,6 +442,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.ignoreAddingIDsBecauseWeAreInClass = NO;
         self.onInitInHandler = NO;
         self.initStageDefer = NO;
+        self.initStageDeferThatWillBeCalledByCompleteInstantiation = NO;
         self.referenceAttributeInHandler = NO;
         self.handlerofDrawview = NO;
         self.methodAttributeInHandler = @"";
@@ -7870,17 +7872,19 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // NSLog([NSString stringWithFormat:@"%@",[self.allFoundClasses objectForKey:elementName]]);
 
 
-        if ([attributeDict valueForKey:@"text"])
+
+
+        // To Do: Nicht 'deferview', sondern das vorhandene attribut initstage=defer ist hier eigentlich entscheidend
+        if ([elementName isEqualToString:@"deferview"])
         {
-            self.attributeCount++;
-            // NSLog(@"Setting the attribute 'text' as 'textBetweenTags'-Parameter of the object.");
-
-            // Wird dann beim schließen ausgelesen
-            // self.textInProgress = [[NSMutableString alloc] initWithString:[attributeDict valueForKey:@"text"]];
-
-            // Neu: Ne, mache ich nicht mehr. Wenn ich doch das Attribut 'text' habe, wieso soll ich es dann nochmal
-            // als textBetweenTags setzen?
+            self.initStageDefer = YES;
         }
+        if ([elementName isEqualToString:@"nicemodaldialog"])
+        {
+            self.initStageDeferThatWillBeCalledByCompleteInstantiation = YES;
+        }
+
+
 
 
         // Ich muss die Stelle einmal markieren...
@@ -7891,6 +7895,12 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [self.output appendString:@" class=\"div_standard noPointerEvents\" style=\""];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
+        
+        if (self.initStageDeferThatWillBeCalledByCompleteInstantiation)
+        {
+            // Nicht sichtbar, weil es ja erst später instanziert wird
+            [self.output appendString:@"display:none;"];
+        }
 
         [self.output appendString:@"\">\n"];
 
@@ -8039,7 +8049,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // ...dann die übrig gebliebenen Attribute (die von der Instanz selbst definierten) setzen
         if ([d count] > 0)
         {
-            // [o appendString:@"\n  // Setzen der Instanz-Variablen, für die nicht die Defaultwerte der Klasse gelten (interpretObject() setzt nur bei hier 'undefined' Werten)"];
 
             // '__strong', damit ich object modifizieren kann
             for (NSString __strong *key in d)
@@ -8075,21 +8084,17 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
                 if (weNeedQuotes)
                 {
-                    // [o appendFormat:@"\n  %@.%@ = '%@';",self.zuletztGesetzteID,key,s];
                     s = [self protectThisSingleQuotedJavaScriptString:s];
                     [instanceVars appendFormat:@"%@ : '%@', ",key,s];
                 }
                 else
                 {
-                    // [o appendFormat:@"\n  %@.%@ = %@;",self.zuletztGesetzteID,key,s];
                     [instanceVars appendFormat:@"%@ : %@, ",key,s];
                 }
             }
 
             // Letztes Komma wieder raus und Leerzeichen ran:
             instanceVars = [[NSMutableString alloc] initWithFormat:@"%@ ",[instanceVars substringToIndex:instanceVars.length-2]];
-
-            // [o appendString:@"\n"];
         }
 
 
@@ -8115,7 +8120,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // Okay, hier muss ich jetzt per jQuery die Objekte
         // auslesen aus der JS-Datei collectedClasses.js
 
-        //[o appendFormat:@"\n  // Klasse '%@' wurde instanziert in '%@' (Fortsetzung - tatsächliche Instanzierung - vorher wurden nur die Attribute gesetzt)",elementName,idUmgebendesElement];
         [o appendFormat:@"\n  // Instanzvariablen holen, id holen, Instanz erzeugen, Objekt auswerten und 'id' entsprechend ergänzen"];
         [o appendFormat:@"\n  var iv = { %@};",instanceVars];
         [o appendFormat:@"\n  var id = document.getElementById('%@');",idUmgebendesElement];
@@ -8126,11 +8130,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
         [o appendString:@"\n  interpretObject(obj,id,iv);\n"];
 
-        // To Do: Nicht 'deferview', sondern das vorhandene attribut initstage=defer ist hier eigentlich entscheidend
-        if ([elementName isEqualToString:@"deferview"] || [elementName isEqualToString:@"nicemodaldialog"])
-        {
-            self.initStageDefer = YES;
-        }
 
 
         // in jQueryOutput0! Damit a) keine weiteren Elemente überschrieben werden,
@@ -8141,9 +8140,13 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // analog auch beim beenden beachten. (Falls es hier geändert wird, dort mitändern!)
         if (self.initStageDefer)
         {
-            // Dann immer ein 'oninit' hinterher triggern, weil das sonst nichts ausgeführt wird
-            //[o appendString:@"  $(id).triggerHandler('oninit');\n"];
             [self.jsInitstageDeferOutput appendString:o];
+        }
+        else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation)
+        {
+            // Dann speichern wir NUR die instanceVars, alles andere klären wir später beim Aufruf von CompleteInstantiation
+            [self.jsInitstageDeferOutput  appendFormat:@"\n  // Klasse '%@' wird später instanziert in '%@' von completeInstantiation",elementName,self.zuletztGesetzteID];
+            [self.jsInitstageDeferOutput  appendFormat:@"\n  $(document.getElementById('%@')).data('instanceVars_',{ %@});\n",self.zuletztGesetzteID,instanceVars];
         }
         else
         {
@@ -9827,6 +9830,10 @@ BOOL isJSExpression(NSString *s)
             {
                 [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-(34/*+34*/)];
             }
+            else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation)
+            {
+                [self.jsInitstageDeferOutput  appendFormat:@"  $(document.getElementById('%@')).data('textBetweenTags_','%@');\n",self.zuletztGesetzteID,s];
+            }
             else
             {
                 [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-34];
@@ -9836,10 +9843,15 @@ BOOL isJSExpression(NSString *s)
 
         //NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-1];
         //if ([enclosingElemTyp isEqualToString:@"deferview"])
-        // So ist es wohl richtig: So werden auch Objekte IN 'deferview's erst verzögert geladen:
-        if ([elementName isEqualToString:@"deferview"] || [elementName isEqualToString:@"nicemodaldialog"])
+        // So ist es wohl richtig: So werden auch Objekte IN deferview's erst verzögert geladen:
+        if ([elementName isEqualToString:@"deferview"])
         {
             self.initStageDefer = NO;
+        }
+
+        if ([elementName isEqualToString:@"nicemodaldialog"])
+        {
+            self.initStageDeferThatWillBeCalledByCompleteInstantiation = NO;
         }
 
 
@@ -12130,6 +12142,9 @@ BOOL isJSExpression(NSString *s)
     "    this.ModeManagerService = function() {\n"
     "        this.makeModal = function() {\n"
     "            alert('ToDo - makeModal!!');\n"
+    "        }\n"
+    "        this.release = function() {\n"
+    "            alert('ToDo - Make not Modal anymore');\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -14428,7 +14443,7 @@ BOOL isJSExpression(NSString *s)
     "// completeInstantiation()                             //\n"
     "/////////////////////////////////////////////////////////\n"
     "var completeInstantiationFunction = function() {\n"
-    "    // ToDo\n"
+    "    alert('ToDo - completeInstantiation');\n"
     "}\n"
     "HTMLDivElement.prototype.completeInstantiation = completeInstantiationFunction;\n"
     "HTMLInputElement.prototype.completeInstantiation = completeInstantiationFunction;\n"
@@ -16884,7 +16899,7 @@ BOOL isJSExpression(NSString *s)
     "        // Kinder sichern\n"
     "        // Ist klonen hier überhaupt nötig? Falls jQuery die Kinder aus dem Speicher entfernt,\n"
     "        // sobald das Elternelement gelöscht ist, zur Sicherheit klonen.\n"
-    "        var gesicherteKinder = $(id).children().clone(true);\n"
+    "        // var gesicherteKinder = $(id).children().clone(true);\n"
     "\n"
     "\n"
     "        // Da wir ersetzen, bekommt dieses Element den Universal-id-Namen\n"
@@ -16982,7 +16997,12 @@ BOOL isJSExpression(NSString *s)
     "        assignAllInstanceAttributes(id,iv);\n"
     "\n"
     "        // Und die Kinder wieder herstellen\n"
-    "        $(id).append(gesicherteKinder);\n"
+    "        // $(id).append(gesicherteKinder);\n"
+    "        // Die kinderVorDemAppenden hier benutzen!. Sonst verweist kinderVorDemAppenden auf alte Nicht-DOM-Element\n"
+    "        // Und der weiter unten durchgeführte appendTo-Vorgang führt zu einem einfügen von Nicht-Dom-Elemente, und\n"
+    "        // nicht zu einer Verschiebung. Dies äußert sich in doppelten ID's! Wtf... das war hart das herauszufinden.\n"
+    // bzw. klon-Vorgang von 'gesicherteKinder' ware wohl falsch
+    "        $(id).append(kinderVorDemAppenden);\n"
     "\n"
     "        // Dann den kompletten JS-Code ausführen\n"
     "        executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id'));\n"
@@ -17612,7 +17632,7 @@ BOOL isJSExpression(NSString *s)
     "      // Ein evtl. Text-Attribut überschreibt immer textBetweenTags\n"
     "      if (el.text)\n"
     "          el.setAttribute_('text', el.text);\n"
-    "}\n"
+    "  }\n"
     "}\n"
     "\n"
     "\n"
@@ -17686,7 +17706,7 @@ BOOL isJSExpression(NSString *s)
     "  this.inherit = new oo.view();\n"
     "\n"
     // kann nicht '_content' heißen, weil fixe property bei Firefox... Halber Tag.... Deswegen um Unterstrich ergänzt
-    "  this.selfDefinedAttributes = { text:textBetweenTags, defaultplacement: '_content_' }\n"
+    "  this.selfDefinedAttributes = { text:textBetweenTags, defaultplacement:'_content_', allowdrag: true, haswindowfocus: false, minheight: 50, minwidth: 60, state: 1 }\n"
     "\n"
     "  this.methods = {\n"
     "    close: function() {\n"
@@ -17708,16 +17728,33 @@ BOOL isJSExpression(NSString *s)
     "  \"  $(@@@P-L,A#TZHALTER@@@_content_).data('name','_content_');\\n\" +\n"
     "  \"\";\n"
     "\n"
-    "  this.contentJQuery = \"\" +\n"
-    "  \"  $('#@@@P-L,A#TZHALTER@@@').draggable();\\n\" +\n"
-    "  \"  $('#@@@P-L,A#TZHALTER@@@').on('drag', function(event,ui) {    $(this).triggerHandler('ony',ui.position.top);    $(this).triggerHandler('onx',ui.position.left);  });\\n\" +\n"
-    "  \"  $('#@@@P-L,A#TZHALTER@@@').on('dragstop', function(event,ui) {    $(this).triggerHandler('ony',ui.position.top);    $(this).triggerHandler('onx',ui.position.left);  });\\n\" +\n"
-    "  \"\";\n"
+    "  this.contentJQuery = function(el) {\n"
+    "    $(el).draggable();\n"
+    "    $(el).on('drag', function(event,ui) {    $(this).triggerHandler('ony',ui.position.top);    $(this).triggerHandler('onx',ui.position.left);  });\n"
+    "    $(el).on('dragstop', function(event,ui) {    $(this).triggerHandler('ony',ui.position.top);    $(this).triggerHandler('onx',ui.position.left);  });\n"
+    "\n"
+    "    // Wenn es keinen Titel gibt, dann keine top-Angabe für den content\n"
+    "    if ($(el).find('.div_windowTitle').html().length == 0)\n"
+    "    {\n"
+    "      $(el).find('.div_windowContent').css('top','0px');\n"
+    "      // und keine höhe für den Titel, damit er richtig nach oben aufrückt\n"
+    "      $(el).find('.div_windowTitle').css('height','0px');\n"
+    "      // und Klasse div_text entfernen, damit es kein Padding gibt\n"
+    "      $(el).find('.div_windowTitle').removeClass('div_text');\n"
+    "    }\n"
+    "\n"
+    "      // ka mehr woher border, bgcolor und die feste Höhe kam. Aber zumindeste Für Taxango unpassend\n"
+    "      if (true)\n"
+    "      {\n"
+    "          $(el).find('.div_windowContent').css('height','auto');\n"
+    "          $(el).css('border-width','0px');\n"
+    "      }\n"
+    "  }\n"
     "}\n"
     "\n"
     "\n"
     "\n"
-    // window ist ein JS-Objekt... alle extends='window' werden nach basewindow umgeleitet
+    // window ist ein nicht überschreibbares JS-Objekt... alle extends='window' werden nach basewindow umgeleitet
     //"///////////////////////////////////////////////////////////////\n"
     //"//  class = window (native class)                            //\n"
     //"///////////////////////////////////////////////////////////////\n"

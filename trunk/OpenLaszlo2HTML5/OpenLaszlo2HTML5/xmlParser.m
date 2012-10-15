@@ -7895,14 +7895,16 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [self.output appendString:@" class=\"div_standard noPointerEvents\" style=\""];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
-        
+
         if (self.initStageDeferThatWillBeCalledByCompleteInstantiation)
         {
             // Nicht sichtbar, weil es ja erst später instanziert wird
-            [self.output appendString:@"display:none;"];
+            [self.output appendString:@"display:none;\" data-initstage=\"defer\">\n"];
         }
-
-        [self.output appendString:@"\">\n"];
+        else
+        {
+            [self.output appendString:@"\">\n"];
+        }
 
 
         // No no! Ich lasse alles erst von der Klasse auswerten, sonst fragen z. B. 'visible'-constraints
@@ -8146,7 +8148,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         {
             // Dann speichern wir NUR die instanceVars, alles andere klären wir später beim Aufruf von CompleteInstantiation
             [self.jsInitstageDeferOutput  appendFormat:@"\n  // Klasse '%@' wird später instanziert in '%@' von completeInstantiation",elementName,self.zuletztGesetzteID];
-            [self.jsInitstageDeferOutput  appendFormat:@"\n  $(document.getElementById('%@')).data('instanceVars_',{ %@});\n",self.zuletztGesetzteID,instanceVars];
+            [self.jsInitstageDeferOutput  appendFormat:@"\n  $(document.getElementById('%@')).data('instanceVars',{ %@});\n",self.zuletztGesetzteID,instanceVars];
         }
         else
         {
@@ -8415,6 +8417,11 @@ BOOL isJSExpression(NSString *s)
                 if (self.initStageDefer)
                 {
                     [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-(34/*+34*/)];
+                }
+                else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation)
+                {
+                    // Ungetestet:
+                    [self.jsInitstageDeferOutput  appendFormat:@"  $(document.getElementById('%@')).data('textBetweenTags_','%@');\n",self.zuletztGesetzteID,s];
                 }
                 else
                 {
@@ -10497,7 +10504,7 @@ BOOL isJSExpression(NSString *s)
     "    background-color:lightgrey;\n"
 	"    height:40px;\n"
 	"    width:50px;\n"
-	"    position:relative;\n"
+	"    position:absolute;\n" // Auch bei relative hier absolute, sonst verschiebt sich das Hintergrundbild bei Taxango.
 	"    top:20px;\n"
 	"    left:20px;\n"
     "    text-align:left;\n"
@@ -11719,9 +11726,14 @@ BOOL isJSExpression(NSString *s)
     "        // Nur wenn noch nicht 'inited'. Klassen sind in der Regel z. B. schon initialisiert.\n"
     "        if (!this.inited)\n"
     "        {\n"
-    "            $(this).triggerHandler('onconstruct');\n"
-    "            $(this).triggerHandler('oninit');\n"
-    "            this.inited = true;\n"
+    "            // Klassen, die per initstage=defer erst verzögert instanziert werden, noch nicht initialiseren!\n"
+    "            // Zum Glück habe ich dieses per HTML5-Annotation mitgespeichert\n"
+    "            if (!$(this).data('initstage') || $(this).data('initstage') != 'defer')\n"
+    "            {\n"
+    "                $(this).triggerHandler('onconstruct');\n"
+    "                $(this).triggerHandler('oninit');\n"
+    "                this.inited = true;\n"
+    "            }\n"
     "        }\n"
     "    });\n"
     "}\n"
@@ -14285,7 +14297,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "var initFunction = function () {\n"
     "    $(this).triggerHandler('oninit');\n"
-    "    this.inited = true;\n"
+    "    // this.inited = true; // Ne, gesondert setzen, bricht sonst per initstage=defer gesetzte Klassen\n"
     "}\n"
     "\n"
     "HTMLDivElement.prototype.init = initFunction;\n"
@@ -14443,7 +14455,42 @@ BOOL isJSExpression(NSString *s)
     "// completeInstantiation()                             //\n"
     "/////////////////////////////////////////////////////////\n"
     "var completeInstantiationFunction = function() {\n"
-    "    alert('ToDo - completeInstantiation');\n"
+    "    var preparations4interpretObject = function(el) {\n"
+    "        // Instanzvariablen holen\n"
+    "        var iv = $(el).data('instanceVars');\n"
+    "        if (iv == undefined)\n"
+    "        {\n"
+    "            alert('Das kann nicht sein. Eine nicht instanzierte Klasse hat immer InstanzVariablen, und seien es leere. el.id = ' + el.id);\n"
+    "        }\n"
+    "\n"
+    "        var id = el;\n"
+    "\n"
+    "        if ($(el).data('textBetweenTags_'))\n"
+    "        {\n"
+    "            var obj = new oo[$(el).data('olel')]($(el).data('textBetweenTags_'));\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "            var obj = new oo[$(el).data('olel')]('');\n"
+    "        }\n"
+    "\n"
+    "        interpretObject(obj,id,iv);\n"
+    "    }\n"
+    "\n"
+    "    if (!this.inited)\n"
+    "    {\n"
+    "        preparations4interpretObject(this);\n"
+    "        // Ab hier wurde 'this' u. U. ausgetauscht, und ich kann es nicht mehr benutzen, weil es sich nicht mehr im DOM befindet\n"
+    "        // Test möglich z. B. mit alert($(this).closest('html').length);\n"
+    "\n"
+    "        // Hier mit andSelf() zu arbeiten geht schief, weil this ja u. U. ausgetauscht wird im 1. Durchlauf\n"
+    "        // Und dann iteriert er falsch weiter über Objekte, die es gar nicht mehr gibt... oh man....\n"
+    "        $(this).find('*').each( function() {\n"
+    "            if ($(this).data('initstage') === 'defer') {\n"
+    "                preparations4interpretObject(this);\n"
+    "            }\n"
+    "        });\n"
+    "    }\n"
     "}\n"
     "HTMLDivElement.prototype.completeInstantiation = completeInstantiationFunction;\n"
     "HTMLInputElement.prototype.completeInstantiation = completeInstantiationFunction;\n"
@@ -16939,7 +16986,17 @@ BOOL isJSExpression(NSString *s)
     "            }\n"
     "        }\n"
     "\n"
-    "        var theSavedCSSFromRemovedElement = $(id).replaceWith(obj.inherit.contentHTML).attr('style');\n"
+    "        var theSavedCSSFromRemovedElement = $(id).attr('style');\n"
+    "\n"
+    "        if (kinderVorDemAppenden.length > 0)\n"
+    "        {\n"
+    "            $(id).replaceWith(obj.inherit.contentHTML);\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "            $(id).replaceWith(obj.inherit.contentHTML);\n"
+    "        }\n"
+    "\n"
     "        // Interne ID dieser Funktion neu setzen\n"
     "        id = document.getElementById(id.id);\n"
     "        // Und externen Elementnamen neu setzen\n"
@@ -17002,7 +17059,8 @@ BOOL isJSExpression(NSString *s)
     "        // Und der weiter unten durchgeführte appendTo-Vorgang führt zu einem einfügen von Nicht-Dom-Elemente, und\n"
     "        // nicht zu einer Verschiebung. Dies äußert sich in doppelten ID's! Wtf... das war hart das herauszufinden.\n"
     // bzw. klon-Vorgang von 'gesicherteKinder' ware wohl falsch
-    "        $(id).append(kinderVorDemAppenden);\n"
+    "        if (kinderVorDemAppenden.length > 0)\n"
+    "            $(id).append(kinderVorDemAppenden);\n"
     "\n"
     "        // Dann den kompletten JS-Code ausführen\n"
     "        executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id'));\n"
@@ -17221,13 +17279,6 @@ BOOL isJSExpression(NSString *s)
     "  }\n"
     "\n"
     "\n"
-    //"  // Wenn es Ein Text-Attribut gibt und eine Klasse mit class='div_text' vorliegt, und auch text übergeben wurde,\n"
-    //"  // dann wird der textBetweenTags in das Element, welches 'div_text' als Klasse hat, eingefügt.\n"
-    //"  // Example 28.10. Defining new text classes\n"
-    //"  if (id.text !== undefined && $(s).hasClass('div_text') && jQuery.inArray('textBetweenTags_',an) != -1 && av[jQuery.inArray('textBetweenTags_',an)] !== '')\n"
-    //"    $('#'+$(s).attr('id')).html(av[jQuery.inArray('textBetweenTags_',an)]);\n"
-    //"\n"
-    //"\n"
     "  // ********* Hier setze ich bereits vor ab in dem div existierende Kinder an die richtige Stelle *********\n"
     "  // ********* Damit 'defaultplacement' gesetzt werden kann *********\n"
     "  // ********* Die Variable, auf die defaultplacement verweist, wird hier bekannt gemacht *********\n"
@@ -17690,7 +17741,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  this.selfDefinedAttributes = { enabled: true, passowrd: false }\n"
     "\n"
-    "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_text noPointerEvents\" />';\n"
+    "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" data-olel=\"inputtext\" class=\"div_text noPointerEvents\" />';\n"
     "}\n"
     "\n"
     "\n"
@@ -17715,7 +17766,7 @@ BOOL isJSExpression(NSString *s)
     "  }\n"
     "\n"
     "  this.contentHTML = '' +\n"
-    "  '<div id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_window ui-corner-all\">\\n' +\n"
+    "  '<div id=\"@@@P-L,A#TZHALTER@@@\" data-olel=\"basewindow\" class=\"div_window ui-corner-all\">\\n' +\n"
     "  '  <div id=\"@@@P-L,A#TZHALTER@@@_title\" data-name=\"_title\" class=\"div_text div_windowTitle\"></div>\\n' +\n"
     "  '  <div id=\"@@@P-L,A#TZHALTER@@@_content_\" data-name=\"_content_\" class=\"div_windowContent\">\\n' +\n"
     "  '  </div>\\n' +\n"
@@ -17778,7 +17829,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  this.selfDefinedAttributes = { text:textBetweenTags }\n"
     "\n"
-    "  this.contentHTML = '<button type=\"button\" id=\"@@@P-L,A#TZHALTER@@@\" class=\"input_standard\" style=\"\">'+textBetweenTags+'</button>';\n"
+    "  this.contentHTML = '<button type=\"button\" id=\"@@@P-L,A#TZHALTER@@@\" data-olel=\"button\" class=\"input_standard\" style=\"\">'+textBetweenTags+'</button>';\n"
     "\n"
     "  this.contentLeadingJSHead = '';\n"
     "\n"

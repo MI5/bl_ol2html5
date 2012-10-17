@@ -2913,7 +2913,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
     [s appendString:@"\n  // Korrekturen wegen SA Y:\n"];
-    [s appendFormat:@"  adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayout(%@);\n",elem];
+    [s appendFormat:@"  adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayoutY(%@);\n",elem];
 
 
     // Auch noch die Höhe setzen! (Damit die Angaben im umgebenden Div stimmen). Da sich valign=middle auf
@@ -14489,6 +14489,12 @@ BOOL isJSExpression(NSString *s)
     "        // Und dann iteriert er falsch weiter über Objekte, die gar nicht mehr im DOM sind... oh man....\n"
     "        $(el).find('*').each(function() {\n"
     "            if ($(this).data('initstage') === 'defer') {\n"
+    "                // Meist wird die äußere Hauptklasse dann separat visible gemacht, aber die inneren schon hier\n"
+    "                // Sie sind trotzdem noch versteckt, weil umgebende Hauptklasse noch versteckt.\n"
+    "                // Aber Layout wird dann schonmal tendenziell korrekter gesetzt\n"
+    "                // Direkt vor dem Auswerten, danach wurde this evtl. ausgetauscht, analog zu oben\n"
+    "                $(this).show();\n" //this.setAttribute_('visible',true);
+    "\n"
     "                preparations4interpretObject(this);\n"
     "            }\n"
     "        });\n"
@@ -15864,13 +15870,13 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Hilfsfunktion, um width von Div's anzupassen        //\n"
-    "// adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayout()\n"
+    "// adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayoutY()\n"
     "/////////////////////////////////////////////////////////\n"
     "// Eventuell nachfolgende Simplelayouts müssen entsprechend der Breite des vorherigen umgebenden Divs aufrücken.\n"
     "// Deswegen wird hier explizit die Breite gesetzt (ermittelt anhand des breitesten Kindes).\n"
     "// Eventuelle Kinder wurden vorher gesetzt.\n"
     "// Aber nur wenn Breite NICHT explizit vorher gesetzt wurde - dieser Test ist nur mit JS möglich, nicht mit jQuery.\n"
-    "var adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayout = function (el) {\n"
+    "var adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayoutY = function (el) {\n"
     "    if (el.defaultplacement && el.defaultplacement != '' && el[el.defaultplacement])\n"
     "       el = el[el.defaultplacement];\n"
     "\n"
@@ -15895,7 +15901,7 @@ BOOL isJSExpression(NSString *s)
     "    var c = 2;\n"
     "    while ($('#'+el.id+'_repl'+c).length)\n"
     "    {\n"
-    "        adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayout($('#'+el.id+'_repl'+c).get(0));\n"
+    "        adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayoutY($('#'+el.id+'_repl'+c).get(0));\n"
     "        c++;\n"
     "    }\n"
     "}\n"
@@ -16094,6 +16100,10 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "    $(el).on('onaddsubview.SAY', function() { setSimpleLayoutYIn(el,spacing,inset); } );\n"
+    "\n"
+    "    // Hier nochmal zusätzlich setzen, damit auch bei Klassen und dort vorhandenen evtl. Layouts das umgebende Elem korrekt gesetzt wird\n"
+    "    adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY(el,spacing);\n"
+    "    adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayoutY(el);\n"
     "}\n"
     "\n"
     "\n"
@@ -17062,6 +17072,9 @@ BOOL isJSExpression(NSString *s)
     "        assignAllDefaultAttributesAndMethods(id,rueckwaertsArray);\n"
     "        // Und mit den konkreten Instanzvariablen wieder überschreiben\n"
     "        assignAllInstanceAttributes(id,iv);\n"
+    "\n"
+    "        // Da wir hier ja austauschen lieber mal onaddsubview triggern, damit sich evtl. SA's anpassen können\n"
+    "        $(id).parent().triggerHandler('onaddsubview');\n"
     "\n"
     //"        // Und die Kinder wieder herstellen\n"
     //"        // $(id).append(gesicherteKinder);\n"

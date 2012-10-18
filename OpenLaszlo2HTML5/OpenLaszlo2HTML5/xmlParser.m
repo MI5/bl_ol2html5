@@ -6330,7 +6330,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [self.output appendFormat:@" style=\"%@top:2px;width:inherit;padding:0px;border-color:black;overflow:hidden;\">\n",[self addCSSAttributes:attributeDict]];
 
 
-
         if ([attributeDict valueForKey:@"selected"])
         {
             self.attributeCount++;
@@ -6371,11 +6370,14 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         [self.output appendString:@"\">\n"];
 
 
-        // ToDo: Wird derzeit nicht ausgewertet
+
         if ([attributeDict valueForKey:@"info"])
         {
             self.attributeCount++;
-            NSLog(@"Skipping the attribute 'info' for now.");
+            NSLog(@"Setting the attribute 'info' as JS-Variable.");
+
+            [self.jsOutput appendString:@"\n  // Attribut 'info' setzen\n"];
+            [self.jsOutput appendFormat:@"  %@.info = '%@';\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"info"]];
         }
 
 
@@ -6390,7 +6392,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         }
 
         // Das Attribut 'title' hat noch Vorrang und überschreibt u. U. 'text'
-        //  solange wir BDStabsheetTaxango gesondert auswerten.
+        // solange wir BDStabsheetTaxango gesondert auswerten.
         if ([attributeDict valueForKey:@"title"])
         {
             self.attributeCount++;
@@ -6816,27 +6818,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         self.weAreCollectingTheCompleteContentInClass = YES;
     }
 
-
-    // ToDo
-    if ([elementName isEqualToString:@"nicemodaldialogXXX"])
-    {
-        element_bearbeitet = YES;
-
-        if ([attributeDict valueForKey:@"height"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"id"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"width"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"initstage"])
-            self.attributeCount++;
-        if ([attributeDict valueForKey:@"setfocus"])
-            self.attributeCount++;
-
-        // ToDo
-        // Alles was hier definiert wird, wird derzeit übersprungen, später ändern und Sachen abarbeiten.
-        self.weAreCollectingTheCompleteContentInClass = YES;
-    }
 
 
     // ToDo
@@ -8914,8 +8895,7 @@ BOOL isJSExpression(NSString *s)
         self.textInProgress = nil;
     }
 
-    if ([elementName isEqualToString:@"class"] ||
-        [elementName isEqualToString:@"nicemodaldialogXXX"])
+    if ([elementName isEqualToString:@"class"])
     {
         element_geschlossen = YES;
 
@@ -10122,16 +10102,14 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"\n  if (!window['globalcalendar']) globalcalendar = {}; // ToDo\n"];
     [self.output appendString:@"  globalcalendar.setCurrentdate = function() { return new Date(); };\n"];
 
-    [self.output appendString:@"  function dlg()\n  {\n    // Extern definiert\n    this.open = open;\n    // Intern definiert (beides möglich)\n"];
+    //[self.output appendString:@"  function dlg()\n  {\n    // Extern definiert\n    this.open = open;\n    // Intern definiert (beides möglich)\n"];
     // Name kann auch doppelt auftauchen beim definieren einer JS-Function
-    [self.output appendString:@"     this.completeInstantiation = function completeInstantiation() { };\n  }\n"];
-    [self.output appendString:@"  function open()\n  {\n    alert('Willst du wirklich deine Ehefrau löschen? Usw...');\n  }\n"];
-    [self.output appendString:@"  //var dlgFamilienstandSingle = new dlg();\n\n"];
+    //[self.output appendString:@"     this.completeInstantiation = function completeInstantiation() { };\n  }\n"];
+    //[self.output appendString:@"  function open()\n  {\n    alert('Willst du wirklich deine Ehefrau löschen? Usw...');\n  }\n"];
 
     // Seitdem ich die initstage=defer-Klassen nach ganz unten verschoben habe, taucht das hier auf,
     // Er erwartet glaube ich die Variable '_inner' in einem 'BDSReplicator'
-    [self.output appendString:@"  if (window.element139) element139._inner = element139;\n"];
-    [self.output appendString:@"  if (window.element139) element139.measureHeight = function() {};\n\n"];
+    //[self.output appendString:@"  if (window.element139) element139._inner = element139;\n"];
 
 
     // Normale Javascript-Anweisungen
@@ -12878,6 +12856,12 @@ BOOL isJSExpression(NSString *s)
     "            this.lastNodeType = lastNodeType;\n"
     "            this.p = lastP;\n"
     "\n"
+    "            // ToDo - seit auswerten BDSinputgrid\n"
+    "            if (returnValue == null) returnValue = {}; // Bei null kann er die beiden Sachen sonst net adden\n"
+    "            returnValue.setAttr = function(a,b) {};\n"
+    "            returnValue.removeAttr = function(a) {};\n"
+    "            // -> Mögliche Lösung das mixin hier reinmixen von oben, welches ja setAttr() und removeAttr() bereitstellt\n"
+    "\n"
     "            return returnValue;\n"
     "        }\n"
     "        this.setNodeText = function(text) {\n"
@@ -13045,6 +13029,13 @@ BOOL isJSExpression(NSString *s)
     "                return newNode;\n"
     "            }\n"
     "            return undefined;\n"
+    "        }\n"
+    "        this.addNode = function(name,text,attrs) {\n"
+    "            // Adds a new child node below the current context\n"
+    "\n"
+    "            // ToDo\n"
+    "\n"
+    "            // return(s) the new node as lz.DataElement\n"
     "        }\n"
     "        this.setPointer = function(p) {\n"
     "            // init ohne Dataset in diesem Fall!\n"
@@ -16139,7 +16130,8 @@ BOOL isJSExpression(NSString *s)
     "                    var width = 0;\n"
     "                    kind.prevAll().each(function() { width += $(this).outerWidth(); });\n"
     "                    var leftValue = width * -1;\n"
-    "                    kind.get(0).setAttribute_('x',leftValue+'px');\n"
+    "                    if (parseInt(kind.css('left')) !== leftValue)\n"
+    "                        kind.get(0).setAttribute_('x',leftValue+'px');\n"
     "                }\n"
     "            }\n"
     "        }\n"
@@ -16148,7 +16140,8 @@ BOOL isJSExpression(NSString *s)
     "        if (typeof kind.data('visible_') === 'boolean' && kind.data('visible_') === false) topValue = parseInt(kind.prev().css('top'));\n"
     "\n"
     //"        if (!$(kind.prev()).is(':visible')) { topValue = !isNaN(parseInt(kind.prev().css('top'))) ? parseInt(kind.prev().css('top')) : 0; } // Well... Why does this work? (Bsp. <checkbox>)\n"
-    "        kind.get(0).setAttribute_('y',topValue+'px');\n"
+    "        if (parseInt(kind.css('top')) !== topValue) // Erspart uns spürbar Aufrufe von setAttribute_()\n"
+    "            kind.get(0).setAttribute_('y',topValue+'px');\n"
     "\n"
     "        // Falls es geklonte Geschwister gibt:\n"
     "        var c = 2;\n"
@@ -16219,7 +16212,8 @@ BOOL isJSExpression(NSString *s)
     "        if (typeof kind.data('visible_') === 'boolean' && kind.data('visible_') === false) leftValue = parseInt(kind.prev().css('left'));\n"
     "\n"
     //"            if (!$(kind.prev()).is(':visible')) { leftValue = !isNaN(parseInt(kind.prev().css('left'))) ? parseInt(kind.prev().css('left')) : 0; } // Well... Why does this work? (Bsp. <checkbox>)\n"
-    "        kind.get(0).setAttribute_('x',leftValue+'px');\n"
+    "        if (parseInt(kind.css('left')) !== leftValue) // Erspart uns spürbar Aufrufe von setAttribute_()\n"
+    "            kind.get(0).setAttribute_('x',leftValue+'px');\n"
     "\n"
     "        // Falls es geklonte Geschwister gibt:\n"
     "        var c = 2;\n"
@@ -16711,9 +16705,9 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "    // setAttribute_ verschickt events nur an 'onvalue' usw...\n"
-    "    if (prop === 'myDataset') prop = 'dataset';\n"
-    "    if (prop === 'myTitle') prop = 'title'; // ToDo -> Are you sure with this things?\n"
     "    if (prop === 'myValue') prop = 'value';\n"
+    "    if (prop === 'myDataset') prop = 'dataset';\n"
+    "    if (prop === 'myTitle') prop = 'title'; // To Do -> Are you sure with this? - Already tested - still don't know.\n"
     "\n"
     "    // Falls er z. B. über das 'name'-Attribut geht, muss ich ein with() darum packen\n"
     "    // gilt sowohl für expression als auch für obj\n"

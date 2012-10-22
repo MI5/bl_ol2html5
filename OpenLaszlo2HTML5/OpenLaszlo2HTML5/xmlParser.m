@@ -1094,7 +1094,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         widthGesetzt = YES;
     }
 
-    if ([elemName isEqualToString:@"BDScombobox"])
+    if ([elemName isEqualToString:@"BDScomboboxXXX"])
     {
     if ([attributeDict valueForKey:@"controlwidth"]) // ToDo - Self defined attribute of BDScombobox
     {
@@ -2165,6 +2165,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jQueryOutput appendString:@"\n  // jQuery-blur-event (anstelle des Attributs onblur)\n"];
         [self.jQueryOutput appendFormat:@"  $('#%@').blur(function(){ with (this) { %@ } });\n",idName,s];
     }
+
 
 
     if ([attributeDict valueForKey:@"onvalue"])
@@ -5207,7 +5208,7 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"BDScombobox"] || // ToDo -  als Klasse auslesen
+    if ([elementName isEqualToString:@"BDScomboboxXXX"] || // ToDo -  als Klasse auslesen
         [elementName isEqualToString:@"combobox"] ||
         [elementName isEqualToString:@"datacombobox"])
     {
@@ -7348,7 +7349,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         }
 
         // OL benutzt 'classroot' als Variable für den Zugriff auf das erste in einer Klasse
-        // definierte Elemente. Deswegen, falls wir eine Klasse auswerten, einfach die Var setzen
+        // definierte Element. Deswegen, falls wir eine Klasse auswerten, einfach die Var setzen
         if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
             [o appendFormat:@"    var classroot = %@;\n\n",ID_REPLACE_STRING];
 
@@ -7505,9 +7506,9 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         }
 
         if ([name isEqualToString:@"onchanged"] ||
-            [name isEqualToString:@"onvalue"] ||
-            // [name isEqualToString:@"ondata"] || // Lieber als 'Custom'-Handler
-            [name isEqualToString:@"onnewvalue"])
+            // [name isEqualToString:@"onvalue"] || // MUSS 'custom'-Handler sein
+            // [name isEqualToString:@"ondata"] || // Lieber als 'custom'-Handler
+            [name isEqualToString:@"onnewvalueasdasda"])
         {
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-change-event.");
@@ -7516,15 +7517,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
             [o appendFormat:@"  $('#%@').change(function(e)\n  {\n    ",enclosingElem];
 
-
-            // Extra Code, um den alten Value speichern zu können (s. als Erklärung auch
-            // unten bei gegebenenem Attribut args)
-            if ([name isEqualToString:@"onnewvalue"] ||
-                [name isEqualToString:@"onvalue"])
-            {
-                [o appendString:@"var oldvalue = $(this).data('oldvalue') || '';\n"];
-                [o appendString:@"    $(this).data('oldvalue', $(this).val());\n\n    "];
-            }
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7764,7 +7756,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
         // Wenn es vorher nicht gematcht hat, dann ist es wohl ein self-defined event.
-        // Irgend jemand anderes muss das event dann per triggerHandler() aufrufen
+        // Irgend jemand anderes muss das event dann per triggerHandler() aufrufen.
         if (!alsBuildInEventBearbeitet)
         {
             self.attributeCount++;
@@ -7783,6 +7775,27 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
             [o appendFormat:@"\n  // 'custom'-Handler für %@\n",enclosingElem];
             [o appendFormat:@"  $('#%@').on('%@',function(e%@)\n  {\n    ",enclosingElem,name,args];
 
+
+            // Wenn args gesetzt ist, wird derzeit nur der Wert 'oldvalue' unterstützt
+            // und auch nur wenn als event 'onnewvalue' gesetzt wurde.
+            // Dazu wird der 'onnewvalue' oder 'onvalue'-Handler um Code ergänzt der stets
+            // den alten Wert in der Variable 'oldvalue' speichert.
+            if ([attributeDict valueForKey:@"args"])
+            {
+                if ([[attributeDict valueForKey:@"args"] isEqualToString:@"oldvalue"])
+                {
+                    if ([name isEqualToString:@"onnewvalue"] ||
+                        [name isEqualToString:@"onvalue"])
+                    {
+                        NSLog(@"Found the attribute 'args' with value 'oldvalue'.");
+                        NSLog(@"Setting extra-code in the handler to retrieve the oldvalue");
+
+                        [o appendString:@"var oldvalue = $(this).data('oldvalue_') || '';\n"];
+                        [o appendString:@"    $(this).data('oldvalue_', $(this).find('*').andSelf().find('input,select').filter(':first').val());\n\n    "];
+                    }
+                }
+            }
+
             // Okay, jetzt Text sammeln und beim schließen einfügen
         }
 
@@ -7791,26 +7804,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // jQueryOutput0! Damit die Handler bekannt sind, bevor diese getriggert werden! (Bsp. 30.3)
         // Problem: Ladezeit verdoppelt sich... weil er dann viel mehr triggern kann... Erst iwie das triggern optimieren
         [self.jQueryOutput appendString:o];
-
-
-        // Wenn args gesetzt ist, wird derzeit nur der Wert 'oldvalue' unterstützt
-        // und auch nur wenn als event 'onnewvalue' gesetzt wurde
-        // Dazu wird der 'onnewvalue' oder 'onvalue'-Handler um Code ergänzt der stets
-        // den alten Wert in der Variable 'oldvalue' speichert
-        if ([attributeDict valueForKey:@"args"])
-        {
-
-            if ([[attributeDict valueForKey:@"args"] isEqualToString:@"oldvalue"])
-            {
-                if ([name isEqualToString:@"onnewvalue"] ||
-                    [name isEqualToString:@"onvalue"])
-                {
-                    self.attributeCount++;
-                    NSLog(@"Found the attribute 'args' with value 'oldvalue'.");
-                    NSLog(@"Setting extra-code in the handler to retrieve the oldvalue");
-                }
-            }
-        }
     }
 
 
@@ -9158,7 +9151,7 @@ BOOL isJSExpression(NSString *s)
 
 
 
-    if ([elementName isEqualToString:@"BDScombobox"] ||
+    if ([elementName isEqualToString:@"BDScomboboxXXX"] ||
         [elementName isEqualToString:@"combobox"] ||
         [elementName isEqualToString:@"datacombobox"])
     {
@@ -10233,6 +10226,9 @@ BOOL isJSExpression(NSString *s)
         [self.output appendString:@"      }\n"];
         [self.output appendString:@"    });\n"];
         [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_pic']\").remove();\n"];
+        [self.output appendString:@"\n"];
+        [self.output appendString:@"\n"];
+        [self.output appendString:@"    ensureProperCheckboxValueAndThatValueIsTriggered();\n"];
         [self.output appendString:@"\n"];
         [self.output appendString:@"\n"];
 
@@ -11546,6 +11542,52 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Ausgelagert, damit auch anwendbar auf erst später instanzierte Objekte//\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function ensureProperCheckboxValueAndThatValueIsTriggered() {\n"
+    "    // Bei OL hat value von checkboxen eine andere Bedeutung als bei HTML\n"
+    "    // Bedeutung HTML: submit-Wert\n"
+    "    // Bedeutung OL: Ob checkbox gesetzt oder nicht (true oder false)\n"
+    "    // Deswegen bei jeder Änderung des Wertes einfach value auf true oder false setzen\n"
+    "    $('input[type=checkbox]').each(function() {\n"
+    "        // Einmal jetzt den aktuellen Wert setzen\n"
+    "        this.value = $(this).is(':checked');\n"
+    "        // this.checked = $(this).is(':checked'); // Unnötig, wird in setAttribute_() gesetzt\n"
+    "        // und bei jeder Änderung\n"
+    "        $(this).off('change.ensure1');\n"
+    "        $(this).on('change.ensure1',function() {\n"
+    "            this.value = $(this).is(':checked');\n"
+    "            // this.checked = $(this).is(':checked'); // Unnötig, wird in setAttribute_() gesetzt\n"
+    "\n"
+    "            $(this).triggerHandler('onchecked',$(this).is(':checked')); // <-- darauf lauschen die constraints bei Checkboxen!\n"
+    "        });\n"
+    "\n"
+    "        // To Do - Eventuell hinfällig, wenn Checkbox als Klasse ausgewertet?\n"
+    "        // Den Mousecursor ändern vom benachbarten span\n"
+    "        $(this).next().css('cursor','pointer');\n"
+    "    });\n"
+    "\n"
+    "    // Davon unabhängig: Triggern, damit da dran hängende Constraints die Änderung mitbekommen\n"
+    "    // Dies gilt sogar für jedes input (und select)!\n"
+    "    $('input,select').each(function() {\n"
+    "        $(this).off('change.ensure2');\n"
+    "        $(this).on('change.ensure2',function() {\n"
+    "            this.myValue = $(this).val(); // <-- aktualisieren, weil die Constraints myValue auslesen, nicht Value\n"
+    "            $(this).triggerHandler('onvalue',$(this).val());\n"
+    "            // $(this).triggerHandler('onmyValue',$(this).val()); // Ich denke das ist unnötig\n"
+    "        });\n"
+    "    });\n"
+    "\n"
+    "    // To Do - Eventuell hinfällig, wenn Radiobutton als Klasse ausgewertet?\n"
+    "    // Auch bei radio-buttons den Cursor stets anpassen vom benachbarten Text\n"
+    "    $('input[type=radio]').each( function() {\n"
+    "        // Den Mousecursor ändern vom benachbarten span\n"
+    "        $(this).next().css('cursor','pointer');\n"
+    "    });\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// Führt die beiden oben genannten Methoden aus (init) //\n"
     "/////////////////////////////////////////////////////////\n"
     "function makeIDsGlobalAndInitStuff(all) {\n"
@@ -11566,41 +11608,7 @@ BOOL isJSExpression(NSString *s)
     "    makeCanvasAccessible();\n"
     "\n"
     "\n"
-    "    // Bei OL hat value von checkboxen eine andere Bedeutung als bei HTML\n"
-    "    // Bedeutung HTML: submit-Wert\n"
-    "    // Bedeutung OL: Ob checkbox gesetzt oder nicht (true oder false)\n"
-    "    // Deswegen bei jeder Änderung des Wertes einfach value auf true oder false setzen\n"
-    "    $('input[type=checkbox]').each( function() {\n"
-    "        // Einmal jetzt den aktuellen Wert setzen\n"
-    "        this.value = $(this).is(':checked');\n"
-    "        // this.checked = $(this).is(':checked'); // Unnötig, wird in setAttribute_() gesetzt\n"
-    "        // und bei jeder Änderung\n"
-    "        $(this).on('change',function() {\n"
-    "            this.value = $(this).is(':checked');\n"
-    "            // this.checked = $(this).is(':checked'); // Unnötig, wird in setAttribute_() gesetzt\n"
-    "\n"
-    "            $(this).triggerHandler('onchecked',$(this).is(':checked')); // <-- darauf lauschen die constraints bei Checkboxen!\n"
-    "        });\n"
-    "\n"
-    "        // Den Mousecursor ändern vom benachbarten span\n"
-    "        $(this).next().css('cursor','pointer');\n"
-    "    });\n"
-    "\n"
-    "    // Davon unabhängig: Triggern, damit da dran hängende Constraints die Änderung mitbekommen\n"
-    "    // Dies gilt sogar für jedes input (und select)!\n"
-    "    $('input,select').each( function() {\n"
-    "        $(this).on('change',function() {\n"
-    "            this.myValue = $(this).val(); // <-- aktualisieren, weil die Constraints myValue auslesen, nicht Value\n"
-    "            $(this).triggerHandler('onvalue',$(this).val());\n"
-    "            $(this).triggerHandler('onmyValue',$(this).val());\n"
-    "        });\n"
-    "    });\n"
-    "\n"
-    "    // Auch bei radio-buttons den Cursor stets anpassen vom benachbarten Text\n"
-    "    $('input[type=radio]').each( function() {\n"
-    "        // Den Mousecursor ändern vom benachbarten span\n"
-    "        $(this).next().css('cursor','pointer');\n"
-    "    });\n"
+    "    ensureProperCheckboxValueAndThatValueIsTriggered();\n"
     "\n"
     "\n"
     "    // ohne 'var', damit global\n"
@@ -13489,9 +13497,16 @@ BOOL isJSExpression(NSString *s)
     "        {\n"
     "            $(me).val(value);\n"
     "        }\n"
+    "        else if ($(me).is('div'))\n"
+    "        {\n"
+    "            // Dann regulär einfach in myValue speichern\n"
+    "            // Dies funktioniert, weil für den HTMLDivElement.prototype eben kein getter/setter definiert ist\n"
+    "            me.myValue = value;\n"
+    "            // me.value = value; // Ich denke unnötig\n"
+    "        }\n"
     "        else\n"
     "        {\n"
-    "            alert('So far unsupported value for value in setAttribute_() - value = '+value);\n"
+    "            alert('So far unsupported value for value in setAttribute_() - value = '+value+', me = '+me);\n"
     "        }\n"
     "    }\n"
     "    else if (attributeName == 'font')\n"
@@ -15101,8 +15116,6 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLInputElement.prototype, 'myValue', {\n"
     "    get : function(){\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "\n"
     "        if ($(this).is('input') && $(this).attr('type') === 'checkbox')\n"
     "            return $(this).is(':checked');\n"
     "\n"
@@ -15117,8 +15130,14 @@ BOOL isJSExpression(NSString *s)
     "});\n"
     "Object.defineProperty(HTMLOptionElement.prototype, 'myValue', {\n"
     "    get : function(){\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "\n"
+    "        return $(this).val();\n"
+    "    },\n"
+    "    set : function(newValue){ $(this).val(newValue); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "Object.defineProperty(HTMLSelectElement.prototype, 'myValue', {\n"
+    "    get : function(){\n"
     "        return $(this).val();\n"
     "    },\n"
     "    set : function(newValue){ $(this).val(newValue); },\n"
@@ -16151,7 +16170,7 @@ BOOL isJSExpression(NSString *s)
     "            c++;\n"
     "        }\n"
     "\n"
-    "        // Aber auf event lauschen, soll er bei jedem Kind (um u. U. SA zu aktualisieren)\n"
+    "        // Aber auf event lauschen soll er bei jedem Kind (to update possible SA)\n"
     "        $(kind).on('onheight.SAY', function() { setSimpleLayoutYIn(el,spacing,inset); } );\n"
     "        $(kind).on('onvisible.SAY', function() { setSimpleLayoutYIn(el,spacing,inset); } );\n"
     "    }\n"
@@ -16223,7 +16242,7 @@ BOOL isJSExpression(NSString *s)
     "            c++;\n"
     "        }\n"
     "\n"
-    "        // Aber auf event lauschen, soll er bei jedem Kind (um u. U. SA zu aktualisieren)\n"
+    "        // Aber auf event lauschen soll er bei jedem Kind (to update possible SA)\n"
     "        $(kind).on('onwidth.SAX', function() { setSimpleLayoutXIn(el,spacing,inset); } );\n"
     "        $(kind).on('onvisible.SAX', function() { setSimpleLayoutXIn(el,spacing,inset); } );\n"
     "    }\n"
@@ -16704,7 +16723,7 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "\n"
-    "    // setAttribute_ verschickt events nur an 'onvalue' usw...\n"
+    "    // setAttribute_ verschickt events nur an 'onvalue' usw..., weil auch nur auf 'onvalue' gelauscht wird.\n"
     "    if (prop === 'myValue') prop = 'value';\n"
     "    if (prop === 'myDataset') prop = 'dataset';\n"
     "    if (prop === 'myTitle') prop = 'title'; // To Do -> Are you sure with this? - Already tested - still don't know.\n"

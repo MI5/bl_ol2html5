@@ -5346,7 +5346,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
                 [o appendFormat:@"  $('#%@ option[value='+",self.zuletztGesetzteID];
                 [o appendFormat:@"$('#%@').children('option :first').prop('value')",self.zuletztGesetzteID];
                 [o appendString:@"+']').attr('selected',true);\n"];
-                [o appendString:@"  // parallel myValue setzen, damit Constraint den defaultwert richtig auslesen kann\n"];
+                [o appendString:@"  // parallel myValue setzen, damit eine Constraint den defaultwert richtig auslesen kann\n"];
                 [o appendFormat:@"  %@.myValue = $('#%@').children('option :first').prop('value');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
             }
             else
@@ -5356,7 +5356,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
                 [o appendFormat:@"  $(\"#%@ option[value=",self.zuletztGesetzteID];
                 [o appendString:[attributeDict valueForKey:@"initvalue"]];
                 [o appendString:@"]\").attr('selected',true);\n"];
-                [o appendString:@"  // parallel myValue setzen, damit Constraint den defaultwert richtig auslesen kann\n"];
+                [o appendString:@"  // parallel myValue setzen, damit eine Constraint den defaultwert richtig auslesen kann\n"];
                 [o appendFormat:@"  %@.myValue = $('#%@').children('option[value=%@]').prop('value');\n",self.zuletztGesetzteID,self.zuletztGesetzteID,[attributeDict valueForKey:@"initvalue"]];
             }
 
@@ -7266,7 +7266,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
 
-        [o appendFormat:@"\n  // Ich binde eine Methode an das genannte Objekt (Objekttyp: %@)\n", elemTyp];
+        [o appendFormat:@"\n  // Binding a method on this object (objecttype: %@)\n", elemTyp];
 
 
         NSString *benutzMich = @""; // Um nur einen s für dataset, datapointer und datapath zu haben
@@ -7790,8 +7790,11 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
                         NSLog(@"Found the attribute 'args' with value 'oldvalue'.");
                         NSLog(@"Setting extra-code in the handler to retrieve the oldvalue");
 
-                        [o appendString:@"var oldvalue = $(this).data('oldvalue_') || '';\n"];
-                        [o appendString:@"    $(this).data('oldvalue_', $(this).find('*').andSelf().find('input,select').filter(':first').val());\n\n    "];
+                        // [o appendString:@"oldvalue = $(this).data('oldvalue_') || '';\n"];
+                        // [o appendString:@"    $(this).data('oldvalue_', $(this).find('*').andSelf().find('input,select').filter(':first').val());\n\n    "];
+
+                        // ohne var, sonst wird das Argument ja 'nur' verdeckt
+                        [o appendString:@"oldvalue = $(this).find('*').andSelf().find('input,select').filter(':first').data('oldvalue_');\n\n    "];
                     }
                 }
             }
@@ -10217,7 +10220,7 @@ BOOL isJSExpression(NSString *s)
         [self.output appendString:@"\n"];
         [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").css('height','27px');\n"];
 
-        [self.output appendString:@"    $(\"[data-olel='BDSeditdate'], [data-olel='BDScombobox']\").each( function() {\n"];
+        [self.output appendString:@"    $(\"[data-olel='BDSeditdate'], [data-olel='BDScombobox']\").each(function() {\n"];
         [self.output appendString:@"      // Wenn die titlewidth UND die controlwidth nicht gesetzt wurde, gibt es noch Probs. Dann muss ich nachkorrigieren\n"];
         [self.output appendString:@"      if (this.titlewidth == 0 || this.controlwidth == 0)\n"];
         [self.output appendString:@"      {\n"];
@@ -10226,6 +10229,39 @@ BOOL isJSExpression(NSString *s)
         [self.output appendString:@"      }\n"];
         [self.output appendString:@"    });\n"];
         [self.output appendString:@"    $(\"[data-olel='BDSeditdate']\").find('*').filter(\"[data-name='_pic']\").remove();\n"];
+        [self.output appendString:@"\n"];
+        [self.output appendString:@"    $(\"[data-olel='BDScombobox']\").each(function() {\n"];
+        [self.output appendString:@"      // Wenn listwidth nicht gesetzt wurde, gibt es noch Probs. Dann muss ich nachkorrigieren\n"];
+        [self.output appendString:@"      if (this.listwidth == 0)\n"];
+        [self.output appendString:@"      {\n"];
+        [self.output appendString:@"        // Wegen kleinerer Schriftart in den Comboboxen, wirken diese zu breit, deswegen 75 %\n"];
+        [self.output appendString:@"        $(this).find('select').css('width',parseInt(this.controlwidth*0.75)+'px');\n"];
+        [self.output appendString:@"      }\n"];
+        [self.output appendString:@"\n"];
+        [self.output appendString:@"      // 'initvalue' wird noch nicht sauber ausgelesen und gesetzt, deswegen hier im nachhinein nachhelfen\n"];
+        [self.output appendString:@"      if (this.initvalue !== undefined)\n"];
+        [self.output appendString:@"      {\n"];
+        [self.output appendString:@"          if (this.initvalue === false)\n"];
+        [self.output appendString:@"          {\n"];
+        [self.output appendString:@"              // 'false' heißt wohl es gibt keinen init-Wert\n"];
+        [self.output appendString:@"              // Aber wegen Kirchensteuer-Combobox muss ich trotzdem das erste Element anwählen und den value setzen\n"];
+        [self.output appendString:@"\n"];
+        [self.output appendString:@"              // Keine Vorauswahl für diese Combobox getroffen, deswegen erstes Element\n"];
+        [self.output appendString:@"              $('#'+this.id+' option[value=' + $('#'+this.id).find('option').first().prop('value') + ']').attr('selected',true);\n"];
+        [self.output appendString:@"\n"];
+        [self.output appendString:@"              // parallel value setzen, um zu triggern, damit eine evtl. darauf horchende Constraint den defaultwert richtig auslesen kann\n"];
+        [self.output appendString:@"              this.setAttribute_('value',$('#'+this.id).find('option').first().prop('value'));\n"];
+        [self.output appendString:@"          }\n"];
+        [self.output appendString:@"          else\n"];
+        [self.output appendString:@"          {\n"];
+        [self.output appendString:@"              // Vorauswahl für diese Combobox setzen\n"];
+        [self.output appendString:@"              $('#'+this.id+' option[value='+this.initvalue+']').attr('selected',true);\n"];
+        [self.output appendString:@"              // parallel value setzen, um zu triggern, damit eine evtl. darauf horchende Constraint den defaultwert richtig auslesen kann\n"];
+        [self.output appendString:@"              if ($('#'+this.id).find('select').children('option[value=\"'+this.initvalue+'\"]').length > 0)\n"];
+        [self.output appendString:@"                  this.setAttribute_('value',$('#'+this.id).find('select').children('option[value=\"'+this.initvalue+'\"]').prop('value'));\n"];
+        [self.output appendString:@"          }\n"];
+        [self.output appendString:@"      }\n"];
+        [self.output appendString:@"    });\n"];
         [self.output appendString:@"\n"];
         [self.output appendString:@"\n"];
         [self.output appendString:@"    ensureProperCheckboxValueAndThatValueIsTriggered();\n"];
@@ -11572,6 +11608,11 @@ BOOL isJSExpression(NSString *s)
     "    $('input,select').each(function() {\n"
     "        $(this).off('change.ensure2');\n"
     "        $(this).on('change.ensure2',function() {\n"
+    "\n"
+    "            // oldvalue kann ausgelesen werden vom handler\n"
+    "            $(this).data('oldvalue_', $(this).data('previousvalue_') || '');\n"
+    "            $(this).data('previousvalue_', $(this).val());\n"
+    "\n"
     "            this.myValue = $(this).val(); // <-- aktualisieren, weil die Constraints myValue auslesen, nicht Value\n"
     "            $(this).triggerHandler('onvalue',$(this).val());\n"
     "            // $(this).triggerHandler('onmyValue',$(this).val()); // Ich denke das ist unnötig\n"
@@ -12160,7 +12201,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    this.ModeManagerService = function() {\n"
     "        this.makeModal = function() {\n"
-    "            alert('ToDo - makeModal!!');\n"
+    "            //alert('ToDo - makeModal!!');\n"
     "        }\n"
     "        this.release = function() {\n"
     "            alert('ToDo - Make not Modal anymore');\n"
@@ -13495,6 +13536,11 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        else if ($(me).is('option'))\n"
     "        {\n"
+    "            $(me).val(value);\n"
+    "        }\n"
+    "        else if ($(me).is('select'))\n"
+    "        {\n"
+    "            // Scheint aber auch schon vorher korrekt gesetzt zu sein\n"
     "            $(me).val(value);\n"
     "        }\n"
     "        else if ($(me).is('div'))\n"

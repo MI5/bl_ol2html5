@@ -3155,7 +3155,10 @@ void OLLog(xmlParser *self, NSString* s,...)
 - (void) legeDatasetAnUndInitMitOeffnendemTag
 {
     [self.jsHead2Output appendString:@"\n// Dataset wird als XML-Struktur angelegt und in einem JS-String gespeichert.\n"];
-    [self.jsHead2Output appendFormat:@"var %@ = new lz.dataset('%@');\n",self.lastUsedDataset,self.lastUsedDataset];
+    [self.jsHead2Output appendFormat:@"var %@ = new lz.dataset(null, {name: '%@'});\n",self.lastUsedDataset,self.lastUsedDataset];
+    [self.jsHead2Output appendString:@"// Ebenfalls sind alle Datasets über eine Property in canvas ansprechbar.\n"];
+    // canvas wird jedoch erst nach dem DOM initialisiert. Deswegen hier nochmal extra in allMyDatasets_ sammeln
+    [self.jsHead2Output appendFormat:@"allMyDatasets_.%@ = %@;\n",self.lastUsedDataset,self.lastUsedDataset];    
     [self.jsHead2Output appendFormat:@"%@.rawdata = '<%@>';\n",self.lastUsedDataset,self.lastUsedDataset];
 }
 
@@ -3263,19 +3266,6 @@ didStartElement:(NSString *)elementName
         gesammelterText = [gesammelterText stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         // Auch newlines müssen escaped werden
         gesammelterText = [gesammelterText stringByReplacingOccurrencesOfString:@"\n" withString:@"\\\n"];
-
-
-        // Galt nur für die alte JS-Objekte-Logik
-        // elementName = [elementName stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
-
-        // Ganz am Anfang erstmal das Objekt an sich anlegen
-        if (self.datasetItemsCounter == 0)
-        {
-            //[self.jsHead2Output appendString:@"\n// Dieses Dataset wird als Objekt angelegt und bekommt alle Elemente als neue Objekt-Propertys mit\n"];
-            //[self.jsHead2Output appendString:@"var "];
-            //[self.jsHead2Output appendString:self.lastUsedDataset];
-            //[self.jsHead2Output appendString:@" = new lz.dataset();\n"];
-        }
 
 
 
@@ -3841,7 +3831,7 @@ didStartElement:(NSString *)elementName
 
                 // Trotzdem anlegen, damit das Programm nicht laufend abstürzt. - aber jQueryOutput0, weil Zugriff auf 'canvas' und/oder canvas.coDataserver nicht klappt
                 [self.jQueryOutput0 appendString:@"\n  // Ein Dataset, welches per Request aus der Wolke gefüllt wird. Ich speichere den Link mal in 'src'.\n"];
-                [self.jQueryOutput0 appendFormat:@"  %@ = new lz.dataset('%@'); // muss vom Typ dataset sein, damit er auf die Methode 'setQueryParam' z. B. zugreifen kann\n",self.lastUsedDataset, self.lastUsedDataset];
+                [self.jQueryOutput0 appendFormat:@"  %@ = new lz.dataset(null, {name: '%@'}); // muss vom Typ dataset sein, damit er auf die Methode 'setQueryParam' z. B. zugreifen kann\n",self.lastUsedDataset, self.lastUsedDataset];
 
                 if ([src hasPrefix:@"$"])
                 {
@@ -3861,7 +3851,7 @@ didStartElement:(NSString *)elementName
                     NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! But it is starting with 'http://'. So I am loading the XML-File (%@) into a string.",src]);
 
                     [self.jsHead2Output appendString:@"\n// Externe XML-Datei wird als XML-Struktur ausgelesen und in einem JS-String gespeichert.\n"];
-                    [self.jsHead2Output appendFormat:@"var %@ = new lz.dataset('%@');\n",self.lastUsedDataset,self.lastUsedDataset];
+                    [self.jsHead2Output appendFormat:@"var %@ = new lz.dataset(null, {name: '%@'});\n",self.lastUsedDataset,self.lastUsedDataset];
                     [self.jsHead2Output appendFormat:@"%@.rawdata = (new XMLSerializer()).serializeToString(getXMLDocumentFromFile('%@'));\n",self.lastUsedDataset,src];
 
                     // Alle 'äußeren' Datasets stecken auch in 'canvas' (aber 'canvas' ist erst nach DOM bekannt, deswegen jsOutput
@@ -4365,7 +4355,8 @@ didStartElement:(NSString *)elementName
         BOOL berechneterWert = NO;
         if (true)
         {
-            if ([value hasPrefix:@"$"])
+            // Bei $path darf er nicht hier reingehen! Deswegen test auf '${'
+            if ([value hasPrefix:@"${"])
             {
                 // Wenn wir in einer Klasse sind, die von state erbt, ist das Eltern-Element nicht der state,
                 // sondern das davon umgebende Element (quasi wie ein Extrasprung)
@@ -4386,7 +4377,7 @@ didStartElement:(NSString *)elementName
         else
         {
             // Das hier ist eigentlich richtig: // To Do
-            if ([value hasPrefix:@"$"])
+            if ([value hasPrefix:@"${"])
             {
                 value = [self modifySomeExpressionsInJSCode:value];
             }
@@ -4418,77 +4409,78 @@ didStartElement:(NSString *)elementName
         }
         else
         {
-            // Folgendes Szenario: Wenn eine selbst definierte Klasse ein Attribut definiert, aber gleichzeitig
-            // dieses erbt, dann hat das selbst definierte Vorrang. Deswegen überschreibe ich das Attribut
-            // innerhalb der Klasse nicht! Dazu teste ich einfach vorher, ob es auch wirklich undefined ist!
-            // Puh, ka, ob das so zu halten ist, zumindest schon mal bei 'title' bricht es, weil von JS vordefiniert
-            // Auch bei 'bgcolor' bricht es, weil von openLaszlo vordefiniert! Und ich deswegen
-            // dafür einen getter angelegt habe. Da der getter existiert, kann es nie undefined
-            // geben!
-            // => Deswegen habe ich die ganze Abfrage rausgenommen.
-            // => Es ist wohl nur bei methoden nötig.
-            //if (![[attributeDict valueForKey:@"name"] isEqualToString:@"title"])
-            //    [o appendFormat:@"\n  if (%@.%@ == undefined)",elem,a];
-
-
-
-
-            // Wenn wir ein Attribut eines Datasets haben, dann binde ich an self.lastUsedDataset
-            // Denn Datasets werden oft nur per 'name' gesetzt und nicht per 'id'
-            if ([elemTyp isEqualToString:@"dataset"])
+            BOOL pathAngabe = NO;
+            if ([value hasPrefix:@"$path{"])
             {
-                [o appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut von '%@' (Objekttyp: %@)", self.lastUsedDataset, elemTyp];
-                [o appendFormat:@"\n  %@.",self.lastUsedDataset];
+                pathAngabe = YES;
+
+                // Ein relativer Pfad zum vorher gesetzen XPath Ich nehme Bezug zum letzten lastDP_ und dem dort gesetzten Pfad.
+                value = [self removeOccurrencesOfDollarAndCurlyBracketsIn:value];
+                // Die Variable 'lastDP_' ist bekannt, da die Ausgabe hier in 'jsComputedValuesOutput' erfolgt.
+                // Genau da (und kurz vorher) erfolgt auch das setzen von lastDP_
+                [o appendString:@"\n  // Ein relativer Pfad für dieses Attribut. Dann nehme ich Bezug zum letzten 'lastDP_' und dem dort gesetzten Pfad.\n"];
+                [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'%@');\n",self.zuletztGesetzteID,value,a];
             }
             else
             {
-                [o appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut von '%@' (Objekttyp: %@)", elem, elemTyp];
-                [o appendFormat:@"\n  %@.",elem];
-            }
-            
-
-
-            [o appendFormat:@"%@ = ",a];
-            if (weNeedQuotes)
-                [o appendString:@"\""];
-            [o appendString:value];
-            if (weNeedQuotes)
-                [o appendString:@"\""];
-            [o appendString:@";\n"];
-
-
-            // Erstmal nur hier drin. Eventuell aber auch erst nach der geschweiften Klammer
-            // Und erstmal nicht, wenn wir in canvas sind (globale Attribute)
-            if (berechneterWert)
-            {
-                NSString *s = [attributeDict valueForKey:@"value"];
-
-
-                // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...
-                NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s in:elem];
-
-
-                s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
-                s = [self modifySomeExpressionsInJSCode:s];
-                // Escape ' in s
-                s = [s stringByReplacingOccurrencesOfString:@"'" withString:@"\\\'"];
-
-
-
-                [o appendFormat:@"  setInitialConstraintValue(%@,'%@','%@');\n",elem,a,s];
-
-                [o appendFormat:@"  // The constraint value depends on %ld other var(s)\n",[vars count]];            
-                for (id object in vars)
+                // Wenn wir ein Attribut eines Datasets haben, dann binde ich an self.lastUsedDataset
+                // Denn Datasets werden oft nur per 'name' gesetzt und nicht per 'id'
+                if ([elemTyp isEqualToString:@"dataset"])
                 {
-                    [o appendFormat:@"  setConstraint(%@,'%@',\"return (function() { with (%@) { %@.setAttribute_('%@',%@); } }).bind(%@)();\"",elem,object,elem,elem,a,s,elem];
-                    if ([elemTyp isEqualToString:@"state"])
+                    [o appendFormat:@"\n  // Ein per <attribute> gesetztes Dataset-Attribut von '%@' (Objekttyp: %@)", self.lastUsedDataset, elemTyp];
+                    [o appendFormat:@"\n  %@.",self.lastUsedDataset];
+                }
+                else
+                {
+                    [o appendFormat:@"\n  // Ein per <attribute> gesetztes Attribut von '%@' (Objekttyp: %@)", elem, elemTyp];
+                    [o appendFormat:@"\n  %@.",elem];
+                }
+
+
+                [o appendFormat:@"%@ = ",a];
+                if (weNeedQuotes)
+                    [o appendString:@"\""];
+                [o appendString:value];
+                if (weNeedQuotes)
+                    [o appendString:@"\""];
+                [o appendString:@";\n"];
+
+
+                // Erstmal nur hier drin. Eventuell aber auch erst nach der geschweiften Klammer
+                // Und erstmal nicht, wenn wir in canvas sind (globale Attribute)
+                if (berechneterWert)
+                {
+                    NSString *s = [attributeDict valueForKey:@"value"];
+
+
+                    // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...
+                    NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:s in:elem];
+
+
+                    s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
+                    s = [self modifySomeExpressionsInJSCode:s];
+                    // Escape ' in s
+                    s = [s stringByReplacingOccurrencesOfString:@"'" withString:@"\\\'"];
+
+
+
+                    [o appendFormat:@"  setInitialConstraintValue(%@,'%@','%@');\n",elem,a,s];
+
+                    [o appendFormat:@"  // The constraint value depends on %ld other var(s)\n",[vars count]];            
+                    for (id object in vars)
                     {
-                        NSString *idOfState = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
-                        [o appendFormat:@",'.state_%@'",idOfState];
+                        [o appendFormat:@"  setConstraint(%@,'%@',\"return (function() { with (%@) { %@.setAttribute_('%@',%@); } }).bind(%@)();\"",elem,object,elem,elem,a,s,elem];
+                        if ([elemTyp isEqualToString:@"state"])
+                        {
+                            NSString *idOfState = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+                            [o appendFormat:@",'.state_%@'",idOfState];
+                        }
+                        [o appendFormat:@");\n"];
                     }
-                    [o appendFormat:@");\n"];
                 }
             }
+
+
 
 
             // War früher mal jsHeadOutput, aber die Elemente sind ja erst nach Instanzierung
@@ -4538,7 +4530,15 @@ didStartElement:(NSString *)elementName
                     }
                     else
                     {
-                        [self.jQueryOutput0 appendString:o];
+                        if (pathAngabe)
+                        {
+                            // Damit die 'path_'-Variable auch vorher gesetz wurde und bekannt ist!
+                            [self.jsComputedValuesOutput appendString:o];
+                        }
+                        else
+                        {
+                            [self.jQueryOutput0 appendString:o];
+                        }
                     }
                 }
             }
@@ -10804,6 +10804,11 @@ BOOL isJSExpression(NSString *s)
 - (void) createJSFile:(NSString*)path
 {
     NSString *js = @"/* FILE: jsHelper.js */\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// enthält alle Datasets, welche nach dem Aufbau des DOMs dann in 'canvas' kopiert werden//\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var allMyDatasets_ = {};\n"
+    "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Soll einen datapath ( = this) mit dem als Arg übergebenem Wert updaten //\n"
@@ -11419,6 +11424,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    canvas.setDefaultContextMenu = function(contextmenu) {};\n"
     "\n"
+    "    // Alle datasets stecken auch in einer Property von canvas\n"
+    "    canvas.myDatasets = allMyDatasets_;\n"
     "\n"
     "    // Anhand dieser Variable kann im Skript abgefragt werden, ob wir im Debugmode sind\n"
     "    // ohne 'var', damit global. \n"
@@ -12400,9 +12407,11 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "    // A <dataset> tag defines a local dataset. The name of the dataset is used in the datapath attribute of a view.\n"
-    "    this.dataset = function(name) {\n"
+    "    this.dataset = function(parentNode,options) {\n"
+    "        this.parentNode = parentNode; // Dieses Argument ist noch ohne weitere Auswirkungen\n"
+    "\n"
     "        this.rawdata = '';\n"
-    "        this.name = name;\n"
+    "        this.name = options.name;\n"
     "        this.queryParamKeys = [];\n"
     "        this.queryParamVals = [];\n"
     "\n"
@@ -12881,7 +12890,15 @@ BOOL isJSExpression(NSString *s)
     "                return (new XMLSerializer()).serializeToString(this.xml);\n"
     "            }\n"
     "        }\n"
-    "        this.selectChild = function() {\n"
+    "        this.selectChild = function(amnt) {\n"
+    "            if (amnt !== undefined && amnt !== 1)\n"
+    "            {\n"
+    "                alert('Bis jetzt wird nur das erste, also First Child unterstützt. To Do');\n"
+    "                // Lösung wohl: nicht mehr 'firstChild' benutzen und unten anstatt der 1 'amnt' benutzen\n"
+    "            }\n"
+    "            if (amnt === undefined || amnt === null)\n"
+    "                amnt = 1;\n"
+    "\n"
     "            // Node aktualisieren in dem ich eins tiefer wandere\n"
     "            if (this.lastNode)\n"
     "                this.lastNode = this.lastNode.firstChild;\n"
@@ -13669,6 +13686,10 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        $(me).data('mask_',value); // noch ka warum man den explizit setzen kann\n"
     "    }\n"
+    "    else if (attributeName === 'datapath')\n"
+    "    {\n"
+    "        $(me).data('datapath',value);\n"
+    "    }\n"
     "    else if (attributeName === 'doesenter')\n"
     "    {\n"
     "        // If set to true, the component manager will call this component with doEnterDown\n"
@@ -14406,6 +14427,18 @@ BOOL isJSExpression(NSString *s)
     "HTMLInputElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
     "HTMLSelectElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
     "HTMLButtonElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// applyData()                                         //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var applyDataFunction = function(data) {\n"
+    "}\n"
+    "\n"
+    "// Derzeit bewusst nicht implementiert, damit ich testen kann ob sie überschrieben wurde, und (nur) dann ausführe\n"
+    "// HTMLDivElement.prototype.applyData = applyDataFunction;\n"
+    "// HTMLInputElement.prototype.applyData = applyDataFunction;\n"
+    "// HTMLSelectElement.prototype.applyData = applyDataFunction;\n"
+    "// HTMLButtonElement.prototype.applyData = applyDataFunction;\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// completeInstantiation()                             //\n"
@@ -15340,13 +15373,50 @@ BOOL isJSExpression(NSString *s)
     "        return c;\n"
     "    }\n"
     "\n"
-    "    throw new TypeError('So far unsupported call of presentAttribute');\n"
+    "    throw new TypeError('So far unsupported call of presentAttribute()');\n"
     "}\n"
     "\n"
     "HTMLDivElement.prototype.presentAttribute = presentAttributeFunction;\n"
     "HTMLInputElement.prototype.presentAttribute = presentAttributeFunction;\n"
     "HTMLSelectElement.prototype.presentAttribute = presentAttributeFunction;\n"
     "HTMLButtonElement.prototype.presentAttribute = presentAttributeFunction;\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// acceptAttribute() - nachimplementiert               //\n"
+    "// undokumentiert, aber taucht in Example 37.9 auf     //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var acceptAttributeFunction = function (attr,as,value) {\n"
+    "    if (attr === 'bgcolor' && as === 'color')\n"
+    "    {\n"
+    "        if (value === 'black') value = '#000000';\n"
+    "        if (value === 'maroon') value = '#800000';\n"
+    "        if (value === 'green') value = '#008000';\n"
+    "        if (value === 'navy') value = '#000080';\n"
+    "        if (value === 'silver') value = '#c0c0c0';\n"
+    "        if (value === 'red') value = '#ff0000';\n"
+    "        if (value === 'lime') value = '#00ff00';\n"
+    "        if (value === 'blue') value = '#0000ff';\n"
+    "        if (value === 'gray') value = '#808080';\n"
+    "        if (value === 'purple') value = '#800080';\n"
+    "        if (value === 'olive') value = '#808000';\n"
+    "        if (value === 'teal') value = '#008080';\n"
+    "        if (value === 'white') value = '#ffffff';\n"
+    "        if (value === 'fuchsia') value = '#ff00ff';\n"
+    "        if (value === 'yellow') value = '#ffff00';\n"
+    "        if (value === 'aqua') value = '#00ffff';\n"
+    "\n"
+    "        this.setAttribute_(attr, value);\n"
+    "    }\n"
+    "    else\n"
+    "    {\n"
+    "        throw new TypeError('So far unsupported call of acceptAttribute()');\n"
+    "    }\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.acceptAttribute = acceptAttributeFunction;\n"
+    "HTMLInputElement.prototype.acceptAttribute = acceptAttributeFunction;\n"
+    "HTMLSelectElement.prototype.acceptAttribute = acceptAttributeFunction;\n"
+    "HTMLButtonElement.prototype.acceptAttribute = acceptAttributeFunction;\n"
     "\n"
     "\n"
     "\n"
@@ -16035,9 +16105,11 @@ BOOL isJSExpression(NSString *s)
     "            var topValue = i * spacing;\n"
     "            if (kind.css('position') === 'relative')\n"
     "            {\n"
-    "                // Wenn wir hinten nicht runter gefallen sind\n"
-    "                if ($(el).children().eq(0).position().left != kind.position().left)\n"
+    "                // Wenn wir hinten nicht runter gefallen sind (auch nicht ursprünglich)\n"
+    "                if ($(el).children().eq(0).position().left != kind.position().left || $(el).data('urspruenglichNichtHeruntergefallen_'))\n"
     "                {\n"
+    "                    $(el).data('urspruenglichNichtHeruntergefallen_',true);\n"
+    "\n"
     "                    // topValue = i * spacing + kind.prev().outerHeight()/* + parseInt(kind.prev().css('top'))*/;\n"
     "                    // Nur so klappt es bei Beispiel <basebutton>:\n"
     "                    topValue = spacing + kind.prev().outerHeight() + parseInt(kind.prev().css('top'));\n"
@@ -16227,12 +16299,12 @@ BOOL isJSExpression(NSString *s)
     "// setAbsoluteDataPathIn()                             //\n"
     "/////////////////////////////////////////////////////////\n"
     "// Ich werte die XPath-Angabe über einen temporär angelegten Datapointer aus.\n"
-    "// Das Ergebnis des XPath-Requests wird als text des Elements gesetzt\n"
+    "// Das Ergebnis des XPath-Requests wird normalerweise als text des Elements gesetzt (dies kann über applyData() aber auch umgebogen werden)\n"
     "// Aber nur, wenn es eine Text-Node ist. Denn es kann auch nur ein Pfad angegeben sein, auf den sich dann tiefer verschachtelte Elemente beziehen.\n"
     "// Liefert der XPath-Request mehrere Ergebnisse zurück, muss ich hingegen das Div entsprechend oft duplizieren.\n"
     "var setAbsoluteDataPathIn = function (el,path) {\n"
-    "    // XPath speichern, damit Kinder darauf zugreifen können.\n"
-    "    $('#'+el.id).data('XPath',path);\n"
+    "    // 'datapath'-xpath wird intern gespeichert (u. a. damit Kinder darauf zugreifen können).\n"
+    "    $('#'+el.id).data('datapath',path);\n"
     "    // Letzten Datapointer global speichern, damit evtl. nachfolgende relative Datapointer darauf zugreifen können\n"
     "    lastDP_ = new lz.datapointer(path,false);\n"
     "\n"
@@ -16323,7 +16395,24 @@ BOOL isJSExpression(NSString *s)
     "    else\n"
     "    {\n"
     "        if (lastDP_.getNodeType() == 3)\n"
-    "            $('#'+el.id).html(lastDP_.getNodeText());\n"
+    "        {\n"
+    "            if (typeof el.applyData === 'function')\n"
+    "            {\n"
+    "                el.applyData(lastDP_.getNodeText());\n"
+    "\n"
+    "                // Gleichzeitig müssen wir bei Änderungen des datapaths darauf reagieren\n"
+    "                $(el).on('ondatapath', function() {\n"
+    "                    var dp = new lz.datapointer($(el).data('datapath'),false);\n"
+    "                    el.applyData(dp.getNodeText());\n"
+    "                });\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                // Eventuell ist dieser Zweig nur noch old Legacy-Code\n"
+    "                // Gemäß Beispiel 37.10 darf ich hier gar nichts setzen...\n"
+    "                // $('#'+el.id).html(lastDP_.getNodeText());\n"
+    "            }\n"
+    "        }\n"
     "    }\n"
     "}\n"
     "\n"
@@ -16337,10 +16426,10 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        // Der xpath kann im eigenen Element oder im parent-Element stecken\n"
     "        var XPath = undefined;\n"
-    "        if ($(el).parent().data('XPath'))\n"
-    "            XPath = $(el).parent().data('XPath');\n"
-    "        if ($(el).data('XPath'))\n"
-    "            XPath = $(el).data('XPath');\n"
+    "        if ($(el).parent().data('datapath'))\n"
+    "            XPath = $(el).parent().data('datapath');\n"
+    "        if ($(el).data('datapath'))\n"
+    "            XPath = $(el).data('datapath');\n"
     "\n"
     "        var zusammengesetzterXPath = XPath + '[1]/' + path;\n"
     "        el.setAttribute_(attr,pointer.xpathQuery(zusammengesetzterXPath));\n"
@@ -17381,7 +17470,7 @@ BOOL isJSExpression(NSString *s)
     "        return;\n"
     "    }\n"
     "\n"
-    "    if (v.startsWith('$path{')) // Ist dann gar kein Constraint value\n"
+    "    if (v.startsWith('$path{')) // Ist dann gar kein Constraint value, sondern ein relative datapath. Horcht auch nicht auf Änderungen!\n"
     "    {\n"
     "        v = '${' + v.substring(6);\n"
     "        v = v.substring(2,v.length-1);\n"

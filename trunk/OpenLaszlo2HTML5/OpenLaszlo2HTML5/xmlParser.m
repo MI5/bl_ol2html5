@@ -4384,6 +4384,13 @@ didStartElement:(NSString *)elementName
         }
 
 
+        // Ist dann kein constraint value
+        BOOL onceWert = NO;
+        if ([value hasPrefix:@"$once{"])
+        {
+            onceWert = YES;
+            value = [self makeTheComputedValueComputable:value withAndBindEquals:elem];
+        }
 
 
         // Wenn wir in einer Klasse sind, alle Attribute der Klasse intern mitspeichern
@@ -4392,7 +4399,7 @@ didStartElement:(NSString *)elementName
         if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
         {
             NSString *className = self.lastUsedNameAttributeOfClass;
-            
+
             if (![self.allFoundClasses objectForKey:className])
                 [self instableXML:@"Das geht so nicht. Wenn ich Attribute hinzufüge zu einer Klasse, muss ich vorher auf diese Klasse gestoßen sein!"];
 
@@ -4404,7 +4411,14 @@ didStartElement:(NSString *)elementName
             }
             else
             {
-                [attrDictOfClass setObject:value forKey:a];
+                if (onceWert)
+                {
+                    [attrDictOfClass setObject:[NSString stringWithFormat:@"@§.BERECHNETERWERTABERONCE.§@%@",value] forKey:a];
+                }
+                else
+                {
+                    [attrDictOfClass setObject:value forKey:a];
+                }
             }
         }
         else
@@ -10817,6 +10831,19 @@ BOOL isJSExpression(NSString *s)
     "    String.prototype.updateData = function(str) {\n"
     "        // Somewhat dringend ToDo\n"
     "        // Und warum steckt das überhaupt im String-Objekt?\n"
+    "        // alert('Do I get in here?'); // Yes, more than 100 times\n"
+    "    };\n"
+    "}\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// und somehow seit auswerten grid kann man über diesen String einen xPathQuery auslösen??//\n"
+    "// String.prototype.xpathQuery im String-prototype...  //\n"
+    "/////////////////////////////////////////////////////////\n"
+    // ToDo: Einfach entfernen, sobald datapointer kein string mehr ist.
+    "if (typeof String.prototype.xpathQuery != 'function') {\n"
+    "    String.prototype.xpathQuery = function(s) {\n"
+    "        var dp = new lz.datapointer(this);\n"
+    "\n"
+    "        return dp.xpathQuery(s);\n"
     "    };\n"
     "}\n"
     "\n"
@@ -12780,10 +12807,18 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        this.setNodeText = function(text) {\n"
     "            // Lieber ohne jQuery, da kein HTML-Dokument, sondern eine Node\n"
-    "            if (this.lastNode && typeof text == 'string')\n"
+    "            if (this.lastNode && (typeof text == 'string' || typeof text == 'number'))\n"
     "            {\n"
     "                this.lastNodeText = text; // Intern aktualisieren\n"
     "                this.lastNode.childNodes[0].nodeValue = text; // Extern aktualisieren\n"
+    "\n"
+    "                // Alle $path-Angaben (relativeDatapath-Angaben) aktualisieren sich bei Änderungen\n"
+    "                // Deswegen hier triggern eines Nicht-Dom-Elements (nämlich lz.datapointer), aber das scheint zu klappen\n"
+    "                $(this).triggerHandler('datapathhaschanged');\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                alert('So far unsupported call of setNodeText() in datapointer');\n"
     "            }\n"
     "        }\n"
     "        this.isValid = function() {\n"
@@ -12831,6 +12866,9 @@ BOOL isJSExpression(NSString *s)
     "                    this.lastNodeName = this.p.nodeName;\n"
     "                    this.lastNodeType = this.p.nodeType;\n"
     "                    this.xpath = this.datasetName + ':' + this.getElementsXPath(this.lastNode);\n"
+    "\n"
+    "                    // Damit sich $path-Angaben aktualisieren\n"
+    "                    $(this).triggerHandler('datapathhaschanged');\n"
     "\n"
     "                    return true;\n"
     "                }\n"
@@ -12985,6 +13023,13 @@ BOOL isJSExpression(NSString *s)
     //"            enumerable : false,\n"
     //"            configurable : true\n"
     //"        });\n"
+    "\n"
+    "\n"
+    "        // 'datapath' erbt eigentlich alles von 'datapointer'. Das wird aber jetzt zu kompliziert\n"
+    "        // Einfach die Methoden von 'datapath' hier noch ergänzen und immer mit 'datapointer' arbeiten.\n"
+    "        this.updateDateToDo = function() {\n"
+    "\n"
+    "        }\n"
     "    }\n"
     "\n"
     "\n"
@@ -13689,6 +13734,7 @@ BOOL isJSExpression(NSString *s)
     "    else if (attributeName === 'datapath')\n"
     "    {\n"
     "        $(me).data('datapath',value);\n"
+    "        me.datapath = new lz.datapointer($(me).data('datapath'),false);\n"
     "    }\n"
     "    else if (attributeName === 'doesenter')\n"
     "    {\n"
@@ -14304,21 +14350,13 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// datapath                                            //\n"
     "/////////////////////////////////////////////////////////\n"
-    "HTMLDivElement.prototype.datapath = '';\n"
-    "HTMLInputElement.prototype.datapath = '';\n"
-    "HTMLSelectElement.prototype.datapath = '';\n"
-    "HTMLButtonElement.prototype.datapath = '';\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// und somehow seit auswerten grid kann man über diesen String einen xPathQuery auslösen??//\n"
-    "// String.prototype.xpathQuery im String-prototype...  //\n"
-    "/////////////////////////////////////////////////////////\n"
-    "if (typeof String.prototype.xpathQuery != 'function') {\n"
-    "    String.prototype.xpathQuery = function(s) {\n"
-    "        var dp = new lz.datapointer(this);\n"
-    "\n"
-    "        return dp.xpathQuery(s);\n"
-    "    };\n"
-    "}\n"
+    "HTMLDivElement.prototype.datapath = null;\n"
+    "HTMLInputElement.prototype.datapath = null;\n"
+    "HTMLSelectElement.prototype.datapath = null;\n"
+    "HTMLButtonElement.prototype.datapath = null;\n"
+
+
+
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -16295,7 +16333,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Hilfsfunktion, um einen absolut gesetzten Datapath auszuwerten\n"
+    "// Hilfsfunktion, um einen absolut gesetzten Datapath auszuwerten//\n"
     "// setAbsoluteDataPathIn()                             //\n"
     "/////////////////////////////////////////////////////////\n"
     "// Ich werte die XPath-Angabe über einen temporär angelegten Datapointer aus.\n"
@@ -16307,6 +16345,8 @@ BOOL isJSExpression(NSString *s)
     "    $('#'+el.id).data('datapath',path);\n"
     "    // Letzten Datapointer global speichern, damit evtl. nachfolgende relative Datapointer darauf zugreifen können\n"
     "    lastDP_ = new lz.datapointer(path,false);\n"
+    "    // Hmmm, einfach im Element speichern, ist von OL so vorgesehen, lastDP_ kann dann evtl. sogar entfernt werden\n"
+    "    el.datapath = lastDP_;\n"
     "\n"
     "\n"
     "    if (lastDP_.getXPathIndex() > 1)\n"
@@ -16447,6 +16487,10 @@ BOOL isJSExpression(NSString *s)
     "    else\n"
     "    {\n"
     "        el.setAttribute_(attr,pointer.xpathQuery(path));\n"
+    "\n"
+    "        // Zusätzlich bei Änderungen darauf reagieren:\n"
+    "        // Ich horche hier auf das triggern eines Nicht-DOM-Elements, aber das scheint zu klappen\n"
+    "        $(pointer).on('datapathhaschanged', function() { el.setAttribute_(attr,pointer.xpathQuery(path)); });\n"
     "    }\n"
     "}\n"
     "\n"
@@ -16853,6 +16897,14 @@ BOOL isJSExpression(NSString *s)
     "                if (typeof value === 'string' && value.startsWith('$')) // = Constraint value\n"
     "                {\n"
     "                    handleConstraintValue(id,key,value);\n"
+    "                }\n"
+    "                else if (typeof value === 'string' && value.startsWith('@§.BERECHNETERWERTABERONCE.§@'))\n"
+    "                {\n"
+    "                    value = value.substr(29);\n"
+    "                    value = replaceID(value,''+$(id).attr('id'));\n"
+    "\n"
+    "                    var evalString = 'id[key] = ' + value + ';'\n"
+    "                    eval(evalString);\n"
     "                }\n"
     "                else if (typeof value === 'string' && value.startsWith('@§.BERECHNETERWERT.§@')) // = historisch, ToDo weg!\n"
     "                {\n"
@@ -17473,8 +17525,16 @@ BOOL isJSExpression(NSString *s)
     "    if (v.startsWith('$path{')) // Ist dann gar kein Constraint value, sondern ein relative datapath. Horcht auch nicht auf Änderungen!\n"
     "    {\n"
     "        v = '${' + v.substring(6);\n"
-    "        v = v.substring(2,v.length-1);\n"
-    "        // setRelativeDataPathIn(el,v,lastDP_,a); // ToDo\n"
+    "        v = v.substring(3,v.length-2);\n"
+    "        if (el.datapath)\n"
+    "        {\n"
+    "            var dp = new lz.datapointer(el.datapath,false);\n"
+    "            setRelativeDataPathIn(el,v,dp,a);\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "            alert('Something went wrong');\n"
+    "        }\n"
     "        return;\n"
     "    }\n"
     "\n"

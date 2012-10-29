@@ -222,6 +222,8 @@ BOOL ownSplashscreen = NO;
 @property (nonatomic) BOOL onInitInHandler;
 @property (nonatomic) BOOL initStageDefer;
 @property (nonatomic) BOOL initStageDeferThatWillBeCalledByCompleteInstantiation;
+@property (nonatomic) BOOL debugConsoleActivated;
+
 // 'reference'-Variable in einem Handler muss an das korrekte Element gebunden werden
 @property (nonatomic) BOOL referenceAttributeInHandler;
 @property (nonatomic) BOOL handlerofDrawview;
@@ -292,7 +294,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize weAreInRollUpDownWithoutSurroundingRUDContainer = _weAreInRollUpDownWithoutSurroundingRUDContainer;
 @synthesize weAreCollectingTheCompleteContentInClass = _weAreCollectingTheCompleteContentInClass;
 
-@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, initStageDefer = _initStageDefer, initStageDeferThatWillBeCalledByCompleteInstantiation =_initStageDeferThatWillBeCalledByCompleteInstantiation, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler, handlerofDrawview = _handlerofDrawview, lastUsedNameAttributeOfState = _lastUsedNameAttributeOfState;
+@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, initStageDefer = _initStageDefer, initStageDeferThatWillBeCalledByCompleteInstantiation =_initStageDeferThatWillBeCalledByCompleteInstantiation, debugConsoleActivated = _debugConsoleActivated, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler, handlerofDrawview = _handlerofDrawview, lastUsedNameAttributeOfState = _lastUsedNameAttributeOfState;
 
 
 
@@ -439,6 +441,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.onInitInHandler = NO;
         self.initStageDefer = NO;
         self.initStageDeferThatWillBeCalledByCompleteInstantiation = NO;
+        self.debugConsoleActivated = NO;
         self.referenceAttributeInHandler = NO;
         self.handlerofDrawview = NO;
         self.methodAttributeInHandler = @"";
@@ -945,10 +948,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     if ([attributeDict valueForKey:@"opacity"])
     {
         self.attributeCount++;
-        NSLog(@"Setting the attribute 'opacity' as CSS 'opacity'.");
-        [style appendString:@"opacity:"];
-        [style appendString:[attributeDict valueForKey:@"opacity"]];
-        [style appendString:@";"];
+        [self setTheValue:[attributeDict valueForKey:@"opacity"] ofAttribute:@"opacity"];
     }
 
     if ([attributeDict valueForKey:@"fgcolor"])
@@ -1483,6 +1483,9 @@ void OLLog(xmlParser *self, NSString* s,...)
                 // davon abhängig sind (deswegen jsOutput).
                 [self.jsOutput appendString:@"\n  // Debug-Mode wurde aktiviert! Anhand dieser Variable kann im Skript erkannt werden, dass wir im Debugmode sind\n"];
                 [self.jsOutput appendString:@"  $debug = true;\n\n"];
+
+                // Auch Der Konverter soll erkennen können, ob wir die Konsole aktiviert haben oder nicht
+                self.debugConsoleActivated = YES;
             }
         }
 
@@ -2059,6 +2062,13 @@ void OLLog(xmlParser *self, NSString* s,...)
             self.attributeCount++;
             NSLog(@"Setting the attribute 'layout' as simplelayout with axis:y.");
 
+            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:spacing andAttributes:attributeDict];
+        }
+        else // kann auch außer 'spacing' gar keine Angaben zum Layout enthalten
+        {
+            self.attributeCount++;
+            NSLog(@"Setting the attribute 'layout' as simplelayout with axis:y.");
+            
             [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:spacing andAttributes:attributeDict];
         }
     }
@@ -3701,43 +3711,71 @@ didStartElement:(NSString *)elementName
         {
             self.attributeCount++;
 
-            [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere x-Position haben\n"];
-            [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('left','%@px');",[attributeDict valueForKey:@"x"]];
+            if (self.debugConsoleActivated) // Wegen Beispiel 37.13 Abfrage drum herum
+            {
+                [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere x-Position haben\n"];
+                [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('left','%@px');",[attributeDict valueForKey:@"x"]];
 
-            [self.jQueryOutput appendString:@"\n  // Dann auch Breite des Debug-Fenster anpassen (Elternbreite - Padding - Border - 1 * X\n"];
-            [self.jQueryOutput appendFormat:@"  $('#debugWindow').width($('#debugWindow').parent().width()-20-10-1*%@);\n",[attributeDict valueForKey:@"x"]];
+                [self.jQueryOutput appendString:@"\n  // Dann auch Breite des Debug-Fenster anpassen (Elternbreite - Padding - Border - 1 * X)\n"];
+                [self.jQueryOutput appendFormat:@"  $('#debugWindow').width($('#debugWindow').parent().width()-20-10-1*%@);\n",[attributeDict valueForKey:@"x"]];
+            }
         }
 
         if ([attributeDict valueForKey:@"y"])
         {
             self.attributeCount++;
 
-            [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere y-Position haben\n"];
-            [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('top','%@px');\n",[attributeDict valueForKey:@"y"]];
+            if (self.debugConsoleActivated)
+            {
+                [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere y-Position haben\n"];
+                [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('top','%@px');\n",[attributeDict valueForKey:@"y"]];
+            }
         }
 
         if ([attributeDict valueForKey:@"height"])
         {
             self.attributeCount++;
-            
-            [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere Höhe haben\n"];
-            [self.jQueryOutput appendFormat:@"  $('#debugWindow').height('%@');\n",[attributeDict valueForKey:@"height"]];
-            // Mindestens bei %-Angaben, aber vermutlich immer, muss ich auch noch
-            // den Rahmen (oben+unten) abziehen und Padding (oben+unten) (Bsp. lz.Formatter - Beispiel 5)
-            [self.jQueryOutput appendString:@"  // Abzüglich Padding oben+unten (2*10) und border-width (2*5);\n"];
-            [self.jQueryOutput appendString:@"  $('#debugWindow').height($('#debugWindow').height()-30);\n"];
 
-            // Bricht bei %-Angaben:
-            //[self.jQueryOutput appendFormat:@"  $('#debugInnerWindow').css('height','%dpx');\n\n",[[attributeDict valueForKey:@"height"] intValue]-30];
-            // Deswegen einfach direkt auf den eben ausgerechneten Wert beziehen:
-            [self.jQueryOutput appendString:@"  $('#debugInnerWindow').height($('#debugWindow').height()-30);\n\n"];
+            if (self.debugConsoleActivated)
+            {
+                [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere Höhe haben\n"];
+                [self.jQueryOutput appendFormat:@"  $('#debugWindow').height('%@');\n",[attributeDict valueForKey:@"height"]];
+                // Mindestens bei %-Angaben, aber vermutlich immer, muss ich auch noch
+                // den Rahmen (oben+unten) abziehen und Padding (oben+unten) (Bsp. lz.Formatter - Beispiel 5)
+                [self.jQueryOutput appendString:@"  // Abzüglich Padding oben+unten (2*10) und border-width (2*5);\n"];
+                [self.jQueryOutput appendString:@"  $('#debugWindow').height($('#debugWindow').height()-30);\n"];
+
+                // Bricht bei %-Angaben:
+                //[self.jQueryOutput appendFormat:@"  $('#debugInnerWindow').css('height','%dpx');\n\n",[[attributeDict valueForKey:@"height"] intValue]-30];
+                // Deswegen einfach direkt auf den eben ausgerechneten Wert beziehen:
+                [self.jQueryOutput appendString:@"  $('#debugInnerWindow').height($('#debugWindow').height()-30);\n\n"];
+            }
+        }
+
+        if ([attributeDict valueForKey:@"width"])
+        {
+            self.attributeCount++;
+
+            if (self.debugConsoleActivated)
+            {
+                [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere Breite haben\n"];
+                [self.jQueryOutput appendFormat:@"  $('#debugWindow').width('%@');\n",[attributeDict valueForKey:@"width"]];
+                [self.jQueryOutput appendString:@"  // Abzüglich Padding oben+unten (2*10) und border-width (2*5);\n"];
+                [self.jQueryOutput appendString:@"  $('#debugWindow').width($('#debugWindow').height()-30);\n"];
+
+                [self.jQueryOutput appendString:@"  $('#debugInnerWindow').width($('#debugWindow').width()-30);\n\n"];
+            }
         }
 
         if ([attributeDict valueForKey:@"fontsize"])
         {
             self.attributeCount++;
-            [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere Schriftgröße haben\n"];
-            [self.jQueryOutput appendFormat:@"  $('#debugWindow').setAttribute_('fontsize',%@);\n",[attributeDict valueForKey:@"fontsize"]];
+
+            if (self.debugConsoleActivated)
+            {
+                [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere Schriftgröße haben\n"];
+                [self.jQueryOutput appendFormat:@"  $('#debugWindow').setAttribute_('fontsize',%@);\n",[attributeDict valueForKey:@"fontsize"]];
+            }
         }
     }
 
@@ -4434,7 +4472,7 @@ didStartElement:(NSString *)elementName
                 // Die Variable 'lastDP_' ist bekannt, da die Ausgabe hier in 'jsComputedValuesOutput' erfolgt.
                 // Genau da (und kurz vorher) erfolgt auch das setzen von lastDP_
                 [o appendString:@"\n  // Ein relativer Pfad für dieses Attribut. Dann nehme ich Bezug zum letzten 'lastDP_' und dem dort gesetzten Pfad.\n"];
-                [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'%@');\n",self.zuletztGesetzteID,value,a];
+                [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'%@');\n",elem,value,a];
             }
             else
             {
@@ -10988,6 +11026,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        /******** ADDED - %w durch %s ersetzen, wird noch nicht unterstützt ********/\n"
     "        arguments[0] = arguments[0].replace(/%w/g,'%s');\n"
+    "        arguments[0] = arguments[0].replace(/%#w/g,'%s'); // Wegen Bsp. 37.13\n"
     "        /******** ADDED - %w durch %s ersetzen, wird noch nicht unterstützt ********/\n"
     "\n"
     "        if (!str_format.cache.hasOwnProperty(arguments[0])) {\n"
@@ -14178,7 +14217,8 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        // Wenn es vorher nicht matcht, dann einfach die Property setzen, dann ist es eine selbst definierte Variable\n"
     "        // Vorher aber Test ob die Property auch vorher definiert wurde! Sonst läuft wohl etwas schief\n"
-    "        if (me[attributeName] !== undefined)\n"
+    "        if (true /* me[attributeName] !== undefined */)\n"
+    "        // erstmal 'true', sonst geht Beispiel 37.13 nicht auf\n"
     "        {\n"
     "            me[attributeName] = value;\n"
     "        }\n"
@@ -14200,7 +14240,8 @@ BOOL isJSExpression(NSString *s)
     "    while ($('#'+me.id+'_repl'+c).length)\n"
     "    {\n"
     "        // Gemäß Bsp. 'lz.ReplicationManager' ist das hier falsch... (Deswegen testweise mal hier rausgenommen)\n"
-    "        //$('#'+me.id+'_repl'+c).get(0).setAttribute_(attributeName,value);\n"
+    "        // Aber gemäß Bsp. 37.11 muss es wohl rein (oder es gilt nur beim instanzieren von Klassen könnte auch sein)\n"
+    "        $('#'+me.id+'_repl'+c).get(0).setAttribute_(attributeName,value);\n"
     "        c++;\n"
     "    }\n"
     "}\n"
@@ -16139,19 +16180,31 @@ BOOL isJSExpression(NSString *s)
     "            if (kind.css('position') === 'relative')\n"
     "            {\n"
     "                // Wenn wir hinten nicht runter gefallen sind (auch nicht ursprünglich)\n"
-    "                if ($(el).children().eq(0).position().left != kind.position().left || $(el).data('urspruenglichNichtHeruntergefallen_'))\n"
+    "                if ($(el).children().eq(0).position().left != kind.position().left || kind.data('urspruenglichNichtHeruntergefallen_'))\n"
     "                {\n"
-    "                    $(el).data('urspruenglichNichtHeruntergefallen_',true);\n"
+    "                    kind.data('urspruenglichNichtHeruntergefallen_',true);\n"
     "\n"
     "                    // topValue = i * spacing + kind.prev().outerHeight()/* + parseInt(kind.prev().css('top'))*/;\n"
     "                    // Nur so klappt es bei Beispiel <basebutton>:\n"
     "                    topValue = spacing + kind.prev().outerHeight() + parseInt(kind.prev().css('top'));\n"
-    "                    // var leftValue = parseInt(kind.prev().css('left'))-kind.prev().outerWidth();\n"
-    "                    // leftValue = leftValue * i;\n"
-    "                    // nur so klappt es bei Bsp. 27.1 (Constraints in tags):\n"
-    "                    var width = 0;\n"
-    "                    kind.prevAll().each(function() { width += $(this).outerWidth(); });\n"
-    "                    var leftValue = width * -1;\n"
+    //"                    // leftValue = leftValue * i;\n"
+    //"                    // nur so klappt es bei Bsp. 27.1 (Constraints in tags):\n"
+    //"                    var width = 0;\n"
+    //"                    kind.prevAll().each(function() { width += $(this).outerWidth(); });\n"
+    //"                    var leftValue = width * -1;\n"
+    // Nicht mehr nachvollziehbar, weil es so eben nicht klappt... deswegen so:
+    "\n"
+    "                    if (kind.prev().is('button'))\n"
+    "                    {\n"
+    "                        // Irgendwie nimmt der Button intern keinen Platz ein bei Safari, obwohl position:relative\n"
+    "                        var leftValue = 0;\n"
+    "                        topValue = spacing; // Gilt natürlich dann auch für topValue\n"
+    "                    }\n"
+    "                    else\n"
+    "                    {\n"
+    "                        var leftValue = parseInt(kind.prev().css('left'))-kind.prev().outerWidth();\n"
+    "                    }\n"
+    "\n"
     "                    if (parseInt(kind.css('left')) !== leftValue)\n"
     "                        kind.get(0).setAttribute_('x',leftValue+'px');\n"
     "                }\n"
@@ -17272,6 +17325,23 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
+    "  // Example 37.11:\n"
+    "  // Hier nochmals setAbsoluteDataPath setzen, weil erst hier alle Attribute gesetzt wurden, und alles korrekt geklont wurde\n"
+    "  // Direkt hiernach kommt ein eventueller relativer Datapath. Dies muss ich bedenken, falls ich eines Tages die 'obj.attributeNames' auflöse\n"
+    "  if (iv.datapath)\n"
+    "  {\n"
+    "    if (iv.datapath.startsWith('${'))\n"
+    "    {\n"
+    "        // Dann ist es kein String, sondern ein JS-Ausdruck - Ob wirklich eine Constraint nötig ist, ist eher fraglich.\n"
+    "        iv.datapath = iv.datapath.substring(2,iv.datapath.length-1);\n"
+    "    }\n"
+    "\n"
+    "    setAbsoluteDataPathIn(id,iv.datapath);\n"
+    "    // oh man... setAbsoluteDataPath tauscht das Element aus... Deswegen muss ich natürlich id hier neu setzen...\n"
+    "    id = $('#'+id.id).get(0);\n"
+    "  }\n"
+    "\n"
+    "\n"
     "\n"
     "  // Alle per style gegebenen Attribute muss ich ermitteln und später damit vergleichen\n"
     "  // Denn die per style direkt in der Instanz gesetzten Attribute haben Vorrang vor denen\n"
@@ -17374,15 +17444,6 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "    }\n"
     "  }\n"
-    "\n"
-    "  // ToDoToDoToDo - Datapath-Attribut korrekt auslesen.\n"
-    "  // Example 37.11\n"
-    "  // Erst hier setAbsoluteDataPath setzen, weil erst hier alle Attribute gesetzt wurden, und alles korrekt geklont wird\n"
-    "  setAbsoluteDataPathIn(id,'boxes:/boxes/box');\n"
-    "  // oh man... setAbsoluteDataPath tauscht das Element aus... Deswegen muss ich natürlich id hier neu setzen...\n"
-    "  id = $('#'+id.id).get(0);\n"
-    "\n"
-    "  setRelativeDataPathIn(id,'@color',id.datapath,'bgcolor');\n"
     "\n"
     "\n"
     "  // Replace-IDs von contentHTML ersetzen\n"

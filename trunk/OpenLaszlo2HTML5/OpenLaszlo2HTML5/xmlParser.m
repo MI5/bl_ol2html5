@@ -38,12 +38,8 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
-
-
-BOOL kompiliereSpeziellFuerTaxango = YES;
-
 
 
 
@@ -884,11 +880,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
         else
         {
-            if (!kompiliereSpeziellFuerTaxango)
-            {
-                [o appendString:@"\n  // Ein relativer Pfad! Dann nehme ich Bezug zum letzten 'lastDP_' und dem dort gesetzten Pfad.\n"];
-                [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'text');\n",self.zuletztGesetzteID,dp];
-            }
+            [o appendString:@"\n  // Ein relativer Pfad! Dann nehme ich Bezug zum letzten 'lastDP_' und dem dort gesetzten Pfad.\n"];
+            [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'text');\n",self.zuletztGesetzteID,dp];
         }
 
 
@@ -2134,13 +2127,12 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         s = [self modifySomeExpressionsInJSCode:s];
 
-        [self pointerEventsZulassenBeiId:idName];
-        [self.jQueryOutput appendString:@"\n  // jQuery-click-event (anstelle des Attributs onclick)\n"];
-        [self.jQueryOutput appendFormat:@"  $('#%@').click(function(){ with (this) { %@ } });\n",idName,s];
-
-        // Wenn es ein onclick gibt, soll sich der Mauszeiger ändern.
+        NSString *showHandCursor = @"false";
         if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
-            [self changeMouseCursorOnHoverOverElement:idName];
+            showHandCursor = @"true";
+
+        [self.jQueryOutput appendString:@"\n  // jQuery-click-event\n"];
+        [self.jQueryOutput appendFormat:@"  addMouseEventTo('%@','click', function(){ with (this) { %@ } },%@);\n",idName,s,showHandCursor];
     }
 
 
@@ -2153,13 +2145,12 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         s = [self modifySomeExpressionsInJSCode:s];
 
-        [self pointerEventsZulassenBeiId:idName];
-        [self.jQueryOutput appendString:@"\n  // jQuery-dblclick-event (anstelle des Attributs ondblclick)\n"];
-        [self.jQueryOutput appendFormat:@"  $('#%@').dblclick(function(){ with (this) { %@ } });\n",idName,s];
-
-        // Wenn es ein ondblclick gibt, soll sich der Mauszeiger ändern.
+        NSString *showHandCursor = @"false";
         if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
-            [self changeMouseCursorOnHoverOverElement:idName];
+            showHandCursor = @"true";
+
+        [self.jQueryOutput appendString:@"\n  // jQuery-dblclick-event\n"];
+        [self.jQueryOutput appendFormat:@"  addMouseEventTo('%@','dblclick', function(){ with (this) { %@ } },%@);\n",idName,s,showHandCursor];
     }
 
 
@@ -2217,12 +2208,12 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         s = [self modifySomeExpressionsInJSCode:s];
 
-        [self pointerEventsZulassenBeiId:idName];
-        [self.jQueryOutput appendString:@"\n  // jQuery-mousedown-event (anstelle des Attributs onmousedown)\n"];
-        [self.jQueryOutput appendFormat:@"  $('#%@').mousedown(function(){ with (this) { %@ } });\n",idName,s];
-
+        NSString *showHandCursor = @"false";
         if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
-            [self changeMouseCursorOnHoverOverElement:idName];
+            showHandCursor = @"true";
+        
+        [self.jQueryOutput appendString:@"\n  // jQuery-mousedown-event\n"];
+        [self.jQueryOutput appendFormat:@"  addMouseEventTo('%@','mousedown', function(){ with (this) { %@ } },%@);\n",idName,s,showHandCursor];
     }
 
 
@@ -2235,12 +2226,13 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         s = [self modifySomeExpressionsInJSCode:s];
 
-        [self pointerEventsZulassenBeiId:idName];
-        [self.jQueryOutput appendString:@"\n  // jQuery-mouseup-event (anstelle des Attributs onmouseup)\n"];
-        [self.jQueryOutput appendFormat:@"  $('#%@').mouseup(function(){ with (this) { %@ } });\n",idName,s];
 
+        NSString *showHandCursor = @"false";
         if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
-            [self changeMouseCursorOnHoverOverElement:idName];
+            showHandCursor = @"true";
+
+        [self.jQueryOutput appendString:@"\n  // jQuery-mouseup-event\n"];
+        [self.jQueryOutput appendFormat:@"  addMouseEventTo('%@','mouseup', function(){ with (this) { %@ } },%@);\n",idName,s,showHandCursor];
     }
 
 
@@ -2253,12 +2245,13 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         s = [self modifySomeExpressionsInJSCode:s];
 
-        [self pointerEventsZulassenBeiId:idName];
-        [self.jQueryOutput appendString:@"\n  // jQuery-mouseout-event (anstelle des Attributs onmouseout)\n"];
-        [self.jQueryOutput appendFormat:@"  $('#%@').mouseout(function(){ with (this) { %@ } });\n",idName,s];
 
+        NSString *showHandCursor = @"false";
         if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
-            [self changeMouseCursorOnHoverOverElement:idName];
+            showHandCursor = @"true";
+
+        [self.jQueryOutput appendString:@"\n  // jQuery-mouseout-event\n"];
+        [self.jQueryOutput appendFormat:@"  addMouseEventTo('%@','mouseout', function(){ with (this) { %@ } },%@);\n",idName,s,showHandCursor];
     }
 
 
@@ -2271,12 +2264,13 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         s = [self modifySomeExpressionsInJSCode:s];
 
-        [self pointerEventsZulassenBeiId:idName];
-        [self.jQueryOutput appendString:@"\n  // jQuery-mouseover-event (anstelle des Attributs onmouseover)\n"];
-        [self.jQueryOutput appendFormat:@"  $('#%@').mouseover(function(){ with (this) { %@ } });\n",idName,s];
 
+        NSString *showHandCursor = @"false";
         if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
-            [self changeMouseCursorOnHoverOverElement:idName];
+            showHandCursor = @"true";
+        
+        [self.jQueryOutput appendString:@"\n  // jQuery-mouseover-event\n"];
+        [self.jQueryOutput appendFormat:@"  addMouseEventTo('%@','mouseover', function(){ with (this) { %@ } },%@);\n",idName,s,showHandCursor];
     }
 
 
@@ -2332,7 +2326,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         s = [self modifySomeExpressionsInJSCode:s];
 
         [self.jQueryOutput appendString:@"\n  // self-invoking function with with and with bind (anstelle des Attributs ondata)\n"];
-        // asbfnalbjfas WARUM AUCH IMMER, muss da nochmal ein ready drum herum. Irgendwas ist
+        // WARUM AUCH IMMER, muss da nochmal ein ready drum herum. Irgendwas ist
         // da was out of sync. Problem trat auf bei Beispiel 11.4 (mit embeded dataset aber...)!
         [self.jQueryOutput appendString:@"  $(window).ready(function() {\n"];
         [self.jQueryOutput appendFormat:@"    (function(){ with (this) { %@ } }).bind(%@)();\n",s,idName];
@@ -2345,16 +2339,16 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         self.attributeCount++;
         NSLog(@"Setting the attribute 'datapath' by accessing a temporary datapointer.");
-        
+
         NSString *dp = [attributeDict valueForKey:@"datapath"];
         if ([dp hasPrefix:@"$"])
             dp = [self makeTheComputedValueComputable:dp];
         else
             dp = [NSString stringWithFormat:@"'%@'",dp];
-        
-        
+
+
         NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
-        
+
         if ([dp rangeOfString:@":"].location != NSNotFound)
         {
             [o appendString:@"\n  // datapath-Attribut mit ':' im String (also ein absoluter XPath).\n"];
@@ -2362,14 +2356,11 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
         else
         {
-            if (!kompiliereSpeziellFuerTaxango)
-            {
-                [o appendString:@"\n  // Ein relativer Pfad! Dann nehme ich Bezug zum letzten 'lastDP_' und dem dort gesetzten Pfad.\n"];
-                [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'text');\n",idName,dp];
-            }
+            [o appendString:@"\n  // Ein relativer Pfad! Dann nehme ich Bezug zum letzten 'lastDP_' und dem dort gesetzten Pfad.\n"];
+            [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'text');\n",idName,dp];
         }
-        
-        
+
+
         // Auf jeden Fall müssen absolute und relative Datapaths GLEICH ausgegeben werden,
         // weil relative sich ja auf die kurz vorher definierten absoluten beziehen.
         // Diese Analogie gilt wohl auch zum Element 'datapath'.
@@ -10241,6 +10232,10 @@ BOOL isJSExpression(NSString *s)
         [self.output appendString:@"    ensureProperCheckboxValueAndThatValueIsTriggered();\n"];
         [self.output appendString:@"\n"];
         [self.output appendString:@"\n"];
+        [self.output appendString:@"    // Extra-SpezialCode für Taxango:\n"];
+        [self.output appendString:@"    // Führe CalcEingaben aus, immer dann wenn sich in inputs oder selects etwas ändert\n"];
+        [self.output appendString:@"    // Ersetzt das 'ondocumentchange' von weiter oben.\n"];
+        [self.output appendString:@"    $('input, select').on('blur', function() { CalcEingaben($(this).val()); } );\n"];
 
 
         [self.output appendString:@"  });\n"];
@@ -12352,17 +12347,60 @@ BOOL isJSExpression(NSString *s)
     "            $(this).triggerHandler('onDocumentChange');\n"
     "        }\n"
     "        this.hasAttr = function(a) {\n"
-    "            return this.hasAttribute(a);\n"
+    "            // Wenn vorhanden, rufen wir das Build-In-hasAttribute() auf.\n"
+    "            if (this.hasAttribute)\n"
+    "            {\n"
+    "                return this.hasAttribute(a);\n"
+    "            }\n"
+    "            // Auch Datasets bekommen das DataElementMixin, sind aber kein Element-Objekt\n"
+    "            // Deswegen hasAttribute selbst implementieren\n"
+    "            else if (this.rawdata !== undefined) // Dann sind wir mit hoher Wahrscheinlichkeit ein Dataset\n"
+    "            {\n"
+    "                return (this[a] !== undefined)\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                throw new TypeError('DataElementMixin - hasAttr() - So far unsupported context.');\n"
+    "            }\n"
+    
     "        }\n"
     "        // hasChildNodes() = Build-in\n"
-    "        // insertbefore() = Build-in\n"
     "        this.removeAttr = function(a) {\n"
-    "            return this.removeAttribute(a);\n"
+    "            // Wenn vorhanden, rufen wir das Build-In-removeAttribute() auf.\n"
+    "            if (this.removeAttribute)\n"
+    "            {\n"
+    "                this.removeAttribute(a);\n"
+    "            }\n"
+    "            // Auch Datasets bekommen das DataElementMixin, sind aber kein Element-Objekt\n"
+    "            // Deswegen removeAttribute selbst implementieren\n"
+    "            else if (this.rawdata !== undefined) // Dann sind wir mit hoher Wahrscheinlichkeit ein Dataset\n"
+    "            {\n"
+    "                if (this[a] !== undefined)\n"
+    "                    delete this[a];\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                throw new TypeError('DataElementMixin - removeAttr() - So far unsupported context.');\n"
+    "            }\n"
     "        }\n"
-    "        // removeChild() = Build-in\n"
     "        // replaceChild() = Build-in\n"
     "        this.setAttr = function(n,v) {\n"
-    "            this.setAttribute(n,v);\n"
+    "            // Wenn vorhanden, rufen wir das Build-In-setAttribute() auf.\n"
+    "            if (this.setAttribute)\n"
+    "            {\n"
+    "                this.setAttribute(n,v);\n"
+    "            }\n"
+    "            // Auch Datasets bekommen das DataElementMixin, sind aber kein Element-Objekt\n"
+    "            // Deswegen setAttribute selbst implementieren - Wir rufen mal nicht setAttribute_ auf,\n"
+    "            // und triggern auch nicht. Sondern setzen die property einfach direkt.\n"
+    "            else if (this.rawdata !== undefined) // Dann sind wir mit hoher Wahrscheinlichkeit ein Dataset\n"
+    "            {\n"
+    "                this[n] = v;\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                throw new TypeError('DataElementMixin - setAttr() - So far unsupported context.');\n"
+    "            }\n"
     "        }\n"
     "        this.setAttrs = function(o) { /* Deprecated */\n"
     "            Object.keys(o).forEach(function(key)\n"
@@ -12378,6 +12416,66 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        this.setNodeName = function(name) { /* Deprecated */\n"
     "            this.setAttribute('nodeName',name);\n"
+    "        }\n"
+    "\n"
+    "\n"
+    "        // insertBefore muss ich erweitern, aber trotzdem das Originale weiter benutzen...\n"
+    "        this.overwriteInsertBeforeAndOverwriteRemoveChildAndAddAttributes_ = function(scope) {\n"
+    "            // we need to add a callback to the original insertBefore-Method\n"
+    "            // define a closure to avoid polluting the global name space\n"
+    "            if (scope.p) // Klappt derzeit nur, wenn wir einen dp-context haben\n"
+    "            (function (s) {\n"
+    "                var oldInsertBefore = s.p.insertBefore;\n"
+    "\n"
+    "                s.p.insertBefore = function (a,b) {\n"
+    "                    // oldInsertBefore(a, b); // Wirft somehow Type Error, deswegen so:\n"
+    "                    oldInsertBefore.apply(this, [a, b]);\n"
+    "\n"
+    "                    updateDataAndDatasetAndTrigger(s,a.nodeName);\n"
+    "                }\n"
+    "            })(scope);\n"
+    "\n"
+    "\n"
+    "            // we need to add a callback to the original removeChild-Method\n"
+    "            // define a closure to avoid polluting the global name space\n"
+    "            if (scope.p) // Klappt derzeit nur, wenn wir einen dp-context haben\n"
+    "            (function (s) {\n"
+    "                var oldRemoveChild = s.p.removeChild;\n"
+    "\n"
+    "                s.p.removeChild = function (a) {\n"
+    "                    if (a === undefined) return;\n"
+    "\n"
+    "                    if (a.nextSibling)\n"
+    "                        var nextNodeName = a.nextSibling.nodeName;\n"
+    "                    else\n"
+    "                        var nextNodeName = 'null';\n"
+    "\n"
+    "                    if (a.nodeName) // Dann ist es tendenziell ein Element-Element und wir können es ohne Error removen\n"
+    "                    {\n"
+    "                        oldRemoveChild.apply(this, [a]);\n"
+    "\n"
+    "                        updateDataAndDatasetAndTrigger(s,nextNodeName);\n"
+    "                    }\n"
+    "                }\n"
+    "            })(scope);\n"
+    "\n"
+    "\n"
+    "            // Einen getter für das Element-Objekt gibt es schon an anderer Stelle\n"
+    "            // Hier nur nachrüsten, wenn wir ein Dataset sind.\n"
+    "            if (scope.rawdata !== undefined) // Dann sind wir mit hoher Wahrscheinlichkeit ein Dataset\n"
+    "                Object.defineProperty(scope, 'attributes_', {\n"
+    "                    get : function() {\n"
+    "                        var namedMap = {};\n"
+    "                        for (var prop in this) {\n"
+    "                            if (this.hasOwnProperty(prop) && typeof this[prop] !== 'function') {\n"
+    "                                namedMap[prop] = this[prop];\n"
+    "                            }\n"
+    "                        }\n"
+    "                        return namedMap;\n"
+    "                    },\n"
+    "                    enumerable : false,\n"
+    "                    configurable : true\n"
+    "                });\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -12482,13 +12580,13 @@ BOOL isJSExpression(NSString *s)
     "        for(var prop in mix) {\n"
     "            el[prop] = mix[prop];\n"
     "        }\n"
+    "        mix.overwriteInsertBeforeAndOverwriteRemoveChildAndAddAttributes_(el);\n"
     "\n"
     "        // lz.DataNodeMixin reinmixen\n"
     "        var mix = new lz.DataNodeMixin();\n"
     "        for(var prop in mix) {\n"
     "            el[prop] = mix[prop];\n"
     "        }\n"
-    "\n"
     "\n"
     "\n"
     "        return el;\n"
@@ -12557,22 +12655,23 @@ BOOL isJSExpression(NSString *s)
     "        this.doRequest = function() {\n"
     "            $(this).triggerHandler('ondata');\n"
     "        }\n"
-    "        // Meiner Meinung nach macht das keinen Sinn, dass ein Dataset die Methode\n"
-    "        // serialize() aufrufen kann. Diese Methode haben nur Datapointer!\n"
-    "        // Aber GFlender ruft serialize() bei Datasets auf.\n"
+    "\n"
+    "        // lz.DataElementMixin reinmixen\n"
+    "        var mix = new lz.DataElementMixin();\n"
+    "        for(var prop in mix) {\n"
+    "            this[prop] = mix[prop];\n"
+    "        }\n"
+    "        mix.overwriteInsertBeforeAndOverwriteRemoveChildAndAddAttributes_(this);\n"
+    "\n"
+    "        // lz.DataNodeMixin reinmixen\n"
+    "        var mix = new lz.DataNodeMixin();\n"
+    "        for(var prop in mix) {\n"
+    "            this[prop] = mix[prop];\n"
+    "        }\n"
+    "        // serialize() von DataNodeMixin überschreiben, da anderer Zugriff bei Datasets\n"
     "        this.serialize = function() {\n"
-    // Wegen Bsp. 37.2 'escapeTextFunction' drum herum
+    "            // Wegen Bsp. 37.2 'escapeTextFunction' drum herum\n"
     "            return escapeTextFunction(this.rawdata);\n"
-    "        }\n"
-    "        // Meiner Meinung nach macht das keinen Sinn, dass ein Dataset die Methode\n"
-    "        // setAttr() aufrufen kann. Diese Methode gibt es gemäß OL-Doku nicht\n"
-    "        // Aber GFlender ruft setAttr() bei Datasets auf.\n"
-    "        this.setAttr = function(a,v) {\n"
-    "            // this.setAttribute_(a,v);\n"
-    "        }\n"
-    "        // Analoges gilt für removeAttr():\n"
-    "        this.removeAttr = function(a,v) {\n"
-    "            //\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -12581,6 +12680,46 @@ BOOL isJSExpression(NSString *s)
     "    this.datapointer = function(xpath,rerun) {\n"
     "        // Jeden neu instanzierte Datapointer sofort speichern, damit ich ihn später wiederfinde und triggern kann\n"
     "        allMyDatapointer_.push(this);\n"
+    "\n"
+    "\n"
+    "        // Wenn ich ein Element einfüge muss ich ein paar Dinge des Datapointers aktualisieren und\n"
+    "        // anderen datapointern die vorgenommene Aktualisierung per 'ondata' mitteilen.\n"
+    "        updateDataAndDatasetAndTrigger = function(dp,addedNodeName) {\n"
+    "            // Anscheinend muss ich unser internes data aktualisieren...\n"
+    "            dp.data = (new XMLSerializer()).serializeToString(dp.p);\n"
+    "\n"
+    "            // ... und ich muss auch das Dataset als solches aktualisieren, weil andere Pointer ein aktualisiertes Dataset erwarten\n"
+    "            dp.dataset.rawdata = '<'+dp.datasetName+'>' + dp.data + '</'+dp.datasetName+'>';\n"
+    "            // Und jetzt alle datapointer triggern, die mit diesem Dataset arbeiten\n"
+    "            for (var i = 0;i<allMyDatapointer_.length;i++)\n"
+    "            {\n"
+    "                // Nur 'ondata' triggern, wenn beide Datapointer auf dem gleichen Dataset beruhen\n"
+    "                if (allMyDatapointer_[i].datasetName === dp.datasetName)\n"
+    "                {\n"
+    "                    // Dann immer 'ondata' triggern\n"
+    "                    if (allMyDatapointer_[i].rerunxpath === true)\n"
+    "                    {\n"
+    "                        $(allMyDatapointer_[i]).triggerHandler('ondata', addedNodeName);\n"
+    "                    }\n"
+    "\n"
+    "                    // Dann 'ondata' nur einmal initial triggern\n"
+    "                    if (allMyDatapointer_[i].rerunxpath === false)\n"
+    "                    {\n"
+    "                        if (!allMyDatapointer_[i].ondataWasTriggeredOnce)\n"
+    "                        {\n"
+    "                            $(allMyDatapointer_[i]).triggerHandler('ondata', addedNodeName);\n"
+    "                            allMyDatapointer_[i].ondataWasTriggeredOnce = true;\n"
+    "                        }\n"
+    "                    }\n"
+    "                }\n"
+    "\n"
+    "                // Nur 'datasethaschanged' triggern, wenn beide Datapointer auf dem gleichen Dataset beruhen\n"
+    "                if (allMyDatapointer_[i].datasetName === dp.datasetName)\n"
+    "                {\n"
+    "                    $(allMyDatapointer_[i]).triggerHandler('datasethaschanged', addedNodeName);\n"
+    "                }\n"
+    "            }\n"
+    "        }\n"
     "\n"
     "\n"
     "        this.getElementsXPath = function(el)\n"
@@ -12800,15 +12939,15 @@ BOOL isJSExpression(NSString *s)
     "                // lz.DataElementMixin reinmixen\n"
     "                var mix = new lz.DataElementMixin();\n"
     "                    for(var prop in mix) {\n"
-    "                    this.p[prop] = mix[prop];\n"
+    "                        this.p[prop] = mix[prop];\n"
     "                }\n"
+    "                mix.overwriteInsertBeforeAndOverwriteRemoveChildAndAddAttributes_(this);\n"
     "\n"
     "                // lz.DataNodeMixin reinmixen\n"
     "                var mix = new lz.DataNodeMixin();\n"
     "                for(var prop in mix) {\n"
     "                    this.p[prop] = mix[prop];\n"
     "                }\n"
-    "\n"
     "            }\n"
     "\n"
     "            if (this.p)\n"
@@ -13167,7 +13306,7 @@ BOOL isJSExpression(NSString *s)
     "            return undefined;\n"
     "        }\n"
     "        this.addNodeFromPointer = function(pointer) {\n"
-    "            if (this.lastNode === undefined) // Dringend ToDo\n"
+    "            if (this.p === undefined) // Dringend ToDo\n"
     "                return; //throw new TypeError('function datapointer.addNodeFromPointer - this.lastNode should not be undefined. Can not add Pointer to an undefined datapointer.');\n"
     "            if (pointer === undefined)\n"
     "                throw new TypeError('function datapointer.addNodeFromPointer - pointer should not be undefined. Can not add an undefined Pointer.');\n"
@@ -13214,19 +13353,8 @@ BOOL isJSExpression(NSString *s)
     "                this.p.lastChild.appendChild(newTextNode);\n"
     "            }\n"
     "\n"
-    "            // Anscheinend muss ich unser internes data aktualisieren\n"
-    "            this.data = (new XMLSerializer()).serializeToString(this.p);\n"
-    "            // Ich muss auch das Dataset als solches aktualisieren, weil andere Pointer ein aktualisiertes Dataset erwarten\n"
-    "            this.dataset.rawdata = '<'+this.datasetName+'>' + this.data + '</'+this.datasetName+'>';\n"
-    "            // Und jetzt alle datapointer triggern, die mit diesem Dataset arbeiten\n"
-    "            for (var i = 0;i<allMyDatapointer_.length;i++)\n"
-    "            {\n"
-    "                // Nur 'ondata' triggern, wenn beide Datapointer auf dem gleichen Dataset beruhen\n"
-    "                if (allMyDatapointer_[i].datasetName === this.datasetName)\n"
-    "                {\n"
-    "                    $(allMyDatapointer_[i]).triggerHandler('ondata', name);\n"
-    "                }\n"
-    "            }\n"
+    "\n"
+    "            updateDataAndDatasetAndTrigger(this,name);\n"
     "\n"
     "\n"
     "            // return(s) the new node as lz.DataElement\n"
@@ -13296,7 +13424,7 @@ BOOL isJSExpression(NSString *s)
     "    /////////////////////////////////////////////////////////\n"
     //    "LzDelegate = function(scope,method) { var fn = window[method]; return fn.bind(scope); }\n"
     //     Beispiel 2.3 in Chapter 27 klappt nur so:
-    "    this.Delegate = function(scope,method) {\n"
+    "    this.Delegate = function(scope,method,eventSender,eventName) {\n"
     "        var fn = scope[method];\n"
     "        if (fn === undefined)\n"
     "            throw new TypeError('function lz.Delegate - The given method was not found in the given scope. Method not yet defined?');\n"
@@ -14471,7 +14599,8 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        // Gemäß Bsp. 'lz.ReplicationManager' ist das hier falsch... (Deswegen testweise mal hier rausgenommen)\n"
     "        // Aber gemäß Bsp. 37.11 muss es wohl rein (oder es gilt nur beim instanzieren von Klassen könnte auch sein)\n"
-    "        $('#'+me.id+'_repl'+c).get(0).setAttribute_(attributeName,value);\n"
+    "        // Gemäß Bsp. 37.19 muss es aber doch raus... (weil dort das 'mouseover', 'mouseout' und 'click' individuell gilt!)\n"
+    "        //$('#'+me.id+'_repl'+c).get(0).setAttribute_(attributeName,value);\n"
     "        c++;\n"
     "    }\n"
     "}\n"
@@ -14731,11 +14860,11 @@ BOOL isJSExpression(NSString *s)
     "var applyDataFunction = function(data) {\n"
     "}\n"
     "\n"
-    "// Derzeit bewusst nicht implementiert, damit ich testen kann ob sie überschrieben wurde, und (nur) dann ausführe\n"
-    "// HTMLDivElement.prototype.applyData = applyDataFunction;\n"
-    "// HTMLInputElement.prototype.applyData = applyDataFunction;\n"
-    "// HTMLSelectElement.prototype.applyData = applyDataFunction;\n"
-    "// HTMLButtonElement.prototype.applyData = applyDataFunction;\n"
+    //"// Derzeit bewusst nicht implementiert, damit ich testen kann ob sie überschrieben wurde, und (nur) dann ausführe\n"
+    "HTMLDivElement.prototype.applyData = applyDataFunction;\n"
+    "HTMLInputElement.prototype.applyData = applyDataFunction;\n"
+    "HTMLSelectElement.prototype.applyData = applyDataFunction;\n"
+    "HTMLButtonElement.prototype.applyData = applyDataFunction;\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// completeInstantiation()                             //\n"
@@ -15019,6 +15148,27 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// getSelectionPosition()                              //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// ToDo: Wenn das Element keinen Focus hat, eigentlich -1 zurückliefern\n"
+    "var getSelectionPositionFunction = function () {\n"
+    "    if ('selectionStart' in this) {\n"
+    "        // Standard-compliant browsers\n"
+    "        return this.selectionStart;\n"
+    "    }\n"
+    "    else if (document.selection) {\n"
+    "        // IE\n"
+    "        this.focus();\n"
+    "        var sel = document.selection.createRange();\n"
+    "        var selLen = document.selection.createRange().text.length;\n"
+    "        sel.moveStart('character', -this.value.length);\n"
+    "        return sel.text.length - selLen;\n"
+    "    }\n"
+    "}\n"
+    "HTMLInputElement.prototype.getSelectionPosition = getSelectionPositionFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// getTextHeight()                                     //\n"
     "/////////////////////////////////////////////////////////\n"
     "var getTextHeightFunction = function () {\n"
@@ -15074,6 +15224,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "// Ziemlich seltsame Geschichte, aber formatToString hängt iwie auch bei <text> mit drin\n"
     "HTMLDivElement.prototype.formatToString = LzFormatter.prototype.formatToString;\n"
+    "// Und auch im Prototype von String...\n"
+    "String.prototype.formatToString = LzFormatter.prototype.formatToString;\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -16640,7 +16792,7 @@ BOOL isJSExpression(NSString *s)
     "var setAbsoluteDataPathIn = function (el,path) {\n"
     "    if (typeof el === 'string')\n"
     "    {\n"
-    "        // Falls ich über triggerHandler('ondata') aufgerufen wurde (s. u.), nehme ich einen 'string' entgegen, da var sonst evtl. ausgetauscht wurde\n"
+    "        // Falls ich über triggerHandler('datasethaschanged') aufgerufen wurde (s. u.), nehme ich einen 'string' entgegen, da var sonst evtl. ausgetauscht wurde\n"
     "        el = $('#'+el).get(0);\n"
     "    }\n"
     "\n"
@@ -16775,9 +16927,9 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "    }\n"
     "\n"
-    "    $(lastDP_).off('ondata.setAbsoluteDP');\n"
+    "    $(lastDP_).off('datasethaschanged.setAbsoluteDP');\n"
     "    // Ich muss hier mit el.id arbeiten, falls das Objekt selber ausgetauscht wurde\n"
-    "    $(lastDP_).on('ondata.setAbsoluteDP', function() { setAbsoluteDataPathIn(el.id,path); });\n"
+    "    $(lastDP_).on('datasethaschanged.setAbsoluteDP', function() { setAbsoluteDataPathIn(el.id,path); });\n"
     "}\n"
     "\n"
     "\n"
@@ -16788,7 +16940,7 @@ BOOL isJSExpression(NSString *s)
     "var setRelativeDataPathIn = function (el,path,pointer,attr) {\n"
     "    if (typeof el === 'string')\n"
     "    {\n"
-    "        // Falls ich über triggerHandler('ondata') aufgerufen wurde (s. u.), nehme ich einen 'string' entgegen, da var sonst evtl. ausgetauscht wurde\n"
+    "        // Falls ich über triggerHandler('datasethaschanged') aufgerufen wurde (s. u.), nehme ich einen 'string' entgegen, da var sonst evtl. ausgetauscht wurde\n"
     "        el = $('#'+el).get(0);\n"
     "    }\n"
     "\n"
@@ -16829,9 +16981,9 @@ BOOL isJSExpression(NSString *s)
     "        $(pointer).off('datapathhaschanged.setRelativeDP');\n"
     "        $(pointer).on('datapathhaschanged.setRelativeDP', function() { el.setAttribute_(attr,pointer.xpathQuery(path)); });\n"
     "    }\n"
-    "    $(pointer).off('ondata.setRelativeDP');\n"
+    "    $(pointer).off('datasethaschanged.setRelativeDP');\n"
     "    // Ich MUSS hier über el.id gehen, also einen string, weil das Element selber evtl. ausgetauscht wurde (von setAbsoluteDP)\n"
-    "    $(pointer).on('ondata.setRelativeDP', function() { setRelativeDataPathIn(el.id,path,pointer,attr); });\n"
+    "    $(pointer).on('datasethaschanged.setRelativeDP', function() { setRelativeDataPathIn(el.id,path,pointer,attr); });\n"
     "}\n"
     "\n"
     "\n"
@@ -17139,6 +17291,43 @@ BOOL isJSExpression(NSString *s)
     "        $(obj).on('on'+prop+namespace, Function(func));\n"
     "    }\n"
     "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hilfsfunktion, um MouseEvents zu setzen             //\n"
+    "// Als Funktion, damit hover nur einmal gesetzt wird   //\n"
+    "// und Geschwister berücksichtigt werden können        //\n"
+    "// addMouseEventTo()                                   //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var addMouseEventTo = function (el,event,func,showHandCursor) {\n"
+    "    $('#'+el).css('pointer-events','auto');\n"
+    "\n"
+    "    if (showHandCursor && $('#'+el).data('mousechangeOnHoverAndPointerEventsAlreadySet') == undefined)\n"
+    "    {\n"
+    "        $('#'+el).hover(function(e) {\n"
+    "            if (this == e.target)\n"
+    "                $(this).css('cursor','pointer');\n"
+    "        }, function(e) {\n"
+    "            if (this == e.target)\n"
+    "                $(this).css('cursor','auto');\n"
+    "        });\n"
+    "\n"
+    "        $('#'+el).data('mousechangeOnHoverAndPointerEventsAlreadySet',true);\n"
+    "    }\n"
+    "\n"
+    "    // Und schließlich das eigentliche MouseEvent setzen\n"
+    "    $('#'+el).on(event, func);\n"
+    "\n"
+    "    // Falls es geklonte Geschwister gibt:\n"
+    "    var c = 2;\n"
+    "    while ($('#'+el+'_repl'+c).length)\n"
+    "    {\n"
+    "        // Gemäß Bsp. 37.19 muss das rein\n"
+    "        addMouseEventTo(el+'_repl'+c,event,func,showHandCursor);\n"
+    "        c++;\n"
+    "    }\n"
+    "}\n"
+    "\n"
     "\n"
     "\n"
     "\n";

@@ -7229,7 +7229,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
 
         NSString *benutzMich = @""; // Um nur einen s für dataset, datapointer und datapath zu haben
-        BOOL wirBrauchenWith = NO;
+
 
         if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
         {
@@ -7240,9 +7240,6 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         }
         else
         {
-            // Dann sind wir in einem anderen Scope und brauchen 'with'
-            wirBrauchenWith = YES;
-
             // Folgendes Szenario: Wenn eine selbst definierte Klasse eine Methode definiert,
             // aber gleichzeitig diese erbt, dann hat die selbst definierte Vorrang! Deswegen
             // überschreibe ich mit der Methode innerhalb der Klasse nicht! Dazu teste ich
@@ -7292,12 +7289,19 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
         [o appendString:[attributeDict valueForKey:@"name"]];
         [o appendFormat:@" = function(%@)\n  {\n",args];
-        if (wirBrauchenWith)
+
+        if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"] || [elemTyp isEqualToString:@"datapath"])
         {
-            if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"] || [elemTyp isEqualToString:@"datapath"])
-                [o appendFormat:@"    with (%@) {\n",benutzMich];
-            else
-                [o appendFormat:@"    with (%@) {\n",elem];
+            [o appendFormat:@"    with (%@) {\n",benutzMich];
+        }
+        else if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
+        {
+            // Auch dann brauche ich unbedingt 'with'! Damit er auf die in 'canvas.x' gesetzten globalen Vars zugreifen kann
+            [o appendFormat:@"    with (canvas) {\n"];
+        }
+        else
+        {
+            [o appendFormat:@"    with (%@) {\n",elem];
         }
 
         // Falls es default values für die Argumente gibt, muss ich diese hier setzen
@@ -7782,6 +7786,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
         // Falls ich es ändere: Analog auch beim schließenden Tag ändern!
         // jQueryOutput0! Damit die Handler bekannt sind, bevor diese getriggert werden! (Bsp. 30.3)
         // Problem: Ladezeit verdoppelt sich... weil er dann viel mehr triggern kann... Erst iwie das triggern optimieren
+        // To Do Later
         [self.jQueryOutput appendString:o];
     }
 
@@ -9641,6 +9646,7 @@ BOOL isJSExpression(NSString *s)
         // Falls ich es ändere: Analog auch beim öffnenden Tag ändern!
         // jQueryOutput0! Damit die Handler bekannt sind, bevor diese getriggert werden! (Bsp. 30.3)
         // Problem: Ladezeit verdoppelt sich... weil er dann viel mehr triggern kann... Erst iwie das triggern optimieren
+        // To Do Later
         [self.jQueryOutput appendString:o];
 
 
@@ -9686,7 +9692,8 @@ BOOL isJSExpression(NSString *s)
 
 
         // Damit er in jeder Code-Zeile korrekt einrückt
-        s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\n   "];
+        s = [NSString stringWithFormat:@"  %@",s]; // Erste Zeile um 2 Leerzeichen ergänzen
+        s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\n     "];
 
 
         // Bei Methoden in 'drawview' muss ich nochmal extra was machen.
@@ -9708,22 +9715,20 @@ BOOL isJSExpression(NSString *s)
         [o appendString:s];
 
 
+        // Einmal extra schließen wegen 'with (x)'
+        [o appendString:@"\n    }"];
+        [o appendString:@"\n  }\n"];
+
+
         // Falls wir in canvas/library sind, dann muss es nicht nur global verfügbar sein,
         // sondern auch über 'canvas.' ansprechbar sein.
         if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"canvas"] ||
             [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"library"])
         {
-            [o appendString:@"\n  }\n"];
             [o appendString:@"  // Diese Methode ebenfalls an canvas binden\n"];
             [o appendFormat:@"  canvas.%@ = %@;\n",self.lastUsedNameAttributeOfMethod,self.lastUsedNameAttributeOfMethod];
         }
-        else
-        {
-            // Dann hatten wir wegen anderem scope ein 'with (x) {' gesetzt.
-            // Dieses müssen wir hier einmal extra schließen
-            [o appendString:@"\n    }"];
-            [o appendString:@"\n  }\n"];
-        }
+
 
         if ([self.lastUsedNameAttributeOfMethod isEqualToString:@"init"])
         {
@@ -10068,8 +10073,6 @@ BOOL isJSExpression(NSString *s)
 
     //[self.output appendString:@"  function dlg()\n  {\n    // Extern definiert\n    this.open = open;\n    // Intern definiert (beides möglich)\n"];
     // Name kann auch doppelt auftauchen beim definieren einer JS-Function
-    //[self.output appendString:@"     this.completeInstantiation = function completeInstantiation() { };\n  }\n"];
-    //[self.output appendString:@"  function open()\n  {\n    alert('Willst du wirklich deine Ehefrau löschen? Usw...');\n  }\n"];
 
 
     // Normale Javascript-Anweisungen
@@ -12360,6 +12363,10 @@ BOOL isJSExpression(NSString *s)
     "            {\n"
     "                return (this[a] !== undefined)\n"
     "            }\n"
+    "            else if (this.nodeType == 9) // Wenn wir ein Dokument-Knoten sind, können wir scheinbar auch Attribute abfragen\n"
+    "            {\n"
+    "                return (this[a] !== undefined)\n"
+    "            }\n"
     "            else\n"
     "            {\n"
     "                throw new TypeError('DataElementMixin - hasAttr() - So far unsupported context.');\n"
@@ -12380,6 +12387,11 @@ BOOL isJSExpression(NSString *s)
     "                if (this[a] !== undefined)\n"
     "                    delete this[a];\n"
     "            }\n"
+    "            else if (this.nodeType == 9) // Wenn wir ein Dokument-Knoten sind, können wir scheinbar auch Attribute entfernen\n"
+    "            {\n"
+    "                if (this[a] !== undefined)\n"
+    "                    delete this[a];\n"
+    "            }\n"
     "            else\n"
     "            {\n"
     "                throw new TypeError('DataElementMixin - removeAttr() - So far unsupported context.');\n"
@@ -12396,6 +12408,10 @@ BOOL isJSExpression(NSString *s)
     "            // Deswegen setAttribute selbst implementieren - Wir rufen mal nicht setAttribute_ auf,\n"
     "            // und triggern auch nicht. Sondern setzen die property einfach direkt.\n"
     "            else if (this.rawdata !== undefined) // Dann sind wir mit hoher Wahrscheinlichkeit ein Dataset\n"
+    "            {\n"
+    "                this[n] = v;\n"
+    "            }\n"
+    "            else if (this.nodeType == 9) // Wenn wir ein Dokument-Knoten sind, können wir scheinbar auch Attribute setzen\n"
     "            {\n"
     "                this[n] = v;\n"
     "            }\n"
@@ -12661,9 +12677,10 @@ BOOL isJSExpression(NSString *s)
     "            this.queryParamKeys.push(key);\n"
     "            this.queryParamVals.push(val);\n"
     "        }\n"
+    "        // returns a datapointer that points to the root of the dataset.\n"
     "        this.getPointer = function() {\n"
-    "            var pointer = new lz.datapointer(this.name+':'+'/'+'ToDo');\n"
-    "            alert('Just get this damn pointer');\n"
+    "            var pointer = new lz.datapointer(this.name + ':/',false);\n"
+    "            alert('Did it work? ' + pointer.p + ' should not be undefined.');\n"
     "            return pointer;\n"
     "        }\n"
     "        this.doRequest = function() {\n"
@@ -12703,7 +12720,17 @@ BOOL isJSExpression(NSString *s)
     "            dp.data = (new XMLSerializer()).serializeToString(dp.p);\n"
     "\n"
     "            // ... und ich muss auch das Dataset als solches aktualisieren, weil andere Pointer ein aktualisiertes Dataset erwarten\n"
-    "            dp.dataset.rawdata = '<'+dp.datasetName+'>' + dp.data + '</'+dp.datasetName+'>';\n"
+    "\n"
+    "            // hmmmm, bei Bsp. 37.15 muss ich datasetName ergänzen. Im Taxango-Code nicht... why?\n"
+    "            // Diese Abfrage ist noch unsauber. Bricht, wenn ein Dataset mit 2 gleich benannten verschachtelten Tags startet\n"
+    "            if (dp.data.startsWith('<'+dp.datasetName+'>'))\n"
+    "            {\n"
+    "                dp.dataset.rawdata = dp.data;\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                dp.dataset.rawdata = '<'+dp.datasetName+'>' + dp.data + '</'+dp.datasetName+'>';\n"
+    "            }\n"
     "\n"
     "            // Und jetzt alle datapointer triggern, die mit diesem Dataset arbeiten\n"
     "            for (var i = 0;i<allMyDatapointer_.length;i++)\n"
@@ -12770,10 +12797,16 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "        // Hardcore-Code..... Diese Funktion ist das Arbeitstier\n"
-    "        this.setXPath = function(xpath_) {\n"
+    "        this.setXPath = function(xpath_,historischSkipReadingDataset) {\n"
     "            if (this.xpath === undefined || this.xpath == null) {\n"
     "                // Dann noch nachträglich initialisieren\n"
     "                this.init(xpath_);\n"
+    "            }\n"
+    "\n"
+    "            // Neu: So oder so muss ich das zu Grunde liegende Dataset neu einlesen, falls dieses zwischenzeitlich geändert wurde\n"
+    "            if (!historischSkipReadingDataset)\n"
+    "            {\n"
+    "                this.refreshXMLFromDataset();\n"
     "            }\n"
     "\n"
     "            var pfad = xpath_.substring(xpath_.indexOf(':')+1,xpath_.length);\n"
@@ -12945,8 +12978,8 @@ BOOL isJSExpression(NSString *s)
     "            }\n"
     "\n"
     "            this.lastNode = node;\n"
-    "            this.lastNodeText = nodeValue;\n"
     "            this.p = node; // p IST immer die letzte node\n"
+    "            this.lastNodeText = nodeValue;\n"
     "            if (this.p)\n"
     "            {\n"
     "                // lz.DataElementMixin reinmixen\n"
@@ -12971,15 +13004,15 @@ BOOL isJSExpression(NSString *s)
     "            this.lastQueryNumberOfNodesPointingTo = numberOfNodesPointingTo;\n"
     "\n"
     "            // Weil es kann undefined zurückliefern, oder boolescher Wert\n"
-    "            if (this.lastNode === undefined) return undefined;\n"
-    "            return (this.lastNode !== undefined);\n"
+    "            if (this.p === undefined) return undefined;\n"
+    "            return (this.p !== undefined);\n"
     "        }\n"
     "\n"
     "\n"
     "        // Normalweise wird beim anlegen alles initialisiert anhand des Arguments xpath\n"
     "        // Es gibt jedoch eine Stelle im GFlender-Code (CalcUmzugskostenpauschale)\n"
     "        // wo Quatsch übergeben wird als Argument. Das muss ich abfangen.\n"
-    "        // **private** (iwie privat machen)\n"
+    "        // **private**\n"
     "        this.init = function(xpath) {\n"
     "            this.xpath = xpath;\n"
     "\n"
@@ -12987,7 +13020,14 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            this.dataset = window[this.datasetName];\n"
     "\n"
+    "            this.refreshXMLFromDataset();\n"
+    "        }\n"
     "\n"
+    "\n"
+    "        // xml-Initialisierung als eigene Methode, da setXPath() bei jedem Aufruf dieses aktualisieren muss\n"
+    "        // falls sich der Inhalt des Datasets durch andere Pointer, die ebenfalls damit arbeiten, geändert hat.\n"
+    "        // **private**\n"
+    "        this.refreshXMLFromDataset = function() {\n"
     "            // Standardfall:\n"
     "            if (this.dataset && this.dataset.rawdata)\n"
     "            {\n"
@@ -13020,7 +13060,7 @@ BOOL isJSExpression(NSString *s)
     //"\n"
     "        this.rerunxpath = rerun; // Kann eventuell manchmal noch 'undefined' sein\n"
     "\n"
-    "        this.lastNode = undefined; // Ergebnis wird von setXPath hier reingeschrieben\n"
+    "        this.lastNode = null; // Ergebnis wird von setXPath hier reingeschrieben\n"
     "        this.lastNodeText = null; // Ergebnis wird von setXPath hier reingeschrieben\n"
     "        this.data = null;\n"
     "        this.p = null; // Ergebnis wird von setXPath hier reingeschrieben\n"
@@ -13056,8 +13096,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            // alte 'Variablen' sichern\n"
     "            var lastNode = this.lastNode;\n"
-    "            var lastNodeText = this.lastNodeText;\n"
     "            var lastP = this.p;\n"
+    "            var lastNodeText = this.lastNodeText;\n"
     "            var lastData = (new XMLSerializer()).serializeToString(this.p);\n"
     "\n"
     "\n"
@@ -13084,8 +13124,10 @@ BOOL isJSExpression(NSString *s)
     "            // abgefragt hat, dann diesen zurückgeben, ansonsten den Knoten selber,\n"
     "            // ansonsten null (Rückwärts-Logik, wenn zutreffend, wird überschrieben)\n"
     "            var returnValue = null;\n"
-    "            if (this.lastNode) \n"
-    "                returnValue = this.lastNode;\n"
+    "            if (this.p) \n"
+    "            {\n"
+    "                returnValue = this.p;\n"
+    "            }\n"
     "            // Wenn Text da ist und es eine Textnode ist\n"
     "            // hmmm, 3. Bedingung somehow broken seit Eliminierung von last_node_type\n"
     "            if (this.p && this.p.nodeValue /* && this.getNodeType() == 3 */) \n"
@@ -13097,15 +13139,19 @@ BOOL isJSExpression(NSString *s)
     "            if (query.endsWith('/text()'))\n"
     "            {\n"
     "                if (this.lastNodeText)\n"
+    "                {\n"
     "                    returnValue = this.lastNodeText;\n"
+    "                }\n"
     "                else\n"
+    "                {\n"
     "                    returnValue = '';\n"
+    "                }\n"
     "            }\n"
     "\n"
     "            // alte 'pointer' wiederherstellen\n"
     "            this.lastNode = lastNode;\n"
-    "            this.lastNodeText = lastNodeText;\n"
     "            this.p = lastP;\n"
+    "            this.lastNodeText = lastNodeText;\n"
     "            this.data = lastData;\n"
     "\n"
     "            // ToDo - Seit auswerten BDSinputgrid\n"
@@ -13183,15 +13229,15 @@ BOOL isJSExpression(NSString *s)
     "            return window[this.xpath.substring(0,this.xpath.indexOf(':'))];\n"
     "        }\n"
     "        this.getNodeAttribute = function(attr) {\n"
-    "            if (this.lastNode)\n"
-    "                return this.lastNode.getAttribute(attr);\n"
+    "            if (this.p)\n"
+    "                return this.p.getAttribute(attr);\n"
     "            else\n"
     "                return undefined;\n"
     "        }\n"
     "        this.selectNext = function() {\n"
     "            // Damit Beispiel lz.DataNodeMixin funzt, hier mit p arbeiten, falls p gesetzt\n"
     "            // p wird gesondert gesetzt in this.setPointer(). Ansonsten ist es eh immer this.lastNode.\n"
-    "            // Irgendwas stimmt noch nicht ganz (evtl. gelöst jetzt wegen einem hinzugefügten return false und Ergänzung von this.lastNode\n"
+    "            // Irgendwas stimmt noch nicht ganz (evtl. gelöst jetzt wegen einem hinzugefügten return false)\n"
     "            if (this.p)\n"
     "            {\n"
     "                if (this.p.nextSibling != null)\n"
@@ -13308,10 +13354,10 @@ BOOL isJSExpression(NSString *s)
     "            return this.lastNode != null;\n"
     "        }\n"
     "        this.deleteNode = function() {\n"
-    "            if (this.lastNode)\n"
+    "            if (this.p)\n"
     "            {\n"
     "                // Zwischenspeichern\n"
-    "                var toDelete = this.lastNode;\n"
+    "                var toDelete = this.p;\n"
     "                // Auf Grundlage der zu löschenden Node eins vor\n"
     "                // selectNext() aktualisiert gleichzeitig auch die internen Variablen\n"
     "                var result = this.selectNext();\n"
@@ -13320,15 +13366,15 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "                // selectNext() aktualisiert gleichzeitig auch die internen Variablen\n"
     "                if (result)\n"
-    "                    return this.lastNode;\n"
+    "                    return this.p;\n"
     "                else\n"
     "                    return null;\n"
     "            }\n"
     "            return undefined;\n"
     "        }\n"
     "        this.addNodeFromPointer = function(pointer) {\n"
-    "            if (!this.p) // Dringend ToDo\n"
-    "                return; //throw new TypeError('function datapointer.addNodeFromPointer - this.lastNode should not be undefined. Can not add Pointer to an undefined datapointer.');\n"
+    "            if (!this.p)\n"
+    "                throw new TypeError('function datapointer.addNodeFromPointer - this.lastNode should not be undefined. Can not add Pointer to an undefined datapointer.');\n"
     "            if (!pointer)\n"
     "                throw new TypeError('function datapointer.addNodeFromPointer - pointer should not be undefined. Can not add an undefined Pointer.');\n"
     "\n"
@@ -13352,7 +13398,7 @@ BOOL isJSExpression(NSString *s)
     "            }\n"
     "            return null;\n"
     "        }\n"
-    "        this.addNode = function(name,text,attrs) { // oi + trigger\n"
+    "        this.addNode = function(name,text,attrs) { // oi\n"
     "            if (!this.p)\n"
     "            {\n"
     "                alert('datapointer.addNode with undefined this.p - This is still to handle - ToDo');\n"
@@ -13403,19 +13449,11 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            this.xml = getXMLDocumentFromString(p.serialize());\n"
     "\n"
-    "            this.setXPath(this.xpath);\n"
+    "            this.setXPath(this.xpath,true);\n"
     "\n"
     "            // In dem Fall p direkt übernehmen, sonst gehen zu viele Informationen verloren (z. B. parentNode)\n"
     "            this.p = p;\n"
     "        }\n"
-    // Doesn't work with Example lz.DataNodeMixin
-    //"        // Ich hatte 'p' die ganze Zeit schon. p ist wohl nichts anderes als this.lastNode!\n"
-    //"        Object.defineProperty(this, 'p', {\n"
-    //"            get : function(){ return this.lastNode; },\n"
-    //"            set : function(newValue){ this.lastNode = newValue; $(this).triggerHandler('onp', newValue); },\n"
-    //"            enumerable : false,\n"
-    //"            configurable : true\n"
-    //"        });\n"
     "\n"
     "\n"
     "        // 'datapath' erbt eigentlich alles von 'datapointer'. Das wird aber jetzt zu kompliziert\n"
@@ -15191,7 +15229,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// getSelectionPosition()                              //\n"
     "/////////////////////////////////////////////////////////\n"
-    "// ToDo: Wenn das Element keinen Focus hat, eigentlich -1 zurückliefern\n"
+    "// To Do: Wenn das Element keinen Focus hat, eigentlich -1 zurückliefern\n"
     "var getSelectionPositionFunction = function () {\n"
     "    if ('selectionStart' in this) {\n"
     "        // Standard-compliant browsers\n"

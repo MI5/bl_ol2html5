@@ -4048,11 +4048,27 @@ didStartElement:(NSString *)elementName
             name = [attributeDict valueForKey:@"id"];
 
 
+        // Wenn wir in einer Klasse sind, binden wir den Datapointer nicht an nix, sondern an die Klasse!
+        BOOL wirSindInEinerKlasse = NO;
+        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+        {
+            wirSindInEinerKlasse = YES;
+        }
+
+
         // Ich lege jeden datapointer als globales Objekt an, auf welches zugegriffen werden kann
         if ([name length] > 0)
         {
-            [o appendString:@"\n  // Ein Datapointer (bewusst ohne var, damit global verfügbar)\n"];
-            [o appendFormat:@"  %@ = new lz.datapointer(%@,%@);\n",name,dp,rerunxpath];
+            if (wirSindInEinerKlasse)
+            {
+                [o appendString:@"\n  // Ein Datapointer, der zu einer Klasse gehört\n"];
+                [o appendFormat:@"  %@.%@ = new lz.datapointer(%@,%@);\n",ID_REPLACE_STRING,name,dp,rerunxpath];
+            }
+            else
+            {
+                [o appendString:@"\n  // Ein Datapointer (bewusst ohne var, damit global verfügbar)\n"];
+                [o appendFormat:@"  %@ = new lz.datapointer(%@,%@);\n",name,dp,rerunxpath];
+            }
         }
         else
         {
@@ -4060,8 +4076,16 @@ didStartElement:(NSString *)elementName
 
             name = [NSString stringWithFormat:@"pointerWithoutName%ld",self.pointerWithoutNameZaehler];
 
-            [o appendString:@"\n  // Ein Datapointer ohne 'name'- oder 'id'-Attribut. Wohl nur um ein 'ondata'-Handler daran zu binden oder so... hmmm\n"];
-            [o appendFormat:@"  %@ = new lz.datapointer(%@,%@);\n",name,dp,rerunxpath];
+            if (wirSindInEinerKlasse)
+            {
+                [o appendString:@"\n  // Ein Datapointer, der zu einer Klasse gehört\n"];
+                [o appendFormat:@"  %@.%@ = new lz.datapointer(%@,%@);\n",ID_REPLACE_STRING,name,dp,rerunxpath];
+            }
+            else
+            {
+                [o appendString:@"\n  // Ein Datapointer ohne 'name'- oder 'id'-Attribut. Wohl nur um ein 'ondata'-Handler daran zu binden oder so... hmmm\n"];
+                [o appendFormat:@"  %@ = new lz.datapointer(%@,%@);\n",name,dp,rerunxpath];
+            }
         }
 
         // Falls gleich eine Methode oder ein Handler kommt, die sich an diesen Pointer binden möchte
@@ -6334,7 +6358,7 @@ if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:
 
             if ([[attributeDict valueForKey:@"selected"] isEqualToString:@"true"])
             {
-                // ToDo
+                // To Do - Nicht Taxango-relevant.
                 //[self.jQueryOutput appendString:@"\n  // Dieser Tab ist selected\n"];
                 //[self.jQueryOutput appendFormat:@"  $('#%@').tabs('select', '#%@');\n",self.lastUsedTabSheetContainerID,geradeVergebeneID];
             }
@@ -13154,12 +13178,6 @@ BOOL isJSExpression(NSString *s)
     "            this.lastNodeText = lastNodeText;\n"
     "            this.data = lastData;\n"
     "\n"
-    "            // ToDo - Seit auswerten BDSinputgrid\n"
-    "            if (returnValue == null) returnValue = {}; // Bei null kann er die beiden Sachen sonst net adden\n"
-    "            returnValue.setAttr = function(a,b) {};\n"
-    "            returnValue.removeAttr = function(a) {};\n"
-    "            // -> Mögliche Lösung das mixin hier reinmixen von oben, welches ja setAttr() und removeAttr() bereitstellt\n"
-    "\n"
     "            return returnValue;\n"
     "        }\n"
     "        this.setNodeText = function(text) {\n"
@@ -13458,11 +13476,43 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        // 'datapath' erbt eigentlich alles von 'datapointer'. Das wird aber jetzt zu kompliziert\n"
     "        // Einfach die Methoden von 'datapath' hier noch ergänzen und immer mit 'datapointer' arbeiten.\n"
-    "        this.updateData = function() {\n"
+    "        this.updateData = function(recursion) { // somewhat oi\n"
     "            // Soll einen datapath ( = this) mit dem als Arg übergebenem Wert updaten //\n"
     "\n"
     "            // Somewhat dringend ToDo\n"
     "            // alert('Do I get in here?'); // Yes, more than 100 times\n"
+    "\n"
+    "            if (typeof(recursion)==='undefined') recursion = false;\n"
+    "\n"
+    "            if (!recursion && this.p) {\n"
+    "                this.p.__LZlockFromUpdate(this)\n"
+    "            };\n"
+    "\n"
+    /*
+        var p = this.parsedPath ? this.parsedPath.operator : null;
+        if (ppdo_$1 != null) {
+            var dat_$2 = this.immediateparent.updateData();
+            if (dat_$2 !== void 0) {
+                if (ppdo_$1 == "name") {
+                    this.setNodeName(dat_$2)
+                } else if (ppdo_$1 == "text") {
+                    this.setNodeText(dat_$2)
+                } else if (ppdo_$1 == "attributes") {
+                    this.p.$lzc$set_attributes(dat_$2)
+                } else {
+                    this.setNodeAttribute(ppdo_$1.substring(11), dat_$2)
+                }}};
+    "\n"
+        var depChildren = this.__LZdepChildren;
+        if (depChildren != null) {
+            for (var i = 0;i < depChildren.length;i++) {
+                depChildren[i].__LZupdateData(true)
+            }};
+        if (!recursion && this.p) {
+            this.p.__LZunlockFromUpdate(this)
+        }
+*/
+
     "        }\n"
     "    }\n"
     "\n"
@@ -18361,7 +18411,8 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'basegrid';\n"
     "  this.inherit = new oo.basecomponent();\n"
     "\n"
-    "  this.selfDefinedAttributes = { bgcolor0: null, bgcolor1: null, columns: null, contentdatapath: '*', hilite: null, multiselect: true, rowheight: null, selectable: true, showhlines: false, shownitems: -1, showvlines: false, sizetoheader: null, spacing: 0 }\n"
+    // columns muss hier ein Array sein und nicht 'null', sonst Absturz bei Zugriff auf property 'length'
+    "  this.selfDefinedAttributes = { bgcolor0: null, bgcolor1: null, columns: [], contentdatapath: '*', hilite: null, multiselect: true, rowheight: null, selectable: true, showhlines: false, shownitems: -1, showvlines: false, sizetoheader: null, spacing: 0 }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"

@@ -759,7 +759,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         // Ein relativer Pfad zum im Elternelement gesetzten XPath
         s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
 
-        [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'%@');\n",self.zuletztGesetzteID,s,attr];
+        [o appendFormat:@"  setRelativeDataPathIn(%@,%@,'%@');\n",self.zuletztGesetzteID,s,attr];
     }
     else if ([s hasPrefix:@"$"]) // = 'sure' constraint Value
     {
@@ -879,8 +879,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
         else
         {
-            [o appendString:@"\n  // Ein relativer Pfad! Dann nehme ich Bezug zum letzten 'lastDP_' und dem dort gesetzten Pfad.\n"];
-            [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'text');\n",self.zuletztGesetzteID,dp];
+            [o appendString:@"\n  // Ein relativer Datapath\n"];
+            [o appendFormat:@"  setRelativeDataPathIn(%@,%@,'text');\n",self.zuletztGesetzteID,dp];
         }
 
 
@@ -2355,8 +2355,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
         else
         {
-            [o appendString:@"\n  // Ein relativer Pfad! Dann nehme ich Bezug zum letzten 'lastDP_' und dem dort gesetzten Pfad.\n"];
-            [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'text');\n",idName,dp];
+            [o appendString:@"\n  // Ein relativer Datapath!\n"];
+            [o appendFormat:@"  setRelativeDataPathIn(%@,%@,'text');\n",idName,dp];
         }
 
 
@@ -4155,8 +4155,8 @@ didStartElement:(NSString *)elementName
         }
         else
         {
-            [o appendString:@"\n  // Ein relativer Pfad! Dann nehme ich Bezug zum letzten 'lastDP_' und dem dort gesetzten Pfad.\n"];
-            [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'text');\n",idUmgebendesElement,dp];
+            [o appendString:@"\n  // Ein relativer Datapath.\n"];
+            [o appendFormat:@"  setRelativeDataPathIn(%@,%@,'text');\n",idUmgebendesElement,dp];
         }
 
         // Auf jeden Fall müssen absolute und relative Datapaths GLEICH ausgegeben werden,
@@ -4547,12 +4547,10 @@ didStartElement:(NSString *)elementName
             {
                 pathAngabe = YES;
 
-                // Ein relativer Pfad zum vorher gesetzen XPath Ich nehme Bezug zum letzten lastDP_ und dem dort gesetzten Pfad.
                 value = [self removeOccurrencesOfDollarAndCurlyBracketsIn:value];
-                // Die Variable 'lastDP_' ist bekannt, da die Ausgabe hier in 'jsComputedValuesOutput' erfolgt.
-                // Genau da (und kurz vorher) erfolgt auch das setzen von lastDP_
-                [o appendString:@"\n  // Ein relativer Pfad für dieses Attribut. Dann nehme ich Bezug zum letzten 'lastDP_' und dem dort gesetzten Pfad.\n"];
-                [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'%@');\n",elem,value,a];
+
+                [o appendString:@"\n  // Ein relativer Datapath für dieses Attribut.\n"];
+                [o appendFormat:@"  setRelativeDataPathIn(%@,%@,'%@');\n",elem,value,a];
             }
             else
             {
@@ -5287,12 +5285,10 @@ didStartElement:(NSString *)elementName
 
             if ([v hasPrefix:@"$path{"])
             {
-                // Ein relativer Pfad zum vorher gesetzen XPath Ich nehme Bezug zum letzten lastDP_ und dem dort gesetzten Pfad.
                 v = [self removeOccurrencesOfDollarAndCurlyBracketsIn:v];
-                // Die Variable 'lastDP_' ist bekannt, da die Ausgabe hier in 'jsComputedValuesOutput' erfolgt.
-                // Genau da (und kurz vorher) erfolgt auch das setzen von lastDP_
-                [self.jsComputedValuesOutput appendString:@"\n  // Ein relativer Pfad für 'value'! Dann nehme ich Bezug zum letzten 'lastDP_' und dem dort gesetzten Pfad.\n"];
-                [self.jsComputedValuesOutput appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'%@');\n",self.zuletztGesetzteID,v,@"value"];
+
+                [self.jsComputedValuesOutput appendString:@"\n  // Ein relativer Pfad für 'value'!\n"];
+                [self.jsComputedValuesOutput appendFormat:@"  setRelativeDataPathIn(%@,%@,'%@');\n",self.zuletztGesetzteID,v,@"value"];
             }
             else
             {
@@ -11590,9 +11586,6 @@ BOOL isJSExpression(NSString *s)
     "    // einer Grupper geleert wird (und NICHT beim öffnen neu initialisiert). Weil bei verschachtelten\n"
     "    // 'animatorgroups's die inneren, die Attribute der äußeren 'erben'.\n"
     "    animatorgroup_ = { animators : [], doStart : function() { for (var i = 0;i<this.animators.length;i++) { this.animators[i].doStart(); } } };\n"
-    "\n"
-    "    // Der zuletzt angesprochene absolute Datapath für relative Datapaths (bewusst ohne var, damit global)\n"
-    "    lastDP_ = undefined;\n"
     "}\n"
     "\n"
     "\n"
@@ -13120,7 +13113,6 @@ BOOL isJSExpression(NSString *s)
     "            return returnValue;\n"
     "        }\n"
     "        this.setNodeText = function(text) { // oi + trigger + Abfragen\n"
-    "            // Lieber ohne jQuery, da kein HTML-Dokument, sondern eine Node\n"
     "\n"
     "            if (!this.p)\n"
     "            {\n"
@@ -13162,7 +13154,7 @@ BOOL isJSExpression(NSString *s)
     "            // Deswegen hier triggern eines Nicht-Dom-Elements (nämlich lz.datapointer), aber das scheint zu klappen\n"
     "            $(this).triggerHandler('datapathhaschanged');\n"
     "\n"
-    "            this.lastNodeText = text; // Intern aktualisieren\n"
+    "            this.lastNodeText = text; // Intern aktualisieren - Kann entfernt werden, wenn lastNodeText entfert wird\n"
     "        }\n"
     "        this.isValid = function() { // oi\n"
     "            if (this.p == undefined || this.p == null)\n"
@@ -13447,7 +13439,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        // Soll einen datapath ( = this) updaten mit den veränderten Werten in 'datamapped UI Controls'\n"
     "        this.updateData = function(recursion) { // somewhat oi\n"
-    "            return;\n"
+    "\n"
     "            // Somewhat dringend ToDo\n"
     "            // alert('Do I get in here?'); // Yes, more than 100 times\n"
     "\n"
@@ -16939,14 +16931,14 @@ BOOL isJSExpression(NSString *s)
     "    // sonst klappt das Triggern in set_Relative_Datapath nicht mehr, weil der datapointer ja ersetzt wurde und nur ein altes Objekt getriggert wird\n"
     "    if (!$(el).data('datapathobject_'))\n"
     "    {\n"
-    "        lastDP_ = new lz.datapointer(path,false);\n"
+    "        var dp = new lz.datapointer(path,false);\n"
     "\n"
-    "        // Und dann einfach direkt im Element speichern, ist von OL so vorgesehen, Globaler Zugriff auf lastDP_ kann dann evtl. sogar entfernt werden\n"
-    "        $(el).data('datapathobject_',lastDP_);\n"
+    "        // Und dann einfach direkt im Element speichern, ist von OL so vorgesehen\n"
+    "        $(el).data('datapathobject_',dp);\n"
     "    }\n"
     "    else\n"
     "    {\n"
-    "        lastDP_ = $(el).data('datapathobject_');\n"
+    "        dp = $(el).data('datapathobject_');\n"
     "\n"
     "        // Ich MUSS den Datapointer aber, wenn ich ihn schon nicht neu anlege, zumindestens neu initialisieren\n"
     "        $(el).data('datapathobject_').init(path);\n"
@@ -16954,7 +16946,7 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "\n"
-    "    if (lastDP_.getXPathIndex() > 1)\n"
+    "    if (dp.getXPathIndex() > 1)\n"
     "    {\n"
     "        // Markieren, weil dies Auswirkungen auf viele Dinge hat...\n"
     "        $('#'+el.id).data('IAmAReplicator',true);\n"
@@ -16979,7 +16971,7 @@ BOOL isJSExpression(NSString *s)
     "        var p = $('#'+el.id).parent();\n"
     "        $('#'+el.id).remove();\n"
     "\n"
-    "        for (var i=0;i<lastDP_.getXPathIndex();i++)\n"
+    "        for (var i=0;i<dp.getXPathIndex();i++)\n"
     "        {\n"
     "            c++;\n"
     "            // Muss es jedes mal nochmal klonen, sonst wäre der Klon-Vorgang nur 1x erfolgreich\n"
@@ -17039,11 +17031,11 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "    else\n"
     "    {\n"
-    "        if (lastDP_.getNodeType() == 3)\n"
+    "        if (dp.getNodeType() == 3)\n"
     "        {\n"
     "            if (typeof el.applyData === 'function')\n"
     "            {\n"
-    "                el.applyData(lastDP_.getNodeText());\n"
+    "                el.applyData(dp.getNodeText());\n"
     "\n"
     "                // Gleichzeitig müssen wir bei Änderungen des datapaths darauf reagieren\n"
     "                $(el).on('ondatapath', function() {\n"
@@ -17055,14 +17047,14 @@ BOOL isJSExpression(NSString *s)
     "            {\n"
     "                // Eventuell ist dieser Zweig nur noch old Legacy-Code\n"
     "                // Gemäß Beispiel 37.10 darf ich hier gar nichts setzen...\n"
-    "                // $('#'+el.id).html(lastDP_.getNodeText());\n"
+    "                // $('#'+el.id).html(dp.getNodeText());\n"
     "            }\n"
     "        }\n"
     "    }\n"
     "\n"
-    "    $(lastDP_).off('datasethaschanged.setAbsoluteDP');\n"
+    "    $(dp).off('datasethaschanged.setAbsoluteDP');\n"
     "    // Ich muss hier mit el.id arbeiten, falls das Objekt selber ausgetauscht wurde\n"
-    "    $(lastDP_).on('datasethaschanged.setAbsoluteDP', function() { setAbsoluteDataPathIn(el.id,path); });\n"
+    "    $(dp).on('datasethaschanged.setAbsoluteDP', function() { setAbsoluteDataPathIn(el.id,path); });\n"
     "}\n"
     "\n"
     "\n"
@@ -17070,15 +17062,15 @@ BOOL isJSExpression(NSString *s)
     "// Hilfsfunktion, um einen relativ gesetzten Datapath auszuwerten\n"
     "// setRelativeDataPathIn()                             //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var setRelativeDataPathIn = function (el,path,pointer,attr) {\n"
+    "var setRelativeDataPathIn = function (el,path,attr) {\n"
     "    if (typeof el === 'string')\n"
     "    {\n"
     "        // Falls ich über triggerHandler('datasethaschanged') aufgerufen wurde (s. u.), nehme ich einen 'string' entgegen, da var sonst evtl. ausgetauscht wurde\n"
     "        el = $('#'+el).get(0);\n"
     "    }\n"
     "\n"
-    "    // Sucht solange nach einem Datapath in el oder den Elternelementen, bis er einen findet\n"
-    "    pointer = el.datapath;\n"
+    "    // Sucht solange nach einem Datapath-Objekt in 'el' selber oder den Elternelementen, bis er einen findet\n"
+    "    var pointer = el.datapath;\n"
     "\n"
     "    if ($(el).parent().data('IAmAReplicator') || $(el).data('IAmAReplicator'))\n"
     "    {\n"
@@ -17145,7 +17137,7 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "    $(pointer).off('datasethaschanged.setRelativeDP');\n"
     "    // Ich MUSS hier über el.id gehen, also einen string, weil das Element selber evtl. ausgetauscht wurde (von setAbsoluteDP)\n"
-    "    $(pointer).on('datasethaschanged.setRelativeDP', function() { setRelativeDataPathIn(el.id,path,pointer,attr); });\n"
+    "    $(pointer).on('datasethaschanged.setRelativeDP', function() { setRelativeDataPathIn(el.id,path,attr); });\n"
     "}\n"
     "\n"
     "\n"
@@ -17976,6 +17968,7 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        // Dann ist es kein String, sondern ein JS-Ausdruck - Ob wirklich eine Constraint nötig ist, ist eher fraglich.\n"
     "        iv.datapath = iv.datapath.substring(2,iv.datapath.length-1);\n"
+    "        eval('iv.datapath = ' + iv.datapath + ';');\n"
     "    }\n"
     "\n"
     "    setAbsoluteDataPathIn(id,iv.datapath);\n"
@@ -18237,7 +18230,7 @@ BOOL isJSExpression(NSString *s)
     "        v = v.substring(3,v.length-2);\n"
     "        if (el.datapath)\n"
     "        {\n"
-    "            setRelativeDataPathIn(el,v,el.datapath,a);\n"
+    "            setRelativeDataPathIn(el,v,a);\n"
     "        }\n"
     "        else\n"
     "        {\n"

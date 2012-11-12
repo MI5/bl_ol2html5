@@ -6,7 +6,7 @@
 //
 // iwie gibt es noch ein Problem mit den pointer-events (globalhelp verdeckt Foren-Button)
 //
-// 'lastDP_' bei den datapointern, davon muss ich weg -> Dann kann ich auch Problem mit Bsp. 37.15 lösen
+// 'last DP _' bei den datapointern ist nun weg -> Dann kann ich wohl jetzt auch das Problem mit Bsp. 37.15 lösen
 //
 //
 //
@@ -756,10 +756,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([s hasPrefix:@"$path{"])
     {
-        // Ein relativer Pfad zum vorher gesetzen XPath Ich nehme Bezug zum letzten lastDP_ und dem dort gesetzten Pfad.
+        // Ein relativer Pfad zum im Elternelement gesetzten XPath
         s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
-        // Die Variable 'lastDP_' ist bekannt, da die Ausgabe hier in 'jsComputedValuesOutput' erfolgt.
-        // Genau da (und kurz vorher) erfolgt auch das setzen von lastDP_
+
         [o appendFormat:@"  setRelativeDataPathIn(%@,%@,lastDP_,'%@');\n",self.zuletztGesetzteID,s,attr];
     }
     else if ([s hasPrefix:@"$"]) // = 'sure' constraint Value
@@ -4056,18 +4055,29 @@ didStartElement:(NSString *)elementName
         }
 
 
+        // Datapointer kennen ihren parent. Auszug aus Doku: Datapointers are not bound to views like datapaths are,
+        // but they do have a place in the view hierarchy—that is, they "know about" parents and children.
+        NSString* idUmgebendesElement = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+        NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
+        if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
+        {
+            idUmgebendesElement = @"canvas";
+        }
+
+
         // Ich lege jeden datapointer als globales Objekt an, auf welches zugegriffen werden kann
         if ([name length] > 0)
         {
             if (wirSindInEinerKlasse)
             {
                 [o appendString:@"\n  // Ein Datapointer, der zu einer Klasse gehört\n"];
-                [o appendFormat:@"  %@.%@ = new lz.datapointer(%@,%@);\n",ID_REPLACE_STRING,name,dp,rerunxpath];
+                [o appendFormat:@"  %@.%@ = new lz.datapointer(%@,%@,%@);\n",ID_REPLACE_STRING,name,dp,rerunxpath,idUmgebendesElement];
             }
             else
             {
                 [o appendString:@"\n  // Ein Datapointer (bewusst ohne var, damit global verfügbar)\n"];
-                [o appendFormat:@"  %@ = new lz.datapointer(%@,%@);\n",name,dp,rerunxpath];
+                [o appendFormat:@"  %@ = new lz.datapointer(%@,%@,%@);\n",name,dp,rerunxpath,idUmgebendesElement];
             }
         }
         else
@@ -4079,12 +4089,12 @@ didStartElement:(NSString *)elementName
             if (wirSindInEinerKlasse)
             {
                 [o appendString:@"\n  // Ein Datapointer, der zu einer Klasse gehört\n"];
-                [o appendFormat:@"  %@.%@ = new lz.datapointer(%@,%@);\n",ID_REPLACE_STRING,name,dp,rerunxpath];
+                [o appendFormat:@"  %@.%@ = new lz.datapointer(%@,%@,%@);\n",ID_REPLACE_STRING,name,dp,rerunxpath,idUmgebendesElement];
             }
             else
             {
                 [o appendString:@"\n  // Ein Datapointer ohne 'name'- oder 'id'-Attribut. Wohl nur um ein 'ondata'-Handler daran zu binden oder so... hmmm\n"];
-                [o appendFormat:@"  %@ = new lz.datapointer(%@,%@);\n",name,dp,rerunxpath];
+                [o appendFormat:@"  %@ = new lz.datapointer(%@,%@,%@);\n",name,dp,rerunxpath,idUmgebendesElement];
             }
         }
 
@@ -4140,7 +4150,7 @@ didStartElement:(NSString *)elementName
         }
         else if (dp.length == 0)
         {
-            [o appendString:@"\n  // datapath-Element mit ':' im String (also ein absoluter XPath).\n"];
+            [o appendString:@"\n  // Leerer datapath (Wird gesetzt als absoluter XPath).\n"];
             [o appendFormat:@"  setAbsoluteDataPathIn(%@,'');\n",idUmgebendesElement];
         }
         else
@@ -5336,87 +5346,6 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:@"\">\n"];
 
-
-
-/*
-if (![elementName isEqualToString:@"combobox"] && ![elementName isEqualToString:@"datacombobox"])
-{
-        if (![attributeDict valueForKey:@"dataset"])
-        {
-            [self instableXML:@"ERROR: No attribute 'dataset' given in BDScombobox-tag"];
-        }
-        else
-        {
-            self.attributeCount++;
-            NSLog(@"Using the attribute 'dataset' as arrayname for jQuery, to access the corresponding array, which contains all Entrys (previously set by <dataset>.");
-        }
-
-
-
-
-        NSString *dataset = [attributeDict valueForKey:@"dataset"];
-
-
-        [o appendFormat:@"\n  // Combobox-content über einen Datapointer auswerten\n"];
-        if ([dataset hasPrefix:@"$"])
-        {
-            // Falls es ein Ausdruck ist, muss ich $,{,} entfernen
-            // Ich lasse den Ausdruck dann von JS auswerten
-            dataset = [self removeOccurrencesOfDollarAndCurlyBracketsIn:dataset];
-
-            [o appendFormat:@"  var myDp_ = new lz.datapointer(%@+':/items/          *[1]');\n",dataset];
-        }
-        else
-        {
-            [o appendFormat:@"  var myDp_ = new lz.datapointer('%@:/items/           *[1]');\n",dataset];
-        }
-        [o appendFormat:@"  if (myDp_.isValid())\n"];
-        [o appendFormat:@"  {\n"];
-        [o appendFormat:@"      do\n"];
-        [o appendFormat:@"      {\n"];
-        [o appendFormat:@"          $('#%@').append( new Option(myDp_.getNodeText(), myDp_.getNodeAttribute('value') ? myDp_.getNodeAttribute('value') : '') );\n",theId];
-        [o appendFormat:@"      }\n"];
-        [o appendFormat:@"      while (myDp_.selectNext())\n"];
-        [o appendFormat:@"  }\n"];
-
-
-        // Vorauswahl setzen, falls eine gegeben ist
-        if ([attributeDict valueForKey:@"initvalue"])
-        {
-            self.attributeCount++;
-
-            if ([[attributeDict valueForKey:@"initvalue"] isEqual:@"false"])
-            {
-                // 'false' heißt wohl es gibt keinen init-Wert
-                // Aber wegen Kirchensteuer-Combobox muss ich trotzdem das erste Element anwählen (keine KiSt-Pflicht)
-
-                [o appendString:@"  // Keine Vorauswahl für diese Combobox getroffen, deswegen erstes Element\n"];
-                [o appendFormat:@"  $('#%@ option[value='+",self.zuletztGesetzteID];
-                [o appendFormat:@"$('#%@').children('option :first').prop('value')",self.zuletztGesetzteID];
-                [o appendString:@"+']').attr('selected',true);\n"];
-                [o appendString:@"  // parallel myValue setzen, damit eine Constraint den defaultwert richtig auslesen kann\n"];
-                [o appendFormat:@"  %@.myValue = $('#%@').children('option :first').prop('value');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-            }
-            else
-            {
-                NSLog(@"Using the attribute 'initvalue' to set a starting value for the combobox.");
-                [o appendString:@"  // Vorauswahl für diese Combobox setzen\n"];
-                [o appendFormat:@"  $(\"#%@ option[value=",self.zuletztGesetzteID];
-                [o appendString:[attributeDict valueForKey:@"initvalue"]];
-                [o appendString:@"]\").attr('selected',true);\n"];
-                [o appendString:@"  // parallel myValue setzen, damit eine Constraint den defaultwert richtig auslesen kann\n"];
-                [o appendFormat:@"  %@.myValue = $('#%@').children('option[value=%@]').prop('value');\n",self.zuletztGesetzteID,self.zuletztGesetzteID,[attributeDict valueForKey:@"initvalue"]];
-            }
-
-        }
-        else
-        {
-            // Trotzdem eine Vorauswahl treffen (erstes Element), sonst testet constraint auf 'undefined'
-            [o appendString:@"  // parallel myValue setzen, damit Constraint den defaultwert richtig auslesen kann\n"];
-            [o appendFormat:@"  %@.myValue = $('#%@').children('option :first').prop('value');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-        }
-}
-*/
 
 
         if ([attributeDict valueForKey:@"listwidth"])
@@ -12732,29 +12661,39 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "    // handlet den Zugriff auf die XML-Datensätze\n"
-    "    this.datapointer = function(xpath,rerun) {\n"
+    "    this.datapointer = function(xpath,rerun,parentElem) {\n"
     "        // Jeden neu instanzierte Datapointer sofort speichern, damit ich ihn später wiederfinde und triggern kann\n"
     "        allMyDatapointer_.push(this);\n"
     "\n"
+    "        // Datapointers are not bound to views like datapaths are, but they do have a place in the view hierarchy—that is, they 'know about' parents and children.\n"
+    "        if (parentElem)\n"
+    "        {\n"
+    "            this.immediateparent = parentElem;\n"
+    "            this.parent = parentElem;\n"
+    "        }\n"
     "\n"
     "        // Wenn ich ein Element hinzufüge muss ich ein paar Dinge des Datapointers aktualisieren und\n"
     "        // anderen datapointern die vorgenommene Aktualisierung per 'ondata' mitteilen.\n"
     "        updateDataAndDatasetAndTrigger = function(dp,addedNodeName) {\n"
-    "            // Anscheinend muss ich unser internes data aktualisieren...\n"
-    "            dp.data = (new XMLSerializer()).serializeToString(dp.p);\n"
-    "\n"
-    "            // ... und ich muss auch das Dataset als solches aktualisieren, weil andere Pointer ein aktualisiertes Dataset erwarten\n"
-    "\n"
-    "            // hmmmm, bei Bsp. 37.15 muss ich datasetName ergänzen. Im Taxango-Code nicht... why?\n"
-    "            // Diese Abfrage ist noch unsauber. Bricht, wenn ein Dataset mit 2 gleich benannten verschachtelten Tags startet\n"
-    "            if (dp.data.startsWith('<'+dp.datasetName+'>'))\n"
+    "            // Anscheinend muss ich unser internes data mit dem gerade gesetzten Wert aktualisieren.\n"
+    "            var topOfTheTree = dp.p;\n"
+    "            while (topOfTheTree.parentNode)\n"
     "            {\n"
-    "                dp.dataset.rawdata = dp.data;\n"
+    "                topOfTheTree = topOfTheTree.parentNode;\n"
     "            }\n"
-    "            else\n"
-    "            {\n"
-    "                dp.dataset.rawdata = '<'+dp.datasetName+'>' + dp.data + '</'+dp.datasetName+'>';\n"
-    "            }\n"
+    "            // Ich muss hier über den XMLSerializer gehen, da in das parentNode-Element nicht serialize() reingemixt wurde\n"
+    "            dp.data = (new XMLSerializer()).serializeToString(topOfTheTree);\n"
+    "\n"
+    "            // Und ich muss auch das Dataset als solches aktualisieren, weil auch\n"
+    "            // andere darauf gerichtete Pointer ein aktualisiertes Dataset erwarten.\n"
+    //"            if (dp.data.startsWith('<'+dp.datasetName+'>'))\n"
+    //"            {\n"
+    "            dp.dataset.rawdata = dp.data;\n"
+    //"            }\n"
+    //"            else\n"
+    //"            {\n"
+    //"                dp.dataset.rawdata = '<'+dp.datasetName+'>' + dp.data + '</'+dp.datasetName+'>';\n"
+    //"            }\n"
     "\n"
     "            // Und jetzt alle datapointer triggern, die mit diesem Dataset arbeiten\n"
     "            for (var i = 0;i<allMyDatapointer_.length;i++)\n"
@@ -13180,21 +13119,50 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            return returnValue;\n"
     "        }\n"
-    "        this.setNodeText = function(text) {\n"
+    "        this.setNodeText = function(text) { // oi + trigger + Abfragen\n"
     "            // Lieber ohne jQuery, da kein HTML-Dokument, sondern eine Node\n"
-    "            if (this.lastNode && (typeof text == 'string' || typeof text == 'number'))\n"
-    "            {\n"
-    "                this.lastNodeText = text; // Intern aktualisieren\n"
-    "                this.lastNode.childNodes[0].nodeValue = text; // Extern aktualisieren\n"
     "\n"
-    "                // Alle $path-Angaben (relativeDatapath-Angaben) aktualisieren sich bei Änderungen\n"
-    "                // Deswegen hier triggern eines Nicht-Dom-Elements (nämlich lz.datapointer), aber das scheint zu klappen\n"
-    "                $(this).triggerHandler('datapathhaschanged');\n"
-    "            }\n"
-    "            else\n"
+    "            if (!this.p)\n"
     "            {\n"
-    "                alert('So far unsupported call of setNodeText() in datapointer');\n"
+    "                alert(this.xpath);\n"
+    "                throw new TypeError('function datapointer.setNodeText - this.p should not be undefined. Can not add Text to an undefined datapointer.');\n"
+    "                return;\n"
     "            }\n"
+    "\n"
+    "            if (typeof text !== 'string' && typeof text !== 'number')\n"
+    "            {\n"
+    "                throw new TypeError('function datapointer.setNodeText - So far unsupported type of the argument. Especially Array would need some extra treatment');\n"
+    "            }\n"
+    "\n"
+    "            // Wenn wir selber keine Textnode sind, dann eine evtl. Kind-Textnode aktualisieren\n"
+    "            if(this.p.nodeType != 3)\n"
+    "            {\n"
+    "                var einKindMitDemTextGesetzt = false;\n"
+    "                var kinder = this.p.childNodes;\n"
+    "                for(var i=0;i<kinder.length;i++)\n"
+    "                {\n"
+    "                    var kind=kinder[i];\n"
+    "                    if (kind.nodeType==3)\n"
+    "                    {\n"
+    "                        kind.nodeValue = text;\n"
+    "                        // Dann hier direkt alle Events auslösen, da ich von OL-Lösung abweiche\n"
+    "                        updateDataAndDatasetAndTrigger(this,text);\n"
+    "                        einKindMitDemTextGesetzt = true;\n"
+    "                        break;\n"
+    "                    }\n"
+    "                }\n"
+    "                // Ansonsten neue Textnode anfügen\n"
+    "                if(!einKindMitDemTextGesetzt)\n"
+    "                {\n"
+    "                    this.p.appendChild(new lz.DataText(text))\n"
+    "                }\n"
+    "            }\n"
+    "\n"
+    "            // Alle $path-Angaben (relativeDatapath-Angaben) aktualisieren sich bei Änderungen\n"
+    "            // Deswegen hier triggern eines Nicht-Dom-Elements (nämlich lz.datapointer), aber das scheint zu klappen\n"
+    "            $(this).triggerHandler('datapathhaschanged');\n"
+    "\n"
+    "            this.lastNodeText = text; // Intern aktualisieren\n"
     "        }\n"
     "        this.isValid = function() { // oi\n"
     "            if (this.p == undefined || this.p == null)\n"
@@ -13314,7 +13282,7 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        // Return a new datapointer that points to the same node, has a null xpath and a false rerunxpath attribute\n"
     "        this.dupePointer = function() {\n"
-    "            var dupe = new lz.datapointer(this.xpath,false);\n"
+    "            var dupe = new lz.datapointer(this.xpath,false,this.immediateparent);\n"
     "            dupe.lastNode = this.lastNode;\n"
     "            dupe.lastNodeText = this.lastNodeText;\n"
     "            dupe.data = (new XMLSerializer()).serializeToString(this.p);\n"
@@ -13392,7 +13360,7 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        this.addNodeFromPointer = function(pointer) {\n"
     "            if (!this.p)\n"
-    "                throw new TypeError('function datapointer.addNodeFromPointer - this.lastNode should not be undefined. Can not add Pointer to an undefined datapointer.');\n"
+    "                throw new TypeError('function datapointer.addNodeFromPointer - this.p should not be undefined. Can not add Pointer to an undefined datapointer.');\n"
     "            if (!pointer)\n"
     "                throw new TypeError('function datapointer.addNodeFromPointer - pointer should not be undefined. Can not add an undefined Pointer.');\n"
     "\n"
@@ -13476,42 +13444,57 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        // 'datapath' erbt eigentlich alles von 'datapointer'. Das wird aber jetzt zu kompliziert\n"
     "        // Einfach die Methoden von 'datapath' hier noch ergänzen und immer mit 'datapointer' arbeiten.\n"
-    "        this.updateData = function(recursion) { // somewhat oi\n"
-    "            // Soll einen datapath ( = this) mit dem als Arg übergebenem Wert updaten //\n"
     "\n"
+    "        // Soll einen datapath ( = this) updaten mit den veränderten Werten in 'datamapped UI Controls'\n"
+    "        this.updateData = function(recursion) { // somewhat oi\n"
+    "            return;\n"
     "            // Somewhat dringend ToDo\n"
     "            // alert('Do I get in here?'); // Yes, more than 100 times\n"
     "\n"
     "            if (typeof(recursion)==='undefined') recursion = false;\n"
     "\n"
-    "            if (!recursion && this.p) {\n"
-    "                this.p.__LZlockFromUpdate(this)\n"
+    "            if (!recursion && this.p)\n"
+    "            {\n"
+    "                this.p.__LZlockFromUpdate(this);\n"
+    "            }\n"
+    "\n"
+    "            if (this.xpath)\n"
+    "            {\n"
+    "                var valueToSet = this.immediateparent.updateData();\n"
+    "                if (valueToSet !== void 0)\n"
+    "                {\n"
+    "                    if (this.xpath.endsWith('/name()'))\n"
+    "                    {\n"
+    "                        this.setNodeName(valueToSet);\n"
+    "                    }\n"
+    "                    else if (this.xpath.endsWith('/text()'))\n"
+    "                    {\n"
+    "                        this.setNodeText(valueToSet);\n"
+    "                    }\n"
+    "                    else if (this.xpath.contains('@')) // Logik für 'Wenn es ein Attribut ist'\n"
+    "                    {\n"
+    "                        this.p.$lzc$set_attributes(valueToSet);\n"
+    "                    }\n"
+    "                    else\n"
+    "                    {\n"
+    "                        this.setNodeAttribute(ppdo_$1.substring(11), valueToSet);\n"
+    "                    }\n"
+    "                }\n"
     "            };\n"
     "\n"
-    /*
-        var p = this.parsedPath ? this.parsedPath.operator : null;
-        if (ppdo_$1 != null) {
-            var dat_$2 = this.immediateparent.updateData();
-            if (dat_$2 !== void 0) {
-                if (ppdo_$1 == "name") {
-                    this.setNodeName(dat_$2)
-                } else if (ppdo_$1 == "text") {
-                    this.setNodeText(dat_$2)
-                } else if (ppdo_$1 == "attributes") {
-                    this.p.$lzc$set_attributes(dat_$2)
-                } else {
-                    this.setNodeAttribute(ppdo_$1.substring(11), dat_$2)
-                }}};
+    "            var depChildren = this.__LZdepChildren;\n"
+    "            if (depChildren != null)\n"
+    "            {\n"
+    "                for (var i = 0;i < depChildren.length;i++)\n"
+    "                {\n"
+    "                    depChildren[i].__LZupdateData(true)\n"
+    "                };\n"
+    "            }\n"
     "\n"
-        var depChildren = this.__LZdepChildren;
-        if (depChildren != null) {
-            for (var i = 0;i < depChildren.length;i++) {
-                depChildren[i].__LZupdateData(true)
-            }};
-        if (!recursion && this.p) {
-            this.p.__LZunlockFromUpdate(this)
-        }
-*/
+    "            if (!recursion && this.p)\n"
+    "            {\n"
+    "                this.p.__LZunlockFromUpdate(this)\n"
+    "            }\n"
 
     "        }\n"
     "    }\n"
@@ -14223,7 +14206,7 @@ BOOL isJSExpression(NSString *s)
     "    else if (attributeName === 'datapath')\n"
     "    {\n"
     "        $(me).data('datapath',value);\n"
-    "        $(me).data('datapathobject_',new lz.datapointer(value,false));\n"
+    "        $(me).data('datapathobject_',new lz.datapointer(value,false,me));\n"
     "    }\n"
     "    else if (attributeName === 'doesenter')\n"
     "    {\n"
@@ -14534,6 +14517,7 @@ BOOL isJSExpression(NSString *s)
     "    else if (attributeName === 'p' && typeof me.setXPath === 'function')\n"
     "    {\n"
     "        // Example 37.19 - Setting 'p' somehow means setting the 'xpath' or pointer on this datapath\n"
+    "        // Aus der Doku: 'Calling setAttribute on p calls Lz.Datapointer.setPointer.' To Do\n"
     "        me.p = value;\n"
     "        $(me).triggerHandler('datapathhaschanged');\n"
     "    }\n"
@@ -14824,7 +14808,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// destroy() - nachimplementiert                       //\n"
+    "// destroy()                                           //\n"
     "/////////////////////////////////////////////////////////\n"
     "var destroyFunction = function () {\n"
     "    $(this).triggerHandler('ondestroy');\n"
@@ -14841,6 +14825,22 @@ BOOL isJSExpression(NSString *s)
     "HTMLInputElement.prototype.destroy = destroyFunction;\n"
     "HTMLSelectElement.prototype.destroy = destroyFunction;\n"
     "HTMLButtonElement.prototype.destroy = destroyFunction;\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// updateData()                                        //\n"
+    "// Wird überschrieben von Elementen, um Werte für Datapath zurückzuliefern\n"
+    "// Wenn es auf diese unüberschriebene Methode stößt, die 'null' zurückliefert, macht er nix, ansonsten schon...//\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var updateDataFunction = function () {\n"
+    "    return void 0;\n"
+    "}\n"
+    "\n"
+    "HTMLDivElement.prototype.updateData = updateDataFunction;\n"
+    "HTMLInputElement.prototype.updateData = updateDataFunction;\n"
+    "HTMLSelectElement.prototype.updateData = updateDataFunction;\n"
+    "HTMLButtonElement.prototype.updateData = updateDataFunction;\n"
     "\n"
     "\n"
     "\n"
@@ -15067,7 +15067,14 @@ BOOL isJSExpression(NSString *s)
     "    get : function(){\n"
     "        if (!$(this).data('datapathobject_'))\n"
     "        {\n"
-    "            throw new TypeError('setter.prototype.datapath - Hmmm - No datapath set yet, so you can not get one.');\n"
+    "            if (this.immediateparent)\n"
+    "            {\n"
+    "                return this.immediateparent.datapath;\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                throw new TypeError('setter.prototype.datapath - Hmmm - No datapath set yet, so you can not get one.');\n"
+    "            }\n"
     "        }\n"
     "\n"
     "        return $(this).data('datapathobject_');\n"
@@ -17070,6 +17077,9 @@ BOOL isJSExpression(NSString *s)
     "        el = $('#'+el).get(0);\n"
     "    }\n"
     "\n"
+    "    // Sucht solange nach einem Datapath in el oder den Elternelementen, bis er einen findet\n"
+    "    pointer = el.datapath;\n"
+    "\n"
     "    if ($(el).parent().data('IAmAReplicator') || $(el).data('IAmAReplicator'))\n"
     "    {\n"
     "        // Der xpath kann im eigenen Element oder im parent-Element stecken\n"
@@ -17096,8 +17106,8 @@ BOOL isJSExpression(NSString *s)
     "        /*Klappt noch nicht zuverläßig\n"
     "        if (!$(el).data('datapathobject_'))\n"
     "        {\n"
-    "            // Und dann einfach direkt im Element speichern, ist von OL so vorgesehen, Globaler Zugriff auf lastDP_ kann dann evtl. sogar entfernt werden\n"
-    "            $(el).data('datapathobject_',new lz.datapointer(zusammengesetzterXPath,false));\n"
+    "            // Und dann einfach direkt im Element speichern, ist von OL so vorgesehen.\n"
+    "            $(el).data('datapathobject_',new lz.datapointer(zusammengesetzterXPath,false,el));\n"
     "        }\n"
     "        else\n"
     "        {\n"

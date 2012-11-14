@@ -856,42 +856,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 - (NSMutableString*) addCSSAttributes:(NSDictionary*) attributeDict toElement:(NSString*) elemName
 {
-    // Ganz am Anfang in addCSSAttributes, damit ein evtl. absoluter datapath bekannt ist, noch bevor andere Attribute per path darauf zugreifen!
-    // Doesn't work with Taxango right now
-    if ([attributeDict valueForKey:@"datapathXXXXX"])
-    {
-        self.attributeCount++;
-        NSLog(@"Setting the attribute 'datapath' by accessing a temporary datapointer.");
-
-        NSString *dp = [attributeDict valueForKey:@"datapath"];
-        if ([dp hasPrefix:@"$"])
-            dp = [self makeTheComputedValueComputable:dp];
-        else
-            dp = [NSString stringWithFormat:@"'%@'",dp];
-
-
-        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
-
-        if ([dp rangeOfString:@":"].location != NSNotFound)
-        {
-            [o appendString:@"\n  // datapath-Attribut mit ':' im String (also ein absoluter XPath).\n"];
-            [o appendFormat:@"  setAbsoluteDataPathIn(%@,%@);\n",self.zuletztGesetzteID,dp];
-        }
-        else
-        {
-            [o appendString:@"\n  // Ein relativer Datapath\n"];
-            [o appendFormat:@"  setRelativeDataPathIn(%@,%@,'text');\n",self.zuletztGesetzteID,dp];
-        }
-
-
-        // Auf jeden Fall müssen absolute und relative Datapaths GLEICH ausgegeben werden,
-        // weil relative sich ja auf die kurz vorher definierten absoluten beziehen.
-        // Diese Analogie gilt wohl auch zum Element 'datapath'.
-        [self.jsComputedValuesOutput appendString:o];
-    }
-
-
-
     // Alle Styles in einem eigenen String sammeln, könnte nochmal nützlich werden
     NSMutableString *style = [[NSMutableString alloc] initWithString:@""];
 
@@ -1724,8 +1688,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jsOutput appendString:@"\n  // All 'name'-attributes can be referenced by its parent Element\n"];
 
 
-        // Wenn wir in einer Klasse in der ersten Ebene sind, dann ist der Parent immer das
-        // umgebende Element der Klasse
+        // Wenn wir in einer Klasse in der ersten Ebene sind, dann ist der Parent immer das umgebende Element der Klasse
 
         if ([elemTyp isEqualToString:@"evaluateclass"])
         {
@@ -2352,18 +2315,17 @@ void OLLog(xmlParser *self, NSString* s,...)
         {
             [o appendString:@"\n  // datapath-Attribut mit ':' im String (also ein absoluter XPath).\n"];
             [o appendFormat:@"  setAbsoluteDataPathIn(%@,%@);\n",idName,dp];
+
+            // Absolute Datapath-Angaben sollten stets vor den relativen bekannt sein
+            [self.jQueryOutput0 appendString:o];
         }
         else
         {
             [o appendString:@"\n  // Ein relativer Datapath!\n"];
             [o appendFormat:@"  setRelativeDataPathIn(%@,%@,'text');\n",idName,dp];
+
+            [self.jsComputedValuesOutput appendString:o];
         }
-
-
-        // Auf jeden Fall müssen absolute und relative Datapaths GLEICH ausgegeben werden,
-        // weil relative sich ja auf die kurz vorher definierten absoluten beziehen.
-        // Diese Analogie gilt wohl auch zum Element 'datapath'.
-        [self.jsComputedValuesOutput appendString:o];
     }
 
 
@@ -3898,19 +3860,20 @@ didStartElement:(NSString *)elementName
                 else
                     NSLog(@"I will ignore this src-file for now (it's a GET-Request).");
 
-                // Trotzdem anlegen, damit das Programm nicht laufend abstürzt. - aber jQueryOutput0, weil Zugriff auf 'canvas' und/oder canvas.coDataserver nicht klappt
-                [self.jQueryOutput0 appendString:@"\n  // Ein Dataset, welches per Request aus der Wolke gefüllt wird. Ich speichere den Link mal in 'src'.\n"];
-                [self.jQueryOutput0 appendFormat:@"  %@ = new lz.dataset(null, {name: '%@'}); // muss vom Typ dataset sein, damit er auf die Methode 'setQueryParam' z. B. zugreifen kann\n",self.lastUsedDataset, self.lastUsedDataset];
+                // Trotzdem anlegen, damit das Programm nicht laufend abstürzt.
+                // Aber jsOutput und damit nach dem DOM, weil Zugriff auf 'canvas' und/oder canvas.coDataserver sonst nicht klappt
+                [self.jsOutput appendString:@"\n  // Ein Dataset, welches per Request aus der Wolke gefüllt wird. Ich speichere den Link mal in 'src'.\n"];
+                [self.jsOutput appendFormat:@"  %@ = new lz.dataset(null, {name: '%@'}); // muss vom Typ dataset sein, damit er auf die Methode 'setQueryParam' z. B. zugreifen kann\n",self.lastUsedDataset, self.lastUsedDataset];
 
                 if ([src hasPrefix:@"$"])
                 {
                     // src = [self makeTheComputedValueComputable:src]; // <-- klappt nicht, weil dataset keine 'id' hat
                     src = [self removeOccurrencesOfDollarAndCurlyBracketsIn:src];
-                    [self.jQueryOutput0 appendFormat:@"  %@.src = %@;\n",self.lastUsedDataset, src];
+                    [self.jsOutput appendFormat:@"  %@.src = %@;\n",self.lastUsedDataset, src];
                 }
                 else
                 {
-                    [self.jQueryOutput0 appendFormat:@"  %@.src = '%@';\n",self.lastUsedDataset, src];
+                    [self.jsOutput appendFormat:@"  %@.src = '%@';\n",self.lastUsedDataset, src];
                 }
             }
             else
@@ -4147,22 +4110,25 @@ didStartElement:(NSString *)elementName
         {
             [o appendString:@"\n  // datapath-Element mit ':' im String (also ein absoluter XPath).\n"];
             [o appendFormat:@"  setAbsoluteDataPathIn(%@,%@);\n",idUmgebendesElement,dp];
+
+            // Absolute Datapath-Angaben sollten stets vor den relativen bekannt sein, z. B. Example 37.15
+            [self.jQueryOutput0 appendString:o];
         }
         else if (dp.length == 0)
         {
             [o appendString:@"\n  // Leerer datapath (Wird gesetzt als absoluter XPath).\n"];
             [o appendFormat:@"  setAbsoluteDataPathIn(%@,'');\n",idUmgebendesElement];
+
+            // Absolute Datapath-Angaben sollten stets vor den relativen bekannt sein, z. B. Example 37.15
+            [self.jQueryOutput0 appendString:o];
         }
         else
         {
             [o appendString:@"\n  // Ein relativer Datapath.\n"];
             [o appendFormat:@"  setRelativeDataPathIn(%@,%@,'text');\n",idUmgebendesElement,dp];
-        }
 
-        // Auf jeden Fall müssen absolute und relative Datapaths GLEICH ausgegeben werden,
-        // weil relative sich ja auf die kurz vorher definierten absoluten beziehen.
-        // Diese Analogie gilt wohl auch zum Attribut (!) 'datapath'.
-        [self.jsComputedValuesOutput appendString:o];
+            [self.jsComputedValuesOutput appendString:o];
+        }
     }
 
 
@@ -4619,7 +4585,7 @@ didStartElement:(NSString *)elementName
             // (Damit es noch vor den Computed Values und Constraint Values bekannt ist)
             // Wenn wir ein Attribut von canvas haben, dann so früh wie möglich bekannt machen, da z. B. 'datasets'
             // auf diese Attribute schon zugreifen.
-            if ([elemTyp isEqualToString:@"canvas"])
+            if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"BDStabsheetcontainer"])
             {
                 [self.jsOutput appendString:o];
             }
@@ -7196,9 +7162,8 @@ didStartElement:(NSString *)elementName
 
             // Tja... auch Datasets können jetzt Methoden haben...
             // In so einem Fall immer an das letzte Dataset binden, nicht an die ID.
-            // Denn Datasets werden unter Umständen auch per 'name'-Attribut angesprochen!
-            // (und nicht per id)
-            // Tja....... sogar Datapointer können auch Methoden haben...
+            // Denn Datasets werden unter Umständen auch per 'name'-Attribut angesprochen! (und nicht per id)
+            // Tja....... sogar Datapointer können Methoden haben...
             // Und ebenso datapath's... ! (dann eine Ebene weiter zurück springen, um korrektes el zu erwischen)
             if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"])
             {
@@ -7245,7 +7210,7 @@ didStartElement:(NSString *)elementName
         }
         else if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
         {
-            // Auch dann brauche ich unbedingt 'with'! Damit er auf die in 'canvas.x' gesetzten globalen Vars zugreifen kann
+            // Auch dann brauche ich unbedingt 'with (canvas)'! Damit er auf die in 'canvas.x' gesetzten globalen Vars zugreifen kann
             [o appendFormat:@"    with (canvas) {\n"];
         }
         else
@@ -7271,8 +7236,12 @@ didStartElement:(NSString *)elementName
 
         // jQueryOutput0, damit es noch vor den Computed Values und Constraint Values bekannt ist
         // Denn diese greifen u. U. schon auf Methoden zu
-        [self.jQueryOutput0 appendString:o];
-
+        // Sogar jsOutput und damit noch früher! Damit der 'oninit'-Code auf die Methoden zugreifen kann!
+        // (Der 'oninit'-Code steckt ja auch in jQueryOutput0, wurde aber u. U. schon davor geschrieben)
+        if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"] || [elemTyp isEqualToString:@"datapath"])
+            [self.jQueryOutput0 appendString:o];
+        else
+            [self.jsOutput appendString:o];
 
         // Okay, jetzt Text der Methode sammeln und beim schließen einfügen
     }
@@ -7450,23 +7419,23 @@ didStartElement:(NSString *)elementName
         }
 
 
-        if ( [name isEqualToString:@"oninit__DeleteMe"] || [name isEqualToString:@"onconstruct__DeleteMe"])
+        // Für bereits instanzierte DOM-Elemente gilt:
+        // Alles was in init ist, einfach direkt ausführen
+        // Falls es doch mal das init eines windows (canvas) sein sollte, nicht schlimm,
+        // denn wir führen schon von vorne herein den gesamten Code in $(window).load(function() aus!
+        // Ich muss das bei DOM-Elementen so frühzeitig ausführen, sonst wird 'initxml' bei Taango zu spät ausgeführt
+        // Wenn wir aber in einer Klasse sind, dann gilt:
+        // Seitdem ich alle handler in jQueryOutput0 ausgebe, sind die in der oninit-Methode benutzten Methoden noch
+        // nicht alle bekannt. Deswegen bei Klassen als reguläre oninit-Handler setzen und  später 'oninit' triggern.
+        if (([name isEqualToString:@"oninit"] || [name isEqualToString:@"onconstruct"]) && ![[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
         {
             self.attributeCount++;
-            // NSLog(@"Binding the method in this handler to a jQuery-load-event.");
-            // Nein, load-event gibt es nur bei window (also body und frameset)
-            // alles was in init ist einfach direkt ausführen
-            // Falls es doch mal das init eines windows (canvas) sein sollte, nicht schlimm,
-            // denn wir führen schon von vorne herein den gesamten Code in
-            // $(window).load(function() aus!
-            // Hmm, seitdem ich alle handler in jQueryOutput0 ausgebe, sind die in der oninit-Methode benutzten Methoden
-            // noch nicht alle bekannt. Deswegen neu: Ich lasse es als oninit-Handler und triggere dann 'oninit' später
-            NSLog(@"NOT Binding the method in this handler. Direct execution of code.");
 
-            [o appendFormat:@"\n  // oninit/onconstruct-Handler für %@ (wir führen den Code direkt aus)\n  // Aber korrekten Scope berücksichtigen! Deswegen in einer Funktion mit bind() ausführen\n  // Zusätzlich ist auch noch with (this) {} erforderlich.\n",enclosingElem];
+            NSLog(@"NOT Binding the method in this handler. Direct execution of the 'oninit'-Handler.");
 
-            // [o appendFormat:@"  $('#%@').load(function()\n  {\n    ",self.zuletztGesetzteID];
-            [o appendFormat:@"  var bindMeToCorrectScope = function () {\n    with (this) {\n        "];
+            [o appendFormat:@"\n  // oninit/onconstruct-Handler für %@ (wir führen den Code direkt aus)\n  // Aber korrekten Scope berücksichtigen! Deswegen in einer Funktion mit bind() ausführen\n",enclosingElem];
+
+            [o appendFormat:@"  var bindOnInitToCorrectScope = function () {\n    with (this) {\n        "];
 
 
             if ([attributeDict valueForKey:@"args"])
@@ -7736,7 +7705,10 @@ didStartElement:(NSString *)elementName
         // jQueryOutput0! Damit die Handler bekannt sind, bevor diese getriggert werden! (Bsp. 30.3)
         // Problem: Ladezeit verdoppelt sich... weil er dann viel mehr triggern kann... Erst iwie das triggern optimieren
         // To Do Later
-        [self.jQueryOutput appendString:o];
+        if (self.onInitInHandler)
+            [self.jQueryOutput0 appendString:o];
+        else
+            [self.jQueryOutput appendString:o];
     }
 
 
@@ -8644,8 +8616,15 @@ BOOL isJSExpression(NSString *s)
 
 
 
+
+        // In manchen JS/jQuery tauchen '\n' auf, die müssen zu <br /> werden
+        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\\n" withString:@"<br />"];
+        rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\\n" withString:@"<br />"];
+
+
         // Falls im HTML-Code Text mit ' auftaucht, müssen wir das escapen.
         rekursiveRueckgabeOutput = [rekursiveRueckgabeOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
+        rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         rekursiveRueckgabeJsComputedValuesOutput = [rekursiveRueckgabeJsComputedValuesOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
@@ -8654,31 +8633,27 @@ BOOL isJSExpression(NSString *s)
 
 
         // In manchen JS/jQuery tauchen " auf, die müssen escaped werden
+        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJsToUseLaterOutput = [rekursiveRueckgabeJsToUseLaterOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
 
-
-
-        // In manchen JS/jQuery tauchen \n auf, die müssen zu <br /> werden
-        rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\\n" withString:@"<br />"];
-        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\\n" withString:@"<br />"];
-
+        // STATT DESSEN: Bei jsOutput:
 
         // Ich muss im Quellcode bereits vorab geschriebene Escape-Sequenzen berücksichtigen:
-        // In JQueryOutput0 taucht folgendes auf: "\"", aber auch "\\" 
+        // In jsOutput taucht folgendes auf: "\"", aber auch "\\" 
         // Ich muss erst \\” suchen und ersetzen mit temporären string
-        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\\\\\"" withString:@"ugly%$§§$%ugly1"];
-        // Jetzt muss ich \” suchen und ersetzen mit temporären string
-        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\\\"" withString:@"ugly%$§§$%ugly2"];
+        rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"\\\\\"" withString:@"ugly%$§§$%ugly1"];
+        // Jetzt muss ich \" suchen und ersetzen mit temporären string
+        rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"\\\"" withString:@"ugly%$§§$%ugly2"];
         // Jetzt normales ersetzen von \"
-        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+        rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         // Jetzt kann ich nach \" bzw den ersetzten String suchen und ersetzen
-        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly2" withString:@"\\\\\\\""];
+        rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly2" withString:@"\\\\\\\""];
         // Jetzt kann ich nach \\" bzw den ersetzten String suchen und ersetzen
-        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly1" withString:@"\\\\\\\\\\\""];
+        rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly1" withString:@"\\\\\\\\\\\""];
 
 
 
@@ -8688,8 +8663,7 @@ BOOL isJSExpression(NSString *s)
         // Deswegen muss ich diese aus dem String entfernen.
         // Eine wirklich gute Multi-Line-String-Lösung gibt es wohl nicht.
         // Siehe auch: http://google-styleguide.googlecode.com/svn/trunk/javascriptguide.xml?showone=Multiline_string_literals#Multiline_string_literals
-        // Am Ende innerhalb der JS-String-Zeile muss ein \\n stehen,
-        // damit Kommentare nur für eine Zeile gelten.
+        // Am Ende innerhalb der JS-String-Zeile muss ein \\n stehen, damit Kommentare nur für eine Zeile gelten.
         rekursiveRueckgabeOutput = [rekursiveRueckgabeOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n' + \n  '"];
         rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
@@ -9538,7 +9512,7 @@ BOOL isJSExpression(NSString *s)
             if (self.onInitInHandler)
             {
                 [o appendString:s];
-                [o appendFormat:@"\n    }\n  }\n  bindMeToCorrectScope.bind(%@)();\n",enclosingElem];
+                [o appendFormat:@"\n    }\n  }\n  bindOnInitToCorrectScope.bind(%@)();\n",enclosingElem];
             }
             else
             {
@@ -9596,7 +9570,10 @@ BOOL isJSExpression(NSString *s)
         // jQueryOutput0! Damit die Handler bekannt sind, bevor diese getriggert werden! (Bsp. 30.3)
         // Problem: Ladezeit verdoppelt sich... weil er dann viel mehr triggern kann... Erst iwie das triggern optimieren
         // To Do Later
-        [self.jQueryOutput appendString:o];
+        if (self.onInitInHandler)
+            [self.jQueryOutput0 appendString:o];
+        else
+            [self.jQueryOutput appendString:o];
 
 
 
@@ -9645,8 +9622,12 @@ BOOL isJSExpression(NSString *s)
         s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\n     "];
 
 
-        // Bei Methoden in 'drawview' muss ich nochmal extra was machen.
+
         NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-1];
+
+
+
+        // Bei Methoden in 'drawview' muss ich nochmal extra was machen.
         if ([enclosingElemTyp isEqualToString:@"drawview"] || ([enclosingElemTyp isEqualToString:@"evaluateclass"] && [self.lastUsedExtendsAttributeOfClass isEqualToString:@"drawview"]))
         {
             s = [self modifySomeCanvasExpressionsInJSCode:s];
@@ -9671,8 +9652,7 @@ BOOL isJSExpression(NSString *s)
 
         // Falls wir in canvas/library sind, dann muss es nicht nur global verfügbar sein,
         // sondern auch über 'canvas.' ansprechbar sein.
-        if ([[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"canvas"] ||
-            [[self.enclosingElements objectAtIndex:[self.enclosingElements count]-1] isEqualToString:@"library"])
+        if ([enclosingElemTyp isEqualToString:@"canvas"] || [enclosingElemTyp isEqualToString:@"library"])
         {
             [o appendString:@"  // Diese Methode ebenfalls an canvas binden\n"];
             [o appendFormat:@"  canvas.%@ = %@;\n",self.lastUsedNameAttributeOfMethod,self.lastUsedNameAttributeOfMethod];
@@ -9687,8 +9667,13 @@ BOOL isJSExpression(NSString *s)
             [self.jsComputedValuesOutput appendFormat:@"  %@.init();\n",[self.enclosingElementsIds lastObject]];
         }
 
+
         // jQueryOutput0 (Begründung siehe öffnendes Tag)
-        [self.jQueryOutput0 appendString:o];
+        // jsOutput (Begründung siehe öffnendes Tag)
+        if ([enclosingElemTyp isEqualToString:@"dataset"] || [enclosingElemTyp isEqualToString:@"datapointer"] || [enclosingElemTyp isEqualToString:@"datapath"])
+            [self.jQueryOutput0 appendString:o];
+        else
+            [self.jsOutput appendString:o];
     }
 
 
@@ -10200,9 +10185,9 @@ BOOL isJSExpression(NSString *s)
 
     [self.output appendString:@"\n  // To Speed up Loading I will trigger 'oninit' after everything is displayed (not suitable in every situation)\n"];
     [self.output appendString:@"  // setTimeout()-function with 20 ms delay (setTimeout() is non-blocking, and though shows the Layout immediately)\n"];
-    // 0 oder 1 als ms-Angabe klappt nicht 100 %, dann zeigt er manchmal doch nicht das Layout an.
-    // Vermutlich checkt er intern nicht jede ms, und deswegen kann es u. U. passieren,
-    // dass er direkt weiter den Code ausführt, ka.
+            // 0 oder 1 als ms-Angabe klappt nicht 100 %, dann zeigt er manchmal doch nicht das Layout an.
+            // Vermutlich checkt er intern nicht jede ms, und deswegen kann es u. U. passieren,
+            // dass er direkt weiter den Code ausführt, ka.
     [self.output appendString:@"  window.setTimeout(function() { triggerOnInitForAllElements(); }, 20);\n"];
 
     // Speziell für Taxango (evtl. als Option mit anbieten?):
@@ -13014,7 +12999,11 @@ BOOL isJSExpression(NSString *s)
     //"        if (xpath === '')\n"
     //"            throw new TypeError('Constructor function datapointer - first argument should not be empty.');\n"
     //"\n"
-    "        this.rerunxpath = rerun; // Kann eventuell manchmal noch 'undefined' sein\n"
+    "        if (rerun === undefined || rerun == null)\n"
+    "        {\n"
+    "            rerun = false;\n"
+    "        }\n"
+    "        this.rerunxpath = rerun;\n"
     "\n"
     "        this.lastNode = null; // Ergebnis wird von setXPath hier reingeschrieben\n"
     "        this.lastNodeText = null; // Ergebnis wird von setXPath hier reingeschrieben\n"
@@ -14197,7 +14186,6 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "    else if (attributeName === 'datapath')\n"
     "    {\n"
-    "        $(me).data('datapath',value);\n"
     "        $(me).data('datapathobject_',new lz.datapointer(value,false,me));\n"
     "    }\n"
     "    else if (attributeName === 'doesenter')\n"
@@ -16924,14 +16912,11 @@ BOOL isJSExpression(NSString *s)
     "        el = $('#'+el).get(0);\n"
     "    }\n"
     "\n"
-    "    // 'datapath'-xpath wird intern gespeichert (u. a. damit Kinder darauf zugreifen können).\n"
-    "    $('#'+el.id).data('datapath',path);\n"
-    "    // Letzten Datapointer global speichern, damit evtl. nachfolgende relative Datapointer darauf zugreifen können\n"
     "    // Der Datapointer darf wegen Beispiel 37.15 nur neu angelegt werden, wenn es ihn noch nicht gibt\n"
     "    // sonst klappt das Triggern in set_Relative_Datapath nicht mehr, weil der datapointer ja ersetzt wurde und nur ein altes Objekt getriggert wird\n"
     "    if (!$(el).data('datapathobject_'))\n"
     "    {\n"
-    "        var dp = new lz.datapointer(path,false);\n"
+    "        var dp = new lz.datapointer(path,false,el);\n"
     "\n"
     "        // Und dann einfach direkt im Element speichern, ist von OL so vorgesehen\n"
     "        $(el).data('datapathobject_',dp);\n"
@@ -17039,7 +17024,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "                // Gleichzeitig müssen wir bei Änderungen des datapaths darauf reagieren\n"
     "                $(el).on('ondatapath', function() {\n"
-    "                    var dp = new lz.datapointer($(el).data('datapath'),false);\n"
+    "                    var dp = new lz.datapointer(el.datapath.xpath,false);\n"
     "                    el.applyData(dp.getNodeText());\n"
     "                });\n"
     "            }\n"
@@ -17074,21 +17059,16 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    if ($(el).parent().data('IAmAReplicator') || $(el).data('IAmAReplicator'))\n"
     "    {\n"
-    "        // Der xpath kann im eigenen Element oder im parent-Element stecken\n"
-    "        var XPath = undefined;\n"
-    "        if ($(el).parent().data('datapath'))\n"
-    "            XPath = $(el).parent().data('datapath');\n"
-    "        if ($(el).data('datapath'))\n"
-    "            XPath = $(el).data('datapath');\n"
+    "        var elternXPath = pointer.xpath;\n"
     "\n"
     "        // Falls vorhanden, muss ich diese entfernen, da dies nur Ergänzungen\n"
-    "        // am Ende des XPaths sind, aber selber nicht zum Pfad dazugehören.\n"
-    "        if (XPath.endsWith('/text()'))\n"
-    "            XPath = XPath.substr(0,XPath.length-7);\n"
-    "        if (XPath.endsWith('/name()'))\n"
-    "            XPath = XPath.substr(0,XPath.length-7);\n"
+    "        // am Ende des elternXPath sind, aber selber nicht zum Pfad dazugehören.\n"
+    "        if (elternXPath.endsWith('/text()'))\n"
+    "            elternXPath = elternXPath.substr(0,elternXPath.length-7);\n"
+    "        if (elternXPath.endsWith('/name()'))\n"
+    "            elternXPath = elternXPath.substr(0,elternXPath.length-7);\n"
     "\n"
-    "        var zusammengesetzterXPath = XPath + '[1]/' + path;\n"
+    "        var zusammengesetzterXPath = elternXPath + '[1]/' + path;\n"
     "\n"
     "\n"
     "        // gemäß OL-Test SIND auch relative datapaths eigenständige datapointer\n"
@@ -17116,7 +17096,7 @@ BOOL isJSExpression(NSString *s)
     "        var c = 2;\n"
     "        while ($('#'+el.id+'_repl'+c).length)\n"
     "        {\n"
-    "            zusammengesetzterXPath = XPath + '['+c+']/' + path;\n"
+    "            zusammengesetzterXPath = elternXPath + '['+c+']/' + path;\n"
     "            window[el.id+'_repl'+c].setAttribute_(attr,pointer.xpathQuery(zusammengesetzterXPath));\n"
     "            c++;\n"
     "        }\n"
@@ -17638,7 +17618,9 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        else\n"
     "        {\n"
-    "            id[key] = value;\n"
+    "            // 'datapath'-Property wird erst weiter unten gesetzt\n"
+    "            if (key !== 'datapath')\n"
+    "                id[key] = value;\n"
     "        }\n"
     "    });\n"
     "}\n"
@@ -17960,7 +17942,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "  // Example 37.11:\n"
-    "  // Hier nochmals setAbsoluteDataPath setzen, weil erst hier alle Attribute gesetzt wurden, und alles korrekt geklont wurde\n"
+    "  // Erst hier DataPath setzen, weil erst hier alle Attribute gesetzt wurden, und alles korrekt geklont wurde\n"
     "  // Direkt hiernach kommt ein eventueller relativer Datapath. Dies muss ich bedenken, falls ich eines Tages die 'obj.attributeNames' auflöse\n"
     "  if (iv.datapath)\n"
     "  {\n"
@@ -17971,7 +17953,18 @@ BOOL isJSExpression(NSString *s)
     "        eval('iv.datapath = ' + iv.datapath + ';');\n"
     "    }\n"
     "\n"
-    "    setAbsoluteDataPathIn(id,iv.datapath);\n"
+    "\n"
+    "    if (!iv.datapath.contains(':'))\n"
+    "    {\n"
+    "        // This somehow doesn't work yet...\n"
+    "        //alert(iv.datapath + ' ***** ' + $(id).parent().data('IAmAReplicator') || $(id).data('IAmAReplicator'));\n"
+    "        //setRelativeDataPathIn(id,iv.datapath,'text');\n"
+    "    }\n"
+    "    else\n"
+    "    {\n"
+    "        setAbsoluteDataPathIn(id,iv.datapath);\n"
+    "    }\n"
+    "\n"
     "    // oh man... setAbsoluteDataPath tauscht das Element aus... Deswegen muss ich natürlich id hier neu setzen...\n"
     "    id = $('#'+id.id).get(0);\n"
     "  }\n"

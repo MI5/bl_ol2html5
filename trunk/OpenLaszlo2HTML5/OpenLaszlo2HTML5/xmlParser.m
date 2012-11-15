@@ -1333,30 +1333,26 @@ void OLLog(xmlParser *self, NSString* s,...)
             }
 
 
-
-
 // Dieser Code ist nicht mehr nötig, aber würde auch nichts schaden mit ausgeführt zu werden.
-// Es gibt irgendwie noch Probs mit dem Code. Er lädt css-Bilder nicht korrekt beim startup... -> War ein preload-Problem
- 
+
+
             // Wenn ein Punkt enthalten ist, ist es wohl eine Datei
-            if ([src rangeOfString:@"."].location != NSNotFound ||
-            // ... Keine Ahnung wo diese Res herkommenen sollen.
-            [src isEqualToString:@"lzgridsortarrow_rsrc"])
+            if ([src rangeOfString:@"."].location != NSNotFound)
             {
                 // Möglichkeit 1: Resource wird direkt als String angegeben!
-                
+
                 // <----- (hier mit '' setzen, da ja ein String!
                 //[self.jsOutput appendFormat:@"\n  $('#%@').get(0).resource = '%@';\n",self.zuletztGesetzteID,src];
-                
+
                 s = src;
             }
             else
             {
                 // Möglichkeit 2: Resource wurde vorher extern gesetzt+
-                
+
                 // <-----
                 //[self.jsOutput appendFormat:@"\n  $('#%@').get(0).resource = %@;\n",self.zuletztGesetzteID,src];
-                
+
                 // Namen des Bildes aus eigener vorher angelegter Res-DB ermitteln
                 if ([[self.allJSGlobalVars valueForKey:src] isKindOfClass:[NSArray class]])
                 {
@@ -4273,9 +4269,13 @@ didStartElement:(NSString *)elementName
         else
         {
             if (isNumeric([attributeDict valueForKey:@"value"]) || [[attributeDict valueForKey:@"value"] isEqual:@"null"])
+            {
                 type_ = @"number";
+            }
             else
+            {
                 type_ = @"string";
+            }
         }
 
 
@@ -4339,6 +4339,7 @@ didStartElement:(NSString *)elementName
         if ([elemTyp isEqualToString:@"state"])
         {
             elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-3];
+            elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-3];
         }
 
         if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
@@ -4387,13 +4388,13 @@ didStartElement:(NSString *)elementName
             // (dann taucht eher keine Klammer im String auf)
             if ([setter rangeOfString:@"("].location != NSNotFound)
                 setter = [setter substringToIndex:[setter rangeOfString:@"("].location];
-            
+
             [o appendFormat:@"\n  %@.mySetterFor_%@_ = '%@'; \n",elem,a,setter];
 
             // Und event mitgeben. Gilt wohl eigentlich für alle Attribute, aber noch anders gelöst, da ich in
-            // setAtribute_ immer DIREKT triggerHandler aufrufe.
+            // setAttribute_ immer DIREKT triggerHandler aufrufe.
             // Bei settern darf triggerHandler() jedoch nicht automatisch ausgelöst werden. Statt dessen wird es oft
-            // in der setAttribute manuell ausgelöst. Mit diesem event schaffe ich die Möglichkeit dazu. S. Bsp. 29.27
+            // in der setAttribute_ manuell ausgelöst. Mit diesem event schaffe ich die Möglichkeit dazu. S. Bsp. 29.27
             // Vermutlich gilt dies sogar generell für alle Attribute.
             NSString *enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
             [o appendFormat:@"  // Gleichzeitig <event> für %@ setzen\n",enclosingElem];
@@ -4481,7 +4482,11 @@ didStartElement:(NSString *)elementName
         // Wenn wir in einer Klasse sind, alle Attribute der Klasse intern mitspeichern
         // Denn sie müssen bei jedem instanzieren der Klasse mit ihren Startwerten
         // initialisiert werden (Überschreibungen durch Instanzvariablen sind möglich).
-        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+        //if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+        // Das war falsch. Nur Attribute direkt auf Ebene der Klasse gehören natürlich zu der Klasse
+        // Vorher wurden auch Attribute der Klasse zugeordnet, die tiefer verschachtelt in anderen Elementen lagen
+        // siehe Klasse 'trashcangridcolumn'... oh man... so ein Fehler so lange...
+        if ([elemTyp isEqualToString:@"evaluateclass"])
         {
             NSString *className = self.lastUsedNameAttributeOfClass;
 
@@ -4502,7 +4507,26 @@ didStartElement:(NSString *)elementName
                 }
                 else
                 {
-                    [attrDictOfClass setObject:value forKey:a];
+                    // Wenn wir in einer Klasse sind nochmals gesondert auf setter reagieren, sonst geht er iwie verloren
+                    if ([attributeDict valueForKey:@"setter"])
+                    {
+                        NSString *setter = [attributeDict valueForKey:@"setter"];
+                        setter = [self modifySomeExpressionsInJSCode:setter];
+
+                        if (![value isEqualToString:@"null"])
+                        {
+                            // Darauf reagiere ich noch nicht, falls überhaupt möglich sowas:
+                            [self instableXML:@"Hmm, dann wurde setter und ein value gleichzeitg gesetzt. Kann sowas sein?"];
+                        }
+                        else
+                        {
+                            [attrDictOfClass setObject:[NSString stringWithFormat:@"@§.SETTER.§@%@",setter] forKey:a];
+                        }
+                    }
+                    else
+                    {
+                        [attrDictOfClass setObject:value forKey:a];
+                    }
                 }
             }
         }
@@ -7798,60 +7822,6 @@ didStartElement:(NSString *)elementName
         [o appendFormat:@"\n  // Klasse '%@' wurde instanziert in '%@'",elementName,self.zuletztGesetzteID];
 
 
-// Die Defaultwerte werden nicht länger vor der Klasse gesetzt, sondern erst in interpretObject
-/*
-        // Okay, außerdem muss ich alle Variablen der Klasse setzen mit ihren Defaultwerten
-        NSArray *keys = [self.allFoundClasses objectForKey:elementName];
-        if ([keys count] > 0)
-        {
-            [o appendString:@"\n  // Setzen aller Attribute der Klasse mit den Defaultwerten"];
-            [o appendString:@"\n  // Falls er hier schon auf eine Var zugreift, die erst in einer parent-Klasse definiert wird, nicht schlimm. Dann ist es undefined"];
-            [o appendString:@"\n  // Und da undefined, wird es in interpretObject() dann 'überschrieben'"];
-
-            for (NSString *key in keys)
-            {
-                NSString *value = [keys valueForKey:key];
-
-                BOOL weNeedQuotes = YES;
-
-                // Der Test auf null und undefined bricht bei Strings, die WIRKLICH diese Werte enthalten,
-                // aber das nehme ich in Kauf.
-                if (isNumeric(value) || isJSArray(value) || [value isEqualToString:@"null"] || [value isEqualToString:@"undefined"])
-                    weNeedQuotes = NO;
-
-                // Wegen Beispiel 28.10 => Klassen können auf den Text zwischen den Tags zugreifen, wenn das Attribut text heißt
-                // Dann nicht hier ausgeben der Var
-                if ([key isEqualToString:@"text"] && [value isEqualToString:@"textBetweenTags"])
-                    continue;
-
-                // Falls es ein berechneter Wert war, erkennen wir es an der Markierung
-                // Dann Markierung raushauen und wir brauchen dann keine Quotes
-                // Außerdem das korrekte Element für this ersetzen
-                if ([value hasPrefix:@"@§.BERECHNETERWERT.§@"])
-                {
-                    value = [value substringFromIndex:21];
-
-                    value = [value stringByReplacingOccurrencesOfString:ID_REPLACE_STRING withString:self.zuletztGesetzteID];
-
-                    weNeedQuotes = NO;
-                }
-
-                if (weNeedQuotes)
-                {
-                    [o appendFormat:@"\n  %@.%@ = '%@';",self.zuletztGesetzteID,key,value];
-                }
-                else
-                {
-                    [o appendFormat:@"\n  %@.%@ = %@;",self.zuletztGesetzteID,key,value];
-                }
-            }
-        }
-        else
-        {
-            [o appendString:@"\n  // Keine Klassen-Attribute vorhanden, die gesetzt werden müssen"];
-        }
-*/
-
         // Erst alle Build-in-Attribute raushauen...
         NSMutableDictionary *d = [[NSMutableDictionary alloc] initWithDictionary:attributeDict];
         // CSS
@@ -7942,6 +7912,12 @@ didStartElement:(NSString *)elementName
 
                 if (isJSExpression(s))
                     weNeedQuotes = NO;
+
+                // '_columnclass' ist ein internes Attribut von 'grid' und immer ein Objekt und bekommt damit keine quotes
+                if ([key isEqualToString:@"_columnclass"])
+                {
+                    weNeedQuotes = NO;
+                }
 
                 // Eventuell sogar in isJSExpression() auslagern?
                 if ([s hasPrefix:@"'"] && [s hasSuffix:@"'"])
@@ -8228,6 +8204,17 @@ BOOL isJSBoolean(NSString *s)
 
     return NO;
 }
+
+
+// doesn't worker proper, ich teste direkt auf den Attributnamen
+BOOL isLZObject(NSString *s)
+{
+    if ([s hasPrefix:@"lz."])
+        return YES;
+
+    return NO;
+}
+
 
 
 BOOL isJSExpression(NSString *s)
@@ -8694,6 +8681,11 @@ BOOL isJSExpression(NSString *s)
                 if (isJSExpression(value))
                     weNeedQuotes = NO;
 
+                // '_columnclass' ist ein internes Attribut von 'grid' und immer ein Objekt und bekommt damit keine quotes
+                if ([key isEqualToString:@"_columnclass"])
+                {
+                   weNeedQuotes = NO;
+                }
 
                 // Wegen Beispiel 28.10 => Klassen können auf den Text zwischen den Tags zugreifen, wenn das Attribut text heißt
                 if ([key isEqualToString:@"text"] && [value isEqualToString:@"textBetweenTags"])
@@ -11482,6 +11474,9 @@ BOOL isJSExpression(NSString *s)
     "    $swf8 = false;\n"
     "\n"
     "    flash = { net : { FileReference : function() { this.addListener = function() {} } } }\n"
+    "\n"
+    "    // Keine Ahnung, wo diese Variable herkommen soll, 'ftgridcolumn' versucht sie aber als Hintergrundbild für eine view zu setzen\n"
+    "    lzgridsortarrow_rsrc = null;\n"
     "}\n"
     "\n"
     "\n"
@@ -11550,7 +11545,7 @@ BOOL isJSExpression(NSString *s)
     "    makeElementsGlobal(document.getElementsByTagName('option'));\n"
     "    // Make all id's from <button>'s global (Firefox)\n"
     "    makeElementsGlobal(document.getElementsByTagName('button'));\n"
-    "    // Make all id's from <button>'s global (Firefox)\n"
+    "    // Make all id's from <textarea>'s global (Firefox)\n"
     "    makeElementsGlobal(document.getElementsByTagName('textarea'));\n"
     "\n"
     "    // Make canvas accessible\n"
@@ -12777,6 +12772,11 @@ BOOL isJSExpression(NSString *s)
     "            var childrenCounter = 0;\n"
     "            var numberOfNodesPointingTo = 0;\n"
     "\n"
+    "            // setXPath() darf gemäß Doku an sich nicht auf mehrere Nodes zeigen\n"
+    "            // XpathQuery hingegen darf/muss auch ein Array zurückliefern, wenn der Poiner auf mehrere Nodes zeigt\n"
+    "            // Vor jedem Durchlauf zurücksetzen und Array leer initialisieren\n"
+    "            this.arrayForXpathQuery = [];\n"
+    "\n"
     "            if (window.ActiveXObject /* && typeof this.xml.selectNodes !== 'undefined' */)\n"
     "            {\n"
     "                // IE hat die DOM-Beschreibung nicht genau gelesen...\n"
@@ -12820,6 +12820,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "                // for (var i = 0;i < nodes.length;i++) // No! Immer der erste Match zählt.\n"
     "                numberOfNodesPointingTo = nodes.length;\n"
+    "                if (numberOfNodesPointingTo > 0)\n"
+    "                    this.arrayForXpathQuery = nodes;\n"
     "\n"
     "                var i = 0;\n"
     "\n"
@@ -12880,8 +12882,9 @@ BOOL isJSExpression(NSString *s)
     "                while (result)\n"
     "                {\n"
     "                    numberOfNodesPointingTo++;\n"
+    "                    this.arrayForXpathQuery.push(result);\n"
     "\n"
-    "                    // Wenn der Knoten leer ist, dann belass es bei den oben gesetzen undefined-Werten für node, nodeValue und nodeName.\n"
+    "                    // Wenn Knoten leer ist, dann belass es bei den oben gesetzen undefined-Werten für node, nodeValue, nodeName...\n"
     "                    if (result.childNodes[0] != undefined)\n"
     "                    {\n"
     "                        node = result.childNodes[0].parentNode;\n"
@@ -12948,6 +12951,29 @@ BOOL isJSExpression(NSString *s)
     "                    this.p[prop] = mix[prop];\n"
     "                }\n"
     "            }\n"
+    "\n"
+    "            // Natürlich muss ich dann auch hier drin in den einzelnen Nodes das reinmixen vornehmen\n"
+    "            if (this.arrayForXpathQuery.length > 1)\n"
+    "            {\n"
+    "                for (var j=0;j<this.arrayForXpathQuery.length;j++)\n"
+    "                {\n"
+    "                    // lz.DataElementMixin reinmixen\n"
+    "                    var mix = new lz.DataElementMixin();\n"
+    "                    for(var prop in mix) {\n"
+    "                        this.arrayForXpathQuery[j][prop] = mix[prop];\n"
+    "                    }\n"
+    "                    // To Do - Hier noch unsauber - Ich müsste wohl das Array übergeben\n"
+    "                    // und dann in der Methode auf das Array gesondert reagieren.\n"
+    "                    mix.overwriteSomeMethodsAndAddAttributes_(this.arrayForXpathQuery[j]);\n"
+    "\n"
+    "                    // lz.DataNodeMixin reinmixen\n"
+    "                    var mix = new lz.DataNodeMixin();\n"
+    "                    for(var prop in mix) {\n"
+    "                        this.arrayForXpathQuery[j][prop] = mix[prop];\n"
+    "                    }\n"
+    "                }\n"
+    "            }\n"
+    "\n"
     "\n"
     "            if (this.p)\n"
     "                this.data = (new XMLSerializer()).serializeToString(this.p);\n"
@@ -13021,6 +13047,7 @@ BOOL isJSExpression(NSString *s)
     "        this.lastNodeText = null; // Ergebnis wird von setXPath hier reingeschrieben\n"
     "        this.data = null;\n"
     "        this.p = null; // Ergebnis wird von setXPath hier reingeschrieben\n"
+    "        this.arrayForXpathQuery = null; // Ergebnis wird von setXPath hier reingeschrieben\n"
     "\n"
     "        this.xpath = null; // Wird mit 'null' initialisiert gemäß OL-Test. Wird von this.init gesetzt\n"
     "\n"
@@ -13117,6 +13144,13 @@ BOOL isJSExpression(NSString *s)
     "                    returnValue = '';\n"
     "                }\n"
     "            }\n"
+    "            // 'xpathQuery' darf im Gegensatz zu 'setXPath' auch ein Array zurückliefern!\n"
+    "            // Wenn ein Array mit mehreren Nodes vorliegt, dieses priorisiert zurückgeben.\n"
+    "            if (this.arrayForXpathQuery.length > 1)\n"
+    "            {\n"
+    "                returnValue = this.arrayForXpathQuery;\n"
+    "            }\n"
+    "\n"
     "\n"
     "            // alte 'Variablen' wiederherstellen\n"
     "            this.lastNode = lastNode;\n"
@@ -13393,10 +13427,10 @@ BOOL isJSExpression(NSString *s)
     "            }\n"
     "            return null;\n"
     "        }\n"
-    "        this.addNode = function(name,text,attrs) { // oi\n"
+    "        this.addNode = function(name,text,attrs) { // oi + alert\n"
     "            if (!this.p)\n"
     "            {\n"
-    "                alert('datapointer.addNode with undefined this.p - This is still to handle - ToDo');\n"
+    "                alert('datapointer.addNode with undefined this.p - This should not raise anymore.');\n"
     "                return null;\n"
     "            }\n"
     "\n"
@@ -13869,6 +13903,17 @@ BOOL isJSExpression(NSString *s)
     //"    if (Object.getOwnPropertyDescriptor(me,attributeName) && Object.getOwnPropertyDescriptor(me,attributeName).set)\n"
     "    if (me['mySetterFor_'+attributeName+'_'])\n"
     "    {\n"
+    "        alert(typeof me['mySetterFor_'+attributeName+'_']);\n"
+    "        alert('Das muss ich nochmal gegenchecken. Bei Function reagiere ich anders!');\n"
+    "        // Bei Klassen, wird der setter als Funktion gesetzt, was auch richtig ist\n"
+    "        if (typeof me['mySetterFor_'+attributeName+'_'] === 'function')\n"
+    "        {\n"
+    "            me['mySetterFor_'+attributeName+'_'](value);\n"
+    "            return;\n"
+    "        }\n"
+    "\n"
+    "\n"
+    "        // Im Prinzip falscher Code - Bei Nicht-Klassen wird aber noch der setter als String gesetzt\n"
     "        var fnName = me['mySetterFor_'+attributeName+'_'];\n"
     "        var fn = me[fnName];\n"
     //"        alert(fn);\n"
@@ -15330,12 +15375,13 @@ BOOL isJSExpression(NSString *s)
     "// getTextHeight()                                     //\n"
     "/////////////////////////////////////////////////////////\n"
     "var getTextHeightFunction = function () {\n"
-    "    warnOnWrongClass(this);\n"
+    "    // warnOnWrongClass(this);\n"
     "    return $(this).outerHeight();\n"
     "}\n"
     "\n"
     "// Nur für div! Da es die Methode nur bei <div class=\"div_text\"> gibt\n"
     "HTMLDivElement.prototype.getTextHeight = getTextHeightFunction;\n"
+    "HTMLButtonElement.prototype.getTextHeight = getTextHeightFunction; // Weil ich '_title' auf Button verlinke, obwohl es text sein müsste\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -15348,6 +15394,40 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "// Nur für div! Da es die Methode nur bei <div class=\"div_text\"> gibt\n"
     "HTMLDivElement.prototype.getTextWidth = getTextWidthFunction;\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// setMultiline() - deprecated!                        //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var setMultilineFunction = function (v) {\n"
+    "    this.setAttribute_('multiline', v);\n"
+    "}\n"
+    "HTMLDivElement.prototype.setMultiline = setMultilineFunction;\n"
+    "HTMLButtonElement.prototype.setMultiline = setMultilineFunction; // Weil ich '_title' auf Button verlinke, obwohl es text sein müsste\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// setResize() - deprecated!                           //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "HTMLDivElement.prototype.setResize = function (v) {\n"
+    "    this.setAttribute_('resize', v);\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// setScroll() - deprecated!                           //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "HTMLDivElement.prototype.setScroll = function (v) {\n"
+    "    this.setAttribute_('scroll', v);\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// setSelectable() - deprecated!                        //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "HTMLDivElement.prototype.setSelectable = function (v) {\n"
+    "    this.setAttribute_('selectable', v);\n"
+    "}\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -15461,6 +15541,27 @@ BOOL isJSExpression(NSString *s)
     "// cb ist der undokumentierte Zugriff auf das eigentliche Checkbox-Feld\n"
     "// Zugriff darauf wird derzeit nicht unterstützt\n"
     "HTMLInputElement.prototype.cb = { setAttribute_ : function(){} }\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Attribute/Methoden von <button> (OL: <button>)//\n"
+    "/////////////////////////////////////////////////////////\n"
+    "////////////////////////INCOMPLETE///////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// _title ist der undokumentierte Zugriff auf den Text im Button\n"
+    "// Verweist derzeit statt dessen einfach auf den button selber\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter for '_title'                                 //\n"
+    "// READ-ONLY                                           //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(HTMLButtonElement.prototype, '_title', {\n"
+    "    get : function(){ return this; },\n"
+    "    /* READ-ONLY set : , */\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
     "\n"
     "\n"
     "\n"
@@ -17603,6 +17704,16 @@ BOOL isJSExpression(NSString *s)
     "                {\n"
     "                    handleConstraintValue(id,key,value);\n"
     "                }\n"
+    "                else if (typeof value === 'string' && value.startsWith('@§.SETTER.§@'))\n"
+    "                {\n"
+    "                    value = value.substr(12);\n"
+    "                    value = replaceID(value,''+$(id).attr('id'));\n"
+    //"                alert(value);\n"
+    "                    // Den setter als Methode im Objekt speichern, die dann von setAttribute_() aufgerufen wird\n"
+    "                    var evalString = \"id['mySetterFor_'+key+'_'] = function(\" + key + ') { with (' + $(id).attr('id') + ') { ' + value + ' }};';\n"
+    //"                alert(evalString);\n"
+    "                    eval(evalString);\n"
+    "                }\n"
     "                else if (typeof value === 'string' && value.startsWith('@§.BERECHNETERWERTABERONCE.§@'))\n"
     "                {\n"
     "                    value = value.substr(29);\n"
@@ -18458,6 +18569,20 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
+    "//  class = basegridcolumn (native class) - To Do            //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.basegridcolumn = function() {\n"
+    "  this.name = 'basegridcolumn';\n"
+    "  this.inherit = new oo.basecomponent();\n"
+    "\n"
+    "  this.selfDefinedAttributes = { ascendComparator: null, ascendsort: true, colwidth: this.width, datatype: 'string', descendComparator: null, hasSort: false, minwidth: 10, sortpath: '', text: (this.datapath ? this.datapath.xpath : '') }\n"
+    "\n"
+    "  this.contentHTML = '';\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
     "//  class = basescrollbar (native class)                     //\n"
     "///////////////////////////////////////////////////////////////\n"
     "oo.basescrollbar = function() {\n"
@@ -18714,7 +18839,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
-    "//  class = button (native class)                            //\n"
+    "//  class = button (native class) - To Complete              //\n"
     "///////////////////////////////////////////////////////////////\n"
     "oo.button = function(textBetweenTags) {\n"
     "  if(typeof(textBetweenTags) === 'undefined')\n"

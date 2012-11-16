@@ -785,7 +785,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         {
             if ([self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"] || [self.lastUsedExtendsAttributeOfClass isEqualToString:@"dragstate"])
             {
-                e = [NSString stringWithFormat:@"parent.%@",e];
+                // Neu: parent selber merkt jetzt ja, ob wir ein state sind oder nicht.
+                // Denke das hier kann dann weg?!
+                //e = [NSString stringWithFormat:@"parent.%@",e];
             }
         }
 
@@ -803,7 +805,9 @@ void OLLog(xmlParser *self, NSString* s,...)
             {
                 if ([self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"] || [self.lastUsedExtendsAttributeOfClass isEqualToString:@"dragstate"])
                 {
-                    object = [self inString:object searchFor:@"parent" andReplaceWith:@"parent.parent" ignoringTextInQuotes:YES];
+                    // Neu: parent selber merkt jetzt ja, ob wir ein state sind oder nicht.
+                    // Denke das hier kann dann weg?!
+                    //object = [self inString:object searchFor:@"parent" andReplaceWith:@"parent.parent" ignoringTextInQuotes:YES];
                 }
             }
 
@@ -1173,10 +1177,10 @@ void OLLog(xmlParser *self, NSString* s,...)
             NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
             // Die Eigenschaft font-size überträgt sich auf alle Kinder und Enkel
-            [s appendString:@"  // Alle Kinder und Enkel kriegen ebenfalls die font-size-Eigenschaft mit\n"];
+            [s appendString:@"\n  // Alle Kinder und Enkel kriegen ebenfalls die font-size-Eigenschaft mit\n"];
             // Früher war es anstatt 'div' '.div_text'.
             // Das geht nicht, falls der Text eine Klasse ist. Klassen sind immer 'div_standard', nicht 'div_text'
-            [s appendFormat:@"  $('#%@').find('div').css('font-size','%@px');\n\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"fontsize"]];
+            [s appendFormat:@"  $('#%@').find('div').css('font-size','%@px');\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"fontsize"]];
 
             // Muss GANZ Am Anfang stehen, da die width-eigenschaft, die ausgelesen wird,
             // von der Schriftgröße abhängt. Diese muss aber vorher korrekt gesetzt werden!!
@@ -1694,7 +1698,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         {
             // Wenn wir in einem 'state' sind, müssen wir nen Extrasprung machen.
             // Aber nur für das DIREKT im 'state' liegende Element
-            if (self.lastUsedNameAttributeOfState.length > 0)
+            // Neu: Der Extrasprung gilt generell und steckt jetzt direkt in 'parent'
+            if (false)
             {
                 [self.jsOutput appendFormat:@"  ($(document.getElementById('%@').parent).data('olel') == 'state') ? document.getElementById('%@').parent.parent.%@ = document.getElementById('%@') : document.getElementById('%@').parent.%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, self.zuletztGesetzteID, name, self.zuletztGesetzteID, self.zuletztGesetzteID, name, self.zuletztGesetzteID];
             }
@@ -3438,7 +3443,6 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
-        [elementName isEqualToString:@"BDSedit___DeleteMe"] ||
         [elementName isEqualToString:@"BDStext___DeleteMe"] ||
         [elementName isEqualToString:@"statictext"] ||
         [elementName isEqualToString:@"text"] ||
@@ -4983,7 +4987,7 @@ didStartElement:(NSString *)elementName
         // Wegen Beispiel 16.1 font-size von 11px.
         [self.output appendString:@" class=\"input_standard\" style=\"font-size:11px;"];
         [self.output appendString:[self addCSSAttributes:attributeDict]];
-        [self.output appendString:@"\">"];
+        [self.output appendString:@"\">\n"];
 
         // Den Text als Beschriftung für den Button setzen
         if ([attributeDict valueForKey:@"text"])
@@ -5099,69 +5103,6 @@ didStartElement:(NSString *)elementName
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
 
         [self evaluateTextOnlyAttributes:attributeDict];
-    }
-
-
-
-    if ([elementName isEqualToString:@"BDSedit___DeleteMe"])
-    {
-        element_bearbeitet = YES;
-
-
-        if ([attributeDict valueForKey:@"password"])
-        {
-            self.attributeCount++;
-            NSLog(@"Using the attribute 'password' for HTML '<input type=\"password\">'.");
-
-            if ([[attributeDict valueForKey:@"password"] isEqual:@"true"])
-                [self.output appendString:@"<input type=\"password\""];
-            else
-                [self.output appendString:@"<input type=\"text\""];
-        }
-        else
-        {
-            if ([attributeDict valueForKey:@"pattern"])
-            {
-                self.attributeCount++;
-
-                if ([[attributeDict valueForKey:@"pattern"] isEqual:@"[0-9a-z@_.\\-]*"])
-                    [self.output appendFormat:@"<input type=\"email\""];
-                else
-                    [self.output appendFormat:@"<input type=\"text\" pattern=\"%@\"",[attributeDict valueForKey:@"pattern"]];
-            }
-            else
-            {
-                [self.output appendString:@"<input type=\"text\""];
-            }
-        }
-
-
-        [self addIdToElement:attributeDict];
-
-        [self.output appendString:@" class=\"input_standard\" style=\""];
-
-        // Die Width ist bei input-Feldern regelmäßig zu lang, vermutlich wegen interner
-        // border-/padding-/margin-/Angaben bei OpenLaszlo. Deswegen hier vorher Wert abändern.
-        if ([attributeDict valueForKey:@"width"])
-        {
-            int neueW = [[attributeDict valueForKey:@"width"] intValue]-14;
-            [attributeDict setValue:[NSString stringWithFormat:@"%d",neueW] forKey:@"width"];
-        }
-
-        [self.output appendString:[self addCSSAttributes:attributeDict]];
-
-        [self.output appendString:@"\" />\n"];
-
-
-        if ([attributeDict valueForKey:@"maxlength"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'maxlength' for now.");
-        }
-
-        [self evaluateTextInputOnlyAttributes:attributeDict];
-
-        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
     }
 
 
@@ -8862,6 +8803,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"state"] ||
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
+        [elementName isEqualToString:@"button"] ||
         //[elementName isEqualToString:@"rollUpDownContainer"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"tabslider"] ||
@@ -8958,7 +8900,6 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"greenstyle"] ||
         [elementName isEqualToString:@"goldstyle"] ||
         [elementName isEqualToString:@"purplestyle"] ||
-        [elementName isEqualToString:@"BDSedit___DeleteMe"] ||
         [elementName isEqualToString:@"BDSeditdate___DeleteMe"] ||
         [elementName isEqualToString:@"dragstate"] ||
         [elementName isEqualToString:@"frame"] ||
@@ -9768,6 +9709,15 @@ BOOL isJSExpression(NSString *s)
             [self instableXML:[NSString stringWithFormat:@"ERROR: Nicht erfasstes schließendes Element: '%@'", elementName]];
     }
 }
+
+
+
+
+- (void)parser:(NSXMLParser *)parser foundComment:(NSString *)comment
+{
+    // Could I somehow export
+}
+
 
 
 
@@ -13792,7 +13742,7 @@ BOOL isJSExpression(NSString *s)
     "configurable: true,\n"
     "writable: false,\n"
     "value: function(immediate) {\n"
-    "    if(typeof(immediate) === 'undefined')\n"
+    "    if (typeof(immediate) === 'undefined')\n"
     "        immediate = false;\n"
     "\n"
     "    // Wenn wir immediate sind, dann verzichten wir auf die Doppelsprünge!\n"
@@ -13804,7 +13754,7 @@ BOOL isJSExpression(NSString *s)
     "        // input's und select's haben ein umgebendes id-loses div. Das müssen wir überspringen.\n"
     "        p = p.parent();\n"
     "    }\n"
-    "    if (!immediate && ($(p).hasClass('div_rudPanel') || $(p).hasClass('div_windowContent')))\n"
+    "    if (!immediate && (p.hasClass('div_rudPanel') || p.hasClass('div_windowContent')))\n"
     "    {\n"
     "        // Das Rud-Element/Window-Element hat ein Zwischen-Element, da muss ich dann eine Ebene höher springen.\n"
     "        p = p.parent();\n"
@@ -13813,6 +13763,12 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        // Das canvas-Element hat ein (zwei?) Zwischen-Element(e), da muss ich dann eine Ebene höher springen.\n"
     "        p = p.parent().parent();\n"
+    "    }\n"
+    "    // state ist kein ansprechbares Element in der Hierachie und wird stets übersprungen!\n"
+    "    // Gilt immer! Auch bei immediate. Getestet in OL.\n"
+    "    if (p.data('olel') == 'state')\n"
+    "    {\n"
+    "        p = p.parent();\n"
     "    }\n"
     "\n"
     "    return p.get(0);\n"
@@ -13941,7 +13897,19 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        else if ($(me).is('input'))\n"
     "        {\n"
+    "            // To Do - Shouldn't I use $(me).val(); here?\n"
     "            $(me).attr('value',value);\n"
+    "        }\n"
+    "        else if ($(me).is('button'))\n"
+    "        {\n"
+    "            // Ein button kann andere Elemente enthalten! Da kann ich nicht einfach alles per html() ersetzen\n"
+    "            // Deswegen muss ich explizit die/eine Textnode setzen\n"
+    // Ich nehme die erste Textnode analog dazu wie ich einen evtl. Text bei Buttons mit Start-Textwerten setze
+    "            $(me).contents().filter(function() { return this.nodeType == 3; }).eq(0).get(0).nodeValue = value;\n"
+    // Alternativen wäre 'me.firstChild.nodeType' oder 'me.lastChild.nodeType'
+    "\n"
+    "            // Wegen Example 16.1, bei Buttons width mit outerwidth setzen\n"
+    "            $(me).width($(me).outerWidth()/* -22 */);\n"
     "        }\n"
     "        else\n"
     "        {\n"
@@ -13949,10 +13917,6 @@ BOOL isJSExpression(NSString *s)
     // Wegen Bsp. 37.2 wohl eher text()
     // ne, muss html() bleiben, damit keine <br>'s auftauchen auf der Taxango-Startseite.
     "            $(me).html(value);\n"
-    "\n"
-    "            // Wegen Example 16.1, bei Buttons width mit outerwidth setzen\n"
-    "            if ($(me).is('button'))\n"
-    "                $(me).width($(me).outerWidth()/* -22 */);\n"
     "\n"
     "            if (me.resize)\n"
     "            {\n"
@@ -17767,7 +17731,9 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        if (typeof value === 'string' && value.startsWith('$')) // = Constraint value\n"
     "        {\n"
-    "            handleConstraintValue(id,key,value);\n"
+    "            // 'datapath'-Property wird erst weiter unten gesetzt\n"
+    "            if (key !== 'datapath')\n"
+    "                handleConstraintValue(id,key,value);\n"
     "        }\n"
     "        else\n"
     "        {\n"
@@ -18101,9 +18067,14 @@ BOOL isJSExpression(NSString *s)
     "  {\n"
     "    if (iv.datapath.startsWith('${'))\n"
     "    {\n"
-    "        // Dann ist es kein String, sondern ein JS-Ausdruck - Ob wirklich eine Constraint nötig ist, ist eher fraglich.\n"
+    "        // Dann ist es ein auszuwertender JS-Ausdruck - Ob wirklich eine Constraint nötig ist, ist eher fraglich.\n"
     "        iv.datapath = iv.datapath.substring(2,iv.datapath.length-1);\n"
-    "        eval('iv.datapath = ' + iv.datapath + ';');\n"
+    "        (function() { with (id) { eval('iv.datapath = ' + iv.datapath + ';');  } }).bind(id)();\n"
+    "    }\n"
+    "    if (iv.datapath.startsWith('$once{'))\n"
+    "    {\n"
+    "        iv.datapath = iv.datapath.substring(6,iv.datapath.length-1);\n"
+    "        (function() { with (id) { eval('iv.datapath = ' + iv.datapath + ';');  } }).bind(id)();\n"
     "    }\n"
     "\n"
     "\n"

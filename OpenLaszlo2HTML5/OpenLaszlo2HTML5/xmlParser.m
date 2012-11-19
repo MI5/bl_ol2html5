@@ -9,6 +9,47 @@
 // 'last DP _' bei den datapointern ist nun weg -> Dann kann ich wohl jetzt auch das Problem mit Bsp. 37.15 lösen
 //
 //
+// - Warum ist super_ ein Objekt in dem alle Methoden stecken und nicht einfach eine Referenz auf das
+// objekt der Ebene vorher? - Dies würde evtl. das Problem. mit 'maximum call stack size exceeded' lösen
+// bei init-Methode von BDSgridcolumn (habe ich erstmal entfernt den super_.init() in init() dort.
+// (Ich denke das Problem dort ist, dass der parent ein state ist, der ja übersprungen werden müsste)
+// Unsinn! super_ ist schließlich nicht der parent, sondern der inherit!
+// Antwort: Ich binde nur die Methoden, weil ich das this der Methoden ja anpassen muss.
+// Evl. Lösung für super_
+//Object.defineProperty(HTMLElement.prototype, 'super_', {
+//    get : function(){
+//        if ($(this).data('olel') === 'BDSeditnumber')
+//        {
+//            // Wird als erstes aufgerufen, deswegen hier zum testen
+//            // Diese Abfrage muss dann später entfernt werden
+//            return { init: function() {} };
+//        }
+//
+//        if ($(this).data('olel') === 'view')
+//        {
+//            // Ist dann eine Art leere 'Base-Node'
+//            return { init: function() {} };
+//        }
+//        else if ($(this).data('olel') === undefined)
+//        {
+//            // hmmm, ka, das sollte eigentlich nicht entstehen können...
+//            // Entsteht aber noch, und führt jetzt zu weit.
+//        }
+//        else
+//        {
+//            // Objektname, welcher in $(this).data('olel') steckt, packen
+//            // auf inherit davon zugreifen.
+//            // Den inherit instanzieren
+//            // Den inherit mit allen Methoden zurückgeben
+//        }
+//        alert('zugriff auf super_!'); alert($(this).data('olel')); return this; },
+//    /* READ-ONLY set : , */
+//    enumerable : false,
+//    configurable : true
+//});
+//
+//
+//
 //
 //
 //
@@ -170,8 +211,9 @@ BOOL ownSplashscreen = NO;
 @property (strong, nonatomic) NSString *lastUsedNameAttributeOfFont;
 
 
-// Falls eine Methode da dran gebunden wird, brauche ich den Namen (da selten id)
-// oder oft auch gar kein Name (Beispiel 11.4) -> Dann tempName
+// Falls eine Methode oder ein Attribut da dran gebunden wird, brauche ich den Namen
+// (da DataPointer meist ohne id)
+// Oder oft auch gar kein Name (Beispiel 11.4) -> Dann tempName
 @property (strong, nonatomic) NSString *lastUsedNameAttributeOfDataPointer;
 
 // Damit ich auch intern auf die Inhalte der Variablen zugreifen kann
@@ -4061,7 +4103,8 @@ didStartElement:(NSString *)elementName
             }
         }
 
-        // Falls gleich eine Methode oder ein Handler kommt, die sich an diesen Pointer binden möchte
+        // Falls gleich eine Methode, ein Attribut oder ein Handler kommt,
+        // welche sich an diesen Pointer binden möchten.
         self.lastUsedNameAttributeOfDataPointer = name;
 
         [self addJSCode:attributeDict withId:name];
@@ -4109,7 +4152,7 @@ didStartElement:(NSString *)elementName
         if ([dp rangeOfString:@":"].location != NSNotFound)
         {
             [o appendString:@"\n  // datapath-Element mit ':' im String (also ein absoluter XPath).\n"];
-            [o appendFormat:@"  setAbsoluteDataPathIn(%@,%@);\n",idUmgebendesElement,dp];
+            [o appendFormat:@"  var lastUsedDP = setAbsoluteDataPathIn(%@,%@);\n",idUmgebendesElement,dp];
 
             // Absolute Datapath-Angaben sollten stets vor den relativen bekannt sein, z. B. Example 37.15
             [self.jQueryOutput0 appendString:o];
@@ -4117,7 +4160,7 @@ didStartElement:(NSString *)elementName
         else if (dp.length == 0)
         {
             [o appendString:@"\n  // Leerer datapath (Wird gesetzt als absoluter XPath).\n"];
-            [o appendFormat:@"  setAbsoluteDataPathIn(%@,'');\n",idUmgebendesElement];
+            [o appendFormat:@"  var lastUsedDP = setAbsoluteDataPathIn(%@,'');\n",idUmgebendesElement];
 
             // Absolute Datapath-Angaben sollten stets vor den relativen bekannt sein, z. B. Example 37.15
             [self.jQueryOutput0 appendString:o];
@@ -4125,10 +4168,16 @@ didStartElement:(NSString *)elementName
         else
         {
             [o appendString:@"\n  // Ein relativer Datapath.\n"];
-            [o appendFormat:@"  setRelativeDataPathIn(%@,%@,'text');\n",idUmgebendesElement,dp];
+            [o appendFormat:@"  var lastUsedDP = setRelativeDataPathIn(%@,%@,'text');\n",idUmgebendesElement,dp];
 
             [self.jsComputedValuesOutput appendString:o];
         }
+
+        // Falls gleich ein Attribut kommt, welches sich an diesen datapath binden möchte.
+        // Datapath hat ja keine ID, deswegen reagiere ich gesondert auf evtl. DP-Attribute
+        // und benutze diese Variable.
+        // Die Converter-dataPointer-Variable kann hier einfach mitbenutzt werden.
+        self.lastUsedNameAttributeOfDataPointer = @"lastUsedDP";
     }
 
 
@@ -4554,6 +4603,13 @@ didStartElement:(NSString *)elementName
                 {
                     [o appendFormat:@"\n  // Ein per <attribute> gesetztes Dataset-Attribut von '%@' (Objekttyp: %@)", self.lastUsedDataset, elemTyp];
                     [o appendFormat:@"\n  %@.",self.lastUsedDataset];
+                }
+                // Bei 'datapointer' und 'datapath' brauche ich den entsprechenden Namen
+                else if ([elemTyp isEqualToString:@"datapointer"] ||
+                         [elemTyp isEqualToString:@"datapath"])
+                {
+                    [o appendFormat:@"\n  // Ein per <attribute> gesetztes DP-Attribut von '%@' (Objekttyp: %@)", self.lastUsedNameAttributeOfDataPointer, elemTyp];
+                    [o appendFormat:@"\n  %@.",self.lastUsedNameAttributeOfDataPointer];
                 }
                 else
                 {
@@ -13448,7 +13504,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            if (!recursion && this.p)\n"
     "            {\n"
-    "                this.p.__LZlockFromUpdate(this);\n"
+    "                //Noch kein locking implementiert\n"
+    "                //this.p.__LZlockFromUpdate(this);\n"
     "            }\n"
     "\n"
     "            if (this.xpath)\n"
@@ -13466,6 +13523,15 @@ BOOL isJSExpression(NSString *s)
     "                    }\n"
     "                    else if (this.xpath.contains('@')) // Logik für 'Wenn es ein Attribut ist'\n"
     "                    {\n"
+    "alert(this.p.value);\n"
+    "alert(this.data);\n"
+    "this.p.value = valueToSet;\n"
+    "updateDataAndDatasetAndTrigger(this,valueToSet);\n"
+    "// Ändert this.p auf undefined... why??\n"
+    "alert('durch');\n"
+    "alert(this.p);\n"
+    "alert(this.p.value);\n"
+    "alert(this.data);\n"
     "                        this.p.$lzc$set_attributes(valueToSet);\n"
     "                    }\n"
     "                    else\n"
@@ -13486,7 +13552,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            if (!recursion && this.p)\n"
     "            {\n"
-    "                this.p.__LZunlockFromUpdate(this)\n"
+    "                //Noch kein locking implementiert\n"
+    "                //this.p.__LZunlockFromUpdate(this)\n"
     "            }\n"
 
     "        }\n"
@@ -13859,9 +13926,8 @@ BOOL isJSExpression(NSString *s)
     //"    if (Object.getOwnPropertyDescriptor(me,attributeName) && Object.getOwnPropertyDescriptor(me,attributeName).set)\n"
     "    if (me['mySetterFor_'+attributeName+'_'])\n"
     "    {\n"
-    "        alert(typeof me['mySetterFor_'+attributeName+'_']);\n"
-    "        alert('Das muss ich nochmal gegenchecken. Bei Function reagiere ich anders!');\n"
-    "        // Bei Klassen, wird der setter als Funktion gesetzt, was auch richtig ist\n"
+    "        // Bei Klassen wird der setter als Funktion gesetzt, was auch richtig ist\n"
+    "        // Einfach die entsprechende Setter-Funktion aufrufen und dann raus hier.\n"
     "        if (typeof me['mySetterFor_'+attributeName+'_'] === 'function')\n"
     "        {\n"
     "            me['mySetterFor_'+attributeName+'_'](value);\n"
@@ -13910,6 +13976,15 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            // Wegen Example 16.1, bei Buttons width mit outerwidth setzen\n"
     "            $(me).width($(me).outerWidth()/* -22 */);\n"
+    "        }\n"
+    "        else if ($(me).children('div').length > 0) // <u>, <b>, <span> usw. sind ja erlaubt, deswegen auf div-Kinder beschränken\n"
+    "        {\n"
+    "            // Dann auch die Textnode direkt setzen, sonst überschreibe ich ja alle darin enthaltenen Kinder....\n"
+    "            // Und das führt zu wtf-Fehlern.\n"
+    "            $(me).contents().filter(function() { return this.nodeType == 3; }).eq(0).get(0).nodeValue = value;\n"
+    "\n"
+    "            // Zusätzlich in diesem Fall mal auch direkt als Property speichern, falls Klasse es direkt auslesen möchte\n"
+    "            me[attributeName] = value;\n"
     "        }\n"
     "        else\n"
     "        {\n"
@@ -17030,7 +17105,7 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "    else\n"
     "    {\n"
-    "        dp = $(el).data('datapathobject_');\n"
+    "        var dp = $(el).data('datapathobject_');\n"
     "\n"
     "        // Ich MUSS den Datapointer aber, wenn ich ihn schon nicht neu anlege, zumindestens neu initialisieren\n"
     "        $(el).data('datapathobject_').init(path);\n"
@@ -17147,6 +17222,9 @@ BOOL isJSExpression(NSString *s)
     "    $(dp).off('datasethaschanged.setAbsoluteDP');\n"
     "    // Ich muss hier mit el.id arbeiten, falls das Objekt selber ausgetauscht wurde\n"
     "    $(dp).on('datasethaschanged.setAbsoluteDP', function() { setAbsoluteDataPathIn(el.id,path); });\n"
+    "\n"
+    "    // Falls z. B. Attribute an den Pointer des Paths gebunden werden, diesen zurückgeben\n"
+    "    return dp;\n"
     "}\n"
     "\n"
     "\n"
@@ -17225,6 +17303,9 @@ BOOL isJSExpression(NSString *s)
     "    $(pointer).off('datasethaschanged.setRelativeDP');\n"
     "    // Ich MUSS hier über el.id gehen, also einen string, weil das Element selber evtl. ausgetauscht wurde (von setAbsoluteDP)\n"
     "    $(pointer).on('datasethaschanged.setRelativeDP', function() { setRelativeDataPathIn(el.id,path,attr); });\n"
+    "\n"
+    "    // Falls z. B. Attribute an den Pointer des Paths gebunden werden, diesen zurückgeben\n"
+    "    return pointer;\n"
     "}\n"
     "\n"
     "\n"

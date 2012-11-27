@@ -3056,7 +3056,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
     // Das war in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
-    // [self.jsOutput appendString:o];
     // Anscheinend doch nicht, es muss in jQuery (ans Ende), weil erst dann die width und height von selbst
     // definierten Klassen bekannt ist (Example 28.9. Extending the built-in text classes)
     // puh, puh, muss es derzeit wirklich doppelt setzen, auch wegen Bsp. 11.2
@@ -3106,7 +3105,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
     // Das war in self.jsOutput, damit das umgebende DIV richtig gesetzt wird
-    // [self.jsOutput appendString:o];
     // Anscheinend doch nicht, es muss in jQuery (ans Ende), weil erst dann die width und height von
     // selbst definierten Klassen bekannt ist (Example 28.9. Extending the built-in text classes)
     [self.jQueryOutput appendString:o];
@@ -3170,18 +3168,6 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jQueryOutput appendFormat:@"\n  // Setting the value-attribute (comes from OL-'text'-attribute)\n"];
         [self.jQueryOutput appendFormat:@"  $('#%@').val('%@');\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"text"]];
     }
-}
-
-
-
-// Gibt es 2 mal im Code, deswegen als eigene Methode
-- (void) legeDatasetAnUndInitMitOeffnendemTag
-{
-    [self.datasetOutput appendString:@"\n  // Dataset wird als XML-Struktur angelegt und in einem JS-String gespeichert.\n"];
-    [self.datasetOutput appendFormat:@"  %@ = new lz.dataset(null, {name: '%@'});\n",self.lastUsedDataset,self.lastUsedDataset];
-    [self.datasetOutput appendString:@"  // Ebenfalls sind alle Datasets über eine Property in canvas ansprechbar.\n"];
-    [self.datasetOutput appendFormat:@"  canvas.myDatasets['%@'] = %@;\n",self.lastUsedDataset,self.lastUsedDataset];
-    [self.datasetOutput appendFormat:@"  %@.rawdata = '<%@>';\n",self.lastUsedDataset,self.lastUsedDataset];
 }
 
 
@@ -3757,6 +3743,8 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
+        NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
+
         if (![attributeDict valueForKey:@"name"])
         {
             [self instableXML:@"ERROR: No attribute 'name' given in dataset-tag"];
@@ -3771,87 +3759,68 @@ didStartElement:(NSString *)elementName
 
 
 
-
-        // Erstmal ignorieren
-        if ([attributeDict valueForKey:@"proxied"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'proxied'.");
-        }
-
-        // Erstmal ignorieren
-        if ([attributeDict valueForKey:@"timeout"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'timeout'.");
-        }
-
-
-
-
-
-
-
         // Alle nachfolgenden Tags in eine eigene Data-Struktur überführen
         // und diese Tags nicht auswerten lassen vom XML-Parser.
         // Muss (logischerweise) vor der Rekursion stehen, deswegen steht es hier oben
         self.weAreInDatasetAndNeedToCollectTheFollowingTags = YES;
 
 
+        [self.datasetOutput appendString:@"\n  // A dataset\n"];
+        [self.datasetOutput appendFormat:@"  %@ = new lz.dataset(null, {name: '%@'});\n",self.lastUsedDataset,self.lastUsedDataset];
+
+        
+        if ([enclosingElemTyp isEqualToString:@"canvas"] || [enclosingElemTyp isEqualToString:@"library"])
+        {
+            [self.datasetOutput appendString:@"  // datasets are hooked in the surrounding element\n"];
+            [self.datasetOutput appendFormat:@"  canvas.%@ = %@;\n",self.lastUsedDataset,self.lastUsedDataset];
+
+            // http://www.openlaszlo.org/lps3.4/docs/guide/databinding.html 6.1.1
+            [self.datasetOutput appendString:@"  // Also datasets can be accessed through a Property in canvas\n"];
+            [self.datasetOutput appendFormat:@"  canvas.myDatasets['%@'] = %@;\n",self.lastUsedDataset,self.lastUsedDataset];
+        }
+        else
+        {
+            [self instableXML:@"dataset NOT in canvas. Hmmm. Different to Handle?"];
+        }
+
+
 
         // Fals es per src in eigener externer Datei angegeben ist, müssen wir diese auslesen
         if ([attributeDict valueForKey:@"src"])
         {
-            NSString *src = [attributeDict valueForKey:@"src"];
-
             self.attributeCount++;
 
-            // querytype ist wohl ein request in die Wolke (auf eine .php-Datei)
-            // Es gibt als Querytype sowohl "POST", als auch "GET"
-            if ([attributeDict valueForKey:@"querytype"])
+            NSString *src = [attributeDict valueForKey:@"src"];
+
+            if ([src hasPrefix:@"$"])
             {
-                self.attributeCount++;
-
-                [self.datasetOutput appendString:@"\n  // Ein Dataset, welches per Request aus der Wolke gefüllt wird. Ich speichere den Link in 'src'.\n"];
-                [self.datasetOutput appendFormat:@"  %@ = new lz.dataset(null, {name: '%@'});\n",self.lastUsedDataset, self.lastUsedDataset];
-
-                if ([src hasPrefix:@"$"])
-                {
-                    // src = [self makeTheComputedValueComputable:src]; // <-- klappt nicht, weil dataset keine 'id' hat
-                    src = [self removeOccurrencesOfDollarAndCurlyBracketsIn:src];
-                    [self.datasetOutput appendFormat:@"  %@.src = %@;\n",self.lastUsedDataset, src];
-                }
-                else
-                {
-                    [self.datasetOutput appendFormat:@"  %@.src = '%@';\n",self.lastUsedDataset, src];
-                }
+                // src = [self makeTheComputedValueComputable:src];// <-geht nicht, da dataset keine id hat
+                src = [self removeOccurrencesOfDollarAndCurlyBracketsIn:src];
+                // Dann 'src' ohne umschließende Hochkomma setzen
+                [self.datasetOutput appendFormat:@"  %@.src = %@;\n",self.lastUsedDataset, src];
             }
             else
             {
-                if ([src hasPrefix:@"http://"])
-                {
-                    NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! But it is starting with 'http://'. So I am loading the XML-File (%@) into a string.",src]);
-
-                    [self.datasetOutput appendString:@"\n  // Externe XML-Datei wird als XML-Struktur ausgelesen und in einem JS-String gespeichert.\n"];
-                    [self.datasetOutput appendFormat:@"  %@ = new lz.dataset(null, {name: '%@'});\n",self.lastUsedDataset,self.lastUsedDataset];
-                    [self.datasetOutput appendFormat:@"  %@.rawdata = (new XMLSerializer()).serializeToString(getXMLDocumentFromFile('%@'));\n",self.lastUsedDataset,src];
+                [self.datasetOutput appendFormat:@"  %@.src = '%@';\n",self.lastUsedDataset, src];
+            }
 
 
-                    [self.datasetOutput appendString:@"  // datasets außerhalb von Klassen sind auch in canvas verankert\n"];
-                    [self.datasetOutput appendFormat:@"  canvas.%@ = %@;\n",self.lastUsedDataset,self.lastUsedDataset];
-                }
-                else
-                {
-                    NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! So I am calling myself recursive with the file %@",src]);
+            if ([src hasPrefix:@"http:"])
+            {
+                // Aus der Doku: If the value is a URL (starts with 'http:'), the dataset will be configured to load its data at runtime.
+                NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! But it is starting with 'http:'. So I am loading the XML-File (%@) at runtime.",src]);
+            }
+            else
+            {
+                NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! So I am calling myself recursive with the file %@",src]);
 
-                    [self legeDatasetAnUndInitMitOeffnendemTag];
+                // init mit öffnendem Tag:
+                [self.datasetOutput appendFormat:@"  %@.rawdata = '<%@>';\n",self.lastUsedDataset,self.lastUsedDataset];
 
-                    [self callMyselfRecursive:src];
+                [self callMyselfRecursive:src];
 
-                    // Oh man, was ein Bug... Und natürlich noch das letzte schleßende 'dataset'-Tag
-                    // anfügen, damit es keine parser-error beim Einlesen des XML-Strings gibt.
-                    [self.datasetOutput appendFormat:@"  %@.rawdata += '</%@>';\n",self.lastUsedDataset,self.lastUsedDataset];
-                }
+                // Nach Durchlauf der Rekursion das letzte schleßende 'dataset'-Tag anfügen
+                [self.datasetOutput appendFormat:@"  %@.rawdata += '</%@>';\n",self.lastUsedDataset,self.lastUsedDataset];
             }
 
             // Nach dem Verlassen der Rekursion müssen wir nicht länger ein Dataset auswerten
@@ -3859,7 +3828,8 @@ didStartElement:(NSString *)elementName
         }
         else
         {
-            [self legeDatasetAnUndInitMitOeffnendemTag];
+            // init mit öffnendem Tag:
+            [self.datasetOutput appendFormat:@"  %@.rawdata = '<%@>';\n",self.lastUsedDataset,self.lastUsedDataset];
         }
 
 
@@ -3876,6 +3846,27 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
 
             [self.datasetOutput appendFormat:@"  %@.type = '%@';\n",self.lastUsedDataset, [attributeDict valueForKey:@"type"]];
+        }
+
+        if ([attributeDict valueForKey:@"proxied"])
+        {
+            self.attributeCount++;
+
+            [self.datasetOutput appendFormat:@"  %@.proxied = %@;\n",self.lastUsedDataset, [attributeDict valueForKey:@"proxied"]];
+        }
+
+        if ([attributeDict valueForKey:@"timeout"])
+        {
+            self.attributeCount++;
+
+            [self.datasetOutput appendFormat:@"  %@.timeout = %@;\n",self.lastUsedDataset, [attributeDict valueForKey:@"timeout"]];
+        }
+
+        if ([attributeDict valueForKey:@"querytype"])
+        {
+            self.attributeCount++;
+
+            [self.datasetOutput appendFormat:@"  %@.querytype = '%@';\n",self.lastUsedDataset, [attributeDict valueForKey:@"querytype"]];
         }
     }
 
@@ -4591,11 +4582,19 @@ didStartElement:(NSString *)elementName
             // War früher mal jsHeadOutput, aber die Elemente sind ja erst nach Instanzierung
             // bekannt, deswegen jQueryOutput0
             // (Damit es noch vor den Computed Values und Constraint Values bekannt ist)
-            // Wenn wir ein Attribut von canvas haben, dann so früh wie möglich bekannt machen, da z. B. 'datasets'
-            // auf diese Attribute schon zugreifen.
+            // Wenn wir ein Attribut von canvas haben, dann so früh wie möglich bekannt machen,
+            // da z. B. 'datasets' auf diese Attribute schon zugreifen.
             if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"BDStabsheetcontainer"])
             {
-                [self.jsOutput appendString:o];
+                // Es gibt mittlerweilie eine eigene Ausgabe für Datasets, da auch die Attribute rein
+                if ([elemTyp isEqualToString:@"dataset"])
+                {
+                    [self.datasetOutput appendString:o];
+                }
+                else
+                {
+                    [self.jsOutput appendString:o];
+                }
             }
             else
             {
@@ -8637,9 +8636,12 @@ BOOL isJSExpression(NSString *s)
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsHeadOutput];
         [self.jsOLClassesOutput appendString:@"\";\n\n"];
 
-        [self.jsOLClassesOutput appendString:@"  this.contentDataset = \""];
-        [self.jsOLClassesOutput appendString:rekursiveRueckgabeDatasetOutput];
-        [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        if (rekursiveRueckgabeDatasetOutput.length > 0)
+        {
+            [self.jsOLClassesOutput appendString:@"  this.contentDataset = \""];
+            [self.jsOLClassesOutput appendString:rekursiveRueckgabeDatasetOutput];
+            [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        }
 
 
 
@@ -9900,18 +9902,9 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"  if (window['globalcalendar']) globalcalendar.setCurrentdate = function() { return new Date(); };\n\n"];
 
 
-    // Datasets:
-    if (![self.datasetOutput isEqualToString:@""])
-    {
-        [self.output appendString:@"  /***************************** Datasets - start ******************************/\n"];
-        [self.output appendString:self.datasetOutput];
-        [self.output appendString:@"  /***************************** Datasets - end ******************************/\n\n"];
-    }
 
 
-
-
-    // Normale Javascript-Anweisungen
+    // Vorgezogene Javascript-Anweisungen
     if (![self.jsOutput isEqualToString:@""])
     {
         [self.output appendString:self.jsOutput];
@@ -9921,6 +9914,16 @@ BOOL isJSExpression(NSString *s)
         [self.output appendString:@"  /********* Grundlagen legende JS-Anweisungen sind hier vor *********/\n"];
         [self.output appendString:@"  /***Diese müssen zwingend vor folgenden JS/jQuery-Ausgaben kommen***/\n"];
         [self.output appendString:@"  /*******************************************************************/\n\n\n"];
+    }
+
+
+    // datasets erst nach den Canvas-Attributen, da z. B. die 'src'-Variable von datasets
+    // auf canvas-Attribute zugreift!
+    if (![self.datasetOutput isEqualToString:@""])
+    {
+        [self.output appendString:@"  /***************************** Datasets - start ******************************/\n"];
+        [self.output appendString:self.datasetOutput];
+        [self.output appendString:@"  /***************************** Datasets - end ******************************/\n\n"];
     }
 
 
@@ -12479,7 +12482,7 @@ BOOL isJSExpression(NSString *s)
     "        this.acceptencodings = true;\n"
     "        this.cacheable = false;\n"
     "        this.nsprefix = false;\n"
-    "        this.querystring = '';\n"
+    "        this.querystring = null;\n"
     "        // if 'http' or 'soap', the dataset interprets it's src attribute as a URL to be loaded at runtime.\n"
     "        // If the 'src' attribute is set to a URL (e.g., starts with 'http:') then the type attribute implicitly becomes 'http'.\n"
     "        this.type = '';\n"
@@ -12493,21 +12496,39 @@ BOOL isJSExpression(NSString *s)
     "        this.postbody = '';\n"
     "        // this.proxied = canvas.proxied; // Inherits value from canvas.proxied flag.\n"
     "        this.proxyurl = '';\n"
-    "        this.querytype = '' // 'GET' or 'POST'\n"
+    "        this.querytype = 'GET'; // 'GET' or 'POST'\n"
     "        this.request = false;\n"
     "        this.secureport = 443;\n"
-    "        this.timeout = null; // The numer of milliseconds to wait before the request times out, and an ontimeout event is sent.\n"
+    "        this.timeout = null; // numer of milliseconds to wait before the request times out, and an ontimeout event is sent.\n"
     "\n"
     "        this.src = ''; //  If the value is a URL (starts with 'http:'), the dataset will be configured to load its data at runtime\n"
     "        this.rawdata = null;\n"
     "        this.name = options.name;\n"
     "\n"
-    "        this.queryParamKeys = [];\n"
-    "        this.queryParamVals = [];\n"
+    "        this.setQueryParam = function(key, val) { // near oi\n"
+    "            this.querystring = null;\n"
     "\n"
-    "        this.setQueryParam = function(key, val) {\n"
-    "            this.queryParamKeys.push(key);\n"
-    "            this.queryParamVals.push(val);\n"
+    "            if(!this.params)\n"
+    "            {\n"
+    "                this.params = {};\n"
+    "            }\n"
+    "\n"
+    "            this.params[key] = val;\n"
+    "\n"
+    "            if(this.autorequest)\n"
+    "            {\n"
+    "                 this.doRequest()\n"
+    "            }\n"
+    "        }\n"
+    "        this.setQueryParams = function (keyValuePair){ // near oi\n"
+    "            this.querystring = null;\n"
+    "\n"
+    "            this.params = keyValuePair;\n"
+    "\n"
+    "            if (keyValuePair && this.autorequest)\n"
+    "            {\n"
+    "                this.doRequest()\n"
+    "            }\n"
     "        }\n"
     "        // returns a datapointer that points to the root of the dataset.\n"
     "        this.getPointer = function() {\n"
@@ -12516,8 +12537,29 @@ BOOL isJSExpression(NSString *s)
     "            return pointer;\n"
     "        }\n"
     "        this.doRequest = function(ignore) {\n"
-    "            // Das ist wohl so nicht zu halten und muss stark erweitert werden...\n"
-    "            $(this).triggerHandler('ondata');\n"
+    "            if (!this.src) {\n"
+    "                console.log('Warning: No src set for this dataset, but doRequest() was called');\n"
+    "                return;\n"
+    "            }\n"
+    "\n"
+    "            if (this.querytype.toUpperCase() == 'POST')\n"
+    "            {\n"
+    "                var ds = this; // weil this im callback überschrieben wird\n"
+    "                $.post(this.src, function(data) {\n"
+    "                    alert('Data vorher: ' + ds.rawdata);\n"
+    "                    ds.rawdata = (new XMLSerializer()).serializeToString(data);\n"
+    "                    alert('Data Loaded from ' + ds.src + ': ' + ds.rawdata);\n"
+    "\n"
+    "                    // $(this).triggerHandler('ondata');\n"
+    "                }, 'xml');\n"
+    "            }\n"
+    "            else // 'GET' is the default\n"
+    "            {\n"
+    "                this.rawdata = (new XMLSerializer()).serializeToString(getXMLDocumentFromFile(this.src));\n"
+    "            }\n"
+    "\n"
+    "\n"
+    "            // Fehlt gemäß Doku: Auch alle datapointer triggern, die hier dran hängen\n"
     "        }\n"
     "\n"
     "        // lz.DataElementMixin reinmixen\n"

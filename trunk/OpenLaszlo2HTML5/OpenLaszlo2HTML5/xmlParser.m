@@ -129,8 +129,8 @@ BOOL ownSplashscreen = NO;
 @property (strong, nonatomic) NSMutableString *jQueryOutput0;
 @property (strong, nonatomic) NSMutableString *jQueryOutput;
 @property (strong, nonatomic) NSMutableString *jsHeadOutput;
-@property (strong, nonatomic) NSMutableString *jsHead2Output;   // die mit resource gesammelten globalen vars
-                                                                // (+ globale Funktionen + globales gefundenes JS)
+@property (strong, nonatomic) NSMutableString *datasetOutput;
+
 @property (strong, nonatomic) NSMutableString *jsComputedValuesOutput; // kommt DIREKT nach dem DOM
 @property (strong, nonatomic) NSMutableString *jsConstraintValuesOutput; // kommt ebenfalls direkt nach dem DOM
 
@@ -299,7 +299,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize enclosingElements = _enclosingElements, enclosingElementsIds = _enclosingElementsIds;
 
-@synthesize output = _output, jsOutput = _jsOutput, jsOLClassesOutput = _jsOLClassesOutput, jQueryOutput0 = _jQueryOutput0, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, jsHead2Output = _jsHead2Output, jsComputedValuesOutput = _jsComputedValuesOutput, jsConstraintValuesOutput = _jsConstraintValuesOutput, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput, collectedContentOfClass = _collectedContentOfClass;
+@synthesize output = _output, jsOutput = _jsOutput, jsOLClassesOutput = _jsOLClassesOutput, jQueryOutput0 = _jQueryOutput0, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, datasetOutput = _datasetOutput, jsComputedValuesOutput = _jsComputedValuesOutput, jsConstraintValuesOutput = _jsConstraintValuesOutput, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput, collectedContentOfClass = _collectedContentOfClass;
 
 @synthesize jsInitstageDeferOutput = _jsInitstageDeferOutput, jsToUseLaterOutput = _jsToUseLaterOutput;
 
@@ -420,7 +420,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.jQueryOutput0 = [[NSMutableString alloc] initWithString:@""];
         self.jQueryOutput = [[NSMutableString alloc] initWithString:@""];
         self.jsHeadOutput = [[NSMutableString alloc] initWithString:@""];
-        self.jsHead2Output = [[NSMutableString alloc] initWithString:@""];
+        self.datasetOutput = [[NSMutableString alloc] initWithString:@""];
 
         self.jsComputedValuesOutput = [[NSMutableString alloc] initWithString:@""];
         self.jsConstraintValuesOutput = [[NSMutableString alloc] initWithString:@""];
@@ -549,7 +549,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Zur Sicherheit mache ich von allem ne Copy.
         // Nicht, dass es beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.jsHead2Output copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.jsInitstageDeferOutput copy],[self.jsToUseLaterOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy], nil];
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.datasetOutput copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.jsInitstageDeferOutput copy],[self.jsToUseLaterOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy], nil];
         return r;
     }
 }
@@ -2855,7 +2855,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jQueryOutput0 appendString:[result objectAtIndex:3]];
         [self.jQueryOutput appendString:[result objectAtIndex:4]];
         [self.jsHeadOutput appendString:[result objectAtIndex:5]];
-        [self.jsHead2Output appendString:[result objectAtIndex:6]];
+        [self.datasetOutput appendString:[result objectAtIndex:6]];
         [self.cssOutput appendString:[result objectAtIndex:7]];
         [self.externalJSFilesOutput appendString:[result objectAtIndex:8]];
 
@@ -3114,29 +3114,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-- (void) addEnclosingElementsToDatasetProperty
-{
-    if ([self.enclosingElements count] > 0)
-    {
-        int i = 0;
-        // -1, weil wir uns selber hier nicht hinzufügen
-        while (i < [self.enclosingElements count]-1)
-        {
-            if ([[self.enclosingElements objectAtIndex:i] isEqualToString:@"dataset"] ||
-                [[self.enclosingElements objectAtIndex:i] isEqualToString:@"library"] ||
-                [[self.enclosingElements objectAtIndex:i] isEqualToString:@"canvas"])
-            {
-                i++;
-                continue;
-            }
-
-            [self.jsHead2Output appendFormat:@".%@",[self.enclosingElements objectAtIndex:i]];
-            i++;
-        }
-    }
-}
-
-
 
 - (void) evaluateTextOnlyAttributes:(NSDictionary*)attributeDict
 {
@@ -3200,12 +3177,11 @@ void OLLog(xmlParser *self, NSString* s,...)
 // Gibt es 2 mal im Code, deswegen als eigene Methode
 - (void) legeDatasetAnUndInitMitOeffnendemTag
 {
-    [self.jsHead2Output appendString:@"\n// Dataset wird als XML-Struktur angelegt und in einem JS-String gespeichert.\n"];
-    [self.jsHead2Output appendFormat:@"var %@ = new lz.dataset(null, {name: '%@'});\n",self.lastUsedDataset,self.lastUsedDataset];
-    [self.jsHead2Output appendString:@"// Ebenfalls sind alle Datasets über eine Property in canvas ansprechbar.\n"];
-    // canvas wird jedoch erst nach dem DOM initialisiert. Deswegen hier nochmal extra in allMyDatasets_ sammeln
-    [self.jsHead2Output appendFormat:@"allMyDatasets_.%@ = %@;\n",self.lastUsedDataset,self.lastUsedDataset];    
-    [self.jsHead2Output appendFormat:@"%@.rawdata = '<%@>';\n",self.lastUsedDataset,self.lastUsedDataset];
+    [self.datasetOutput appendString:@"\n  // Dataset wird als XML-Struktur angelegt und in einem JS-String gespeichert.\n"];
+    [self.datasetOutput appendFormat:@"  %@ = new lz.dataset(null, {name: '%@'});\n",self.lastUsedDataset,self.lastUsedDataset];
+    [self.datasetOutput appendString:@"  // Ebenfalls sind alle Datasets über eine Property in canvas ansprechbar.\n"];
+    [self.datasetOutput appendFormat:@"  canvas.myDatasets['%@'] = %@;\n",self.lastUsedDataset,self.lastUsedDataset];
+    [self.datasetOutput appendFormat:@"  %@.rawdata = '<%@>';\n",self.lastUsedDataset,self.lastUsedDataset];
 }
 
 
@@ -3300,9 +3276,6 @@ didStartElement:(NSString *)elementName
 
 
 
-    // Alle Elemente in dataset, die nicht 'items' sind, werden in Objekt-Propertys des zugehörigen
-    // Objektes umgewandelt (Der Objektname kommt aus dem dataset-'name'-Attribut)
-    // Neu: Sie werden in eine XML-Struktur überführt
     if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
     {
 
@@ -3314,70 +3287,25 @@ didStartElement:(NSString *)elementName
         gesammelterText = [gesammelterText stringByReplacingOccurrencesOfString:@"\n" withString:@"\\\n"];
 
 
+        [self.datasetOutput appendFormat:@"  %@.rawdata += '%@<%@", self.lastUsedDataset, gesammelterText, elementName];
 
-        [self.jsHead2Output appendFormat:@"%@.rawdata += '%@<%@", self.lastUsedDataset, gesammelterText, elementName];
 
         NSArray *keys = [attributeDict allKeys];
         if ([keys count] > 0)
         {
             for (NSString *key in keys)
             {
-                [self.jsHead2Output appendFormat:@" %@=\"",key];
+                [self.datasetOutput appendFormat:@" %@=\"",key];
                 
                 NSString *s = [attributeDict valueForKey:key];
                 
                 s = [self escapeSomeCharsInAttributeValues:s];
                 
-                [self.jsHead2Output appendFormat:@"%@\"",s];
+                [self.datasetOutput appendFormat:@"%@\"",s];
             }
         }
         
-        [self.jsHead2Output appendString:@">';\n"];
-
-
-
-        /* Wirklich schade um den schönen Code, aber ein Dataset wird
-        nur als XML-Struktur benötigt, nicht mehr als JS-Objekt
-
-        // Jetzt alle <tags> dem Objekt als Property, welches wieder ein Objekt ist, hinzufügen
-        // Wenn das <tag> jedoch ein Attribut 'id' hat, dann mach doch ein Array.
-        if ([attributeDict valueForKey:@"id"])
-        {
-            [self.jsHead2Output appendString:self.lastUsedDataset];
-            [self addEnclosingElementsToDatasetProperty];
-            [self.jsHead2Output appendFormat:@".%@ = ['%@'];\n",elementName,[attributeDict valueForKey:@"id"]];
-        }
-        else
-        {
-            [self.jsHead2Output appendString:self.lastUsedDataset];
-            [self addEnclosingElementsToDatasetProperty];
-            [self.jsHead2Output appendFormat:@".%@ = {};\n",elementName];
-        }
-
-
-        // Dann bekommen die internen Objekt-Propertys die Attribute als Propertys mit
-        NSArray *keys = [attributeDict allKeys];
-        if ([keys count] > 0)
-        {
-            for (NSString *key in keys)
-            {
-                NSString *s = [attributeDict valueForKey:key];
-
-                s = [self escapeSomeCharsInAttributeValues:s];
-
-                // Weil wir 'id' ja weiter oben berücksichtigt haben
-                if (![key isEqualToString:@"id"])
-                {
-                    [self.jsHead2Output appendString:self.lastUsedDataset];
-                    [self addEnclosingElementsToDatasetProperty];
-                    [self.jsHead2Output appendFormat:@".%@.%@ = \"%@\";\n",elementName,key,s];
-                }
-            }
-        }
-        */
-
-
-
+        [self.datasetOutput appendString:@">';\n"];
 
 
 
@@ -3392,7 +3320,7 @@ didStartElement:(NSString *)elementName
 
 
         // Nicht weiter auswerten hier! Das sind selbst definierte Tags. Die werden nicht matchen
-        // Es wurde eh alles erledigt (dataset-Eintrag wurde als property in das Objekt übernommen)
+        // Es wurde eh alles erledigt
         return;
     }
 
@@ -3829,6 +3757,20 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
+        if (![attributeDict valueForKey:@"name"])
+        {
+            [self instableXML:@"ERROR: No attribute 'name' given in dataset-tag"];
+        }
+        else
+        {
+            self.attributeCount++;
+        }
+
+        NSString *name = [attributeDict valueForKey:@"name"];
+        self.lastUsedDataset = name;
+
+
+
 
         // Erstmal ignorieren
         if ([attributeDict valueForKey:@"proxied"])
@@ -3846,28 +3788,14 @@ didStartElement:(NSString *)elementName
 
 
 
-        if (![attributeDict valueForKey:@"name"])
-            [self instableXML:@"ERROR: No attribute 'name' given in dataset-tag"];
-        else
-            self.attributeCount++;
-
-        NSString *name = [attributeDict valueForKey:@"name"];
-        self.lastUsedDataset = name;
-
-
 
 
 
 
         // Alle nachfolgenden Tags in eine eigene Data-Struktur überführen
         // und diese Tags nicht auswerten lassen vom XML-Parser.
-        // Aber wieder rückgängig machen in <items>, falls wir darauf stoßen und
-        // das dataset also damit strukturiert ist (und nicht mit eigenen Begriffen)!
         // Muss (logischerweise) vor der Rekursion stehen, deswegen steht es hier oben
         self.weAreInDatasetAndNeedToCollectTheFollowingTags = YES;
-
-
-
 
 
 
@@ -3878,44 +3806,24 @@ didStartElement:(NSString *)elementName
 
             self.attributeCount++;
 
-            // type ignorieren wir, ist wohl immer auf 'http'
-            if ([attributeDict valueForKey:@"type"])
-            {
-                self.attributeCount++;
-                NSLog(@"Skipping the attribute 'type'.");
-            }
-            // request ignorieren wir, ist wohl immer auf 'true' bzw. spielt für JS keine Rolle
-            if ([attributeDict valueForKey:@"request"])
-            {
-                self.attributeCount++;
-                NSLog(@"Skipping the attribute 'request'.");
-            }
-
-            // querytype ist wohl ein request in die Wolke (auf eine .php-Datei), erstmal ignorieren
-            // Es gibt als Querytipe sowohl "POST", als auch "GET"
+            // querytype ist wohl ein request in die Wolke (auf eine .php-Datei)
+            // Es gibt als Querytype sowohl "POST", als auch "GET"
             if ([attributeDict valueForKey:@"querytype"])
             {
                 self.attributeCount++;
-                NSLog(@"Skipping the attribute 'querytype'.");
-                if ([[attributeDict valueForKey:@"querytype"] isEqualToString:@"POST"])
-                    NSLog(@"I will ignore this src-file for now (it's a POST-Request).");
-                else
-                    NSLog(@"I will ignore this src-file for now (it's a GET-Request).");
 
-                // Trotzdem anlegen, damit das Programm nicht laufend abstürzt.
-                // Aber jsOutput und damit nach dem DOM, weil Zugriff auf 'canvas' und/oder canvas.coDataserver sonst nicht klappt
-                [self.jsOutput appendString:@"\n  // Ein Dataset, welches per Request aus der Wolke gefüllt wird. Ich speichere den Link mal in 'src'.\n"];
-                [self.jsOutput appendFormat:@"  %@ = new lz.dataset(null, {name: '%@'}); // muss vom Typ dataset sein, damit er auf die Methode 'setQueryParam' z. B. zugreifen kann\n",self.lastUsedDataset, self.lastUsedDataset];
+                [self.datasetOutput appendString:@"\n  // Ein Dataset, welches per Request aus der Wolke gefüllt wird. Ich speichere den Link in 'src'.\n"];
+                [self.datasetOutput appendFormat:@"  %@ = new lz.dataset(null, {name: '%@'});\n",self.lastUsedDataset, self.lastUsedDataset];
 
                 if ([src hasPrefix:@"$"])
                 {
                     // src = [self makeTheComputedValueComputable:src]; // <-- klappt nicht, weil dataset keine 'id' hat
                     src = [self removeOccurrencesOfDollarAndCurlyBracketsIn:src];
-                    [self.jsOutput appendFormat:@"  %@.src = %@;\n",self.lastUsedDataset, src];
+                    [self.datasetOutput appendFormat:@"  %@.src = %@;\n",self.lastUsedDataset, src];
                 }
                 else
                 {
-                    [self.jsOutput appendFormat:@"  %@.src = '%@';\n",self.lastUsedDataset, src];
+                    [self.datasetOutput appendFormat:@"  %@.src = '%@';\n",self.lastUsedDataset, src];
                 }
             }
             else
@@ -3924,13 +3832,13 @@ didStartElement:(NSString *)elementName
                 {
                     NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! But it is starting with 'http://'. So I am loading the XML-File (%@) into a string.",src]);
 
-                    [self.jsHead2Output appendString:@"\n// Externe XML-Datei wird als XML-Struktur ausgelesen und in einem JS-String gespeichert.\n"];
-                    [self.jsHead2Output appendFormat:@"var %@ = new lz.dataset(null, {name: '%@'});\n",self.lastUsedDataset,self.lastUsedDataset];
-                    [self.jsHead2Output appendFormat:@"%@.rawdata = (new XMLSerializer()).serializeToString(getXMLDocumentFromFile('%@'));\n",self.lastUsedDataset,src];
+                    [self.datasetOutput appendString:@"\n  // Externe XML-Datei wird als XML-Struktur ausgelesen und in einem JS-String gespeichert.\n"];
+                    [self.datasetOutput appendFormat:@"  %@ = new lz.dataset(null, {name: '%@'});\n",self.lastUsedDataset,self.lastUsedDataset];
+                    [self.datasetOutput appendFormat:@"  %@.rawdata = (new XMLSerializer()).serializeToString(getXMLDocumentFromFile('%@'));\n",self.lastUsedDataset,src];
 
-                    // Alle 'äußeren' Datasets stecken auch in 'canvas' (aber 'canvas' ist erst nach DOM bekannt, deswegen jsOutput
-                    [self.jsOutput appendString:@"  // datasets außerhalb von Klassen sind auch in canvas verankert\n"];
-                    [self.jsOutput appendFormat:@"  canvas.%@ = %@;\n",self.lastUsedDataset,self.lastUsedDataset];
+
+                    [self.datasetOutput appendString:@"  // datasets außerhalb von Klassen sind auch in canvas verankert\n"];
+                    [self.datasetOutput appendFormat:@"  canvas.%@ = %@;\n",self.lastUsedDataset,self.lastUsedDataset];
                 }
                 else
                 {
@@ -3940,9 +3848,9 @@ didStartElement:(NSString *)elementName
 
                     [self callMyselfRecursive:src];
 
-                    // Oh man, was ein Bug... Und natürlich noch das letzte schleßende 'dataset'-Tag anfügen,
-                    // damit es keine parser-error beim Einlesen des XML-Strings gibt
-                    [self.jsHead2Output appendFormat:@"%@.rawdata += '</%@>';\n",self.lastUsedDataset,self.lastUsedDataset];
+                    // Oh man, was ein Bug... Und natürlich noch das letzte schleßende 'dataset'-Tag
+                    // anfügen, damit es keine parser-error beim Einlesen des XML-Strings gibt.
+                    [self.datasetOutput appendFormat:@"  %@.rawdata += '</%@>';\n",self.lastUsedDataset,self.lastUsedDataset];
                 }
             }
 
@@ -3952,6 +3860,22 @@ didStartElement:(NSString *)elementName
         else
         {
             [self legeDatasetAnUndInitMitOeffnendemTag];
+        }
+
+
+
+        if ([attributeDict valueForKey:@"request"])
+        {
+            self.attributeCount++;
+
+            [self.datasetOutput appendFormat:@"  %@.request = %@;\n",self.lastUsedDataset, [attributeDict valueForKey:@"request"]];
+        }
+
+        if ([attributeDict valueForKey:@"type"])
+        {
+            self.attributeCount++;
+
+            [self.datasetOutput appendFormat:@"  %@.type = '%@';\n",self.lastUsedDataset, [attributeDict valueForKey:@"type"]];
         }
     }
 
@@ -8406,13 +8330,9 @@ BOOL isJSExpression(NSString *s)
 
         if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
         {
-            [self.jsHead2Output appendFormat:@"%@.rawdata += '</%@>';\n",self.lastUsedDataset, self.lastUsedDataset];
+            [self.datasetOutput appendFormat:@"  %@.rawdata += '</%@>';\n",self.lastUsedDataset, self.lastUsedDataset];
 
             self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
-        }
-        else
-        {
-            [self.jsHead2Output appendString:@"\n"];
         }
     }
 
@@ -8431,29 +8351,10 @@ BOOL isJSExpression(NSString *s)
         gesammelterText = [gesammelterText stringByReplacingOccurrencesOfString:@"\n" withString:@"\\\n"];
 
 
-        [self.jsHead2Output appendFormat:@"%@.rawdata += '%@</%@>';\n",self.lastUsedDataset, gesammelterText, elementName];
+        [self.datasetOutput appendFormat:@"  %@.rawdata += '%@</%@>';\n",self.lastUsedDataset, gesammelterText, elementName];
 
 
-        /* Seit Umstieg auf XML-Struktur (und kein JS-Objekt mehr) nicht mehr nötig
-        if ([gesammelterText length] > 0)
-        {
-            // Dann ist es doch kein Objekt... sondern es wird ein Inhalt erfasst.
-            if ([self.jsHead2Output length] > 0)
-            {
-                // self.jsHead2Output = [NSMutableString stringWithFormat:[self.jsHead2Output substringToIndex:[self.jsHead2Output length] - 4]];
-            }
-            
-            // Und hinzufügen von gesammelten Text, falls er zwischen den tags gesetzt wurde.
-            //[self.jsHead2Output appendFormat:@"%@;\n",gesammelterText];
-        }
-        */
-
-
-
-
-
-
-        // Das sind selbstdefinierte Tags. Raus hier. Die werden niemals matchen
+        // Das sind selbstdefinierte Tags. Raus hier. Die werden niemals weiter unten matchen.
         // Es wurde ja alles erledigt.
         return;
     }
@@ -8538,9 +8439,9 @@ BOOL isJSExpression(NSString *s)
         if (![rekursiveRueckgabeJsHeadOutput isEqualToString:@""])
             NSLog(@"String 5 aus der Rekursion wird unser Leading-JS-Head-content für JS-Objekt");
 
-        NSString *rekursiveRueckgabeJsHead2Output = [result objectAtIndex:6];
-        if (![rekursiveRueckgabeJsHead2Output isEqualToString:@""])
-            NSLog(@"String 6 aus der Rekursion wird unser JS-Head2-content für JS-Objekt");
+        NSString *rekursiveRueckgabeDatasetOutput = [result objectAtIndex:6];
+        if (![rekursiveRueckgabeDatasetOutput isEqualToString:@""])
+            NSLog(@"String 6 aus der Rekursion wird unser dataset-content für JS-Objekt");
 
         NSString *rekursiveRueckgabeCssOutput = [result objectAtIndex:7];
         if (![rekursiveRueckgabeCssOutput isEqualToString:@""])
@@ -8620,7 +8521,7 @@ BOOL isJSExpression(NSString *s)
         // In manchen JS/jQuery tauchen " auf, die müssen escaped werden
         rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
-        rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+        rekursiveRueckgabeDatasetOutput = [rekursiveRueckgabeDatasetOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJsToUseLaterOutput = [rekursiveRueckgabeJsToUseLaterOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
@@ -8652,7 +8553,7 @@ BOOL isJSExpression(NSString *s)
         rekursiveRueckgabeOutput = [rekursiveRueckgabeOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n' + \n  '"];
         rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
-        rekursiveRueckgabeJsHead2Output = [rekursiveRueckgabeJsHead2Output stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
+        rekursiveRueckgabeDatasetOutput = [rekursiveRueckgabeDatasetOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJsHeadOutput = [rekursiveRueckgabeJsHeadOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJsComputedValuesOutput = [rekursiveRueckgabeJsComputedValuesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
@@ -8736,8 +8637,8 @@ BOOL isJSExpression(NSString *s)
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsHeadOutput];
         [self.jsOLClassesOutput appendString:@"\";\n\n"];
 
-        [self.jsOLClassesOutput appendString:@"  this.contentJSHead = \""];
-        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsHead2Output];
+        [self.jsOLClassesOutput appendString:@"  this.contentDataset = \""];
+        [self.jsOLClassesOutput appendString:rekursiveRueckgabeDatasetOutput];
         [self.jsOLClassesOutput appendString:@"\";\n\n"];
 
 
@@ -9422,11 +9323,9 @@ BOOL isJSExpression(NSString *s)
 
         // Die Variablen auf die zugegriffen wird, sind teils HTMLDivElemente
         // und müssen bekannt sein, deswegen kann es nicht im Head stehen (alte Lösung)
-        // [self.jsHead2Output appendString:s];
         // statt dessen:
         // War jQueryOutput, aber es muss vor den SimpleLayouts bekannt sein, da diese sich auch auf
-        // per Skript gesetzte Elemente mit beziehen
-        // Deswegen jQueryOutput0
+        // per Skript gesetzte Elemente beziehen, deswegen jQueryOutput0:
         if ([s length] > 0)
         {
             [self.jQueryOutput0 appendString:@"\n  /***** ausgewertetes <script>-Tag - Anfang *****/\n"];
@@ -9919,12 +9818,8 @@ BOOL isJSExpression(NSString *s)
 
     [pre appendString:@"\n<script type=\"text/javascript\">\n"];
 
-    // Muss auch ausgegeben werde! Auf die resourcen wird per JS unter Umständen zugegriffen
     [pre appendString:self.jsHeadOutput];
 
-    // erstmal nur die mit resource gesammelten globalen vars ausgeben
-    // (+ globale Funktionen + globales JS)
-    [pre appendString:self.jsHead2Output];
     [pre appendString:@"\n</script>\n\n</head>\n\n<body>\n"];
 
 
@@ -9976,7 +9871,7 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"makeIDsGlobalAndInitStuff();\n\n\n"];
 
 
-    // Die jQuery-Anweisungen:
+    // Weitere JS-Anweisungen:
 
     //[self.output appendString:@"\n\n// '$(function() {' ist leider zu unverlässig. Bricht z. B. das korrekte setzen der Breite von element9, weil es die direkten Kinder-Elemente nicht richtig auslesen kann\n// Dieses Problem trat nur beim Reloaden auf, nicht beim direkten Betreten der Seite per URL. Very strange!\n// Jedenfalls lässt sich das Problem über '$(window).load(function() {});' anstatt '$(document).ready(function() {});' lösen.\n// http://stackoverflow.com/questions/6504982/jquery-behaving-strange-after-page-refresh-f5-in-chrome\n// Dadurch muss ich auch nicht mehr alle width/height-Startwerte per css auf 'auto' setzen.\n"];
     [self.output appendString:@"$(window).load(function()\n{\n"];
@@ -9998,14 +9893,22 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"  if (window['SonstigeAusgaben']) SonstigeAusgaben.addrow = function() { };\n\n"];
 
     [self.output appendString:@"  // seit ich BDScheckbox auswerte:\n"];
-    // Problem ist hier: Es steckt in einem 'initstage=defer', Darin selber ist aber eine normale view, deren
-    // 'visible'-Eigenschaft sich von 'cbpdfemail' ableitet (das wird aber erst später gesetzt...)
+    // Problem ist hier: Es steckt in einem 'initstage=defer', Darin selber ist aber eine normale view,
+    // deren 'visible'-Eigenschaft sich von 'cbpdfemail' ableitet (das wird aber erst später gesetzt...)
     [self.output appendString:@"  if (window['cbpdfemail']) cbpdfemail.checked = false;\n\n"];
 
     [self.output appendString:@"  if (window['globalcalendar']) globalcalendar.setCurrentdate = function() { return new Date(); };\n\n"];
 
-    //[self.output appendString:@"  function dlg()\n  {\n    // Extern definiert\n    this.open = open;\n    // Intern definiert (beides möglich)\n"];
-    // Name kann auch doppelt auftauchen beim definieren einer JS-Function
+
+    // Datasets:
+    if (![self.datasetOutput isEqualToString:@""])
+    {
+        [self.output appendString:@"  /***************************** Datasets - start ******************************/\n"];
+        [self.output appendString:self.datasetOutput];
+        [self.output appendString:@"  /***************************** Datasets - end ******************************/\n\n"];
+    }
+
+
 
 
     // Normale Javascript-Anweisungen
@@ -10862,13 +10765,6 @@ BOOL isJSExpression(NSString *s)
 {
     NSString *js = @"/* FILE: jsHelper.js */\n"
     "/////////////////////////////////////////////////////////\n"
-    "// enthält alle Datasets, welche nach dem Aufbau des DOMs dann in 'canvas' kopiert werden//\n"
-    "/////////////////////////////////////////////////////////\n"
-    "var allMyDatasets_ = {};\n"
-    "\n"
-    "\n"
-    "\n"
-    "/////////////////////////////////////////////////////////\n"
     "// jQuery UI Datepicker auf Deutsch setzen               \n"
     "/////////////////////////////////////////////////////////\n"
     "jQuery(function($) {\n"
@@ -11473,7 +11369,7 @@ BOOL isJSExpression(NSString *s)
     "    canvas.setDefaultContextMenu = function(contextmenu) {};\n"
     "\n"
     "    // Alle datasets stecken auch in einer Property von canvas\n"
-    "    canvas.myDatasets = allMyDatasets_;\n"
+    "    canvas.myDatasets = {}; // Dictionary of all named datasets.\n"
     "\n"
     "    // Anhand dieser Variable kann im Skript abgefragt werden, ob wir im Debugmode sind\n"
     "    // ohne 'var', damit global. \n"
@@ -12577,8 +12473,35 @@ BOOL isJSExpression(NSString *s)
     "    this.dataset = function(parentNode,options) {\n"
     "        this.parentNode = parentNode; // Dieses Argument ist noch ohne weitere Auswirkungen\n"
     "\n"
-    "        this.rawdata = '';\n"
+    "        // init-only\n"
+    "        this.trimwhitespace = false;\n"
+    "        // read-only\n"
+    "        this.acceptencodings = true;\n"
+    "        this.cacheable = false;\n"
+    "        this.nsprefix = false;\n"
+    "        this.querystring = '';\n"
+    "        // if 'http' or 'soap', the dataset interprets it's src attribute as a URL to be loaded at runtime.\n"
+    "        // If the 'src' attribute is set to a URL (e.g., starts with 'http:') then the type attribute implicitly becomes 'http'.\n"
+    "        this.type = '';\n"
+    "        // read/write\n"
+    "        this.autorequest = false;\n"
+    "        this.clientcacheable = false;\n"
+    "        // this.dataprovider = canvas.defaultdataprovider; // Holds a pointer to the DataProvider which handles data load requests\n"
+    "        this.getresponseheaders = false;\n"
+    "        this.multirequest = false;\n"
+    "        this.params = null; // An lz.Param object which holds query key-value pairs.\n"
+    "        this.postbody = '';\n"
+    "        // this.proxied = canvas.proxied; // Inherits value from canvas.proxied flag.\n"
+    "        this.proxyurl = '';\n"
+    "        this.querytype = '' // 'GET' or 'POST'\n"
+    "        this.request = false;\n"
+    "        this.secureport = 443;\n"
+    "        this.timeout = null; // The numer of milliseconds to wait before the request times out, and an ontimeout event is sent.\n"
+    "\n"
+    "        this.src = ''; //  If the value is a URL (starts with 'http:'), the dataset will be configured to load its data at runtime\n"
+    "        this.rawdata = null;\n"
     "        this.name = options.name;\n"
+    "\n"
     "        this.queryParamKeys = [];\n"
     "        this.queryParamVals = [];\n"
     "\n"
@@ -12592,7 +12515,7 @@ BOOL isJSExpression(NSString *s)
     "            alert('Did it work? ' + pointer.p + ' should not be undefined.');\n"
     "            return pointer;\n"
     "        }\n"
-    "        this.doRequest = function() {\n"
+    "        this.doRequest = function(ignore) {\n"
     "            // Das ist wohl so nicht zu halten und muss stark erweitert werden...\n"
     "            $(this).triggerHandler('ondata');\n"
     "        }\n"
@@ -18507,8 +18430,8 @@ BOOL isJSExpression(NSString *s)
     "    if (s.length > 0)\n"
     "        evalCode(s);\n"
     "\n"
-    "    // Replace-IDs von contentJSHead ersetzen\n"
-    "    var s = replaceID(obj.contentJSHead, r, r2);\n"
+    "    // Replace-IDs von contentDataset ersetzen\n"
+    "    var s = replaceID(obj.contentDataset, r, r2);\n"
     "    // Dann den JSHead-Content hinzufügen/auswerten\n"
     "    if (s.length > 0)\n"
     "        evalCode(s);\n"
@@ -18950,8 +18873,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  this.contentLeadingJSHead = '';\n"
     "\n"
-    "  this.contentJSHead = '';\n"
-    "\n"
     "  this.contentJS = '';\n"
     "\n"
     "  this.contentLeadingJQuery = ''\n"
@@ -18978,8 +18899,6 @@ BOOL isJSExpression(NSString *s)
     "  this.contentHTML = '';\n"
     "\n"
     "  this.contentLeadingJSHead = '';\n"
-    "\n"
-    "  this.contentJSHead = '';\n"
     "\n"
     "  this.contentJS = '';\n"
     "\n"

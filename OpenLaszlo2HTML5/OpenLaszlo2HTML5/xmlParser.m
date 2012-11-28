@@ -6509,7 +6509,6 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
-
         // Theoretisch könnte auch eine id gesetzt worden sein, auch wenn OL-Doku davon abrät!
         // http://www.openlaszlo.org/lps4.9/docs/developers/tutorials/classes-tutorial.html (1.1)
         // Dann hier aussteigen
@@ -6518,157 +6517,147 @@ didStartElement:(NSString *)elementName
             [self instableXML:@"ID attribute on class found!!! It's important to note that you should not assign an id attribute in a class definition. Each id should be unique; ids are global and if you were to include an id assignment in the class definition, then creating several instances of a class would several views with the same id, which would cause unpredictable behavior. http://www.openlaszlo.org/lps4.9/docs/developers/tutorials/classes-tutorial.html (1.1)"];
         }
 
-
-        if ([attributeDict valueForKey:@"name"])
+        if (![attributeDict valueForKey:@"name"])
         {
-            self.attributeCount++;
-
-            NSString *name = [attributeDict valueForKey:@"name"];
-
-            // Wir sammeln alle gefundenen 'name'-Attribute von class in einem eigenen Dictionary.
-            // Weil die names können später eigene <tags> werden! Ich muss dann später darauf testen
-            // ob das ELement vorher definiert wurde.
-            // Als Objekt setzen wir ein NSDictionary, in dem alle Attribute der Klasse gesammelt
-            // werden. Dies ist wichtig, weil ich beim instanzieren einer Klasse, alle Attribute
-            // mit ihren Initial-Werten setzen muss.
-
-            NSMutableDictionary *dict = [[NSMutableDictionary alloc] initWithCapacity:200];
-            [self.allFoundClasses setObject:dict forKey:name];
-
-            // Damit ich in <evaluateclass> die Attribute korrekt zuordnen kann,
-            // muss ich mir den Namen der Klasse merken:
-            self.lastUsedNameAttributeOfClass = name;
-
-            // Manchmal muss ich wissen von wem die Klasse erbt, z.B. bei <drawview>
-            self.lastUsedExtendsAttributeOfClass = [attributeDict valueForKey:@"extends"] ? [attributeDict valueForKey:@"extends"] : @"view";
-
-
-            // Auserdem speichere ich die gefunden Klasse als JS-Objekt und schreibe es nach
-            // collectedClasses.js
-            // Die Attribute speichere ich einzeln ab und lese sie durch jQuery aus, sobald sie
-            // instanziert wird.
-
-
-            NSArray *keys_ = [attributeDict allKeys];
-            NSMutableArray *keys = [[NSMutableArray alloc] initWithArray:keys_];
-
-
-            [self.jsOLClassesOutput appendString:@"\n\n"];
-            [self.jsOLClassesOutput appendString:@"///////////////////////////////////////////////////////////////\n"];
-            [self.jsOLClassesOutput appendFormat:@"// class = %@ (from %@)",name,[self.pathToFile lastPathComponent]];
-
-            for (int i=(42-((int)[name length]+(int)[[self.pathToFile lastPathComponent] length])); i > 0; i--)
-            {
-                [self.jsOLClassesOutput appendFormat:@" "];
-            }
-
-            [self.jsOLClassesOutput appendFormat:@"//\n"];
-            [self.jsOLClassesOutput appendString:@"///////////////////////////////////////////////////////////////\n"];
-            [self.jsOLClassesOutput appendFormat:@"oo.%@ = function(textBetweenTags) {\n",name];
-
-
-            [self.jsOLClassesOutput appendFormat:@"  this.name = '%@';\n",name];
-
-            // Das Attribut 'name' brauchen wir jetzt nicht mehr.
-            int i = (int)[keys count]; // Test, ob es auch klappt
-            [keys removeObject:@"name"];
-            if (i == [keys count])
-                [self instableXML:@"Konnte Attribut 'name' in <class> nicht löschen."];
-
-            // extends auslesen und speichern, dann extends aus der Attribute-liste löschen
-            NSString *inherit = [attributeDict valueForKey:@"extends"];
-            if (inherit == nil || inherit.length == 0)
-            {
-                [self.jsOLClassesOutput appendString:@"  this.inherit = new oo.view();\n\n"];
-            }
-            else
-            {
-                self.attributeCount++;
-
-                if ([inherit isEqualToString:@"window"])
-                    inherit = @"basewindow";
-
-                [self.jsOLClassesOutput appendFormat:@"  this.inherit = new oo.%@(textBetweenTags);\n\n",inherit];
-            }
-            [keys removeObject:@"extends"];
-
-            // Dass klappt so nicht, weil es auch CSS-Eigenschaften gibt, die sich erst auswerten
-            // lassen, wenn ein Objekt instanziert wurde. (z.B. Breite, Höhe des Parents)
-            // Deswegen werden dort die CSS-Eigenschaften ausgewertet
-            // Dazu gebe ich die CSS-Eigenschaften einzeln (!) der Klasse mit (s.u.)
-            // CSS-Eigenschaften auswerten...
-            // NSString *styles = [self addCSSAttributes:attributeDict];
-            // ...und der Klasse mitgeben
-            // [self.jsOLClassesOutput appendFormat:@"  this.style = '%@';\n\n",styles];
-
-            // Mit JS-Eigenschaften klappt es auch nicht..., da hier keine Rekursion am Start ist,
-            // schreibt die Funktion in das Output-File. Ich löse es jetzt so, indem ich die JS-Attribute ebenfalls
-            // auf JS-Ebene in der Funktion interpretObject() auswerte.
-            // [self.output appendString:[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",ID_REPLACE_STRING]]];
-
-
-            // Falls keine Attribute vorhanden, muss trotdzem ein leeres Array erzeugt werden!
-            // Denn manche Abfragen verlassen sich noch auf die Existenz eines Arrays.
-            // if ([keys count] > 0)
-            {
-                // Alle Attributnamen als Array hinzufügen
-                [self.jsOLClassesOutput appendString:@"  this.attributeNames = ["];
-
-                int i = 0;
-                for (NSString *key in keys)
-                {
-                    i++;
-
-                    if (i > 1)
-                        [self.jsOLClassesOutput appendString:@", "];
-
-                    // Es gibt Attribute mit ' drin, deswegen hier "
-                    [self.jsOLClassesOutput appendString:@"\""];
-                    [self.jsOLClassesOutput appendString:key];
-                    [self.jsOLClassesOutput appendString:@"\""];
-
-                    // Die Attribute werden erst später ausgelesen, deswegen hier hochzählen
-                    // Sie werden aktuell ja nicht weiter bearbeitet.
-                    self.attributeCount++;
-                }
-
-                [self.jsOLClassesOutput appendString:@"];\n"];
-
-
-                // Und alle Attributwerte als Array hinzufügen
-                [self.jsOLClassesOutput appendString:@"  this.attributeValues = ["];
-
-                i = 0;
-                for (NSString *key in keys)
-                {
-                    i++;
-
-                    if (i > 1)
-                        [self.jsOLClassesOutput appendString:@", "];
-
-                    // Es gibt Attribute mit ' drin, deswegen hier "
-                    if (!isJSExpression([attributeDict valueForKey:key]))
-                        [self.jsOLClassesOutput appendString:@"\""];
-                    [self.jsOLClassesOutput appendString:[attributeDict valueForKey:key]];
-                    if (!isJSExpression([attributeDict valueForKey:key]))
-                        [self.jsOLClassesOutput appendString:@"\""];
-                }
-
-                [self.jsOLClassesOutput appendString:@"];\n\n"];
-            }
-
-
-            // Den Content von der Klasse ermitteln wir so:
-            // Wir lassen es einmal rekrusiv durchlaufen und können so die OL-Elemente in HTML-Elemente umwandeln
-            // Später fügt jQuery diese HTML-Elemente, beim auslesen des JS-Objekts, als HTML-Code ein.
-            // Hier den String leeren, und dann alles innerhalb <class> definierte da drin sammeln.
-            // Wenn <class> geschlossen wird, dann hinzufügen.
-            self.collectedContentOfClass = [[NSMutableString alloc] initWithString:@""];
+            [self instableXML:@"There's no point in creating a class without 'name'-Attribut. How to instantiate?"];
         }
         else
         {
-            [self instableXML:@"Eine class ohne 'name'-Attribut macht wohl keinen Sinn. Wie soll man sie sonst später ansprechen?"];
+            self.attributeCount++;
         }
+
+        NSString *name = [attributeDict valueForKey:@"name"];
+
+        // Damit ich in <evaluateclass> die Attribute korrekt zuordnen kann,
+        // muss ich mir den Namen der Klasse merken:
+        self.lastUsedNameAttributeOfClass = name;
+
+
+        // Manchmal muss ich wissen von wem die Klasse erbt, z.B. bei <drawview>
+        self.lastUsedExtendsAttributeOfClass = [attributeDict valueForKey:@"extends"] ? [attributeDict valueForKey:@"extends"] : @"view";
+
+
+
+        // Wir sammeln alle gefundenen 'name'-Attribute von class in einem eigenen Dictionary.
+        // Weil die names können später eigene <tags> werden! Ich muss dann später darauf testen
+        // ob das ELement vorher definiert wurde.
+        // Als dazugehöriges Objekt setzen wir ein NSDictionary, in dem ALLE Attribute der Klasse
+        // gesammelt werden.
+        // Die direkt im Tag definierten werden direkt hier gesetzt.
+        // Per <attribute> gesetzte werden beim auslesen der Klasse ergänzt.
+
+        // Alt:
+         NSMutableDictionary *dict = [[NSMutableDictionary alloc] initWithCapacity:200];
+        // Statt dessen:
+        //NSMutableDictionary *dict = [[NSMutableDictionary alloc] initWithDictionary:attributeDict copyItems:YES];
+        //[dict removeObjectForKey:@"name"];
+        //[dict removeObjectForKey:@"extends"];
+
+
+        [self.allFoundClasses setObject:dict forKey:name];
+
+
+
+        NSArray *keys_ = [attributeDict allKeys];
+        NSMutableArray *keys = [[NSMutableArray alloc] initWithArray:keys_];
+
+
+        [self.jsOLClassesOutput appendString:@"\n\n"];
+        [self.jsOLClassesOutput appendString:@"///////////////////////////////////////////////////////////////\n"];
+        [self.jsOLClassesOutput appendFormat:@"// class = %@ (from %@)",name,[self.pathToFile lastPathComponent]];
+
+        for (int i=(42-((int)[name length]+(int)[[self.pathToFile lastPathComponent] length])); i > 0; i--)
+        {
+            [self.jsOLClassesOutput appendFormat:@" "];
+        }
+
+        [self.jsOLClassesOutput appendFormat:@"//\n"];
+        [self.jsOLClassesOutput appendString:@"///////////////////////////////////////////////////////////////\n"];
+        [self.jsOLClassesOutput appendFormat:@"oo.%@ = function(textBetweenTags) {\n",name];
+
+
+        [self.jsOLClassesOutput appendFormat:@"  this.name = '%@';\n",name];
+
+        // Das Attribut 'name' brauchen wir jetzt nicht mehr.
+        int i = (int)[keys count]; // Test, ob es auch klappt
+        [keys removeObject:@"name"];
+        if (i == [keys count])
+        {
+            [self instableXML:@"Konnte Attribut 'name' in <class> nicht löschen."];
+        }
+
+        // extends auslesen und speichern, dann extends aus der Attribute-liste löschen
+        NSString *inherit = [attributeDict valueForKey:@"extends"];
+        if (inherit == nil || inherit.length == 0)
+        {
+            [self.jsOLClassesOutput appendString:@"  this.inherit = new oo.view();\n\n"];
+        }
+        else
+        {
+            self.attributeCount++;
+
+            if ([inherit isEqualToString:@"window"])
+                inherit = @"basewindow";
+
+            [self.jsOLClassesOutput appendFormat:@"  this.inherit = new oo.%@(textBetweenTags);\n\n",inherit];
+        }
+        [keys removeObject:@"extends"];
+
+
+
+        // Alle Attributnamen als Array hinzufügen
+        [self.jsOLClassesOutput appendString:@"  this.attributeNames = ["];
+
+        int j = 0;
+        for (NSString *key in keys)
+        {
+            j++;
+
+            if (j > 1)
+                [self.jsOLClassesOutput appendString:@", "];
+
+            // Es gibt Attribute mit ' drin, deswegen hier "
+            [self.jsOLClassesOutput appendString:@"\""];
+            [self.jsOLClassesOutput appendString:key];
+            [self.jsOLClassesOutput appendString:@"\""];
+
+            // Die Attribute werden erst später ausgelesen, deswegen hier hochzählen
+            // Die Attribute werden aktuell ja nicht weiter bearbeitet.
+            self.attributeCount++;
+        }
+
+        [self.jsOLClassesOutput appendString:@"];\n"];
+
+
+        // Und alle Attributwerte als Array hinzufügen
+        [self.jsOLClassesOutput appendString:@"  this.attributeValues = ["];
+
+        j = 0;
+        for (NSString *key in keys)
+        {
+            j++;
+
+            if (j > 1)
+                [self.jsOLClassesOutput appendString:@", "];
+
+            // Es gibt Attribute mit ' drin, deswegen hier "
+            if (!isJSExpression([attributeDict valueForKey:key]))
+                [self.jsOLClassesOutput appendString:@"\""];
+            [self.jsOLClassesOutput appendString:[attributeDict valueForKey:key]];
+            if (!isJSExpression([attributeDict valueForKey:key]))
+                [self.jsOLClassesOutput appendString:@"\""];
+        }
+
+        [self.jsOLClassesOutput appendString:@"];\n\n"];
+
+
+        // Den Content von der Klasse ermitteln wir so:
+        // Wir lassen es einmal rekrusiv durchlaufen und wandeln so die OL-Elemente in HTML-Elemente um
+        // Später fügt jQuery diese HTML-Elemente beim auslesen des JS-Objekts als HTML-Code ein.
+        // Hier den String dafür leeren, und dann alles innerhalb <class> definierte da drin sammeln.
+        // Wenn <class> geschlossen wird, dann hinzufügen.
+        self.collectedContentOfClass = [[NSMutableString alloc] initWithString:@""];
+
 
 
         // Alles was in class definiert wird, wird extra gesammelt
@@ -14025,6 +14014,8 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "    else if (attributeName == 'width')\n"
     "    {\n"
+    "        // To Do: Aus der Doku: 'when the width attribute of a <view> is set, the view needs to update the width of the parent view if clipping is set to false.'\n"
+    "\n"
     "        // jQuery doesn't like plain strings containing a number\n"
     "        if (typeof value === 'string' && !value.endsWith('px') && !value.endsWith('%'))\n"
     "            value = value + 'px';\n"
@@ -17832,6 +17823,8 @@ BOOL isJSExpression(NSString *s)
     // Jedoch haben die getter (von z. B. 'bgcolor') das gebrochen, da diese ja nicht undefined zurückliefern.
     "function interpretObject(obj,id,iv)\n"
     "{\n"
+    "  var onInitFunc = null;\n"
+    "\n"
     "  // http://www.openlaszlo.org/lps4.9/docs/developers/introductory-classes.html#introductory-classes.placement\n"
     "  // 2.5 Placement -> By default, instances which appear inside a class are made children of the top level instance of the class.\n"
     "  var kinderVorDemAppenden = $(id).children(); // die existierenden Kinder sichern\n"
@@ -18141,8 +18134,6 @@ BOOL isJSExpression(NSString *s)
     "        attrArr.push(attr);\n"
     "    }\n"
     "  }\n"
-    "\n"
-    "  var onInitFunc = undefined;\n"
     "\n"
     "  // Erst die Attribute auswerten\n"
     "  var an = obj.attributeNames ? obj.attributeNames : [];\n"

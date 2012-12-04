@@ -135,7 +135,7 @@ BOOL ownSplashscreen = NO;
 @property (strong, nonatomic) NSMutableString *jsConstraintValuesOutput; // kommt ebenfalls direkt nach dem DOM
 
 @property (strong, nonatomic) NSMutableString *jsInitstageDeferOutput;
-@property (strong, nonatomic) NSMutableString *jsToUseLaterOutput;
+@property (strong, nonatomic) NSMutableString *idsAndNamesOutput;
 
 @property (strong, nonatomic) NSMutableString *cssOutput; // CSS-Ausgaben, die gesammelt werden, derzeit @Font-Face
 
@@ -301,7 +301,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize output = _output, jsOutput = _jsOutput, jsOLClassesOutput = _jsOLClassesOutput, jQueryOutput0 = _jQueryOutput0, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, datasetOutput = _datasetOutput, jsComputedValuesOutput = _jsComputedValuesOutput, jsConstraintValuesOutput = _jsConstraintValuesOutput, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput, collectedContentOfClass = _collectedContentOfClass;
 
-@synthesize jsInitstageDeferOutput = _jsInitstageDeferOutput, jsToUseLaterOutput = _jsToUseLaterOutput;
+@synthesize jsInitstageDeferOutput = _jsInitstageDeferOutput, idsAndNamesOutput = _idsAndNamesOutput;
 
 @synthesize errorParsing = _errorParsing, verschachtelungstiefe = _verschachtelungstiefe, rollUpDownVerschachtelungstiefe = _rollUpDownVerschachtelungstiefe;
 
@@ -426,7 +426,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.jsConstraintValuesOutput = [[NSMutableString alloc] initWithString:@""];
 
         self.jsInitstageDeferOutput = [[NSMutableString alloc] initWithString:@""];
-        self.jsToUseLaterOutput = [[NSMutableString alloc] initWithString:@""];
+        self.idsAndNamesOutput = [[NSMutableString alloc] initWithString:@""];
 
         self.cssOutput = [[NSMutableString alloc] initWithString:@""];
         self.externalJSFilesOutput = [[NSMutableString alloc] initWithString:@""];
@@ -549,7 +549,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Zur Sicherheit mache ich von allem ne Copy.
         // Nicht, dass es beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.datasetOutput copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.jsInitstageDeferOutput copy],[self.jsToUseLaterOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy], nil];
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.datasetOutput copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.jsInitstageDeferOutput copy],[self.idsAndNamesOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy], nil];
         return r;
     }
 }
@@ -1360,22 +1360,22 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Ich setze es per setAttribute_ auf JS-Ebene.
             // Geht wohl nur dann wenn ich DIESE CSS-Angaben noch vor alles andere setze, sonst
             // ist width und height nicht früh genug gesetzt und SA's verschieben sich!
-            [self.jsOutput appendString:@"\n  // Setting 'resource'\n"];
+            [self.jQueryOutput0 appendString:@"\n  // Setting 'resource'\n"];
 
             // 2. Bedingung: Damit er dann wenigstens '' setzt, sonst Absturz
             if ([src rangeOfString:@"."].location != NSNotFound || src.length == 0)
             {
-                [self.jsOutput appendFormat:@"  %@.setAttribute_('resource', '%@');\n",self.zuletztGesetzteID,src];
+                [self.jQueryOutput0 appendFormat:@"  %@.setAttribute_('resource', '%@');\n",self.zuletztGesetzteID,src];
             }
             else 
             {
-                [self.jsOutput appendFormat:@"  %@.setAttribute_('resource', %@);\n",self.zuletztGesetzteID,src];
+                [self.jQueryOutput0 appendFormat:@"  %@.setAttribute_('resource', %@);\n",self.zuletztGesetzteID,src];
             }
 
             if ([attributeDict valueForKey:@"frame"])
             {
-                [self.jsOutput appendString:@"\n  // Setting 'frame'\n"];
-                [self.jsOutput appendFormat:@"  %@.setAttribute_('frame', %ld);\n",self.zuletztGesetzteID,index+1];
+                [self.jQueryOutput0 appendString:@"\n  // Setting 'frame'\n"];
+                [self.jQueryOutput0 appendFormat:@"  %@.setAttribute_('frame', %ld);\n",self.zuletztGesetzteID,index+1];
             }
 
 
@@ -1686,15 +1686,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-// Genauso wie die ID muss auch das Name-Attribut global im JS-Raum vefügbar sein
-// Muss immer nach addIdToElement aufgerufen werden, weil ich auf self.zuletztgesetzteID
-// zurückgreife.
+// Genauso wie die ID muss auch das Name-Attribut global im JS-Raum vefügbar sein. Muss immer
+// nach addIdToElement aufgerufen werden, weil ich auf self.zuletztgesetzteID zurückgreife.
 
-// Dies war mal in jQueryOutput0, aber die Name-Attrbute müssen von Anfang an bekannt sein,
-// damit auch Klassen, die instanziert werden, darauf zugreifen können (Klassen werden
-// ebenfalls in jQueryOutput0 deklariert)
-// Deswegen müssen alle name-Attribute noch davor global deklariert werden!
-// => Deswegen ab nach jsOutput damit.
 - (void) convertNameAttributeToGlobalJSVar:(NSDictionary*) attributeDict
 {
     if ([attributeDict valueForKey:@"name"])
@@ -1703,66 +1697,35 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
 
-        NSLog(@"Setting the attribute 'name' as global JS variable.");
+        NSLog(@"Setting the attribute 'name' as global JS variable or as hook in the parent.");
         self.attributeCount++;
 
-        // Das ist Unsinn, weil ich das name-tag ja gerade nicht setze:
-        // [self.jsOutput appendFormat:@"  var %@ = document.getElementsByName('%@');\n",name, name];
-
-        // Ich verzichte hier bewusst auf das var, weil ich es in der Funktion
-        // $(window).load(function() { ... }); deklariere!
-        // Mit var davor wird es nur lokal. Ohne var wird es global.
-        // Alternative um es global zu machen:
-        // "window.Gewerbesteuerpflicht = ...;" bzw. "window['Gewerbesteuerpflicht'] = ...;"
-
-        // 'name' Attribute wurden bisher immer global gemacht. Dies ist aber nicht per se korrekt und hat Sachen gebrochen.
-        // (edGeburtsdatumPartner gab es sowohl als 'id' als auch woanders als 'name' und hat sich jeweils überschrieben)
-
-        // -> Aber Vorsicht!! Wenn die View auf erster Ebene ist, muss das name-Attribut weiterhin global bleiben!
+        // 'name'-Attribute wurden bisher immer global gemacht. Dies ist aber nicht per se korrekt.
+        // Nur wenn die View auf erster Ebene ist, muss das name-Attribut weiterhin global bleiben!
         // http://www.openlaszlo.org/lps4.2/docs/developers/program-development.html Dort 2.2.3
         // Deswegen:
         if ([elemTyp isEqualToString:@"canvas"])
         {
-            [self.jsOutput appendString:@"\n  // All Objects that are direct children of the canvas and have a 'name'-attribute need to be global JS-Variables\n"];
-            [self.jsOutput appendFormat:@"  %@ = document.getElementById('%@');\n",name, self.zuletztGesetzteID];
+            [self.idsAndNamesOutput appendString:@"\n  // All Objects that are direct children of the canvas and have a 'name'-attribute need to be global JS-Variables\n"];
+            [self.idsAndNamesOutput appendFormat:@"  %@ = document.getElementById('%@');\n",name, self.zuletztGesetzteID];
         }
 
-        [self.jsOutput appendString:@"\n  // All 'name'-attributes can be referenced by its parent Element\n"];
+
+        [self.idsAndNamesOutput appendString:@"\n  // All 'name'-attributes can be referenced by its parent Element\n"];
 
 
         // Wenn wir in einer Klasse in der ersten Ebene sind, dann ist der Parent immer das umgebende Element der Klasse
-
         if ([elemTyp isEqualToString:@"evaluateclass"])
         {
-            [self.jsOutput appendFormat:@"  %@.%@ = document.getElementById('%@');\n",ID_REPLACE_STRING, name, self.zuletztGesetzteID];
+            [self.idsAndNamesOutput appendFormat:@"  %@.%@ = document.getElementById('%@');\n",ID_REPLACE_STRING, name, self.zuletztGesetzteID];
         }
         else
         {
-            // Wenn wir in einem 'state' sind, müssen wir nen Extrasprung machen.
-            // Aber nur für das DIREKT im 'state' liegende Element
-            // Neu: Der Extrasprung gilt generell und steckt jetzt direkt in 'parent'
-            if (false)
-            {
-                [self.jsOutput appendFormat:@"  ($(document.getElementById('%@').parent).data('olel') == 'state') ? document.getElementById('%@').parent.parent.%@ = document.getElementById('%@') : document.getElementById('%@').parent.%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, self.zuletztGesetzteID, name, self.zuletztGesetzteID, self.zuletztGesetzteID, name, self.zuletztGesetzteID];
-            }
-            else
-            {
-                // nach OL-Test: parent UND immediateparent kriegen die Referenz über das Name-Attribut gesetzt...
-                [self.jsOutput appendFormat:@"  document.getElementById('%@').parent.%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, name, self.zuletztGesetzteID];
-                // Wirkt sich hier noch nicht aus! Erst wenn ich ne Klasse instanziere
-                //[self.jsOutput appendFormat:@"  document.getElementById('%@').immediateparent.%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, name, self.zuletztGesetzteID];
-            }
+            // nach OL-Test: parent UND immediateparent kriegen die Referenz über das Name-Attribut gesetzt...
+            [self.idsAndNamesOutput appendFormat:@"  document.getElementById('%@').parent.%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, name, self.zuletztGesetzteID];
+            // Wirkt sich hier noch nicht aus! Erst wenn ich ne Klasse instanziere
+            //[self.jsOutput appendFormat:@"  document.getElementById('%@').immediateparent.%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, name, self.zuletztGesetzteID];
         }
-
-        //[self.jsOutput appendString:@"  // ...save 'name'-attribute internally, so it can be retrieved by the getter.\n"];
-        //[self.jsOutput appendFormat:@"  $(%@).data('name','%@');\n",self.zuletztGesetzteID, name];
-        // -> Nicht mehr nötig, weil ich 'name' als HTML5-Annotation setze und somit automatisch in jQuerys data() erscheint
-
-        //[self.jsOutput appendString:@"  // ...and all 'name'-attributes can be referenced by canvas.*\n"];
-        //[self.jsOutput appendFormat:@"  canvas.%@ = %@;\n",name, name];
-        // Nein... das stimmt nicht so generell. Es kann nur sein, dass sich dies ergibt, weil
-        // der parent halt 'canvas' ist. Deswegen musste diese Anweisung raus, hat sonst Sachen
-        // überschrieben, wenn es mehrere name-Attribute im Dokument mit gleichem Namen gab
     }
 }
 
@@ -2477,7 +2440,6 @@ void OLLog(xmlParser *self, NSString* s,...)
     [self.output appendFormat:@" id=\"%@\"",self.zuletztGesetzteID];
 
 
-
     // Ebenfalls noch Elementnamen als HTML5-Annotation adden
     [self.output appendFormat:@" data-olel=\"%@\"",[self.enclosingElements lastObject]];
 
@@ -2512,8 +2474,8 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Nur bei nachträglich hinzugefügten Klassen ist es nachwievor nötig!
     if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
     {
-        [self.jsOutput appendString:@"\n  // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein.\n"];
-        [self.jsOutput appendFormat:@"  %@ = document.getElementById('%@');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+        [self.idsAndNamesOutput appendString:@"\n  // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein.\n"];
+        [self.idsAndNamesOutput appendFormat:@"  %@ = document.getElementById('%@');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
     }
 
 
@@ -2877,9 +2839,9 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.jsConstraintValuesOutput appendString:[result objectAtIndex:14]];
 
         [self.jsInitstageDeferOutput appendString:[result objectAtIndex:15]];
-        [self.jsToUseLaterOutput appendString:[result objectAtIndex:16]];
+        [self.idsAndNamesOutput appendString:[result objectAtIndex:16]];
 
-        // Hier adden, weil ich NICHT die Werte aus diesem Array mit an die Rekursions-Stufe übergeben hatte
+        // Hier wiederum adden, weil ich NICHT die Werte aus diesem Array mit an die Rekursions-Stufe übergeben hatte
         [self.allImgPaths addObjectsFromArray:[result objectAtIndex:17]];
 
         // Hier wieder überschreiben, da ich ja die Werte mit übergeben hatte
@@ -3765,7 +3727,7 @@ didStartElement:(NSString *)elementName
         self.weAreInDatasetAndNeedToCollectTheFollowingTags = YES;
 
 
-        [self.datasetOutput appendString:@"\n  // A dataset\n"];
+        [self.datasetOutput appendString:@"\n  // A dataset:\n"];
         [self.datasetOutput appendFormat:@"  %@ = new lz.dataset(null, {name: '%@'});\n",self.lastUsedDataset,self.lastUsedDataset];
 
         
@@ -4013,7 +3975,7 @@ didStartElement:(NSString *)elementName
             }
             else
             {
-                [o appendString:@"\n  // Ein Datapointer ohne 'name'- oder 'id'-Attribut. Wohl nur um ein 'ondata'-Handler daran zu binden oder so... hmmm\n"];
+                [o appendString:@"\n  // Ein Datapointer ohne 'name'- oder 'id'-Attribut. Wohl nur um ein 'ondata'-Handler daran zu binden.\n"];
                 [o appendFormat:@"  %@ = new lz.datapointer(%@,%@,%@);\n",name,dp,rerunxpath,idUmgebendesElement];
             }
         }
@@ -4406,6 +4368,7 @@ didStartElement:(NSString *)elementName
         // Kann auch ein berechneter Werte sein ($ davor). Wenn ja dann $ usw. entfernen
         // und wir arbeiten dann natürlich ohne Quotes.
         BOOL berechneterWert = NO;
+        NSString* valueVorAenderung = value;
         if (true)
         {
             // Bei $path darf er nicht hier reingehen! Deswegen test auf '${'
@@ -4450,9 +4413,9 @@ didStartElement:(NSString *)elementName
         // Wenn wir in einer Klasse sind, alle Attribute der Klasse intern mitspeichern
         // Denn sie müssen bei jedem instanzieren der Klasse mit ihren Startwerten
         // initialisiert werden (Überschreibungen durch Instanzvariablen sind möglich).
-        //if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+        // if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
         // Das war falsch. Nur Attribute direkt auf Ebene der Klasse gehören natürlich zu der Klasse
-        // Vorher wurden auch Attribute der Klasse zugeordnet, die tiefer verschachtelt in anderen Elementen lagen
+        // Vorher wurden auch Attr. der Klasse zugeordnet, die in tiefer verschachtelten Elementen lagen
         // siehe Klasse 'trashcangridcolumn'... oh man... so ein Fehler so lange...
         if ([elemTyp isEqualToString:@"evaluateclass"])
         {
@@ -4462,6 +4425,13 @@ didStartElement:(NSString *)elementName
                 [self instableXML:@"Das geht so nicht. Wenn ich Attribute hinzufüge zu einer Klasse, muss ich vorher auf diese Klasse gestoßen sein!"];
 
             NSMutableDictionary *attrDictOfClass = [self.allFoundClasses objectForKey:className];
+
+
+            //if ([valueVorAenderung hasPrefix:@"${"])
+            //{
+            //    value = [self modifySomeExpressionsInJSCode:valueVorAenderung];
+            //}
+
 
             if (berechneterWert)
             {
@@ -4483,7 +4453,7 @@ didStartElement:(NSString *)elementName
 
                         if (![value isEqualToString:@"null"])
                         {
-                            // Darauf reagiere ich noch nicht, falls überhaupt möglich sowas:
+                            // Darauf reagiere ich noch nicht, falls sowas überhaupt möglich:
                             [self instableXML:@"Hmm, dann wurde setter und ein value gleichzeitg gesetzt. Kann sowas sein?"];
                         }
                         else
@@ -4579,9 +4549,6 @@ didStartElement:(NSString *)elementName
 
 
 
-            // War früher mal jsHeadOutput, aber die Elemente sind ja erst nach Instanzierung
-            // bekannt, deswegen jQueryOutput0
-            // (Damit es noch vor den Computed Values und Constraint Values bekannt ist)
             // Wenn wir ein Attribut von canvas haben, dann so früh wie möglich bekannt machen,
             // da z. B. 'datasets' auf diese Attribute schon zugreifen.
             if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"BDStabsheetcontainer"])
@@ -4655,7 +4622,7 @@ didStartElement:(NSString *)elementName
         // 'defaultplacement' wird, falls wir in einer Klasse sind, ausgelesen und gesetzt.
         // Das ist evtl. nicht mehr nötig, seitdem ich ALLE Attribute einer Klasse auslese
         // Aber wegen Zugriff auf obj.inherit.defaultplacement noch drin (Bei entfernen von defaultplacement, müsste man
-        // auf das selfDefinedAttributes-Objekt zugreifen, und schauen ob da drin eine var 'defaultplacement' steckt)
+        // auf das attributesDict zugreifen, und schauen ob da drin eine var 'defaultplacement' steckt)
         // hmm, ich schreibe jetzt nicht mehr vor der klasse, sondern erst am Anfang von interpretObject (bzw. teils/teils)
         if (self.ignoreAddingIDsBecauseWeAreInClass && [a isEqualToString:@"defaultplacement"])
             self.defaultplacement = [attributeDict valueForKey:@"value"];
@@ -6600,18 +6567,19 @@ didStartElement:(NSString *)elementName
         {
             self.attributeCount++;
 
+            // 'window' ist ein JS-Objekt...
             if ([inherit isEqualToString:@"window"])
-                inherit = @"basewindow";
+                inherit = @"windowpanel";
 
             [self.jsOLClassesOutput appendFormat:@"  this.inherit = new oo.%@(textBetweenTags);\n\n",inherit];
         }
         [keys removeObject:@"extends"];
 
 
-
+// Das brauche ich nicht mehr, nachdem ich "Tag-Attribute" und "<Attribute>-Attribute" gemergt habe
+/*
         // Alle Attributnamen als Array hinzufügen
         [self.jsOLClassesOutput appendString:@"  this.attributeNames = ["];
-
         int j = 0;
         for (NSString *key in keys)
         {
@@ -6625,17 +6593,12 @@ didStartElement:(NSString *)elementName
             [self.jsOLClassesOutput appendString:key];
             [self.jsOLClassesOutput appendString:@"\""];
 
-            // Die Attribute werden erst später ausgelesen, deswegen hier hochzählen
-            // Die Attribute werden aktuell ja nicht weiter bearbeitet.
             self.attributeCount++;
         }
-
         [self.jsOLClassesOutput appendString:@"];\n"];
-
 
         // Und alle Attributwerte als Array hinzufügen
         [self.jsOLClassesOutput appendString:@"  this.attributeValues = ["];
-
         j = 0;
         for (NSString *key in keys)
         {
@@ -6651,8 +6614,12 @@ didStartElement:(NSString *)elementName
             if (!isJSExpression([attributeDict valueForKey:key]))
                 [self.jsOLClassesOutput appendString:@"\""];
         }
-
         [self.jsOLClassesOutput appendString:@"];\n\n"];
+*/
+        // Aber den attributeCount muss ich trotzdem korrigieren hier
+        self.attributeCount += [keys count];
+
+
 
 
         // Den Content von der Klasse ermitteln wir so:
@@ -7325,7 +7292,9 @@ didStartElement:(NSString *)elementName
             // Okay, jetzt Text sammeln und beim schließen einfügen
         }
 
-        if ([name isEqualToString:@"onchanged"] || [name isEqualToString:@"onnewvalueasdasda"])
+        // Sieht gemäß Code so aus, als würde dieses Event von einer OL-Checkbox ausgelöst werden
+        // Dem entsprechend sollte es passen mit einem change-Listener auf eine Änderung zu horchen
+        if ([name isEqualToString:@"onchanged"])
         {
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-change-event.");
@@ -7334,21 +7303,6 @@ didStartElement:(NSString *)elementName
 
             [o appendFormat:@"  $('#%@').change(function(e)\n  {\n    ",enclosingElem];
 
-
-            alsBuildInEventBearbeitet = YES;
-
-            // Okay, jetzt Text sammeln und beim schließen einfügen
-        }
-
-        if ([name isEqualToString:@"onerror"] ||
-            [name isEqualToString:@"ontimeout"])
-        {
-            self.attributeCount++;
-            NSLog(@"Binding the method in this handler to a jQuery-error-event.");
-
-            [o appendFormat:@"\n  // error-Handler für %@\n",enclosingElem];
-
-            [o appendFormat:@"  $('#%@').error(function(e)\n  {\n    ",enclosingElem];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7589,21 +7543,19 @@ didStartElement:(NSString *)elementName
             // ebenso 'setAttribute_'.
             // Das erste Argument (e) ist immer automatisch das event-Objekt.
             // (Siehe Beispiel <event>, Example 28)
-            [o appendFormat:@"\n  // 'custom'-Handler für %@\n",enclosingElem];
+            [o appendFormat:@"\n  // 'custom'-Handler für %@ / Typ: %@\n",enclosingElem,enclosingElemTyp];
 
 
-            // Per 'jQuery' an 'datapointer' und 'dataset' gebundene Handler machen keinen Sinn, da die jQuery-Length 0 ergibt.
-            // Deswegen hier darauf testen, und an die VAR binden, nicht an das (nicht existierende) DOM-Element
-            if ([enclosingElemTyp isEqualToString:@"datapointer"] || [enclosingElemTyp isEqualToString:@"dataset___kompiliert_noch_nicht..."])
+            // Per 'jQuery' an 'datapointer' und 'dataset' gebundene Handler machen keinen Sinn, da die
+            // jQuery-Length 0 ergibt. Deswegen hier darauf testen, und an die JS-VAR binden,
+            // nicht an das (nicht existierende) DOM-Element.
+            // Bei vorhandenem 'reference'-Attribut können wir den Typ nicht testen, deswegen in diesem
+            // Fall dann auch über die Var gehen (Bei Taxango z. B. bei "dsLogin" nötig).
+            if ([enclosingElemTyp isEqualToString:@"datapointer"] ||
+                [enclosingElemTyp isEqualToString:@"dataset"] ||
+                [attributeDict valueForKey:@"reference"])
             {
-                if ([name isEqualToString:@"ondata"])
-                {
-                    [o appendFormat:@"  $(%@).on('%@',function(e%@)\n  {\n    ",enclosingElem,name,args];
-                }
-                else
-                {
-                    [self instableXML:@"Oh, interessant es scheint nur 'ondata' zu geben in einem solchen Fall!?"];
-                }
+                [o appendFormat:@"  $(%@).on('%@',function(e%@)\n  {\n    ",enclosingElem,name,args];
             }
             else
             {
@@ -7895,7 +7847,7 @@ didStartElement:(NSString *)elementName
         [o appendFormat:@"\n  var id = document.getElementById('%@');",idUmgebendesElement];
         [o appendFormat:@"\n  var obj = new oo.%@('');",elementName];
 
-        // [o appendFormat:@"\n  if (jQuery.inArray('defer',obj.attributeValues) == -1)"]; // try 1 --> Ohne Erfolg...
+        // [o appendFormat:@"\n  if (obj.attributesDict.initstage == 'defer')"]; // try 1 --> Ohne Erfolg...
         // [o appendFormat:@"\n  if ($(id).is(':visible'))"]; // try 2 --> Ohne Erfolg, bricht viewlose Elemente (swfso z. B.)
 
         [o appendString:@"\n  interpretObject(obj,id,iv);\n"];
@@ -8468,21 +8420,21 @@ BOOL isJSExpression(NSString *s)
 
         NSString *rekursiveRueckgabeJsComputedValuesOutput = [result objectAtIndex:13];
         if (![rekursiveRueckgabeJsComputedValuesOutput isEqualToString:@""])
-            NSLog(@"String 13 aus der Rekursion wird unser JS-Computed-Values-content für JS-Objekt");
+            NSLog(@"String 13 aus der Rekursion wird unser JS-Computed-Values-content für das JS-Objekt");
 
         NSString *rekursiveRueckgabeJsConstraintValuesOutput = [result objectAtIndex:14];
         if (![rekursiveRueckgabeJsConstraintValuesOutput isEqualToString:@""])
-            NSLog(@"String 14 aus der Rekursion wird unser JS-Constraint-Values-content für JS-Objekt");
+            NSLog(@"String 14 aus der Rekursion wird unser JS-Constraint-Values-content für das JS-Objekt");
 
 
 
         NSString *rekursiveRueckgabeJsInitstageDeferOutput = [result objectAtIndex:15];
         if (![rekursiveRueckgabeJsInitstageDeferOutput isEqualToString:@""])
-            NSLog(@"String 15 aus der Rekursion wird unser JS-Initstage-Defer-content für JS-Objekt");
+            NSLog(@"String 15 aus der Rekursion wird unser JS-Initstage-Defer-content für das JS-Objekt");
 
-        NSString *rekursiveRueckgabeJsToUseLaterOutput = [result objectAtIndex:16];
-        if (![rekursiveRueckgabeJsToUseLaterOutput isEqualToString:@""])
-            NSLog(@"String 16 aus der Rekursion wird unser To-Use-Later-content für JS-Objekt");
+        NSString *rekursiveRueckgabeIDsAndNamesOutput = [result objectAtIndex:16];
+        if (![rekursiveRueckgabeIDsAndNamesOutput isEqualToString:@""])
+            NSLog(@"String 16 aus der Rekursion wird unser Name-and-ids-content für das JS-Objekt");
 
 
 
@@ -8507,7 +8459,7 @@ BOOL isJSExpression(NSString *s)
         rekursiveRueckgabeJsComputedValuesOutput = [rekursiveRueckgabeJsComputedValuesOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
-        rekursiveRueckgabeJsToUseLaterOutput = [rekursiveRueckgabeJsToUseLaterOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
+        rekursiveRueckgabeIDsAndNamesOutput = [rekursiveRueckgabeIDsAndNamesOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
 
 
         // In manchen JS/jQuery tauchen " auf, die müssen escaped werden
@@ -8516,7 +8468,7 @@ BOOL isJSExpression(NSString *s)
         rekursiveRueckgabeDatasetOutput = [rekursiveRueckgabeDatasetOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
-        rekursiveRueckgabeJsToUseLaterOutput = [rekursiveRueckgabeJsToUseLaterOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+        rekursiveRueckgabeIDsAndNamesOutput = [rekursiveRueckgabeIDsAndNamesOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
 
         // STATT DESSEN: Bei jsOutput:
 
@@ -8551,11 +8503,11 @@ BOOL isJSExpression(NSString *s)
         rekursiveRueckgabeJsComputedValuesOutput = [rekursiveRueckgabeJsComputedValuesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
-        rekursiveRueckgabeJsToUseLaterOutput = [rekursiveRueckgabeJsToUseLaterOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
+        rekursiveRueckgabeIDsAndNamesOutput = [rekursiveRueckgabeIDsAndNamesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
 
 
 
-        [self.jsOLClassesOutput appendFormat:@"  this.selfDefinedAttributes = {"];
+        [self.jsOLClassesOutput appendFormat:@"  this.attributesDict = {"];
 
         NSArray *keys = [self.allFoundClasses objectForKey:self.lastUsedNameAttributeOfClass];
         if ([keys count] > 0)
@@ -8610,7 +8562,7 @@ BOOL isJSExpression(NSString *s)
         // defaultplacement immer mit speichern, damit es besser ausgelesen werden kann, falls gesetzt.
         // self.defaultplacement = [self protectThisSingleQuotedJavaScriptString:self.defaultplacement];
         // [self.jsOLClassesOutput appendFormat:@"  this.defaultplacement = '%@';\n\n",self.defaultplacement];
-        // Neu: Wird nicht mehr hier ausgegeben. Steckt als ganz normale Variable in selfDefinedAttributes
+        // Neu: Wird nicht mehr hier ausgegeben. Steckt als ganz normale Variable im attributesDict
         // Nachdem ausgelesen, wieder zurücksetzen:
         self.defaultplacement = @"";
 
@@ -8625,9 +8577,21 @@ BOOL isJSExpression(NSString *s)
         [self.jsOLClassesOutput appendString:@"';\n\n"];
 
 
-        [self.jsOLClassesOutput appendString:@"  this.contentLeadingJSHead = \""];
-        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsHeadOutput];
-        [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        if (rekursiveRueckgabeJsHeadOutput.length > 0)
+        {
+            [self.jsOLClassesOutput appendString:@"  this.contentJSHead = \""];
+            [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsHeadOutput];
+            [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        }
+
+
+        if (rekursiveRueckgabeIDsAndNamesOutput.length > 0)
+        {
+            [self.jsOLClassesOutput appendString:@"  this.contentNamesAndIDs = \""];
+            [self.jsOLClassesOutput appendString:rekursiveRueckgabeIDsAndNamesOutput];
+            [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        }
+
 
         if (rekursiveRueckgabeDatasetOutput.length > 0)
         {
@@ -8635,8 +8599,6 @@ BOOL isJSExpression(NSString *s)
             [self.jsOLClassesOutput appendString:rekursiveRueckgabeDatasetOutput];
             [self.jsOLClassesOutput appendString:@"\";\n\n"];
         }
-
-
 
 
         // In manchen propertys von duration in Klassen erfolgt der Zugriff auf classroot...
@@ -8661,17 +8623,13 @@ BOOL isJSExpression(NSString *s)
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJQueryOutput];
         [self.jsOLClassesOutput appendString:@"\";\n\n"];
 
-        [self.jsOLClassesOutput appendString:@"  this.contentJSToUseLater = \""];
-        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsToUseLaterOutput];
-        [self.jsOLClassesOutput appendString:@"\";\n\n"];
-
         [self.jsOLClassesOutput appendString:@"  this.contentJSInitstageDefer = \""];
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsInitstageDeferOutput];
         [self.jsOLClassesOutput appendString:@"\";\n"];
 
 
 
-        [self.jsOLClassesOutput appendString:@"};\n"];
+        [self.jsOLClassesOutput appendString:@"}\n"];
 
         
         [self.jsOLClassesOutput appendString:@"// Jede Klasse kann auch per Skript erzeugt werden\n"];
@@ -9909,6 +9867,19 @@ BOOL isJSExpression(NSString *s)
         [self.output appendString:@"  /*******************************************************************/\n\n\n"];
     }
 
+    
+
+    if (![self.idsAndNamesOutput isEqualToString:@""])
+    {
+        [self.output appendString:@"\n\n  /*******************************************************************/\n"];
+        [self.output appendString:@"  /***************************** Grenze ******************************/\n"];
+        [self.output appendString:@"  /*************** ID's & names werden bekannt gemacht ***************/\n"];
+        [self.output appendString:@"  /*******************************************************************/\n"];
+
+        [self.output appendString:self.idsAndNamesOutput];
+    }
+
+
 
     // datasets erst nach den Canvas-Attributen, da z. B. die 'src'-Variable von datasets
     // auf canvas-Attribute zugreift!
@@ -9959,9 +9930,9 @@ BOOL isJSExpression(NSString *s)
     }
 
 
+
     // Normale jQuery-Ausgaben
     [self.output appendString:self.jQueryOutput];
-
 
 
 
@@ -9979,17 +9950,6 @@ BOOL isJSExpression(NSString *s)
     if (ownSplashscreen)
         [self.output appendString:@"\n  $('#splashscreen_').remove();\n"];
 
-
-
-    if (![self.jsToUseLaterOutput isEqualToString:@""])
-    {
-        [self.output appendString:@"\n\n  /*******************************************************************/\n"];
-        [self.output appendString:@"  /***************************** Grenze ******************************/\n"];
-        [self.output appendString:@"  /********************* ToUseLater ist hier nach ********************/\n"];
-        [self.output appendString:@"  /*******************************************************************/\n"];
-
-        [self.output appendString:self.jsToUseLaterOutput];
-    }
 
 
 
@@ -11783,7 +11743,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "function createObjectFromScript(name, scope, attributes) {\n"
     "    if (name === undefined)\n"
-    "        throw new TypeError('function createObjectFromScript - Neither the name-attribute nor the scope-attribute is allowed to be undefined');\n"
+    "        throw new TypeError('function createObjectFromScript - name-attribute is not allowed to be undefined');\n"
     "\n"
     "    if (scope === undefined)\n"
     "        scope = canvas;\n"
@@ -11792,25 +11752,31 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Die id mitgeben, damit ich es nach dem Einfügen daran wieder identifizieren und finden kann!\n"
     "    if (name === 'view') {\n"
-    "        jQuery('<div/>', {\n"
+    "        jQuery('<div></div>', {\n"
     "            id: id,\n"
     "            class: 'div_standard noPointerEvents',\n"
     "        }).appendTo(scope);\n"
     "\n"
     "        // Objekt sofort global bekannt machen\n"
     "        window[id] = document.getElementById(id);\n"
+    "\n"
+    "        // data-olel setzen für das neue Element, wird z. B. von der super_-Property ausgelesen\n"
+    "        $('#'+id).data('olel',name);\n"
     "    }\n"
     "    else if (name === 'button') {\n"
-    "        jQuery('<button/>', {\n"
+    "        jQuery('<button></button>', {\n"
     "            id: id,\n"
     "            class: 'input_standard',\n"
     "        }).appendTo(scope);\n"
     "\n"
     "        // Objekt sofort global bekannt machen\n"
     "        window[id] = document.getElementById(id);\n"
+    "\n"
+    "        // data-olel setzen für das neue Element, wird z. B. von der super_-Property ausgelesen\n"
+    "        $('#'+id).data('olel',name);\n"
     "    }\n"
     "    else if (name === 'text') {\n"
-    "        jQuery('<div/>', {\n"
+    "        jQuery('<div></div>', {\n"
     "            id: id,\n"
     "            class: 'div_text noPointerEvents',\n"
     //"            text: 'Go to Google!'\n"
@@ -11818,9 +11784,12 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        // Objekt sofort global bekannt machen\n"
     "        window[id] = document.getElementById(id);\n"
+    "\n"
+    "        // data-olel setzen für das neue Element, wird z. B. von der super_-Property ausgelesen\n"
+    "        $('#'+id).data('olel',name);\n"
     "    }\n"
     "    else if (typeof oo[name] === 'function') {\n"
-    "        jQuery('<div/>', {\n"
+    "        jQuery('<div></div>', {\n"
     "            id: id,\n"
     "            class: 'div_standard noPointerEvents',\n"
     "        }).appendTo(scope);\n"
@@ -11828,13 +11797,16 @@ BOOL isJSExpression(NSString *s)
     "        // Objekt sofort global bekannt machen\n"
     "        window[id] = document.getElementById(id);\n"
     "\n"
+    "        // data-olel setzen für das neue Element, wird z. B. von der super_-Property ausgelesen\n"
+    "        $('#'+id).data('olel',name);\n"
+    "\n"
     "        var obj = new oo[name]('');\n"
     "        var el = document.getElementById(id);\n"
     "        interpretObject(obj,el,{});\n"
     "    }\n"
     "    else\n"
     "    {\n"
-    "        alert('Das muss ich noch unterstützen: '+name);\n"
+    "        alert('Das muss ich noch unterstützen in createObjectFromScript: '+name);\n"
     "    }\n"
     "\n"
     "    if (attributes)\n"
@@ -11978,11 +11950,27 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "    this.ModeManagerService = function() {\n"
-    "        this.makeModal = function() {\n"
-    "            //alert('To Do - makeModal!!');\n"
+    "        this.makeModal = function(ref) {\n"
+    "            $('body').append(\"<div id='makeModalOverlay_'></div>\");\n"
+    "\n"
+    "            $('#makeModalOverlay_').height($(document).height()).css({\n"
+    "                'top': 0,\n"
+    "                'left': 0,\n"
+    "                'position': 'fixed',\n"
+    "                'opacity' : 0.4,\n"
+    "                'background-color': 'black',\n"
+    "                'width': '100%',\n"
+    "                'z-index': 12000\n"
+    "            });\n"
+    "\n"
+    "            var zi = $('#your-div').css('z-index');\n"
+    "\n"
+    "            ref.bringToFront();\n"
     "        }\n"
-    "        this.release = function() {\n"
-    "            alert('To Do - Make not Modal anymore');\n"
+    "        this.release = function(ref) {\n"
+    "            $('#makeModalOverlay_').remove();\n"
+    "\n"
+    "            // ref.sendToBack(); better test this\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -12059,6 +12047,9 @@ BOOL isJSExpression(NSString *s)
     "            return false;\n"
     "        }\n"
     "        this.loadJS = function(code,target) {\n"
+    "            if (target != undefined)\n"
+    "                alert('check this out if target is not undefined. code: ' + code);\n"
+    "\n"
     "            eval(code);\n"
     "        }\n"
     "        this.loadURL = function(url,target) {\n"
@@ -12501,14 +12492,14 @@ BOOL isJSExpression(NSString *s)
     "        this.setQueryParam = function(key, val) { // near oi\n"
     "            this.querystring = null;\n"
     "\n"
-    "            if(!this.params)\n"
+    "            if (!this.params)\n"
     "            {\n"
     "                this.params = {};\n"
     "            }\n"
     "\n"
     "            this.params[key] = val;\n"
     "\n"
-    "            if(this.autorequest)\n"
+    "            if (this.autorequest)\n"
     "            {\n"
     "                 this.doRequest()\n"
     "            }\n"
@@ -12535,24 +12526,48 @@ BOOL isJSExpression(NSString *s)
     "                return;\n"
     "            }\n"
     "\n"
-    "            if (this.querytype.toUpperCase() == 'POST')\n"
+    "            this.querytype = this.querytype.toUpperCase();\n"
+    "\n"
+    "            if (this.querytype == 'POST')\n"
     "            {\n"
     "                var ds = this; // weil this im callback überschrieben wird\n"
-    "                $.post(this.src, function(data) {\n"
-    "                    alert('Data vorher: ' + ds.rawdata);\n"
-    "                    ds.rawdata = (new XMLSerializer()).serializeToString(data);\n"
-    "                    alert('Data Loaded from ' + ds.src + ': ' + ds.rawdata);\n"
     "\n"
-    "                    // $(this).triggerHandler('ondata');\n"
-    "                }, 'xml');\n"
+    "                $.ajax({\n"
+    "                    type: this.querytype,\n"
+    "                    url: this.src,\n"
+    "                    data: this.params,\n"
+    "                    success: function(data, textStatus, jqXHR) {\n"
+    "                        alert('Data vorher: ' + ds.rawdata);\n"
+    "                        ds.rawdata = (new XMLSerializer()).serializeToString(data);\n"
+    "                        alert('Data Loaded from ' + ds.src + ': ' + ds.rawdata);\n"
+    "\n"
+    "                        $(ds).triggerHandler('ondata');\n"
+    "                    },\n"
+    "                    error: function(jqXHR, textStatus, errorThrown) {\n"
+    "                        // jQuery-Doc: Possible values for the second argument (besides null) are 'timeout', 'error', 'abort', and 'parsererror'.\n"
+    "\n"
+    "                        if (textStatus == 'timeout')\n"
+    "                        {\n"
+    "                            $(ds).triggerHandler('ontimeout');\n"
+    "                        }\n"
+    "                        else\n"
+    "                        {\n"
+    "                            $(ds).triggerHandler('onerror');\n"
+    "                        }\n"
+    "                    },\n"
+    "                    dataType: 'xml'\n"
+    "                });\n"
     "            }\n"
     "            else // 'GET' is the default\n"
     "            {\n"
+    "                alert('Teste mich, und integriere mich in $.ajax({}) (s.o.) - Dazu wohl einfach nur if-else-Abfrage entfernen');\n"
+    "                alert('Vorher: ' + this.rawdata);\n"
     "                this.rawdata = (new XMLSerializer()).serializeToString(getXMLDocumentFromFile(this.src));\n"
+    "                alert('Nachher: ' + this.rawdata);\n"
     "            }\n"
     "\n"
     "\n"
-    "            // Fehlt gemäß Doku: Auch alle datapointer triggern, die hier dran hängen\n"
+    "            // Gemäß Doku fehlt noch: Auch alle datapointer triggern, die hier dran hängen\n"
     "        }\n"
     "\n"
     "        // lz.DataElementMixin reinmixen\n"
@@ -14511,11 +14526,13 @@ BOOL isJSExpression(NSString *s)
     "        else\n"
     "        {\n"
     "            if (typeof value === 'string' && value.contains('.'))\n"
+    "            {\n"
     "                setWidthAndHeightAndBackgroundImage(me,value);\n"
+    "            }\n"
     "            else if (typeof value === 'string' && value != '')\n"
+    "            {\n"
     "                setWidthAndHeightAndBackgroundImage(me,window[value]);\n"
-    //"            else\n"
-    //"                throw 'setAttribute_ - Error trying to set resource. (value = '+value+', me.id = '+me.id+').';\n"
+    "            }\n"
     "        }\n"
     "    }\n"
     "    else if ($(me).hasClass('select_standard') && attributeName == 'editable') // Nur vom Element 'basecombobox' von Haus aus gesetztes Attribut\n"
@@ -15912,7 +15929,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// apply()                                             //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var applyFunction = function () {\n"
+    "var applyFunction = function() {\n"
     "    this.setAttribute_('applied', true);\n"
     "}\n"
     "\n"
@@ -15921,7 +15938,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// remove()                                            //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var removeFunction = function () {\n"
+    "var removeFunction = function() {\n"
     "    this.setAttribute_('applied', false);\n"
     "}\n"
     "\n"
@@ -15941,7 +15958,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// getAttributeRelative()                              //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var getAttributeRelativeFunction = function (prop, ref) {\n"
+    "var getAttributeRelativeFunction = function(prop, ref) {\n"
     "    if (typeof prop !== 'string' && prop !== 'x' && prop !== 'y' && prop !== 'width' && prop !== 'height')\n"
     "        throw new Error('getAttributeRelative() - Unsupported value for first argument.');\n"
     "    if (prop === 'x') return $(this).offset().left - $(ref).offset().left;\n"
@@ -15961,7 +15978,7 @@ BOOL isJSExpression(NSString *s)
     "// measureHeight()                                     //\n"
     "// Reports the 'natural' height of the contents of the view. That is, the height the view would have if it did not have an explicit height.\n"
     "/////////////////////////////////////////////////////////\n"
-    "var measureHeightFunction = function () {\n"
+    "var measureHeightFunction = function() {\n"
     //"    var cssProp = $(this).css('height');\n"
     //"    // $(this).css('height','auto');\n"
     //"    var returnValue = $(this).height();\n"
@@ -15979,7 +15996,7 @@ BOOL isJSExpression(NSString *s)
     "// measureWidth()                                      //\n"
     "// Reports the 'natural' width of the contents of the view. That is, the height the view would have if it did not have an explicit height.\n"
     "/////////////////////////////////////////////////////////\n"
-    "var measureWidthFunction = function () {\n"
+    "var measureWidthFunction = function() {\n"
     //"    var cssProp = $(this).css('width');\n"
     //"    // $(this).css('width','auto');\n"
     //"    var returnValue = $(this).width();\n"
@@ -15996,7 +16013,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// sendToBack()                                        //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var sendToBackFunction = function (oThis) {\n"
+    "var sendToBackFunction = function() {\n"
     "    $(this).css('z-index','-1');\n"
     "}\n"
     "\n"
@@ -16008,7 +16025,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// bringToFront() - nachimplementiert                  //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var bringToFrontFunction = function (oThis) {\n"
+    "var bringToFrontFunction = function() {\n"
     "    $(this).css('zIndex', Math.max.apply(null, $.map($('div:first').find('*'), function(e,i) { return e.style.zIndex; }))+1);\n"
     "}\n"
     "\n"
@@ -16020,7 +16037,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// sendBehind() - nachimplementiert                    //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var sendBehindFunction = function (el) {\n"
+    "var sendBehindFunction = function(el) {\n"
     "    var z = $(el).css('zIndex');\n"
     "    if (z == 'auto')\n"
     "        z = $(el).parents('[zIndex!=\"auto\"]').css('zIndex');\n"
@@ -16036,7 +16053,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// sendInFrontOf() - nachimplementiert                 //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var sendInFrontOfFunction = function (el) {\n"
+    "var sendInFrontOfFunction = function(el) {\n"
     "    var z = $(el).css('zIndex');\n"
     "    if (z == 'auto')\n"
     "        z = $(el).parents('[zIndex!=\"auto\"]').css('zIndex');\n"
@@ -16054,7 +16071,7 @@ BOOL isJSExpression(NSString *s)
     "// presentAttribute() - nachimplementiert              //\n"
     "// undokumentiert, aber taucht in Example 20.5 auf und in Doku nur am Rande erwähnt//\n"
     "/////////////////////////////////////////////////////////\n"
-    "var presentAttributeFunction = function (attr,as) {\n"
+    "var presentAttributeFunction = function(attr,as) {\n"
     "    function rgb2hex(rgb) {\n"
     "        function hex(x) {\n"
     "            return ('0' + parseInt(x).toString(16)).slice(-2);\n"
@@ -17366,6 +17383,7 @@ BOOL isJSExpression(NSString *s)
     "    vars = [];\n"
     "\n"
     "    // Im wesentlichen, um Anfangs- und Endmarkierung der Constraint zu entfernen\n"
+    "    // Aber auch so könnten ja mit geschweiften Klammern geklammerte Ausdrücke vorhanden sein.\n"
     "    s = s.replace(/\\$/g, '');\n"
     "    s = s.replace(/\\{/g, '');\n"
     "    s = s.replace(/\\}/g, '');\n"
@@ -17375,6 +17393,11 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Remove everything between \" (including the \")\n"
     "    s = s.replace(/\"[^\"]*\"/g,'');\n"
+    "\n"
+    "\n"
+    "    // I think we don't need to watch functions! So remove them!\n"
+    "    // Alle Ausdrücke, die mit () enden werden mal entfernt.\n"
+    "    s = s.replace(/[^\\W\\d](\\w|[.]{1,2}(?=\\w))*\\(\\)/g,'');\n"
     "\n"
     // Noch nicht nach JS übertragen, aber die Logik dahinter wirkt eh etwas unsauber
     //"// Okay, falls es ein ? : Ausdruck ist, remove nun alles nach dem ? (inklusive dem ?)\n"
@@ -17393,10 +17416,11 @@ BOOL isJSExpression(NSString *s)
     "        {\n"
     "            var varName = Ergebnis[i];\n"
     "\n"
-    "            // Dann noch eventuelle spezielle Wörter austauschen\n"
-    "            varName = varName.replace(/\\.dataset/g,'.myDataset');\n"
-    "            varName = varName.replace(/\\.title/g,'.myTitle');\n"
-    "            varName = varName.replace(/\\.value/g,'.myValue');\n"
+    // Neu: Steht bereits vor der Methode, Unsinn hier alle einzeln in der Schleife durchzugehen
+    //"            // Dann noch eventuelle spezielle Wörter austauschen\n"
+    //"            varName = varName.replace(/\\.dataset/g,'.myDataset');\n"
+    //"            varName = varName.replace(/\\.title/g,'.myTitle');\n"
+    //"            varName = varName.replace(/\\.value/g,'.myValue');\n"
     "\n"
     "            // Falls ganz vorne jetzt 'immediateparent.' oder 'parent.' steht, dann muss ich unser aktuelles Element\n"
     "            // davorsetzen. Weil jetzt nochmal extra mit 'with () {}' zu arbeiten ist wohl nicht nötig\n"
@@ -17449,7 +17473,7 @@ BOOL isJSExpression(NSString *s)
     "            if (varName == 'void') continue;\n"
     "            if (varName == 'while') continue;\n"
     "\n"
-    "            // Falls mehrmals auf den gleichen Wert getestet wird (z. B. if (x == 2 || x == 3)\n"
+    "            // Falls mehrmals auf den gleichen Wert getestet wird - z. B. if (x == 2 || x == 3)\n"
     "            // brauche (und sollte) ich natürlich auf das 'x' nur einmal horchen.\n"
     "            if (jQuery.inArray(varName,vars) == -1)\n"
     "                vars.push(varName);\n"
@@ -17741,10 +17765,10 @@ BOOL isJSExpression(NSString *s)
     "function hasValidDefaultplacement(el,obj) {\n"
     "    if (!obj.inherit) return false;\n"
     "    if (!obj.inherit.inherit) return false;\n"
-    "    if (!obj.inherit.inherit.selfDefinedAttributes) return false;\n"
-    "    if (!obj.inherit.inherit.selfDefinedAttributes.defaultplacement) return false;\n"
-    "    if (obj.inherit.inherit.selfDefinedAttributes.defaultplacement == '') return false;\n"
-    "    if ($(el).find(\"[data-name='\"+obj.inherit.inherit.selfDefinedAttributes.defaultplacement+\"']\").length == 0) return false\n"
+    "    if (!obj.inherit.inherit.attributesDict) return false;\n"
+    "    if (!obj.inherit.inherit.attributesDict.defaultplacement) return false;\n"
+    "    if (obj.inherit.inherit.attributesDict.defaultplacement == '') return false;\n"
+    "    if ($(el).find(\"[data-name='\"+obj.inherit.inherit.attributesDict.defaultplacement+\"']\").length == 0) return false\n"
     "\n"
     "    return true;\n"
     "}\n"
@@ -17770,11 +17794,24 @@ BOOL isJSExpression(NSString *s)
     "        for (var i = 0;i<rueckwaertsArray.length;i++)\n"
     "        {\n"
     "            var obj = rueckwaertsArray[i];\n"
-    "            if (obj.selfDefinedAttributes)\n"
+    "\n"
+    "            // Ich denke es ist sinnvoll die Methoden (grundsätzlich) vor den Attributen zu setzen,\n"
+    "            // falls berechnete Werte oder Constraints mit diesen arbeiten wollen.\n"
+    "            if (obj.methods)\n"
     "            {\n"
-    "                Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
+    "                Object.keys(obj.methods).forEach(function(key)\n"
     "                {\n"
-    "                    var value = obj.selfDefinedAttributes[key];\n"
+    "                    id[key] = obj.methods[key];\n"
+    "                });\n"
+    "            }\n"
+    "\n"
+    "\n"
+    "            if (obj.attributesDict)\n"
+    "            {\n"
+    "                // Erst alle unberechneten, direkt auslesbare Werte...\n"
+    "                Object.keys(obj.attributesDict).forEach(function(key)\n"
+    "                {\n"
+    "                    var value = obj.attributesDict[key];\n"
     "\n"
     "                    // Assertion:\n"
     "                    if (value === undefined)\n"
@@ -17814,40 +17851,27 @@ BOOL isJSExpression(NSString *s)
     "                            eval('$(id).on(key, function() { with (this) { '+value+'; } });');\n"
     "                        }\n"
     "                    }\n"
-    "\n"
-    "                    else if (typeof value === 'string' && value.startsWith('$')) // = Constraint value\n"
+    "                    else if (typeof value === 'string' && (value.startsWith('$')))\n"
     "                    {\n"
-    "                        handleConstraintValue(id,key,value);\n"
+    "                        // Wird in diesem Fall erst im nächsten Object.keys-Durchlauf ausgewertet\n"
     "                    }\n"
     "                    else if (typeof value === 'string' && value.startsWith('@§.SETTER.§@'))\n"
     "                    {\n"
-    "                        value = value.substr(12);\n"
-    "                        value = replaceID(value,''+$(id).attr('id'));\n"
-    "                        // Den setter als Methode im Objekt speichern, die dann von setAttribute_() aufgerufen wird\n"
-    "                        var evalString = \"id['mySetterFor_'+key+'_'] = function(\" + key + ') { with (' + $(id).attr('id') + ') { ' + value + ' }};';\n"
-    "                        eval(evalString);\n"
+    "\n"
     "                    }\n"
     "                    else if (typeof value === 'string' && value.startsWith('@§.BERECHNETERWERTABERONCE.§@'))\n"
     "                    {\n"
-    "                        value = value.substr(29);\n"
-    "                        value = replaceID(value,''+$(id).attr('id'));\n"
     "\n"
-    "                        var evalString = 'id[key] = ' + value + ';'\n"
-    "                        eval(evalString);\n"
     "                    }\n"
     "                    else if (typeof value === 'string' && value.startsWith('@§.BERECHNETERWERT.§@')) // = historisch, ToDo weg!\n"
     "                    {\n"
-    "                        value = value.substr(21);\n"
-    "                        value = replaceID(value,''+$(id).attr('id'));\n"
     "\n"
-    "                        var evalString = 'id[key] = ' + value + ';'\n"
-    "                        eval(evalString);\n"
     "                    }\n"
     "                    else\n"
     "                    {\n"
     "                        id[key] = value;\n"
-    "                        // war historisch so bei dem alten Schema - ToDo\n"
-    "                        //id.setAttribute_(key,value);\n"
+    "                        // War so bei dem alten Schema, aber denke falsch, dass getriggert wird:\n"
+    "                        // id.setAttribute_(key,value);\n"
     "                    }\n"
     "\n"
     "                    if (i == rueckwaertsArray.length-2) // zusätzlich -1, weil das Ausgangselement unberücksichtigt bleibt\n"
@@ -17858,13 +17882,44 @@ BOOL isJSExpression(NSString *s)
     "                        }\n"
     "                    }\n"
     "                });\n"
-    "            }\n"
     "\n"
-    "            if (obj.methods)\n"
-    "            {\n"
-    "                Object.keys(obj.methods).forEach(function(key)\n"
+    "                // ...dann erst alle berechneten Werte, da sich diese\n"
+    "                //  u. U. auf die Existenz der unberechneten verlassen!\n"
+    "                Object.keys(obj.attributesDict).forEach(function(key)\n"
     "                {\n"
-    "                    id[key] = obj.methods[key];\n"
+    "                    var value = obj.attributesDict[key];\n"
+    "\n"
+    "                    if (typeof value === 'string') // Davorgezogen, um nur einmal testen zu müssen\n"
+    "                    {\n"
+    "                        if (value.startsWith('$')) // = Constraint value\n"
+    "                        {\n"
+    "                            handleConstraintValue(id,key,value);\n"
+    "                        }\n"
+    "                        else if (value.startsWith('@§.SETTER.§@'))\n"
+    "                        {\n"
+    "                            value = value.substr(12);\n"
+    "                            value = replaceID(value,''+$(id).attr('id'));\n"
+    "                            // Den setter als Methode im Objekt speichern, die dann von setAttribute_() aufgerufen wird\n"
+    "                            var evalString = \"id['mySetterFor_'+key+'_'] = function(\" + key + ') { with (' + $(id).attr('id') + ') { ' + value + ' }};';\n"
+    "                            eval(evalString);\n"
+    "                        }\n"
+    "                        else if (value.startsWith('@§.BERECHNETERWERTABERONCE.§@'))\n"
+    "                        {\n"
+    "                            value = value.substr(29);\n"
+    "                            value = replaceID(value,''+$(id).attr('id'));\n"
+    "\n"
+    "                            var evalString = 'id[key] = ' + value + ';'\n"
+    "                            eval(evalString);\n"
+    "                        }\n"
+    "                        else if (value.startsWith('@§.BERECHNETERWERT.§@'))//=historisch, ToDo weg!\n"
+    "                        {\n"
+    "                            value = value.substr(21);\n"
+    "                            value = replaceID(value,''+$(id).attr('id'));\n"
+    "\n"
+    "                            var evalString = 'id[key] = ' + value + ';'\n"
+    "                            eval(evalString);\n"
+    "                        }\n"
+    "                    }\n"
     "                });\n"
     "            }\n"
     "        }\n"
@@ -17911,24 +17966,12 @@ BOOL isJSExpression(NSString *s)
     "  {\n"
     "    var obj = rueckwaertsArray[i];\n" // <-- Auch neu jetzt dadurch.
     "\n"
-    "    // Doppelte Einträge von Attributen entfernen\n"
-    "    obj.inherit = deleteAttributesPreviousDeclared(currentObj.attributeNames,obj.inherit);\n"
     "\n"
-    "    // attributeNames übernehmen\n"
-    "    if (obj.inherit.attributeNames && obj.inherit.attributeNames.length > 0)\n"
-    "      currentObj.attributeNames = currentObj.attributeNames.concat(obj.inherit.attributeNames);\n"
-    "\n"
-    "    // attributeValues übernehmen\n"
-    "    if (obj.inherit.attributeValues && obj.inherit.attributeValues.length > 0)\n"
-    "      currentObj.attributeValues = currentObj.attributeValues.concat(obj.inherit.attributeValues);\n"
-    "\n"
-    "\n"
-    "    // Dann den HTML-Content des Vorfahren einfügen\n"
-    "    // Prepend! Da es der OpenLaszlo-Logik entspricht, tiefer verschachtelte Vorfahren immer davor zu setzen\n"
-    "    // Bzw. neu jetzt append! Weil ich die Vorfahren vom Ende beginnend, auswerte.\n"
+    "    // Zuerst den HTML-Content des Vorfahren einfügen\n"
+    "    // Per append vom tiefsten Element beginnend!\n"
     "    // Vorher aber die ID ersetzen\n"
     "    // Irgendwas stimmt in der Logik noch nicht... Nach meinem Verständnis erben alle Klassen von view\n"
-    "    // So steht es auch in der Doku. Deswegen ist um alle Klassen eine View <div class='div-standard'> herumgebaut, an welche dann immer prepended wird.\n"
+    "    // So steht es auch in der Doku. Deswegen ist um alle Klassen eine View <div class='div-standard'> herumgebaut, an welche dann immer appended wird.\n"
     "    // Dies geht aber nicht auf z. B. bei extends='text', dann nämlich muss die äußerste view ein\n"
     "    // <div class='div_text'> sein. (obwohl 'text' ja eigentlich auch nochmal von view erbt...)\n"
     "    // Dies äußerst sich darin, dass z. B. ein onclick-Handler auf höchster Ebene der Klasse mit 'this' auch\n"
@@ -17938,16 +17981,6 @@ BOOL isJSExpression(NSString *s)
     "    if (obj.inherit.name === 'text' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button' || obj.inherit.name === 'basecombobox' || obj.inherit.name === 'baselistitem'\n"
     "    || obj.inherit.name === 'drawview' || obj.inherit.name === 'edittext')\n"
     "    {\n"
-    //"        // Attribute sichern\n"
-    //"        var gesicherteAttribute = {};\n"
-    //"        if (obj.selfDefinedAttributes) // Schutz gegen Objekte die keine selfDefinedAttributes haben\n"
-    //"        {\n"
-    //"            Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
-    //"            {\n"
-    //"                gesicherteAttribute[key] = id[key];\n"
-    //"            });\n"
-    //"        }\n"
-    //"\n"
     "        // Alle auf vorherigen Vererbungs-Ebenen hinzugefügten Methoden sichern\n"
     "        var gesicherteMethoden = {};\n"
     "        for(var prop in id) {\n"
@@ -18042,8 +18075,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "        // Und das gerettete CSS wieder einsetzen\n"
-    //"        $(id).attr('style',$(id).attr('style') + theSavedCSSFromRemovedElement);\n"
-    // Warum $(id).attr('style') ??. Das ist doch eh immer undefined und bricht dadurch das erste Attribut. Deswegen neu:
     "        $(id).attr('style',theSavedCSSFromRemovedElement);\n"
     "\n"
     "        // Und die zuvor gesicherten events wieder einsetzen\n"
@@ -18055,16 +18086,6 @@ BOOL isJSExpression(NSString *s)
     "                });\n"
     "            });\n"
     "        }\n"
-    //"\n"
-    //"        // Und die Original-Propertys wieder herstellen mit den Nicht-Default-Werten\n"
-    //"        if (obj.selfDefinedAttributes) // Schutz gegen Objekte die keine selfDefinedAttributes haben\n"
-    //"        {\n"
-    //"            Object.keys(obj.selfDefinedAttributes).forEach(function(key)\n"
-    //"            {\n"
-    ////"              id[key] = obj.selfDefinedAttributes[key]; // Das sind die Default-Werte.Aber wir wollen Nicht-Default\n"
-    //"                id[key] = gesicherteAttribute[key];\n"
-    //"            });\n"
-    //"        }\n"
     "\n"
     "        // Und die Methoden wieder herstellen\n"
     "        Object.keys(gesicherteMethoden).forEach(function(key)\n"
@@ -18104,7 +18125,7 @@ BOOL isJSExpression(NSString *s)
     //"        $(id).prepend(obj.inherit.contentHTML);\n"
     "        if (hasValidDefaultplacement(id,obj))\n"
     "        {\n"
-    "          var place = obj.inherit.inherit.selfDefinedAttributes.defaultplacement;\n"
+    "          var place = obj.inherit.inherit.attributesDict.defaultplacement;\n"
     "          $(id).find(\"[data-name='\"+place+\"']\").prepend(obj.inherit.contentHTML);\n"
     "\n"
     "          // Den ursprünglichen parent noch sichern im ersten Element mit id (für Unterscheidung parent/immediateparent)\n"
@@ -18126,7 +18147,7 @@ BOOL isJSExpression(NSString *s)
     "      for(var prop in id) {\n"
     "        if (id.hasOwnProperty(prop) && typeof id[prop] === 'function') {\n"
     "          // Mit korrigiertem this!!! Ein evtl. benutztes 'this' verweist sonst noch auf den Vorfahren.\n"
-    "          methodenDerVorfahren[prop] = id[prop].bind(id);\n"
+    "          methodenDerVorfahren[prop] = id[prop].bind(id); // Durch das bind wird es im alert zu 'native code'\n"
     "        }\n"
     "      }\n"
     "      // 'super' wurde durch 'super_' ersetzt und muss im Element bekannt sein, damit überschriebene Methoden erreichbar bleiben\n"
@@ -18156,7 +18177,7 @@ BOOL isJSExpression(NSString *s)
     "  for(var prop in id) {\n"
     "    if (id.hasOwnProperty(prop) && typeof id[prop] === 'function') {\n"
     "      // Mit korrigiertem this!!! Ein evtl. benutztes 'this' verweist sonst noch auf den Vorfahren.\n"
-    "      methodenDerVorfahren[prop] = id[prop].bind(id);\n"
+    "      methodenDerVorfahren[prop] = id[prop].bind(id); // Durch das bind wird es im alert zu 'native code'\n"
     "    }\n"
     "  }\n"
     "  // 'super' wurde durch 'super_' ersetzt und muss im Element bekannt sein, damit überschriebene Methoden erreichbar bleiben\n"
@@ -18164,6 +18185,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
+    /*
     "  // Alle per style gegebenen Attribute muss ich ermitteln und später damit vergleichen\n"
     "  // Denn die per style direkt in der Instanz gesetzten Attribute haben Vorrang vor denen\n"
     "  // der Klasse. Ich kann noch nicht hier, sondern erst später vergleichen, weil z.B.\n"
@@ -18184,23 +18206,9 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "  }\n"
     "\n"
-    "  // Erst die Attribute auswerten\n"
-    "  var an = obj.attributeNames ? obj.attributeNames : [];\n"
-    "  var av = obj.attributeValues ? obj.attributeValues : [];\n"
-    "\n"
-    "    for (var i = 0;i<an.length;i++)\n"
-    "    {\n"
-    "        if (jQuery.inArray(an[i],attrArr) == -1)\n"
-    "        {\n"
-    "            if (typeof av[i] === 'string' && av[i].startsWith('$')) // = Constraint value\n"
-    "            {\n"
-    "                continue;\n"
-    "            }\n"
-    "            id.setAttribute_(an[i],av[i]);\n"
-    "        }\n"
-    "    }\n"
     "\n"
     "\n"
+     */
     "  // Replace-IDs von contentHTML ersetzen\n"
     "  var s = replaceID(obj.contentHTML,$(id).attr('id'));\n"
     "\n"
@@ -18376,7 +18384,7 @@ BOOL isJSExpression(NSString *s)
     "// @arg v = Der zu setzende value.\n"
     "function handleConstraintValue(el,a,v)\n"
     "{\n"
-    "    // Sicherstellen, dass uns auch wirklich eine Constraint Value übergeben wurde\n"
+    "    // Sicherstellen, dass uns auch wirklich eine Constraint Value übergeben wurde (Assertion)\n"
     "    if (typeof v !== 'string' || !(v.startsWith('$')))\n"
     "        throw new TypeError('Function handleConstraintValue() - Something totally went wrong... This is not a constraint value!');\n"
     "\n"
@@ -18416,13 +18424,14 @@ BOOL isJSExpression(NSString *s)
     "        return;\n"
     "    }\n"
     "\n"
+    "    v = v.replace(/\\.dataset/g,'.myDataset');\n"
+    "    v = v.replace(/\\.title/g,'.myTitle');\n"
+    "    v = v.replace(/\\.value/g,'.myValue');\n"
+    "\n"
     "    // Alle Variablen ermitteln, die die zu setzende Variable beeinflussen können...\n"
     "    var vars = getTheDependingVarsOfTheConstraint(v,el.id);\n"
     "\n"
     "    v = v.substring(2,v.length-1);\n"
-    "    v = v.replace(/\\.dataset/g,'.myDataset');\n"
-    "    v = v.replace(/\\.title/g,'.myTitle');\n"
-    "    v = v.replace(/\\.value/g,'.myValue');\n"
     "\n"
     "    setInitialConstraintValue(el,a,v);\n"
     "\n"
@@ -18443,9 +18452,15 @@ BOOL isJSExpression(NSString *s)
     "// @arg skipContentJS = weil ich die defaultPlacement-Var, die in contentJS steckt, u. U. gesondert auslese.\n"
     "function executeJSCodeOfThisObject(obj, id, r, r2, skipContentJS)\n"
     "{\n"
-    "    // Replace-IDs von contentLeadingJSHead ersetzen\n"
-    "    var s = replaceID(obj.contentLeadingJSHead, r, r2);\n"
+    "    // Replace-IDs von contentJSHead ersetzen\n"
+    "    var s = replaceID(obj.contentJSHead, r, r2);\n"
     "    // Dann den LeadingJSHead-Content hinzufügen/auswerten\n"
+    "    if (s.length > 0)\n"
+    "        evalCode(s);\n"
+    "\n"
+    "    // Replace-IDs von contentNamesAndIDs ersetzen\n"
+    "    var s = replaceID(obj.contentNamesAndIDs, r, r2);\n"
+    "    // Dann den jQuery-Content hinzufügen/auswerten\n"
     "    if (s.length > 0)\n"
     "        evalCode(s);\n"
     "\n"
@@ -18496,12 +18511,6 @@ BOOL isJSExpression(NSString *s)
     "            evalCode(s);\n"
     "    }\n"
     "\n"
-    "    // Replace-IDs von contentJSToUseLater ersetzen\n"
-    "    var s = replaceID(obj.contentJSToUseLater, r, r2);\n"
-    "    // Dann den jQuery-Content hinzufügen/auswerten\n"
-    "    if (s.length > 0)\n"
-    "        evalCode(s);\n"
-    "\n"
     "    // Replace-IDs von contentJSInitstageDefer ersetzen\n"
     "    var s = replaceID(obj.contentJSInitstageDefer, r, r2);\n"
     "    // Dann den initstage-Defer-Content hinzufügen/auswerten\n"
@@ -18533,28 +18542,25 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
-    "///////////////////////////////////////////////////////////////\n"
-    "//  Löscht doppelte Attribute (ältere werden überschrieben)  //\n"
-    "///////////////////////////////////////////////////////////////\n"
-    "function deleteAttributesPreviousDeclared(bestand,neu)\n"
-    "{\n"
-    "    var an = neu.attributeNames ? neu.attributeNames : [];\n"
-    "    var av = neu.attributeValues ? neu.attributeValues : [];\n"
-    "\n"
-    "    for (i = 0;i<an.length;i++)\n"
-    "    {\n"
-    "        if (jQuery.inArray(an[i],bestand) != -1)\n"
-    "        {\n"
-    "            an.splice(i,1);\n"
-    "            av.splice(i,1);\n"
-    "        }\n"
-    "    }\n"
-    "\n"
-    "    return neu;\n"
-    "}\n"
-    "\n"
-    "\n"
-    "\n"
+    //"///////////////////////////////////////////////////////////////\n"
+    //"//  Löscht doppelte Attribute (ältere werden überschrieben)  //\n"
+    //"///////////////////////////////////////////////////////////////\n"
+    //"function deleteAttributesPreviousDeclared(bestand,neu)\n"
+    //"{\n"
+    //"    var an = neu.attributeNames ? neu.attributeNames : [];\n"
+    //"    var av = neu.attributeValues ? neu.attributeValues : [];\n"
+    //"\n"
+    //"    for (i = 0;i<an.length;i++)\n"
+    //"    {\n"
+    //"        if (jQuery.inArray(an[i],bestand) != -1)\n"
+    //"        {\n"
+    //"            an.splice(i,1);\n"
+    //"            av.splice(i,1);\n"
+    //"        }\n"
+    //"    }\n"
+    //"\n"
+    //"    return neu;\n"
+    //"}\n"
     "///////////////////////////////////////////////////////////////\n"
     "//  class = view (native class)                              //\n"
     "///////////////////////////////////////////////////////////////\n"
@@ -18562,7 +18568,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'view';\n"
     "  this.inherit = undefined;\n"
     "\n"
-    "  this.selfDefinedAttributes = { }\n"
+    "  this.attributesDict = { }\n"
     "\n"
     "  this.contentHTML = '';\n"
     //"  this.contentHTML = '<div id=\"@!JS,PLZ!REPLACE!ME!@\" class=\"div_standard noPointerEvents\" />';\n"
@@ -18577,7 +18583,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'grid';\n"
     "  this.inherit = new oo.basegrid();\n"
     "\n"
-    "  this.selfDefinedAttributes = { layout: 'placement:hcontent;axis:x;spacing:-1', showhscroll: true, showvscroll: true }\n"
+    "  this.attributesDict = { layout: 'placement:hcontent;axis:x;spacing:-1', showhscroll: true, showvscroll: true }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"
@@ -18592,7 +18598,7 @@ BOOL isJSExpression(NSString *s)
     "  this.inherit = new oo.basecomponent();\n"
     "\n"
     // columns muss hier ein Array sein und nicht 'null', sonst Absturz bei Zugriff auf property 'length'
-    "  this.selfDefinedAttributes = { bgcolor0: null, bgcolor1: null, columns: [], contentdatapath: '*', hilite: null, multiselect: true, rowheight: null, selectable: true, showhlines: false, shownitems: -1, showvlines: false, sizetoheader: null, spacing: 0 }\n"
+    "  this.attributesDict = { bgcolor0: null, bgcolor1: null, columns: [], contentdatapath: '*', hilite: null, multiselect: true, rowheight: null, selectable: true, showhlines: false, shownitems: -1, showvlines: false, sizetoheader: null, spacing: 0 }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"
@@ -18608,7 +18614,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     // 'colwidth' hier angepasst, damit er beim auswertden der Klasse nicht auf undefined stößt
     // Da muss wohl letzlich ein function() { with() {} }.bind() drum herum;
-    "  this.selfDefinedAttributes = { ascendComparator: null, ascendsort: true, colwidth: 100, datatype: 'string', descendComparator: null, hasSort: false, minwidth: 10, sortpath: '', text: (this.datapath ? this.datapath.xpath : '') }\n"
+    "  this.attributesDict = { ascendComparator: null, ascendsort: true, colwidth: 100, datatype: 'string', descendComparator: null, hasSort: false, minwidth: 10, sortpath: '', text: (this.datapath ? this.datapath.xpath : '') }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"
@@ -18622,7 +18628,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'oo.basescrollbar';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.selfDefinedAttributes = { axis : 'y', focusview : null, mousewheelactive : false, mousewheelevent_off : 'onblur', mousewheelevent_on : 'onfocus', pagesize : null, scrollable : true, scrollattr : '', scrollmax : null, scrolltarget : null, stepsize : 10, usemousewheel : true }\n"
+    "  this.attributesDict = { axis : 'y', focusview : null, mousewheelactive : false, mousewheelevent_off : 'onblur', mousewheelevent_on : 'onfocus', pagesize : null, scrollable : true, scrollattr : '', scrollmax : null, scrolltarget : null, stepsize : 10, usemousewheel : true }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"
@@ -18636,7 +18642,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'vscrollbar';\n"
     "  this.inherit = new oo.basescrollbar();\n"
     "\n"
-    "  this.selfDefinedAttributes = { disabledbgcolor : null }\n"
+    "  this.attributesDict = { disabledbgcolor : null }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"
@@ -18650,7 +18656,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'drawview';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.selfDefinedAttributes = { width:300, height:150 }\n"
+    "  this.attributesDict = { width:300, height:150 }\n"
     "\n"
     "  this.contentHTML = '<div class=\"canvas_element noPointerEvents\"><canvas id=\"@@@P-L,A#TZHALTER@@@\" class=\"div_standard noPointerEvents\"></canvas></div>';\n"
     "}\n"
@@ -18664,7 +18670,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'state';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.selfDefinedAttributes = { applied: false, pooling: false }\n"
+    "  this.attributesDict = { applied: false, pooling: false }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"
@@ -18678,7 +18684,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'dragstate';\n"
     "  this.inherit = new oo.state();\n"
     "\n"
-    "  this.selfDefinedAttributes = { drag_axis: 'both', drag_max_x: null, drag_max_y:null, drag_min_x: null, drag_min_y:null }\n"
+    "  this.attributesDict = { drag_axis: 'both', drag_max_x: null, drag_max_y:null, drag_min_x: null, drag_min_y:null }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"
@@ -18692,7 +18698,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'replicator';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.selfDefinedAttributes = { axis:'y', _clonepool:null, _cloneprops:null, clones:null, container:null, myDataset:null, mask:null, nodes:[], pool:true, replicatedsize:null, _sizes: {x:'width', y:'height' }, spacing:0, xpath:'' }\n"
+    "  this.attributesDict = { axis:'y', _clonepool:null, _cloneprops:null, clones:null, container:null, myDataset:null, mask:null, nodes:[], pool:true, replicatedsize:null, _sizes: {x:'width', y:'height' }, spacing:0, xpath:'' }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "\n"
@@ -18718,7 +18724,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'radiogroup';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.selfDefinedAttributes = { }\n"
+    "  this.attributesDict = { }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"
@@ -18735,7 +18741,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'text';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.selfDefinedAttributes = { resize:true, selectable:false, text:textBetweenTags }\n"
+    "  this.attributesDict = { resize:true, selectable:false, text:textBetweenTags }\n"
     "\n"
     "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" data-olel=\"text\" class=\"div_text noPointerEvents\">'+textBetweenTags+'</div>';\n"
     "\n"
@@ -18756,7 +18762,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'edittext';\n"
     "  this.inherit = new oo.baseformitem(textBetweenTags);\n"
     "\n"
-    "  this.selfDefinedAttributes = { height: 26, maxlength: null, multiline: false, password: false, pattern: '', resizable: false, text: textBetweenTags, text_y: (this.multiline ? 2 : 2), width: 106 }\n"
+    "  this.attributesDict = { height: 26, maxlength: null, multiline: false, password: false, pattern: '', resizable: false, text: textBetweenTags, text_y: (this.multiline ? 2 : 2), width: 106 }\n"
     "\n"
     "  this.methods = {\n"
     "    setMaxlength: function(v) {\n"
@@ -18799,7 +18805,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'inputtext';\n"
     "  this.inherit = new oo.text(textBetweenTags);\n"
     "\n"
-    "  this.selfDefinedAttributes = { enabled: true, passowrd: false }\n"
+    "  this.attributesDict = { enabled: true, passowrd: false }\n"
     "\n"
     "  this.contentHTML = '<div id=\"@@@P-L,A#TZHALTER@@@\" data-olel=\"inputtext\" class=\"div_text noPointerEvents\" />';\n"
     "}\n"
@@ -18817,12 +18823,15 @@ BOOL isJSExpression(NSString *s)
     "  this.inherit = new oo.view();\n"
     "\n"
     // kann nicht '_content' heißen, weil fixe property bei Firefox... Halber Tag.... Deswegen um Unterstrich ergänzt
-    "  this.selfDefinedAttributes = { text:textBetweenTags, defaultplacement:'_content_', allowdrag: true, haswindowfocus: false, minheight: 50, minwidth: 60, state: 1 }\n"
+    "  this.attributesDict = { text:textBetweenTags, defaultplacement:'_content_', allowdrag: true, haswindowfocus: false, minheight: 50, minwidth: 60, state: 1 }\n"
     "\n"
     "  this.methods = {\n"
     "    close: function() {\n"
     "        this.setAttribute_('visible',false);\n"
     "    },\n"
+    "    open: function() {\n"
+    "        this.setAttribute_('visible',true);\n"
+    "    }\n"
     "  }\n"
     "\n"
     "  this.contentHTML = '' +\n"
@@ -18888,11 +18897,9 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'button';\n"
     "  this.inherit = new oo.basebutton();\n"
     "\n"
-    "  this.selfDefinedAttributes = { text:textBetweenTags /* To Do, I Think this is unnecessary */,    focusable: true, text_padding_x: 11, text_padding_y: 4 }\n"
+    "  this.attributesDict = { text:textBetweenTags /* To Do, I Think this is unnecessary */,    focusable: true, text_padding_x: 11, text_padding_y: 4 }\n"
     "\n"
     "  this.contentHTML = '<button type=\"button\" id=\"@@@P-L,A#TZHALTER@@@\" data-olel=\"button\" class=\"input_standard\" style=\"\">'+textBetweenTags+'</button>';\n"
-    "\n"
-    "  this.contentLeadingJSHead = '';\n"
     "\n"
     "  this.contentJS = '';\n"
     "\n"
@@ -18919,8 +18926,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  this.contentHTML = '';\n"
     "\n"
-    "  this.contentLeadingJSHead = '';\n"
-    "\n"
     "  this.contentJS = '';\n"
     "\n"
     "  this.contentLeadingJQuery = ''\n"
@@ -18940,7 +18945,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'baselistitem';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.selfDefinedAttributes = { selected:false }\n"
+    "  this.attributesDict = { selected:false }\n"
     "\n"
     "  this.contentHTML = '<option id=\"@@@P-L,A#TZHALTER@@@\">'+textBetweenTags+'</option>';\n"
     "};\n"
@@ -18987,7 +18992,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'basecombobox';\n"
     "  this.inherit = new oo.baseformitem(textBetweenTags);\n"
     "\n"
-    "  this.selfDefinedAttributes = { editable:true }\n"
+    "  this.attributesDict = { editable:true }\n"
     "\n"
     "  this.contentHTML = '<select id=\"@@@P-L,A#TZHALTER@@@\" class=\"select_standard\"></select>';\n"
     "};\n"
@@ -19004,7 +19009,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'baseformitem';\n"
     "  this.inherit = new oo.basevaluecomponent(textBetweenTags);\n"
     "\n"
-    "  this.selfDefinedAttributes = { changed:false, ignoreform:false, rollbackvalue:null, submit:this.inherit.inherit.selfDefinedAttributes.enabled, submitname:'', value:null }\n"
+    "  this.attributesDict = { changed:false, ignoreform:false, rollbackvalue:null, submit:this.inherit.inherit.attributesDict.enabled, submitname:'', value:null }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "};\n"
@@ -19020,7 +19025,7 @@ BOOL isJSExpression(NSString *s)
     "  this.inherit = new oo.basecomponent(textBetweenTags);\n"
     "\n"
     // Muss 'myType' sein, sonst bricht er den 'type' von <input>s
-    "  this.selfDefinedAttributes = { myType:'none', myValue:null }\n"
+    "  this.attributesDict = { myType:'none', myValue:null }\n"
     "\n"
     "  this.methods = {\n"
     "    getValue: function() {\n"
@@ -19043,7 +19048,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'basecomponent';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.selfDefinedAttributes = { doesenter:false, enabled:true, hasdefault:false, isdefault:false, style: null, styleable: true, text: textBetweenTags }\n"
+    "  this.attributesDict = { doesenter:false, enabled:true, hasdefault:false, isdefault:false, style: null, styleable: true, text: textBetweenTags }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "};\n"

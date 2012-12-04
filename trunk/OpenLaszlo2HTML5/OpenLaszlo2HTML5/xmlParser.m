@@ -9,45 +9,6 @@
 // 'last DP _' bei den datapointern ist nun weg -> Dann kann ich wohl jetzt auch das Problem mit Bsp. 37.15 lösen
 //
 //
-// - Warum ist super_ ein Objekt in dem alle Methoden stecken und nicht einfach eine Referenz auf das
-// objekt der Ebene vorher? - Dies würde evtl. das Problem. mit 'maximum call stack size exceeded' lösen
-// bei init-Methode von BDSgridcolumn (habe ich erstmal entfernt den super_.init() in init() dort.
-// (Ich denke das Problem dort ist, dass der parent ein state ist, der ja übersprungen werden müsste)
-// Unsinn! super_ ist schließlich nicht der parent, sondern der inherit!
-// Antwort: Ich binde nur die Methoden, weil ich das this der Methoden ja anpassen muss.
-// Evl. Lösung für super_
-//Object.defineProperty(HTMLElement.prototype, 'super_', {
-//    get : function(){
-//        if ($(this).data('olel') === 'BDSeditnumber')
-//        {
-//            // Wird als erstes aufgerufen, deswegen hier zum testen
-//            // Diese Abfrage muss dann später entfernt werden
-//            return { init: function() {} };
-//        }
-//
-//        if ($(this).data('olel') === 'view')
-//        {
-//            // Ist dann eine Art leere 'Base-Node'
-//            return { init: function() {} };
-//        }
-//        else if ($(this).data('olel') === undefined)
-//        {
-//            // hmmm, ka, das sollte eigentlich nicht entstehen können...
-//            // Entsteht aber noch, und führt jetzt zu weit.
-//        }
-//        else
-//        {
-//            // Objektname, welcher in $(this).data('olel') steckt, packen
-//            // auf inherit davon zugreifen.
-//            // Den inherit instanzieren
-//            // Den inherit mit allen Methoden zurückgeben
-//        }
-//        alert('zugriff auf super_!'); alert($(this).data('olel')); return this; },
-//    /* READ-ONLY set : , */
-//    enumerable : false,
-//    configurable : true
-//});
-//
 //
 //
 //
@@ -17657,6 +17618,76 @@ BOOL isJSExpression(NSString *s)
     "}\n"
     "\n"
     "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// super_                                              //\n"
+    "// Ermöglicht Zugriff auf alle Methoden des Objekts,   //\n"
+    "// von welchem geerbt wurde.                           //\n"
+    "// ...ist noch etwas unausgereift... To Do             //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(HTMLElement.prototype, 'super_', {\n"
+    "    get : function(){\n"
+    "        if ($(this).data('olel') === 'BDSgridcolumn')\n"
+    "        {\n"
+    "            // So far doesn't work... with 'BDSgridcolumn'\n"
+    "            return { init: function() {} };\n"
+    "        }\n"
+    "\n"
+    "        if ($(this).data('olel') === 'BDSeditnumber' ||\n"
+    "            $(this).data('olel') === 'BDScombobox' ||\n"
+    "            $(this).data('olel') === 'trashcangridcolumn' ||\n"
+    "            $(this).data('olel') === 'basewindow')\n"
+    "        {\n"
+    "            var superMethods_ = { init: function() {} };\n"
+    "\n"
+    "            var temp = new oo[$(this).data('olel')]('');\n"
+    "\n"
+    "            var garbage = {};\n"
+    "            var garbage_1 = {};\n"
+    "            var garbage_2 = {};\n"
+    "            var garbage_3 = {};\n"
+    "            var garbage_4 = {};\n"
+    "            var garbage_5 = {};\n"
+    "            var garbage_6 = {};\n"
+    "\n"
+    "            var s = replaceID(temp.inherit.contentJS,'garbage','superMethods_');\n"
+    "            eval(s);\n"
+    "\n"
+    "            for(var prop in superMethods_) {\n"
+    "                if (superMethods_.hasOwnProperty(prop) && typeof superMethods_[prop] === 'function') {\n"
+    "                    // Mit korrigiertem this!!! Ein evtl. benutztes 'this' verweist sonst noch auf den Vorfahren.\n"
+    "                    superMethods_[prop] = superMethods_[prop].bind(this); // Durch das bind wird es im alert zu 'native code'\n"
+    "                }\n"
+    "            }\n"
+    "\n"
+    "            // Und auch alle Methoden übertragen, die korrekterweise bereits nicht als string vorliegen:\n"
+    "            if ($(this).data('olel') === 'basewindow')\n"
+    "            {\n"
+    "                // hmm, why ist es temp.methods und nicht temp.inherit.methods?\n"
+    "                if (temp.methods)\n"
+    "                {\n"
+    "                    Object.keys(temp.methods).forEach(function(key)\n"
+    "                                      {\n"
+    "                                          superMethods_[key] = temp.methods[key];\n"
+    "                                      });\n"
+    "                }\n"
+    "            }\n"
+    "\n"
+    "            // Wird als erstes aufgerufen, deswegen hier zum testen\n"
+    "            // Diese Abfrage muss dann später entfernt werden\n"
+    "            return superMethods_;\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "            alert('Moment mal bitte! ' + $(this).data('olel'));\n"
+    "            alert(this.id);\n"
+    "        }\n"
+    "        },\n"
+    "        /* READ-ONLY set : , */\n"
+    "        enumerable : false,\n"
+    "        configurable : true\n"
+    "    });\n"
+    "\n"
+    "\n"
     "\n"
     "\n";
 
@@ -18141,19 +18172,6 @@ BOOL isJSExpression(NSString *s)
     "      }\n"
     "\n"
     "\n"
-    // Muss auch zusätzlich hier drin vor executeJSCode sein, damit super_ bekannt ist
-    "      // Alle auf vorherigen Vererbungs-Ebenen hinzugefügten Methoden in das super_Objekt stecken\n"
-    "      var methodenDerVorfahren = { init: function() {} };\n"
-    "      for(var prop in id) {\n"
-    "        if (id.hasOwnProperty(prop) && typeof id[prop] === 'function') {\n"
-    "          // Mit korrigiertem this!!! Ein evtl. benutztes 'this' verweist sonst noch auf den Vorfahren.\n"
-    "          methodenDerVorfahren[prop] = id[prop].bind(id); // Durch das bind wird es im alert zu 'native code'\n"
-    "        }\n"
-    "      }\n"
-    "      // 'super' wurde durch 'super_' ersetzt und muss im Element bekannt sein, damit überschriebene Methoden erreichbar bleiben\n"
-    "      id.super_ = methodenDerVorfahren;\n"
-    "\n"
-    "\n"
     "      // Dann den kompletten JS-Code ausführen\n"
     "      executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id')+'_'+obj.inherit.name, $(id).attr('id'));\n"
     "    }\n"
@@ -18168,20 +18186,6 @@ BOOL isJSExpression(NSString *s)
     // "    obj = obj.inherit;\n" // <-- Nein, wir gehen neuerdings ja über das 'rueckwaertsArray'
     "  }\n"
     "  obj = currentObj; // Wieder unser Original-Objekt setzen\n"
-    "\n"
-    "\n"
-    "\n"
-    "\n"
-    "  // Alle auf vorherigen Vererbungs-Ebenen hinzugefügten Methoden in das super_Objekt stecken\n"
-    "  var methodenDerVorfahren = { init: function() {} };\n"
-    "  for(var prop in id) {\n"
-    "    if (id.hasOwnProperty(prop) && typeof id[prop] === 'function') {\n"
-    "      // Mit korrigiertem this!!! Ein evtl. benutztes 'this' verweist sonst noch auf den Vorfahren.\n"
-    "      methodenDerVorfahren[prop] = id[prop].bind(id); // Durch das bind wird es im alert zu 'native code'\n"
-    "    }\n"
-    "  }\n"
-    "  // 'super' wurde durch 'super_' ersetzt und muss im Element bekannt sein, damit überschriebene Methoden erreichbar bleiben\n"
-    "  id.super_ = methodenDerVorfahren;\n"
     "\n"
     "\n"
     "\n"

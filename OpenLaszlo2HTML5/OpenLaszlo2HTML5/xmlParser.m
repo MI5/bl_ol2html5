@@ -510,7 +510,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Zur Sicherheit mache ich von allem ne Copy.
         // Nicht, dass es beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.datasetOutput copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.jsInitstageDeferOutput copy],[self.idsAndNamesOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy], nil];
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.datasetOutput copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.jsInitstageDeferOutput copy],[self.idsAndNamesOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy],[[NSNumber numberWithInteger:self.pointerWithoutNameZaehler] copy], nil];
         return r;
     }
 }
@@ -2758,6 +2758,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     // id-Zähler übergeben, sonst werden IDs doppelt vergeben!
     x.idZaehler = self.idZaehler;
+    // das gleiche gilt für den pointerWithoutName-Zähler
+    x.pointerWithoutNameZaehler = self.pointerWithoutNameZaehler;
 
     NSArray* result = [x start];
 
@@ -2807,6 +2809,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Hier wieder überschreiben, da ich ja die Werte mit übergeben hatte
         self.allIncludedIncludes = [[NSMutableArray alloc] initWithArray:[result objectAtIndex:18]];
+
+        // pointerWithoutNameZaehler wieder übernehmen, sonst werden pointer-Namen doppelt vergeben!
+        self.pointerWithoutNameZaehler = [[result objectAtIndex:19] integerValue];
     }
 
     NSLog(@"Leaving recursion");
@@ -3931,12 +3936,12 @@ didStartElement:(NSString *)elementName
 
             if (wirSindInEinerKlasse)
             {
-                [o appendString:@"\n  // Ein Datapointer, der zu einer Klasse gehört\n"];
+                [o appendString:@"\n  // Ein Datapointer, der zu einer Klasse gehört, aber keinen Namen hat\n"];
                 [o appendFormat:@"  %@.%@ = new lz.datapointer(%@,%@,%@);\n",ID_REPLACE_STRING,name,dp,rerunxpath,idUmgebendesElement];
             }
             else
             {
-                [o appendString:@"\n  // Ein Datapointer ohne 'name'- oder 'id'-Attribut. Wohl nur um ein 'ondata'-Handler daran zu binden.\n"];
+                [o appendString:@"\n  // Ein Datapointer ohne 'name'- oder 'id'-Attribut. Wohl nur um einen 'ondata'-Handler daran zu binden.\n"];
                 [o appendFormat:@"  %@ = new lz.datapointer(%@,%@,%@);\n",name,dp,rerunxpath,idUmgebendesElement];
             }
         }
@@ -5197,6 +5202,11 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'defaulttext'.");
         }
+        if ([attributeDict valueForKey:@"searchable"])
+        {
+            self.attributeCount++;
+            NSLog(@"Skipping the attribute 'searchable'.");
+        }
 
 
         NSString *shownitems = @"-1";
@@ -5206,41 +5216,54 @@ didStartElement:(NSString *)elementName
             NSLog(@"Saving the attribute 'shownitems' by jQuerys data().");
             shownitems = [attributeDict valueForKey:@"shownitems"];
         }
+
         if ([shownitems hasPrefix:@"$"])
+        {
             shownitems = [self makeTheComputedValueComputable:shownitems];
+        }
         [self.jsComputedValuesOutput appendString:@"\n  // Saving the value 'shownitems' of the <select>-element\n"];
         [self.jsComputedValuesOutput appendFormat:@"  $('#%@').data('shownitems',%@);\n",self.zuletztGesetzteID,shownitems];
 
 
-        if ([attributeDict valueForKey:@"searchable"])
+
+        NSString *textdatapath = @"text()";
+        if ([attributeDict valueForKey:@"textdatapath"])
         {
             self.attributeCount++;
+
+            textdatapath = [attributeDict valueForKey:@"textdatapath"];
         }
 
+        [self.jsComputedValuesOutput appendString:@"\n  // Saving the value 'textdatapath' of the <select>-element\n"];
+        [self.jsComputedValuesOutput appendFormat:@"  $('#%@').data('textdatapath','%@');\n",self.zuletztGesetzteID,textdatapath];
 
-        // To Do -> Erstmal nur intern mitspeichern
+        NSString *valuedatapath = @"@value";
+        if ([attributeDict valueForKey:@"valuedatapath"])
+        {
+            self.attributeCount++;
+
+            valuedatapath = [attributeDict valueForKey:@"valuedatapath"];
+        }
+
+        [self.jsComputedValuesOutput appendString:@"\n  // Saving the value 'valuedatapath' of the <select>-element\n"];
+        [self.jsComputedValuesOutput appendFormat:@"  $('#%@').data('valuedatapath','%@');\n",self.zuletztGesetzteID,valuedatapath];
+
+
         if ([attributeDict valueForKey:@"itemdatapath"])
         {
             self.attributeCount++;
             
             [self.jsComputedValuesOutput appendString:@"\n  // Saving the value 'itemdatapath' of the <select>-element\n"];
             [self.jsComputedValuesOutput appendFormat:@"  $('#%@').data('itemdatapath','%@');\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"itemdatapath"]];
-        }
-        // To Do -> Erstmal nur intern mitspeichern
-        if ([attributeDict valueForKey:@"textdatapath"])
-        {
-            self.attributeCount++;
-            
-            [self.jsComputedValuesOutput appendString:@"\n  // Saving the value 'textdatapath' of the <select>-element\n"];
-            [self.jsComputedValuesOutput appendFormat:@"  $('#%@').data('textdatapath','%@');\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"textdatapath"]];
-        }
-        // To Do -> Erstmal nur intern mitspeichern
-        if ([attributeDict valueForKey:@"valuedatapath"])
-        {
-            self.attributeCount++;
-            
-            [self.jsComputedValuesOutput appendString:@"\n  // Saving the value 'valuedatapath' of the <select>-element\n"];
-            [self.jsComputedValuesOutput appendFormat:@"  $('#%@').data('valuedatapath','%@');\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"valuedatapath"]];
+
+            // Dann wird automatisch ein <option>-Element ergänzt...
+            [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+3];
+            [self.output appendFormat:@"<option id=\"%@_option\"></option>\n",self.zuletztGesetzteID];
+            // ...welches entsprechend dann geklont wird
+            [self.jsComputedValuesOutput appendFormat:@"\n  // datacombobox entsprechend auswerten"];
+            [self.jsComputedValuesOutput appendFormat:@"\n  setAbsoluteDataPathIn($('#%@').children(':first').get(0),$('#%@').data('itemdatapath'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+            [self.jsComputedValuesOutput appendFormat:@"  setRelativeDataPathIn($('#%@').children(':first').get(0),$('#%@').data('valuedatapath'),'value');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+            [self.jsComputedValuesOutput appendFormat:@"  setRelativeDataPathIn($('#%@').children(':first').get(0),$('#%@').data('textdatapath'),'text');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
         }
 
 
@@ -7516,7 +7539,17 @@ didStartElement:(NSString *)elementName
                 [enclosingElemTyp isEqualToString:@"dataset"] ||
                 [attributeDict valueForKey:@"reference"])
             {
-                [o appendFormat:@"  $(%@).on('%@',function(e%@)\n  {\n    ",enclosingElem,name,args];
+                // Wenn wir auf erster Ebene in einer Klasse stecken, dann zusätzlich den Namen um
+                // den context erweitern, da keine globale var
+                NSString *enclosingElemOfEnclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-3];
+                if ([enclosingElemOfEnclosingElem isEqualToString:ID_REPLACE_STRING])
+                {
+                    [o appendFormat:@"  $(%@.%@).on('%@',function(e%@)\n  { // extended name\n    ",ID_REPLACE_STRING,enclosingElem,name,args];
+                }
+                else
+                {
+                    [o appendFormat:@"  $(%@).on('%@',function(e%@)\n  {\n    ",enclosingElem,name,args];
+                }
             }
             else
             {
@@ -8403,6 +8436,14 @@ BOOL isJSExpression(NSString *s)
 
         // Nur Erinnerung, dass es index 18 gibt. Es können in einer Klasse wohl keine includes auftauchen
         // self.allIncludedIncludes = [[NSMutableArray alloc] initWithArray:[result objectAtIndex:18]];
+
+
+        // pointerWithoutNameZaehler wieder übernehmen, sonst werden pointer-Namen doppelt vergeben!
+        // Ich weiß nicht warum, aber manchmal liefert [result objectAtIndex:19] 0 zurück, obwohl
+        // self.pointerWithoutNameZaehler bereits höher ist...
+        // Deswegen nur setzen wenn neuer Wert höher als alter ist.
+        if ([[result objectAtIndex:19] integerValue] > self.pointerWithoutNameZaehler)
+            self.pointerWithoutNameZaehler = [[result objectAtIndex:19] integerValue];
 
 
 
@@ -9730,11 +9771,17 @@ BOOL isJSExpression(NSString *s)
         [pre appendString:@"\n</style>\n"];
     }
 
-    [pre appendString:@"\n<script type=\"text/javascript\">\n"];
 
-    [pre appendString:self.jsHeadOutput];
+    if (![self.jsHeadOutput isEqualToString:@""])
+    {
+        [pre appendString:@"\n<script type=\"text/javascript\">\n"];
 
-    [pre appendString:@"\n</script>\n\n</head>\n\n<body>\n"];
+        [pre appendString:self.jsHeadOutput];
+
+        [pre appendString:@"\n</script>\n"];
+    }
+
+    [pre appendString:@"</head>\n\n<body>\n"];
 
 
 
@@ -12478,7 +12525,10 @@ BOOL isJSExpression(NSString *s)
     "        // returns a datapointer that points to the root of the dataset.\n"
     "        this.getPointer = function() {\n"
     "            var pointer = new lz.datapointer(this.name + ':/',false);\n"
-    "            alert('Did it work? ' + pointer.p + ' should not be undefined.');\n"
+    "\n"
+    "            if (!pointer.p)\n"
+    "                console.log('Warning: getPointer() of lz.dataset points to an undefined p.');\n"
+    "\n"
     "            return pointer;\n"
     "        }\n"
     "        this.doRequest = function(ignore) {\n"
@@ -12489,46 +12539,60 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            this.querytype = this.querytype.toUpperCase();\n"
     "\n"
-    "            if (this.querytype == 'POST')\n"
-    "            {\n"
-    "                var ds = this; // weil this im callback überschrieben wird\n"
+    "            var ds = this; // weil this im callback überschrieben wird\n"
     "\n"
-    "                $.ajax({\n"
-    "                    type: this.querytype,\n"
-    "                    url: this.src,\n"
-    "                    data: this.params,\n"
-    "                    success: function(data, textStatus, jqXHR) {\n"
-    "                        alert('Data vorher: ' + ds.rawdata);\n"
-    "                        ds.rawdata = (new XMLSerializer()).serializeToString(data);\n"
-    "                        alert('Data Loaded from ' + ds.src + ': ' + ds.rawdata);\n"
+    "            $.ajax({\n"
+    "                type: this.querytype,\n"
+    "                url: this.src,\n"
+    "                data: this.params,\n"
+    "                success: function(data, textStatus, jqXHR) {\n"
+    //"                    alert('Data vorher: ' + ds.rawdata);\n"
+    //"\n"
+    "                    var dataAsString = (new XMLSerializer()).serializeToString(data);\n"
     "\n"
-    "                        $(ds).triggerHandler('ondata');\n"
-    "                    },\n"
-    "                    error: function(jqXHR, textStatus, errorThrown) {\n"
-    "                        // jQuery-Doc: Possible values for the second argument (besides null) are 'timeout', 'error', 'abort', and 'parsererror'.\n"
+    "                    // um <?xml version=\"1.0\" encoding=\"ISO-8859-1\"?> rauszukriegen, was ab und an mal im XML-Request auftaucht:\n"
+    "                    if (dataAsString.startsWith('<?xml'))\n"
+    "                    {\n"
+    "                        dataAsString = dataAsString.substr(dataAsString.indexOf('>')+1);\n"
+    "                    }\n"
     "\n"
-    "                        if (textStatus == 'timeout')\n"
+    "                    ds.rawdata = '<' + ds.name + '>' + dataAsString + '</' + ds.name + '>';\n"
+    "\n"
+    //"                    alert('Data Loaded from ' + ds.src + ': ' + ds.rawdata);\n"
+    //"\n"
+    "                    $(ds).triggerHandler('ondata');\n"
+    "\n"
+    "                    // Und jetzt alle datapointer triggern, die mit diesem Dataset arbeiten\n"
+    "                    for (var i = 0;i<allMyDatapointer_.length;i++)\n"
+    "                    {\n"
+    "                        // Nur 'ondata' triggern, wenn beide Datapointer auf dem gleichen Dataset beruhen\n"
+    "                        if (allMyDatapointer_[i].datasetName === ds.name)\n"
     "                        {\n"
-    "                            $(ds).triggerHandler('ontimeout');\n"
+    "                            $(allMyDatapointer_[i]).triggerHandler('ondata');\n"
+    "                            // Ist denn nicht 'ondata' und 'datasethaschanged' das gleiche?\n"
+    "                            $(allMyDatapointer_[i]).triggerHandler('datasethaschanged');\n"
     "                        }\n"
-    "                        else\n"
-    "                        {\n"
-    "                            $(ds).triggerHandler('onerror');\n"
-    "                        }\n"
-    "                    },\n"
-    "                    dataType: 'xml'\n"
-    "                });\n"
-    "            }\n"
-    "            else // 'GET' is the default\n"
-    "            {\n"
-    "                alert('Teste mich, und integriere mich in $.ajax({}) (s.o.) - Dazu wohl einfach nur if-else-Abfrage entfernen');\n"
-    "                alert('Vorher: ' + this.rawdata);\n"
-    "                this.rawdata = (new XMLSerializer()).serializeToString(getXMLDocumentFromFile(this.src));\n"
-    "                alert('Nachher: ' + this.rawdata);\n"
-    "            }\n"
+    "                    }\n"
+    "                },\n"
+    "                error: function(jqXHR, textStatus, errorThrown) {\n"
+    "                    // jQuery-Doc: Possible values for the second argument (besides null) are 'timeout', 'error', 'abort', and 'parsererror'.\n"
     "\n"
-    "\n"
-    "            // Gemäß Doku fehlt noch: Auch alle datapointer triggern, die hier dran hängen\n"
+    "                    if (textStatus == 'timeout')\n"
+    "                    {\n"
+    "                        $(ds).triggerHandler('ontimeout');\n"
+    "                    }\n"
+    "                    else\n"
+    "                    {\n"
+    "                        $(ds).triggerHandler('onerror');\n"
+    "                    }\n"
+    "                },\n"
+    "                dataType: 'xml'\n"
+    "            });\n"
+    //"            else // 'GET' is the default\n"
+    //"            {\n"
+    //"                // Alte Lösung, aber die war zu unflexibel:\n"
+    //"                this.rawdata = (new XMLSerializer()).serializeToString(getXMLDocumentFromFile(this.src));\n"
+    //"            }\n"
     "        }\n"
     "\n"
     "        // lz.DataElementMixin reinmixen\n"
@@ -13093,9 +13157,19 @@ BOOL isJSExpression(NSString *s)
     "                return;\n"
     "            }\n"
     "\n"
+    "            if (text === undefined)\n"
+    "            {\n"
+    "                throw new TypeError('function datapointer.setNodeText - first argument (text) is undefined.');\n"
+    "            }\n"
+    "\n"
+    "            if (text === null)\n"
+    "            {\n"
+    "                throw new TypeError('function datapointer.setNodeText - first argument (text) is null.');\n"
+    "            }\n"
+    "\n"
     "            if (typeof text !== 'string' && typeof text !== 'number')\n"
     "            {\n"
-    "                throw new TypeError('function datapointer.setNodeText - So far unsupported type of the argument. Especially Array would need some extra treatment');\n"
+    "                throw new TypeError('function datapointer.setNodeText - So far unsupported type of the argument. Especially Array would need some extra treatment. typeof text = ' + typeof text + ' and text = ' + text);\n"
     "            }\n"
     "\n"
     "            // Wenn wir selber keine Textnode sind, dann eine evtl. Kind-Textnode aktualisieren\n"
@@ -15528,6 +15602,50 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Attribute/Methoden von <div> (OL: <basecomponent>)  //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "////////////////////////INCOMPLETE///////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'styleable'                       //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(HTMLElement.prototype, 'styleable', {\n"
+    "    get : function(){\n"
+    "        if ($(this).data('styleable_') !== undefined) return $(this).data('styleable_');\n"
+    "        return true; /* => Default Value */\n"
+    "    },\n"
+    "    set : function(newValue){\n"
+    "        $(this).data('styleable_', newValue);\n"
+    "    },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'text'                            //\n"
+    "// Erstmal nur bei select - Erscheint mir bei HTMLElement noch zu risikoreich//\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(HTMLSelectElement.prototype, 'text', {\n"
+    "    get : function(){\n"
+    "        if ($(this).children('option:selected').length > 0)\n"
+    "            return $(this).children('option:selected').text();\n"
+    "        else\n"
+    "            return '';\n"
+    "    },\n"
+    "    set : function(newValue){\n"
+    "        alert('Trying to set text of select - Hmmm -  To check');\n"
+    "    },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
     "// Attribute/Methoden von <select> (OL: <basecombobox>)//\n"
     "/////////////////////////////////////////////////////////\n"
     "////////////////////////INCOMPLETE///////////////////////\n"
@@ -15557,6 +15675,36 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "// Nur für Select! Da es die Methode nur bei <select> gibt\n"
     "HTMLSelectElement.prototype.selectItem = selectItemFunction;\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Attribute/Methoden von <select> (OL: <basedatacombobox>)//\n"
+    "/////////////////////////////////////////////////////////\n"
+    "////////////////////////INCOMPLETE///////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// getItemIndex()                                      //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var getItemIndexFunction = function (value) {\n"
+    "    // ToDo\n"
+    "    // Aber returnt jedenfalls -1, wenn er es nicht findet.\n"
+    "    return -1;\n"
+    "}\n"
+    "\n"
+    "// Nur für Select! Da es die Methode nur bei <select> gibt\n"
+    "HTMLSelectElement.prototype.getItemIndex = getItemIndexFunction;\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// _updateSelectionByIndex()                           //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var _updateSelectionByIndexFunction = function (index) {\n"
+    "    // ToDo\n"
+    "}\n"
+    "\n"
+    "// Nur für Select! Da es die Methode nur bei <select> gibt\n"
+    "HTMLSelectElement.prototype._updateSelectionByIndex = _updateSelectionByIndexFunction;\n"
     "\n"
     "\n"
     "\n"
@@ -16433,24 +16581,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
-    "\n"
-    "\n"
-    "\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// Getter/Setter for 'styleable'                       //\n"
-    "// (von 'basecomponent')                               //\n"
-    "// READ/WRITE                                          //\n"
-    "/////////////////////////////////////////////////////////\n"
-    "Object.defineProperty(HTMLElement.prototype, 'styleable', {\n"
-    "    get : function(){\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "        if ($(this).data('styleable_') !== undefined) return $(this).data('styleable_');\n"
-    "        return true; /* => Default Value */\n"
-    "    },\n"
-    "    set : function(newValue){ $(this).data('styleable_', newValue); },\n"
-    "    enumerable : false,\n"
-    "    configurable : true\n"
-    "});\n"
     "\n"
     // es gibt ein natives JS-align, was sich wohl korrekt zur OL-Logik verhält
     // http://jsfiddle.net/Pv8YQ/ Deswegen nicht nötig.

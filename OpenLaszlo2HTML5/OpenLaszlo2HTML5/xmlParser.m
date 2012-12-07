@@ -685,7 +685,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // setAttribute_() wird zur absolutern PRIORITY-Function. Über die läuft alles!
 - (void) setTheValue:(NSString *)s ofAttribute:(NSString*)attr
 {
-    NSLog([NSString stringWithFormat:@"Setting the attribute %@ with the value %@ by jQuery + we watch it, if necessary!",attr,s]);
+    NSLog([NSString stringWithFormat:@"Setting the attribute %@ with the value %@ by jQuery + we apply constraint(s), if necessary!",attr,s]);
 
     NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
@@ -5235,7 +5235,7 @@ didStartElement:(NSString *)elementName
         }
 
         [self.jsComputedValuesOutput appendString:@"\n  // Saving the value 'textdatapath' of the <select>-element\n"];
-        [self.jsComputedValuesOutput appendFormat:@"  $('#%@').data('textdatapath','%@');\n",self.zuletztGesetzteID,textdatapath];
+        [self.jsComputedValuesOutput appendFormat:@"  %@.textdatapath = '%@';\n",self.zuletztGesetzteID,textdatapath];
 
         NSString *valuedatapath = @"@value";
         if ([attributeDict valueForKey:@"valuedatapath"])
@@ -5246,24 +5246,26 @@ didStartElement:(NSString *)elementName
         }
 
         [self.jsComputedValuesOutput appendString:@"\n  // Saving the value 'valuedatapath' of the <select>-element\n"];
-        [self.jsComputedValuesOutput appendFormat:@"  $('#%@').data('valuedatapath','%@');\n",self.zuletztGesetzteID,valuedatapath];
+        [self.jsComputedValuesOutput appendFormat:@"  %@.valuedatapath = '%@';\n",self.zuletztGesetzteID,valuedatapath];
 
 
         if ([attributeDict valueForKey:@"itemdatapath"])
         {
             self.attributeCount++;
-            
+
+            // Kann es nicht in jQuerys Data-Objekt speichern, skript-code kann die var auch u. U.
+            // direkt auslesen. Deswegen direkt ins Element damit
             [self.jsComputedValuesOutput appendString:@"\n  // Saving the value 'itemdatapath' of the <select>-element\n"];
-            [self.jsComputedValuesOutput appendFormat:@"  $('#%@').data('itemdatapath','%@');\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"itemdatapath"]];
+            [self.jsComputedValuesOutput appendFormat:@"  %@.itemdatapath = '%@';\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"itemdatapath"]];
 
             // Dann wird automatisch ein <option>-Element ergänzt...
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+3];
             [self.output appendFormat:@"<option id=\"%@_option\"></option>\n",self.zuletztGesetzteID];
             // ...welches entsprechend dann geklont wird
             [self.jsComputedValuesOutput appendFormat:@"\n  // datacombobox entsprechend auswerten"];
-            [self.jsComputedValuesOutput appendFormat:@"\n  setAbsoluteDataPathIn($('#%@').children(':first').get(0),$('#%@').data('itemdatapath'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-            [self.jsComputedValuesOutput appendFormat:@"  setRelativeDataPathIn($('#%@').children(':first').get(0),$('#%@').data('valuedatapath'),'value');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-            [self.jsComputedValuesOutput appendFormat:@"  setRelativeDataPathIn($('#%@').children(':first').get(0),$('#%@').data('textdatapath'),'text');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+            [self.jsComputedValuesOutput appendFormat:@"\n  setAbsoluteDataPathIn($('#%@').children(':first').get(0),%@.itemdatapath);\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+            [self.jsComputedValuesOutput appendFormat:@"  setRelativeDataPathIn($('#%@').children(':first').get(0),%@.valuedatapath,'value');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+            [self.jsComputedValuesOutput appendFormat:@"  setRelativeDataPathIn($('#%@').children(':first').get(0),%@.textdatapath,'text');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
         }
 
 
@@ -5325,10 +5327,12 @@ didStartElement:(NSString *)elementName
 
 
 
-        if ([attributeDict valueForKey:@"value"]) // ToDo
+        if ([attributeDict valueForKey:@"value"])
         {
             self.attributeCount++;
-            NSLog(@"Skipping the attribute 'value'.");
+
+            // Habe ich mal ergänzt, aber evtl. hat value ne andere Bedeutung, dann Zeile wieder rausnehmen
+            [self setTheValue:[attributeDict valueForKey:@"value"] ofAttribute:@"value"];
         }
 
 
@@ -7559,7 +7563,7 @@ didStartElement:(NSString *)elementName
 
             // Wenn args gesetzt ist, wird derzeit nur der Wert 'oldvalue' unterstützt
             // und auch nur wenn als event 'onnewvalue' gesetzt wurde.
-            // Dazu wird der 'onnewvalue' oder 'onvalue'-Handler um Code ergänzt der stets
+            // Dazu wird der 'onvalue'-Handler um Code ergänzt der stets
             // den alten Wert in der Variable 'oldvalue' speichert.
             if ([attributeDict valueForKey:@"args"])
             {
@@ -15086,15 +15090,13 @@ BOOL isJSExpression(NSString *s)
     "// completeInstantiation()                             //\n"
     "/////////////////////////////////////////////////////////\n"
     "var completeInstantiationFunction = function() {\n"
-    "    var preparations4interpretObject = function(el) {\n"
+    "    var interpretTheDeferredObject = function(el) {\n"
     "        // Instanzvariablen holen\n"
     "        var iv = $(el).data('instanceVars');\n"
     "        if (iv == undefined)\n"
     "        {\n"
     "            alert('Das kann nicht sein. Eine nicht instanzierte Klasse hat immer InstanzVariablen, und seien es leere. el.id = ' + el.id);\n"
     "        }\n"
-    "\n"
-    "        var id = el;\n"
     "\n"
     "        if ($(el).data('textBetweenTags_'))\n"
     "        {\n"
@@ -15105,19 +15107,18 @@ BOOL isJSExpression(NSString *s)
     "            var obj = new oo[$(el).data('olel')]('');\n"
     "        }\n"
     "\n"
-    "        interpretObject(obj,id,iv);\n"
+    "        interpretObject(obj,el,iv);\n"
     "    }\n"
     "\n"
-    "    if (!this.inited)\n"
-    "    {\n"
+    "    if (!this.inited) {\n"
     "        var theID = this.id;\n"
-    "        preparations4interpretObject(this);\n"
+    "        interpretTheDeferredObject(this);\n"
     "        // Ab hier wurde 'this' u. U. ausgetauscht, und ich kann es nicht mehr benutzen, weil es sich nicht mehr im DOM befindet\n"
     "        // Test möglich z. B. mit alert($(this).closest('html').length);\n"
     "        var el = document.getElementById(theID);\n"
     "\n"
     "        // Ich muss es direkt danach per show sichtbar machen, sonst kann das Layout nicht korrekt gesetzt werden, z.B. bei Simplelayouts\n"
-    "        // Es klappt nur direkt danach, nicht direkt davor im Gegensazu zu unten.... Warum auch immer\n"
+    "        // Es klappt nur direkt danach, nicht direkt davor im Gegensatz zu unten.... Warum auch immer\n"
     "        $(el).show();\n"
     "\n"
     "        // Hier mit andSelf() zu arbeiten geht schief, weil this ja u. U. ausgetauscht wird im 1. Durchlauf\n"
@@ -15130,7 +15131,7 @@ BOOL isJSExpression(NSString *s)
     "                // Direkt vor dem Auswerten, danach wurde this evtl. ausgetauscht, analog zu oben\n"
     "                $(this).show();\n" //this.setAttribute_('visible',true);
     "\n"
-    "                preparations4interpretObject(this);\n"
+    "                interpretTheDeferredObject(this);\n"
     "            }\n"
     "        });\n"
     "\n"
@@ -15686,11 +15687,28 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
     "// getItemIndex()                                      //\n"
+    "// returnt -1, wenn er es nicht findet.                //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var getItemIndexFunction = function (value) {\n"
-    "    // ToDo\n"
-    "    // Aber returnt jedenfalls -1, wenn er es nicht findet.\n"
-    "    return -1;\n"
+    "var getItemIndexFunction = function (value) { // oi 1:1\n"
+    "  alert('help');\n"
+    "\n"
+    "    var index = -1;\n"
+    "    var dp = new lz.datapointer(this);\n"
+    "    var nodes = dp.xpathQuery(this.itemdatapath);\n"
+    "    if (nodes != null) {\n"
+    "        if (! (nodes instanceof Array)) nodes = [nodes];\n"
+    "        for (var i = 0; i < nodes.length; i++) {\n"
+    "            dp.setPointer(nodes[i]);\n"
+    "            var test_value = dp.xpathQuery(this.valuedatapath);\n"
+    "            if (test_value == value) {\n"
+    "                index = i;\n"
+    "                break;\n"
+    "            }\n"
+    "        }\n"
+    "    }\n"
+    "    dp.destroy();\n"
+    "  alert('durch: ' + index);\n"
+    "    return index;\n"
     "}\n"
     "\n"
     "// Nur für Select! Da es die Methode nur bei <select> gibt\n"
@@ -18852,13 +18870,27 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
+    "//  class = baselist (native class)                          //\n"
+    "///////////////////////////////////////////////////////////////\n"
+    "oo.baselist = function() {\n"
+    "  this.name = 'baselist';\n"
+    "  this.inherit = new oo.baseformitem();\n"
+    "\n"
+    "  this.attributesDict = { dataoption:'none', defaultselection:null, itemclassname:'', multiselect:false, toggleselected:false }\n"
+    "\n"
+    "  this.contentHTML = '';\n"
+    "}\n"
+    "\n"
+    "\n"
+    "\n"
+    "///////////////////////////////////////////////////////////////\n"
     "//  class = radiogroup (native class)                        //\n"
     "///////////////////////////////////////////////////////////////\n"
     "oo.radiogroup = function() {\n"
     "  this.name = 'radiogroup';\n"
-    "  this.inherit = new oo.view();\n"
+    "  this.inherit = new oo.baselist();\n"
     "\n"
-    "  this.attributesDict = { }\n"
+    "  this.attributesDict = { layout:'class:simplelayout;axis:y;spacing:5' }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"
@@ -19144,6 +19176,16 @@ BOOL isJSExpression(NSString *s)
     "  this.inherit = new oo.basevaluecomponent(textBetweenTags);\n"
     "\n"
     "  this.attributesDict = { changed:false, ignoreform:false, rollbackvalue:null, submit:this.inherit.inherit.attributesDict.enabled, submitname:'', value:null }\n"
+    "\n"
+    "  this.methods = {\n"
+    "    applyData: function(d) {\n"
+    "        // Till OL 4.0b1\n"
+    "        // This implementation sets the applied data as an initalizater value. This is run by a datapath to get the data from a data node.\n"
+    "        // this.setValue(d,true);\n"
+    "        // Since OL 4.11 there is no more implementation of this method...\n"
+    "        // Muss aber leer drin bleiben, damit unser Test auf die Existenz dieser Methode nicht fehlschlägt.\n"
+    "    }\n"
+    "  }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "};\n"

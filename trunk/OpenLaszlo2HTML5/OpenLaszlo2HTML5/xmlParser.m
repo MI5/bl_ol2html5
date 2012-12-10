@@ -781,41 +781,11 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-
-        // Wenn wir in einer Klasse sind und state extenden, dann müssen wir einen Doppelsprung
-        // bei parent machen. Weil ich den 'state' überspringen muss.
-        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && ([e hasPrefix:@"immediateparent."] || [e hasPrefix:@"parent."]))
-        {
-            if ([self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"] || [self.lastUsedExtendsAttributeOfClass isEqualToString:@"dragstate"])
-            {
-                // Neu: parent selber merkt jetzt ja, ob wir ein state sind oder nicht.
-                // Denke das hier kann dann weg?!
-                //e = [NSString stringWithFormat:@"parent.%@",e];
-            }
-        }
-
-
-
-
         [o appendFormat:@"  setInitialConstraintValue(%@,'%@','%@');\n",self.zuletztGesetzteID,attr,e];
 
         [o appendFormat:@"  // Der zu setzende Wert ist abhängig von %ld woanders gesetzten Variable(n)\n",[vars count]];            
-        for (id __strong object in vars)
+        for (id object in vars)
         {
-            // Wenn wir in einer Klasse sind und state extenden, dann müssen wir einen Doppelsprung
-            // bei parent machen. Weil ich den 'state' überspringen muss.
-            if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && ([e hasPrefix:@"immediateparent."] || [e hasPrefix:@"parent."]))
-            {
-                if ([self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"] || [self.lastUsedExtendsAttributeOfClass isEqualToString:@"dragstate"])
-                {
-                    // Neu: parent selber merkt jetzt ja, ob wir ein state sind oder nicht.
-                    // Denke das hier kann dann weg?!
-                    //object = [self inString:object searchFor:@"parent" andReplaceWith:@"parent.parent" ignoringTextInQuotes:YES];
-                }
-            }
-
-
-
             [o appendFormat:@"  setConstraint(%@,'%@',\"return (function() { with (%@) { %@.setAttribute_('%@',%@); } }).bind(%@)();\");\n",self.zuletztGesetzteID,object,self.zuletztGesetzteID,self.zuletztGesetzteID,attr,e,self.zuletztGesetzteID];
         }
     }
@@ -840,7 +810,16 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
     else if (constraintValue)
     {
-        [self.jsConstraintValuesOutput appendString:o];
+        // Wenn wir gerade in einem (Unterlement von) initStageDefer sind, dann hängt unsere
+        // constraint u. U. von dem initStageDefer-Element ab - Deswegen constraint erst dort ausgeben.
+        if (self.initStageDeferThatWillBeCalledByCompleteInstantiation)
+        {
+            [self.jsInitstageDeferOutput appendString:o];
+        }
+        else
+        {
+            [self.jsConstraintValuesOutput appendString:o];
+        }
     }
     else
     {
@@ -3998,7 +3977,7 @@ didStartElement:(NSString *)elementName
             [o appendFormat:@"  var lastUsedDP = setAbsoluteDataPathIn(%@,%@);\n",idUmgebendesElement,dp];
 
             // Absolute Datapath-Angaben sollten stets vor den relativen bekannt sein, z. B. Example 37.15
-            [self.jQueryOutput0 appendString:o];
+            [self.jsOutput appendString:o];
         }
         else if (dp.length == 0)
         {
@@ -4006,14 +3985,14 @@ didStartElement:(NSString *)elementName
             [o appendFormat:@"  var lastUsedDP = setAbsoluteDataPathIn(%@,'');\n",idUmgebendesElement];
 
             // Absolute Datapath-Angaben sollten stets vor den relativen bekannt sein, z. B. Example 37.15
-            [self.jQueryOutput0 appendString:o];
+            [self.jsOutput appendString:o];
         }
         else
         {
             [o appendString:@"\n  // Ein relativer Datapath.\n"];
             [o appendFormat:@"  var lastUsedDP = setRelativeDataPathIn(%@,%@,'text');\n",idUmgebendesElement,dp];
 
-            [self.jsComputedValuesOutput appendString:o];
+            [self.jQueryOutput0 appendString:o];
         }
 
         // Falls gleich ein Attribut kommt, welches sich an diesen datapath binden möchte.
@@ -4231,12 +4210,27 @@ didStartElement:(NSString *)elementName
 
         NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
 
+
+
+        // Ich hatte hier ursprünglich nur einen möglichen state übersprungen.
+        // nach einführen der Schleife habe ich gemerkt: Natürlich haben states Attribute, dafür gibt
+        // es ja sogar den Extra-Namespace. Deswegen darf ich bei Attributen 'state' NICHT überspringen
+        /*
         // Ein 'state' bewirkt einen Extra-Sprung, da der 'state' selber nicht als Hierachieebene zählt
+        int z = 3;
+        while ([elemTyp isEqualToString:@"state"])
+        {
+            elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-z];
+            elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-z];
+            z++;
+        }
         if ([elemTyp isEqualToString:@"state"])
         {
-            elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-3];
-            elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-3];
+            NSString *adas = @"";
         }
+         */
+
+
 
         if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
         {
@@ -4436,11 +4430,8 @@ didStartElement:(NSString *)elementName
         }
         else
         {
-            BOOL pathAngabe = NO;
             if ([value hasPrefix:@"$path{"])
             {
-                pathAngabe = YES;
-
                 value = [self removeOccurrencesOfDollarAndCurlyBracketsIn:value];
 
                 [o appendString:@"\n  // Ein relativer Datapath für dieses Attribut.\n"];
@@ -4514,69 +4505,48 @@ didStartElement:(NSString *)elementName
 
 
 
-
-            // Wenn wir ein Attribut von canvas haben, dann so früh wie möglich bekannt machen,
-            // da z. B. 'datasets' auf diese Attribute schon zugreifen.
-            if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"BDStabsheetcontainer"])
+            if ([elemTyp isEqualToString:@"dataset"])
             {
-                // Es gibt mittlerweilie eine eigene Ausgabe für Datasets, da auch die Attribute rein
-                if ([elemTyp isEqualToString:@"dataset"])
-                {
-                    [self.datasetOutput appendString:o];
-                }
-                else
-                {
-                    [self.jsOutput appendString:o];
-                }
+                // Es gibt eine eigene Ausgabe für Datasets, da auch die Attribute rein
+                [self.datasetOutput appendString:o];
+            }
+            else if ([elemTyp isEqualToString:@"state"])
+            {
+                NSString *idOfState = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
+
+                // Das erste Newline wieder entfernen...
+                o = [NSMutableString stringWithFormat:@"%@",[o substringFromIndex:1]];
+                // ... und 2 Spaces mehr einrücken.
+                o = [NSMutableString stringWithFormat:@"%@",[self inString:o searchFor:@"  " andReplaceWith:@"    " ignoringTextInQuotes:YES]];
+
+                NSString *verdoppeltesO = o;
+
+                o = [NSMutableString stringWithFormat:@"\n  // Einmal Attribut sofort setzen, wenn 'applied'...\n  if (%@.applied) {\n%@",idOfState,verdoppeltesO];
+                [o appendString:@"  }\n"];
+
+                [o appendString:@"  // ...und einmal bei Änderungen von 'applied' darauf reagieren\n"];
+                // Nochmal 2 Spaces mehr einrücken.
+                verdoppeltesO = [NSMutableString stringWithFormat:@"%@",[self inString:verdoppeltesO searchFor:@"    " andReplaceWith:@"      " ignoringTextInQuotes:YES]];
+                [o appendFormat:@"  $('#%@').on('onapplied',function(a,b) {\n    if (b) {\n%@",idOfState,verdoppeltesO];
+                [o appendFormat:@"    }\n    else {\n      // Von allen Elementen evtl. on's mit diesem namespace entfernen\n      $('.canvas_standard').first().find('*').andSelf().each(function() { $(this).off('.state_%@'); });\n    }\n  });\n",idOfState];
+
+
+                [self.jQueryOutput0 appendString:o];
             }
             else
             {
-                if ([elemTyp isEqualToString:@"state"])
+                // Weil initstage=defer erst verzögert aufgerufen wird, auch die Attribute
+                // dieser Klasseninstanz verzögert setzen.
+                if (self.initStageDeferThatWillBeCalledByCompleteInstantiation)
                 {
-                    NSString *idOfState = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
-
-                    // Das erste Newline wieder entfernen...
-                    o = [NSMutableString stringWithFormat:@"%@",[o substringFromIndex:1]];
-                    // ... und 2 Spaces mehr einrücken.
-                    o = [NSMutableString stringWithFormat:@"%@",[self inString:o searchFor:@"  " andReplaceWith:@"    " ignoringTextInQuotes:YES]];
-
-                    NSString *verdoppeltesO = o;
-
-                    o = [NSMutableString stringWithFormat:@"\n  // Einmal Attribut sofort setzen, wenn 'applied'...\n  if (%@.applied) {\n%@",idOfState,verdoppeltesO];
-                    [o appendString:@"  }\n"];
-
-                    [o appendString:@"  // ...und einmal bei Änderungen von 'applied' darauf reagieren\n"];
-                    // Nochmal 2 Spaces mehr einrücken.
-                    verdoppeltesO = [NSMutableString stringWithFormat:@"%@",[self inString:verdoppeltesO searchFor:@"    " andReplaceWith:@"      " ignoringTextInQuotes:YES]];
-                    [o appendFormat:@"  $('#%@').on('onapplied',function(a,b) {\n    if (b) {\n%@",idOfState,verdoppeltesO];
-                    [o appendFormat:@"    }\n    else {\n      // Von allen Elementen evtl. on's mit diesem namespace entfernen\n      $('.canvas_standard').first().find('*').andSelf().each(function() { $(this).off('.state_%@'); });\n    }\n  });\n",idOfState];
-
-
-                    [self.jQueryOutput0 appendString:o];
+                    [self.jsInitstageDeferOutput appendString:o];
                 }
                 else
                 {
-                    // Spezialbehandlung für Taxango, weil initstage=defer erst verzögert aufgerufen wird, auch die Attribute
-                    // dieser Klasseninstanz verzögert setzen. Korrekte Lösung hier wohl: Abfrage nach initstage=defer einbauen.
-                    if ([elemTyp isEqualToString:@"nicemodaldialog"])
-                    {
-                        [self.jQueryOutput0 appendString:o];
-
-                        // Zusätzlich, um die Werte zu erneuern!! (Weil vorher wird die Var iwie auch schon gebraucht
-                        [self.jsInitstageDeferOutput appendString:o];
-                    }
-                    else
-                    {
-                        if (pathAngabe)
-                        {
-                            // Damit die 'path_'-Variable auch vorher gesetz wurde und bekannt ist!
-                            [self.jsComputedValuesOutput appendString:o];
-                        }
-                        else
-                        {
-                            [self.jQueryOutput0 appendString:o];
-                        }
-                    }
+                    // Wenn wir ein Attribut von canvas haben, dann so früh wie möglich bekannt machen,
+                    // da z. B. 'datasets' auf diese Attribute schon zugreifen.
+                    // Aber auch andere Attribute müssen so früh wie möglich bekannt sein.
+                    [self.jsOutput appendString:o];
                 }
             }
         }
@@ -7639,8 +7609,8 @@ didStartElement:(NSString *)elementName
 
 
 
-
-        // To Do: Nicht 'deferview', sondern das vorhandene attribut initstage=defer ist hier eigentlich entscheidend
+        // To Do: Nicht 'deferview' oder die anderen elementNames,
+        // sondern das vorhandene attribut initstage=defer ist hier eigentlich entscheidend.
         if ([elementName isEqualToString:@"deferview"])
         {
             self.initStageDefer = YES;
@@ -7652,10 +7622,9 @@ didStartElement:(NSString *)elementName
 
 
 
-
         // Ich muss die Stelle einmal markieren...
-        // standardmäßig wird immer von 'view' geerbt, deswegen hier als class 'div_standard'.
-        // Wird falls nötig auf Javascript-Ebene von der Funktion interpretObject() mit Attributen erweitert.
+        // Standardmäßig wird immer von 'view' geerbt, deswegen hier als class 'div_standard'.
+        // Wird falls nötig auf JS-Ebene von der Funktion interpretObject() mit Attributen erweitert.
         [self.output appendString:@"<div"];
         [self addIdToElement:attributeDict];
         [self.output appendString:@" class=\"div_standard noPointerEvents\" style=\""];
@@ -12700,7 +12669,7 @@ BOOL isJSExpression(NSString *s)
     "            }\n"
     "\n"
     "            // Alle $path-Angaben (relativeDatapath-Angaben) aktualisieren sich bei Änderungen\n"
-    "            // Deswegen hier triggern eines Nicht-Dom-Elements (nämlich lz.datapointer), aber das scheint zu klappen\n"
+    "            // Deswegen hier triggern eines Nicht-Dom-Elements (nämlich lz.datapointer)\n"
     "            $(dp).triggerHandler('datapathhaschanged');\n"
     "        }\n"
     "\n"
@@ -12875,9 +12844,12 @@ BOOL isJSExpression(NSString *s)
     "                }\n"
     "                catch (e)\n"
     "                {\n"
-    "                    alert(e);\n"
-    "                    alert(xpath);\n"
-    "                    alert(this.xml);\n"
+    "                    alert('Error: ' + e);\n"
+    "                    alert('xpath: ' + xpath);\n"
+    "                    alert('this.xml: ' + this.xml);\n"
+    "                    alert('this.parent: ' + this.parent);\n"
+    "                    if (this.parent)\n"
+    "                        alert('this.parent.id: ' + this.parent.id);\n"
     "                    alert((new XMLSerializer()).serializeToString(this.xml));\n"
     "                }\n"
     "\n"
@@ -13009,8 +12981,16 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        // xml-Initialisierung als eigene Methode, da setXPath() bei jedem Aufruf dieses aktualisieren muss\n"
     "        // falls sich der Inhalt des Datasets durch andere Pointer, die ebenfalls damit arbeiten, geändert hat.\n"
+    "        // Wenn ich aber z. B. über setPointer() meine XML-Struktur bekommen habe, dann arbeite ich ohne dataset\n"
+    "        // In so einem Fall ist nichts zu updaten und ich gehe raus hier.\n"
     "        // **private**\n"
     "        this.refreshXMLFromDataset = function() {\n"
+    "            // Problem bei 'trashcangridcolumn', deswegen 2. Bedingung hinzugefügt\n"
+    "            // Wenn this.xml noch undefined muss ich es doch irgendwie setzen und durchschleusen\n"
+    "            // Aber es wird wohl ein Error-XML dann gesetzt werden - To Check\n"
+    "            if (this.datasetName == '' && this.xml != undefined)\n"
+    "                return;\n"
+    "\n"
     "            // Standardfall:\n"
     "            if (this.dataset && this.dataset.rawdata)\n"
     "            {\n"
@@ -13051,6 +13031,9 @@ BOOL isJSExpression(NSString *s)
     "        this.data = null;\n"
     "        this.arrayForXpathQuery = null; // Ergebnis wird von setXPath hier reingeschrieben\n"
     "\n"
+    "        this.datasetName = null; // Wird im Normalfall sogleich von 'init' gesetzt\n"
+    "        this.dataset = null; // Wird im Normalfall sogleich von 'init' gesetzt\n"
+    "\n"
     "        this.xpath = null; // Wird mit 'null' initialisiert gemäß OL-Test. Wird von this.init gesetzt\n"
     "\n"
     //"        // Wenn dieses blöde Objekt kommt, dann keine Initialisierung\n"
@@ -13077,6 +13060,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            // alte 'Variablen' sichern\n"
     "            var lastP = this.p;\n"
+    "            var lastXML = this.xml; // newly added, just in case\n"
+    "            var lastXPath = this.xpath; // newly added, just in case\n"
     "            var lastData = (new XMLSerializer()).serializeToString(this.p);\n"
     "            var lastDatasetName = this.datasetName;\n"
     "            var lastDataset = this.dataset;\n"
@@ -13090,8 +13075,7 @@ BOOL isJSExpression(NSString *s)
     "            // Ein einzelner Slash ist das Root-Element und damit ebenfalls ein absoluter Pfad\n"
     "            if (!query.contains(':') && query !== '/' && query !== '/*')\n"
     "            {\n"
-    "                // Abfangen, sonst überschreibt er mir über setXPath und dann init zuviele Variablen\n"
-    "                // Und sowieso macht es keinen Sinn, hier fortzusetzen, wenn xpath gar nicht gesetzt ist\n"
+    "                // Es macht keinen Sinn hier fortzusetzen, wenn xpath gar nicht gesetzt ist\n"
     "                if (this.xpath == null)\n"
     "                    throw new TypeError('lz.datapointer.xpathQuery - this.xpath is not initialized.');\n"
     "\n"
@@ -13149,6 +13133,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            // alte 'Variablen' wiederherstellen\n"
     "            this.p = lastP;\n"
+    "            this.xml = lastXML;\n"
+    "            this.xpath = lastXPath;\n"
     "            this.data = lastData;\n"
     "            this.datasetName = lastDatasetName;\n"
     "            this.dataset = lastDataset;\n"
@@ -13462,9 +13448,9 @@ BOOL isJSExpression(NSString *s)
     "            // Gets all Nodes starting on root element, fehlender Leading '/' wird ergänzt\n"
     "            this.xpath = '/*';\n"
     "\n"
-    "            // Kein dataset\n"
+    "            // In diesem Fall kein verbundenes dataset! - z. B. 'refreshXMLFromDataset()' testet darauf\n"
     "            this.datasetName = '';\n"
-    "            this.dataset = '';\n"
+    "            this.dataset = null;\n"
     "\n"
     "            this.xml = getXMLDocumentFromString(p.serialize());\n"
     "\n"
@@ -13473,9 +13459,24 @@ BOOL isJSExpression(NSString *s)
     "            // Ich muss in diesem Fall 'p' direkt übernehmen!\n"
     "            this.p = p;\n"
     "\n"
-    "            updateDataAndDatasetAndTrigger(this,this.p.serialize()); // ungetestet\n"
+    "            // updateDataAndDatasetAndTrigger(this,this.p.serialize());\n"
+    "            // Nein! Wenn ich doch gar kein Dataset habe, kann ich es weder updaten noch triggern\n"
+    "            // Deswegen nur data hier noch setzen und dann fertig\n"
+    "            this.data = this.p.serialize();\n"
     "        }\n"
+    "        this.destroy = function() {\n"
+    "            // Aus dem dp-Array entfernen\n"
+    "            for (var i = 0;i<allMyDatapointer_.length;i++)\n"
+    "            {\n"
+    "                if (this == allMyDatapointer_[i])\n"
+    "                {\n"
+    "                    allMyDatapointer_.splice(i,1);\n"
+    "                }\n"
+    "            }\n"
     "\n"
+    "            // Und uns killen:\n"
+    "            // delete this; <-- klappt so nicht, der dp sollte von alleine sterben, wenn lokal angelegt\n"
+    "        }\n"
     "\n"
     "        // 'datapath' erbt eigentlich alles von 'datapointer'. Das wird aber jetzt zu kompliziert\n"
     "        // Einfach die Methoden von 'datapath' hier noch ergänzen und immer mit 'datapointer' arbeiten.\n"
@@ -13525,7 +13526,7 @@ BOOL isJSExpression(NSString *s)
     "                for (var i = 0;i < depChildren.length;i++)\n"
     "                {\n"
     "                    depChildren[i].__LZupdateData(true)\n"
-    "                };\n"
+    "                }\n"
     "            }\n"
     "\n"
     "            if (!recursion && this.p)\n"
@@ -15692,8 +15693,6 @@ BOOL isJSExpression(NSString *s)
     "// returnt -1, wenn er es nicht findet.                //\n"
     "/////////////////////////////////////////////////////////\n"
     "var getItemIndexFunction = function (value) { // oi 1:1\n"
-    "  alert('help');\n"
-    "\n"
     "    var index = -1;\n"
     "    var dp = new lz.datapointer(this);\n"
     "    var nodes = dp.xpathQuery(this.itemdatapath);\n"
@@ -15709,7 +15708,6 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "    }\n"
     "    dp.destroy();\n"
-    "  alert('durch: ' + index);\n"
     "    return index;\n"
     "}\n"
     "\n"
@@ -15718,13 +15716,99 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// _updateSelectionByIndex()                           //\n"
+    "// Updates the combobox text and 'selected' attribute. Called when an item is selected.//\n"
+    "// @param Number index: index of data item.            //\n"
+    "// @param Boolean dontSetValue: used by setValue() not to set value. Avoids circular logic.//\n"
+    "// @param Boolean isinitvalue: used by init() to set value as an init value.//\n"
     "/////////////////////////////////////////////////////////\n"
-    "var _updateSelectionByIndexFunction = function (index) {\n"
-    "    // ToDo\n"
+    "var _updateSelectionByIndexFunction = function (index,dontSetValue,isinitvalue) { // oi 1:1\n"
+    "    var dp = new lz.datapointer(this);\n"
+    "\n"
+    "    var nodes = dp.xpathQuery(this.itemdatapath);\n"
+    "    if (! (nodes instanceof Array)) nodes = [nodes];\n"
+    "    dp.setPointer(nodes[index]);\n"
+    "\n"
+    "    var dpValid = dp.isValid();\n"
+    "    if (dpValid) {\n"
+    "        var t = dp.xpathQuery(this.textdatapath);\n"
+    "    } else {\n"
+    "        var t = null;\n"
+    "    }\n"
+    "    // if t is null, use default text (if it exists)\n"
+    "    if( ( t == null || t.length == 0 ) && (this.defaulttext && this.defaulttext.length > 0) )\n"
+    "        t = this.defaulttext;\n"
+    "\n"
+    "    if ( this._cbtext && (this.statictext == null) ) {\n"
+    "        this._cbtext.setAttribute('text', t);\n"
+    "    }\n"
+    "\n"
+    "    if (this.selected == null || dp['p'] !== this.selected['p']) {\n"
+    "        if (! (dontSetValue || this.ismenu)) {\n"
+    "            if (dpValid) {\n"
+    "                var v = dp.xpathQuery(this.valuedatapath);\n"
+    "            } else {\n"
+    "                var v = null;\n"
+    "            }\n"
+    "            this.doSetValue(v, true, true);\n"
+    "        }\n"
+    "        this.setAttribute('text', t);\n"
+    "\n"
+    "        if (this.ismenu) {\n"
+    "            // Clear the selection\n"
+    "            this._selectedIndex = -1;\n"
+    "            if (this['_cblist'] && this._cblist['_selector']) {\n"
+    "                this._cblist._selector.clearSelection();\n"
+    "            }\n"
+    "        } else {\n"
+    "            if (this.selected != null) {\n"
+    "                this.selected.destroy();\n"
+    "            }\n"
+    "            this.selected = dp;\n"
+    "        }\n"
+    "\n"
+    "        if ( this['onselected'] ) this.onselected.sendEvent(dp);\n"
+    "        if ( this['onselect'] )   this.onselect.sendEvent(dp);\n"
+    "    } else {\n"
+    "        dp.destroy();\n"
+    "    }\n"
     "}\n"
     "\n"
     "// Nur für Select! Da es die Methode nur bei <select> gibt\n"
     "HTMLSelectElement.prototype._updateSelectionByIndex = _updateSelectionByIndexFunction;\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// doSetValue()                                        //\n"
+    "// Set value of combobox.                              //\n"
+    "//@param String|Number value: value to set.            //\n"
+    "//@param Boolean isinitvalue: true if value is an init value.//\n"
+    "//@param Boolean ignoreselection: if true, selection won't be updated//\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var doSetValueFunction = function (value,isinitvalue,ignoreselection) { // oi 1:1\n"
+    "    if (this['value'] != value) {\n"
+    "        var i = this.getItemIndex(value);\n"
+    "        this._selectedIndex = i;\n"
+    "\n"
+    "        if (! this.ismenu) {\n"
+    "            var didchange = (this.value != value);\n"
+    "            this.value = value;\n"
+    "            if (isinitvalue || ! this._initcomplete) {\n"
+    "                this.rollbackvalue = value;\n"
+    "            }\n"
+    "            // this.setChanged(didchange && !isinitvalue && this.rollbackvalue != value);\n"
+    "            // To Do, den Comment vor this.setChanged entfernen, wenn http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/baseformitem.lzx per request ausgewertet\n"
+    "            if (this['onvalue']) this.onvalue.sendEvent(value);\n"
+    "        }\n"
+    "\n"
+    "        if ( i != -1 && !ignoreselection) {\n"
+    "            this._updateSelectionByIndex(i, true, false);\n"
+    "        }\n"
+    "    }\n"
+    "}\n"
+    "\n"
+    "// Nur für Select! Da es die Methode nur bei <select> gibt\n"
+    "HTMLSelectElement.prototype.doSetValue = doSetValueFunction;\n"
     "\n"
     "\n"
     "\n"
@@ -17405,7 +17489,7 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "\n"
     "        // Zusätzlich bei Änderungen darauf reagieren:\n"
-    "        // Ich horche hier auf das triggern eines Nicht-DOM-Elements, aber das scheint zu klappen\n"
+    "        // Ich horche hier auf das triggern eines Nicht-DOM-Elements\n"
     "        $(pointer).off('datapathhaschanged');\n"
     "        $(pointer).on('datapathhaschanged.setRelativeDP', function() { if (pointer.xpath) el.setAttribute_(attr,pointer.xpathQuery(pathExtension)); });\n"
     "    }\n"
@@ -17785,6 +17869,7 @@ BOOL isJSExpression(NSString *s)
     "        if ($(this).data('olel') === 'BDSeditnumber' ||\n"
     "            $(this).data('olel') === 'BDScombobox' ||\n"
     "            $(this).data('olel') === 'trashcangridcolumn' ||\n"
+    "            $(this).data('olel') === 'datacombobox' ||\n"
     "            $(this).data('olel') === 'basewindow')\n"
     "        {\n"
     "            var superMethods_ = { init: function() {} };\n"
@@ -17816,9 +17901,9 @@ BOOL isJSExpression(NSString *s)
     "                if (temp.methods)\n"
     "                {\n"
     "                    Object.keys(temp.methods).forEach(function(key)\n"
-    "                                      {\n"
-    "                                          superMethods_[key] = temp.methods[key];\n"
-    "                                      });\n"
+    "                    {\n"
+    "                        superMethods_[key] = temp.methods[key];\n"
+    "                    });\n"
     "                }\n"
     "            }\n"
     "\n"
@@ -17828,14 +17913,14 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        else\n"
     "        {\n"
-    "            alert('Moment mal bitte! ' + $(this).data('olel'));\n"
+    "            alert('Moment mal bitte! Test und Integration von super_ bei ' + $(this).data('olel'));\n"
     "            alert(this.id);\n"
     "        }\n"
-    "        },\n"
-    "        /* READ-ONLY set : , */\n"
-    "        enumerable : false,\n"
-    "        configurable : true\n"
-    "    });\n"
+    "    },\n"
+    "    /* READ-ONLY set : , */\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
     "\n"
     "\n"
     "\n"
@@ -18036,17 +18121,9 @@ BOOL isJSExpression(NSString *s)
     "                    {\n"
     "                        // Wird in diesem Fall erst im nächsten Object.keys-Durchlauf ausgewertet\n"
     "                    }\n"
-    "                    else if (typeof value === 'string' && value.startsWith('@§.SETTER.§@'))\n"
+    "                    else if (typeof value === 'string' && value.startsWith('@§.'))\n"
     "                    {\n"
-    "\n"
-    "                    }\n"
-    "                    else if (typeof value === 'string' && value.startsWith('@§.BERECHNETERWERTABERONCE.§@'))\n"
-    "                    {\n"
-    "\n"
-    "                    }\n"
-    "                    else if (typeof value === 'string' && value.startsWith('@§.BERECHNETERWERT.§@')) // = historisch, ToDo weg!\n"
-    "                    {\n"
-    "\n"
+    "                        // Wird in diesem Fall erst im nächsten Object.keys-Durchlauf ausgewertet\n"
     "                    }\n"
     "                    else\n"
     "                    {\n"
@@ -18484,23 +18561,7 @@ BOOL isJSExpression(NSString *s)
     "            zusammengesetzterXPath = zusammengesetzterXPath + '/';\n"
     "        zusammengesetzterXPath = zusammengesetzterXPath + iv.datapath;\n"
     "\n"
-    "        // Es gibt schonmal verschiedenene Fälle\n"
-    "        if (iv.datapath.length == 0)\n"
-    "        {\n"
-    "            //alert('Leerer DP! This is ToDo!');\n"
-    "        }\n"
-    "        else if (iv.datapath.endsWith('/text()'))\n"
-    "        {\n"
-    "            setAbsoluteDataPathIn(id,zusammengesetzterXPath);\n"
-    "        }\n"
-    "        else if (iv.datapath.contains('@'))\n"
-    "        {\n"
-    "            setAbsoluteDataPathIn(id,zusammengesetzterXPath);\n"
-    "        }\n"
-    "        else\n"
-    "        {\n"
-    "            throw new TypeError('Unhandled Object-instantiation with special instancevar datapath.');\n"
-    "        }\n"
+    "        setAbsoluteDataPathIn(id,zusammengesetzterXPath);\n"
     "    }\n"
     "    else\n"
     "    {\n"
@@ -18745,7 +18806,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
-    "//  class = basegrid (native class) - To Do                  //\n"
+    "//  class = basegrid (native class) - To Do -> Hol von http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/basegrid.lzx                  //\n"
     "///////////////////////////////////////////////////////////////\n"
     "oo.basegrid = function() {\n"
     "  this.name = 'basegrid';\n"
@@ -19169,6 +19230,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "///////////////////////////////////////////////////////////////\n"
     "//  class = baseformitem (native class)                      //\n"
+    "// ToDo -> Nimm den hier: http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/baseformitem.lzx\n"
     "///////////////////////////////////////////////////////////////\n"
     "oo.baseformitem = function(textBetweenTags) {\n"
     "  if(typeof(textBetweenTags) === 'undefined')\n"

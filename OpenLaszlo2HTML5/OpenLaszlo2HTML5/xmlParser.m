@@ -584,6 +584,15 @@ void OLLog(xmlParser *self, NSString* s,...)
         s = [regexp stringByReplacingMatchesInString:s options:0 range:NSMakeRange(0, [s length]) withTemplate:@""];
 
 
+    // I think we don't need to watch functions! So remove them!
+    // Alle Ausdrücke, die mit '(' enden werden mal entfernt.
+    pattern = @"[^\\W\\d](\\w|[.]{1,2}(?=\\w))*\\(";
+    regexp = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:&error];
+    numberOfMatches = [regexp numberOfMatchesInString:s options:0 range:NSMakeRange(0, [s length])];
+    if (numberOfMatches > 0)
+        s = [regexp stringByReplacingMatchesInString:s options:0 range:NSMakeRange(0, [s length]) withTemplate:@""];
+
+
     // Okay, falls es ein ? : Ausdruck ist, remove nun alles nach dem ? (inklusive dem ?)
     s = [[s componentsSeparatedByString: @"?"] objectAtIndex:0];
 
@@ -3816,17 +3825,20 @@ didStartElement:(NSString *)elementName
             rerunxpath = [attributeDict valueForKey:@"rerunxpath"];
         }
 
+        NSString *dp = @"";
         if ([attributeDict valueForKey:@"xpath"])
         {
             self.attributeCount++;
             NSLog(@"Setting the attribute 'xpath' as argument for the datapointer.");
+
+            dp = [attributeDict valueForKey:@"xpath"];
         }
         else
         {
-            [self instableXML:@"Ein datapointer ohne 'xpath'-Attribut macht wohl keinen Sinn."];
+            //[self instableXML:@"Ein datapointer ohne 'xpath'-Attribut macht wohl keinen Sinn."];
+            // Muss ich passieren lassen, ist gemäß Beispiel 37.14 gültig
         }
 
-        NSString *dp = [attributeDict valueForKey:@"xpath"];
 
         if ([dp hasPrefix:@"${"])
         {
@@ -3838,10 +3850,10 @@ didStartElement:(NSString *)elementName
         else
         {
             // Dann in Anführungszeichen setzen:
-            if ([dp length] > 0)
-            {
-                dp = [NSString stringWithFormat:@"'%@'",dp];
-            }
+            // if ([dp length] > 0)
+            // Hmmm, ka mehr, wo das herkam, aber wegen Beispiel 37.14
+            // muss der dp stets gibt in Anführungsstrichte gesetzt werden.
+            dp = [NSString stringWithFormat:@"'%@'",dp];
         }
 
 
@@ -4410,8 +4422,11 @@ didStartElement:(NSString *)elementName
         }
         else
         {
+            BOOL pathAngabe = NO;
             if ([value hasPrefix:@"$path{"])
             {
+                pathAngabe = YES;
+
                 value = [self removeOccurrencesOfDollarAndCurlyBracketsIn:value];
 
                 [o appendString:@"\n  // Ein relativer Datapath für dieses Attribut.\n"];
@@ -4526,7 +4541,16 @@ didStartElement:(NSString *)elementName
                     // Wenn wir ein Attribut von canvas haben, dann so früh wie möglich bekannt machen,
                     // da z. B. 'datasets' auf diese Attribute schon zugreifen.
                     // Aber auch andere Attribute müssen so früh wie möglich bekannt sein.
-                    [self.jsOutput appendString:o];
+                    if (pathAngabe)
+                    {
+                        // Wegen Beispiel 37.13 gesondert setzen, damit der relative dp nicht vor dem
+                        // absoluten dp bekannt ist:
+                        [self.jsComputedValuesOutput appendString:o];
+                    }
+                    else
+                    {
+                        [self.jsOutput appendString:o];
+                    }
                 }
             }
         }
@@ -4863,12 +4887,13 @@ didStartElement:(NSString *)elementName
             }
             else
             {
-                //[self.output appendString:@" value=\""];
-                //[self.output appendString:[attributeDict valueForKey:@"text"]];
-                //[self.output appendString:@"\""];
-                // das war früher nötig, als wir noch <input type="button"> hatten
-                // Jetzt neu einfach ausgeben:
+                // Damit es bündig ist:
+                [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+
                 [self.output appendString:[attributeDict valueForKey:@"text"]];
+
+                // Damit der schließende 'Button'-Tag ebenfalls bündig ist
+                [self.output appendString:@"\n"];
             }
         }
 
@@ -6030,6 +6055,10 @@ didStartElement:(NSString *)elementName
             NSLog(@"Using the attribute 'title' as heading for the tabsheet.");
 
             title = [attributeDict valueForKey:@"title"];
+
+            // Zusätzlich im Element speichern, da es ausgelesen wird
+            [self.jsOutput appendString:@"\n  // Attribut 'title' als 'myTitle' setzen\n"];
+            [self.jsOutput appendFormat:@"  %@.myTitle = '%@';\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"info"]];
         }
 
 
@@ -12445,7 +12474,8 @@ BOOL isJSExpression(NSString *s)
     "            }\n"
     "\n"
     "            // Anscheinend muss ich unser internes data mit dem gerade gesetzten Wert aktualisieren\n"
-    "            dp.data = dp.p.serialize();\n"
+    "            // Muss über den XMLSerializer() gehen, sonst kompiliert Beispiel 37.13 nicht\n"
+    "            dp.data = (new XMLSerializer()).serializeToString(dp.p);\n"
     "\n"
     "            // Wird gleich erst zur topNode, aber heißt schonmal so\n"
     "            var topNode = dp.p;\n"
@@ -12567,8 +12597,15 @@ BOOL isJSExpression(NSString *s)
     "            if (xpath.endsWith('/name()'))\n"
     "                xpath = xpath.substr(0,xpath.length-7);\n"
     "\n"
+    "            // Die korrekte Syntax für 'last()' ist ein bisschen anders und muss korrigiert werden\n"
+    "            if (xpath.endsWith('/last()'))\n"
+    "            {\n"
+    "                xpath = xpath.substr(0,xpath.length-7) + '[last()]';\n"
+    "            }\n"
+    "\n"
     "\n"
     "            // Gets all nodes: var xpath = '/' + this.datasetName + '//*';\n"
+    "\n"
     "\n"
     "            var node = undefined;\n"
     "            var nodeValue = undefined;\n"
@@ -12919,7 +12956,10 @@ BOOL isJSExpression(NSString *s)
     "                }\n"
     "                else\n"
     "                {\n"
-    "                    query = this.xpath + '/' + query;\n"
+    "                    if (!this.xpath.endsWith('/') && !query.startsWith('/'))\n"
+    "                        query = this.xpath + '/' + query;\n"
+    "                    else\n"
+    "                        query = this.xpath + query;\n"
     "                }\n"
     "            }\n"
     "            else\n"
@@ -12961,6 +13001,12 @@ BOOL isJSExpression(NSString *s)
     "            if (this.arrayForXpathQuery.length > 1)\n"
     "            {\n"
     "                returnValue = this.arrayForXpathQuery;\n"
+    "            }\n"
+    "            // Wenn Request mit 'last()' endet, will er den letzten index haben?\n"
+    "            // Diesen Eindruck vermittelt zumindestens das Beispiel 37.14\n"
+    "            if (query.endsWith('/last()'))\n"
+    "            {\n"
+    "                returnValue = this.arrayForXpathQuery.length;\n"
     "            }\n"
     "\n"
     "\n"
@@ -13177,10 +13223,14 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            if (this.p != null)\n"
     "            {\n"
-    "                // Bei einer TextNode muss ich xpath aktualisieren - // ich denke legacy code\n"
-    "                if (this.p.nodeType == 1)\n"
+    "                // Ich MUSS den 'xpath' aktualisieren, damit Beispiel 37.13 klappt!\n"
+    "                // Und zwar bei einer Textnode anders als bei einer Elementnode\n"
+    "                if (this.p.nodeType == 3) // Textnode\n"
     "                {\n"
-    "                    // Auch XPath aktualisieren:\n"
+    "                    this.xpath = this.xpath + '/text()';\n"
+    "                }\n"
+    "                else\n"
+    "                {\n"
     "                    this.xpath = this.xpath + '/' + this.getNodeName() + '[1]';\n"
     "                }\n"
     "\n"
@@ -14804,7 +14854,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// animate() - nachimplementiert                       //\n"
+    "// animate()                                           //\n"
     "/////////////////////////////////////////////////////////\n"
     "var animateFunction = function (prop,to,duration,isRelative,moreArgs,motion) {\n"
     "    // Animationen mit gemischten process-Angaben (sequential,simultaneous) klappen noch nicht...\n"
@@ -15080,6 +15130,21 @@ BOOL isJSExpression(NSString *s)
     "    get : function() {\n"
     "        return 3; // To Do\n"
     "    },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Getter for 'subnodes'                               //\n"
+    "// Aus der Doku: An array of all of the nodes which consider this node their parent.//\n"
+    "// This list is similar to the subviews list, but it contains//\n"
+    "// all the children of this node, not just the view children.//\n"
+    "// (To Do)                                             //\n"
+    "// READ-ONLY                                           //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(HTMLElement.prototype, 'subnodes', {\n"
+    "    get : function(){ return this.subviews; },\n"
+    "    /* READ-ONLY set : , */\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -16330,7 +16395,6 @@ BOOL isJSExpression(NSString *s)
     "    configurable : true\n"
     "});\n"
     "\n"
-    "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Getter for 'subviews'                               //\n"
     "// READ-ONLY                                           //\n"
@@ -17098,8 +17162,9 @@ BOOL isJSExpression(NSString *s)
     "        var dp = $(el).data('datapathobject_');\n"
     "\n"
     "        // Ich MUSS den Datapointer aber, wenn ich ihn schon nicht neu anlege, zumindestens neu initialisieren\n"
-    "        $(el).data('datapathobject_').init(path);\n"
-    "        $(el).data('datapathobject_').setXPath(path);\n"
+    "        // Hmmm, aber dann kompiliert Beispiel 37.13 nicht! Deswegen auskommentiert\n"
+    "        //$(el).data('datapathobject_').init(path);\n"
+    "        //$(el).data('datapathobject_').setXPath(path);\n"
     "    }\n"
     "\n"
     "\n"
@@ -17424,8 +17489,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "    // I think we don't need to watch functions! So remove them!\n"
-    "    // Alle Ausdrücke, die mit () enden werden mal entfernt.\n"
-    "    s = s.replace(/[^\\W\\d](\\w|[.]{1,2}(?=\\w))*\\(\\)/g,'');\n"
+    "    // Alle Ausdrücke, die mit '(' enden werden mal entfernt.\n"
+    "    s = s.replace(/[^\\W\\d](\\w|[.]{1,2}(?=\\w))*\\(/g,'');\n"
     "\n"
     // Noch nicht nach JS übertragen, aber die Logik dahinter wirkt eh etwas unsauber
     //"// Okay, falls es ein ? : Ausdruck ist, remove nun alles nach dem ? (inklusive dem ?)\n"

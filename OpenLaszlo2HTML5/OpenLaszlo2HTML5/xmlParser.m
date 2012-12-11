@@ -1513,7 +1513,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
-        // Bei Windows muss auch der content vergrößert werden
+        // Bei 'window' muss auch der content vergrößert werden
         if ([elemName isEqualToString:@"window"])
         {
             [s appendString:@"\n  // Höhe/Breite des umgebenden Elements u. U. vergrößern\n"];
@@ -1541,26 +1541,6 @@ void OLLog(xmlParser *self, NSString* s,...)
          [self.jQueryOutput appendFormat:@"    $('#%@').parent().width(w);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
          */
     }
-}
-
-
-
-// titlewidth hier extra setzen, außerhalb addCSS, titlewidth bezieht sich  immer auf den Text VOR
-// einem input-Feld und nicht auf das input-Feld selber.
-// @deprecated (sobald alle Klassen ausgewertet werden)
-- (NSMutableString*) addTitlewidth:(NSDictionary*) attributeDict
-{
-    NSMutableString *titlewidth = [[NSMutableString alloc] initWithString:@""];
-
-    if ([attributeDict valueForKey:@"titlewidth"])
-    {
-        self.attributeCount++;
-        NSLog(@"Setting the attribute 'titlewidth' as width for the leading text of the input-field.");
-
-        [titlewidth appendFormat:@"width:%@px;",[attributeDict valueForKey:@"titlewidth"]];
-    }
-
-    return titlewidth;
 }
 
 
@@ -5127,14 +5107,8 @@ didStartElement:(NSString *)elementName
         // WOW, dieses vorangehende <br /> als Lösung zu setzen, hat mich 3 Stunden Zeit gekostet...
         // Quatsch, jetzt nach der neuen Lösung.
         [self.output appendString:@"<div class=\"div_combobox\">\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
 
-
-        [self.output appendString:@"<span style=\""];
-        [self.output appendString:[self addTitlewidth:attributeDict]];
-        [self.output appendString:@"\">"];
-        [self.output appendString:@"</span>\n"];
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
 
@@ -5279,7 +5253,6 @@ didStartElement:(NSString *)elementName
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<span class=\"div_text\" onclick=\"$(this).prev().trigger('click');\" style=\"top:2px;left:20px;"];
-        [self.output appendString:[self addTitlewidth:attributeDict]];
         [self.output appendString:@"\">"];
 
 
@@ -5375,19 +5348,11 @@ didStartElement:(NSString *)elementName
         element_bearbeitet = YES;
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
-        [self.output appendString:@"<div class=\"div_textfield_ohne_vorangehenden_text\">\n"];
+        [self.output appendString:@"<div class=\"div_textfield\">\n"];
 
 
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
-
-        [self.output appendString:@"<span style=\""];
-        [self.output appendString:[self addTitlewidth:attributeDict]];
-        [self.output appendString:@"\">"];
-
-
-        [self.output appendString:@"</span>\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
 
         if ([attributeDict valueForKey:@"multiline"] && [[attributeDict valueForKey:@"multiline"] isEqualToString:@"true"])
         {
@@ -5428,122 +5393,6 @@ didStartElement:(NSString *)elementName
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
     }
-
-
-
-
-
-
-
-    if ([elementName isEqualToString:@"BDSeditdate___DeleteMe"])
-    {
-        element_bearbeitet = YES;
-
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"<div class=\"div_datepicker\" >\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
-
-        [self.output appendString:@"<span style=\""];
-        [self.output appendString:[self addTitlewidth:attributeDict]];
-        [self.output appendString:@"\">"];
-
-        // Wenn im Attribut title Code auftaucht, dann müssen wir es dynamisch setzen
-        // müssen aber erst abwarten bis wir die ID haben, weil wir die für den Zugriff brauchen.
-        // <span> drum herum, damit ich per jQuery darauf zugreifen kann
-        BOOL titelDynamischSetzen = NO;
-        if ([attributeDict valueForKey:@"title"])
-        {
-            self.attributeCount++;
-            NSLog(@"Setting the attribute 'title' in <span>-tags as text in front of datepicker.");
-            if ([[attributeDict valueForKey:@"title"] hasPrefix:@"$"])
-            {
-                titelDynamischSetzen = YES;
-                [self.output appendString:@"CODE! - Wird dynamisch mit jQuery ersetzt."];
-            }
-            else
-            {
-                [self.output appendString:[attributeDict valueForKey:@"title"]];
-            }
-        }
-        [self.output appendString:@"</span>\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
-
-        [self.output appendString:@"<input type=\"text\""];
-
-        NSString *theId =[self addIdToElement:attributeDict];
-
-
-
-        // Jetzt erst haben wir die ID und können diese nutzen für den jQuery-Code
-        if (titelDynamischSetzen)
-        {
-            NSString *code = [attributeDict valueForKey:@"title"];
-
-            code = [self makeTheComputedValueComputable:code];
-
-            [self.jQueryOutput appendString:@"\n  // Datepicker-Text wird hier dynamisch gesetzt\n"];
-            [self.jQueryOutput appendFormat:@"  $('#%@').prev().text(%@);\n",theId,code];
-        }
-
-
-        [self.output appendString:@" style=\""];
-
-
-        [self.output appendString:[self addCSSAttributes:attributeDict]];
-
-        [self.output appendString:@"margin-left:4px;\" />\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"</div>\n"];
-
-
-        // Jetzt noch den jQuery-Code für den Datepicker
-        [self.jQueryOutput appendString:@"\n  // Für das mit dieser id verbundene input-Field setzen wir einen jQuery UI Datepicker\n"];
-        [self.jQueryOutput appendString:@"  // Aber bei iOS-Devices nutzen wir den eingebauten Datepicker\n"];
-        [self.jQueryOutput appendFormat:@"  if (isiOS())\n    document.getElementById('%@').setAttribute('type', 'date');\n  else\n    $('#%@').datepicker();\n",theId,theId];
-
-
-
-
-        if ([attributeDict valueForKey:@"dateErrorMaxDate"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'dateErrorMaxDate'.");
-        }
-        if ([attributeDict valueForKey:@"maxdate"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'maxdate'.");
-        }
-        if ([attributeDict valueForKey:@"mindate"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'mindate'.");
-        }
-        if ([attributeDict valueForKey:@"restrictyear"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'restrictyear'.");
-        }
-        if ([attributeDict valueForKey:@"datedays"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'datedays'.");
-        }
-        if ([attributeDict valueForKey:@"allowfuturedate"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'allowfuturedate'.");
-        }
-        if ([attributeDict valueForKey:@"simple"])
-        {
-            self.attributeCount++;
-            NSLog(@"Skipping the attribute 'simple'.");
-        }
-
-        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",theId]];
-    }
-
-
 
 
 
@@ -8785,7 +8634,6 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"greenstyle"] ||
         [elementName isEqualToString:@"goldstyle"] ||
         [elementName isEqualToString:@"purplestyle"] ||
-        [elementName isEqualToString:@"BDSeditdate___DeleteMe"] ||
         [elementName isEqualToString:@"dragstate"] ||
         [elementName isEqualToString:@"frame"] ||
         [elementName isEqualToString:@"font"] ||
@@ -10407,21 +10255,6 @@ BOOL isJSExpression(NSString *s)
     "    pointer-events: auto;\n"
     "}\n"
     "\n"
-    "/* Standard-datepicker (das umgebende Div) */\n"
-    ".div_datepicker\n"
-    "{\n"
-    "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
-    "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
-    "    width:100%; /* Ein datepicker soll immer die ganze Zeile einnehmen. */\n"
-    "    height:30px; /* Sonst ist er nicht richtig anklickbar. */\n"
-    "    line-height:26px; /* Damit der Text vor dem Datepicker vertikal zentriert ist. */\n"
-    "    text-align:left;\n"
-    "    padding:4px;\n"
-    "    margin-top:8px;\n"
-    "\n"
-    "    pointer-events: auto;\n"
-    "}\n"
-    "\n"
     "/* Standard-checkbox (das umgebende Div) */\n"
     "/* Standard-radiobutton (das umgebende Div) */\n"
     ".div_checkbox\n"
@@ -10476,7 +10309,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/* Standard-Textfield (das umgebende Div) */\n"
     "/* Standard-Slider (das umgebende Div) */\n"
-    ".div_textfield, .div_slider\n"
+    ".div_slider\n"
     "{\n"
     "    width:100%; /* Eine combobox soll immer die ganze Zeile einnehmen. */\n"
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
@@ -10490,7 +10323,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/* Das Search-field, welches keinen vorangehenden Text hat, braucht derzeit noch eine Sonderbehandlung */\n"
     "/* Das darf nicht width:100% sein, sonst fällt der Search-Button hinten runter. */\n"
-    ".div_textfield_ohne_vorangehenden_text\n"
+    ".div_textfield\n"
     "{\n"
     "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
@@ -18211,151 +18044,147 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
-    "  // Durchlauf 2\n"
-    "  // Alle Attribute von Vorfahren werden geerbt. Dazu solange nach Vorfahren suchen, bis 'view' kommt\n"
-    "  // und die Attribute übernehmen (bei gleichen gelten die hierachiemäßig allernächsten).\n"
-    "  // Außerdem den HTML-Content von Vorfahren einfügen und individuelle ID vergeben.\n"
-    "  var currentObj = obj; // Zwischenspeichern\n"
-    // Warum werte ich dies hier vorwärts aus. Ich denke, dass ich beim allerletzten Objekt anfangen muss
-    // und mich dann über die Vererbungshierachie bis zum aktuellen Objekt durchhangeln muss.
-    // Deswegen arbeite ich hier ab jetzt einfach auch mit dem rueckwaertsArray
-    //"  while (obj.inherit !== undefined)\n"
-    "  for (var i = 0;i<rueckwaertsArray.length;i++)\n"
-    "  {\n"
-    "    var obj = rueckwaertsArray[i];\n" // <-- Auch neu jetzt dadurch.
-    "\n"
-    "\n"
-    "    // Zuerst den HTML-Content des Vorfahren einfügen\n"
-    "    // Per append vom tiefsten Element beginnend!\n"
-    "    // Vorher aber die ID ersetzen\n"
-    "    // Irgendwas stimmt in der Logik noch nicht... Nach meinem Verständnis erben alle Klassen von view\n"
-    "    // So steht es auch in der Doku. Deswegen ist um alle Klassen eine View <div class='div-standard'> herumgebaut, an welche dann immer appended wird.\n"
-    "    // Dies geht aber nicht auf z. B. bei extends='text', dann nämlich muss die äußerste view ein\n"
-    "    // <div class='div_text'> sein. (obwohl 'text' ja eigentlich auch nochmal von view erbt...)\n"
-    "    // Dies äußerst sich darin, dass z. B. ein onclick-Handler auf höchster Ebene der Klasse mit 'this' auch\n"
-    "    // Methoden von <text> aufrufen kann (2. Beispiel von <text> in OL-Doku)\n"
-    "    // Derzeitige Lösung: Bei Text (und einigen anderen...) nicht appenden, sondern ersetzen...\n"
-    "    // (und die Attribute, Methoden, Events und CSS übernehmen)\n"
-    "    if (obj.inherit.name === 'text' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button' || obj.inherit.name === 'basecombobox' || obj.inherit.name === 'baselistitem'\n"
-    "    || obj.inherit.name === 'drawview' || obj.inherit.name === 'edittext')\n"
+    "    // Durchlauf 2\n"
+    "    // Alle Attribute von Vorfahren werden geerbt. Dazu solange nach Vorfahren suchen, bis 'view' kommt\n"
+    "    // und die Attribute übernehmen (bei gleichen gelten die hierachiemäßig allernächsten).\n"
+    "    // Außerdem den HTML-Content von Vorfahren einfügen und individuelle ID vergeben.\n"
+    "    var currentObj = obj; // Zwischenspeichern\n"
+    "    for (var i = 0;i<rueckwaertsArray.length;i++)\n"
     "    {\n"
-    "        // Alle auf vorherigen Vererbungs-Ebenen hinzugefügten Methoden sichern\n"
-    "        var gesicherteMethoden = {};\n"
-    "        for(var prop in id) {\n"
-    "            if (id.hasOwnProperty(prop) && typeof id[prop] === 'function') {\n"
-    "                gesicherteMethoden[prop] = id[prop];\n"
-    "            }\n"
-    "        }\n"
-    "\n"
-    "        // Events sichern\n"
-    //"        var gesicherteEvents = $(id).data('events'); // Will break on jQuery 1.8\n"
-    "        var gesicherteEvents = $._data(id,'events'); // Will work on jQuery 1.8\n"
-    "\n"
-    "        // Kinder sichern\n"
-    "        // Ist klonen hier überhaupt nötig? Falls jQuery die Kinder aus dem Speicher entfernt,\n"
-    "        // sobald das Elternelement gelöscht ist, zur Sicherheit klonen.\n"
-    "        // var gesicherteKinder = $(id).children().clone(true);\n"
+    "        var obj = rueckwaertsArray[i];\n"
     "\n"
     "\n"
-    "        // Da wir ersetzen, bekommt dieses Element den Universal-id-Namen\n"
-    "        obj.inherit.contentHTML = replaceID(obj.inherit.contentHTML,''+$(id).attr('id'));\n"
-    "         // Super-Spezialfall bei 'edittext', weil 'type'-property im IE nicht änderbar, deswegen noch im String ändern\n"
-    "        if (obj.inherit.name === 'edittext')\n"
-    "        {\n"
-    "            if (iv.password && iv.password === true)\n"
-    "            {\n"
-    "                obj.inherit.contentHTML = obj.inherit.contentHTML.replace(/text/, 'password'); // ohne 'g'(lobal), nur erster Match\n"
-    "            }\n"
-    "            else if (iv.pattern && iv.pattern === '[0-9a-z@_.\\-]*')\n"
-    "            {\n"
-    "                obj.inherit.contentHTML = obj.inherit.contentHTML.replace(/text/, 'email'); // ohne 'g'\n"
-    "            }\n"
-    "        }\n"
+    "      // Zuerst den HTML-Content des Vorfahren einfügen\n"
+    "      // Per append vom tiefsten Element beginnend!\n"
+    "      // Vorher aber die ID ersetzen\n"
+    "      // Irgendwas stimmt in der Logik noch nicht... Nach meinem Verständnis erben alle Klassen von view\n"
+    "      // So steht es auch in der Doku. Deswegen ist um alle Klassen eine View <div class='div-standard'> herumgebaut, an welche dann immer appended wird.\n"
+    "      // Dies geht aber nicht auf z. B. bei extends='text', dann nämlich muss die äußerste view ein\n"
+    "      // <div class='div_text'> sein. (obwohl 'text' ja eigentlich auch nochmal von view erbt...)\n"
+    "      // Dies äußerst sich darin, dass z. B. ein onclick-Handler auf höchster Ebene der Klasse mit 'this' auch\n"
+    "      // Methoden von <text> aufrufen kann (2. Beispiel von <text> in OL-Doku)\n"
+    "      // Derzeitige Lösung: Bei Text (und einigen anderen...) nicht appenden, sondern ersetzen...\n"
+    "      // (und die Attribute, Methoden, Events und CSS übernehmen)\n"
+    "      if (obj.inherit.name === 'text' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button' || obj.inherit.name === 'basecombobox' || obj.inherit.name === 'baselistitem'\n"
+    "      || obj.inherit.name === 'drawview' || obj.inherit.name === 'edittext')\n"
+    "      {\n"
+    "          // Alle auf vorherigen Vererbungs-Ebenen hinzugefügten Methoden sichern\n"
+    "          var gesicherteMethoden = {};\n"
+    "          for(var prop in id) {\n"
+    "              if (id.hasOwnProperty(prop) && typeof id[prop] === 'function') {\n"
+    "                  gesicherteMethoden[prop] = id[prop];\n"
+    "              }\n"
+    "          }\n"
     "\n"
-    "        // Kurz vorher olel-name sichern, um gleich im parent den Verweis über den Namen zu korrigieren:\n"
-    "        var nameProperty = $(id).data('name');\n"
-    "        var parentElement = id.parent; // Muss ich auch vorher speichern, danach iwie nicht erreichbar\n"
-    "        var parentElement2 = id.immediateparent;\n"
-    "        // Bei element321 (BDSedittext) u. a. ist iwie ein Doppelsprung nötig, weil Elternelement eins tiefer verschachtelt. KA warum (iwie weil Klasse in Klasse instanziert wird)\n"
-    "        if (nameProperty && parentElement && !parentElement[nameProperty])\n"
-    "        {\n"
-    "            while (!parentElement[nameProperty])\n"
-    "            {\n"
-    "                // Rein als Schutz, falls er die property in gar keinem Elternelement findet\n"
-    "                if ($(parentElement).length == 0)\n"
-    "                {\n"
-    "                    console.log('Serious problem in interpretObject(): Could not find a parent element with the name attribue '+nameProperty);\n"
-    "                    break;\n"
-    "                }\n"
+    "          // Events sichern\n"
+    //"          var gesicherteEvents = $(id).data('events'); // Will break on jQuery 1.8\n"
+    "          var gesicherteEvents = $._data(id,'events'); // Will work on jQuery 1.8\n"
     "\n"
-    "                parentElement = parentElement.immediateparent;\n"
-    "                if (parentElement === undefined)\n"
-    "                    break;\n"
-    "            }\n"
-    "        }\n"
-    "\n"
-    "        var theSavedCSSFromRemovedElement = $(id).attr('style');\n"
-    "\n"
-    "        if (kinderVorDemAppenden.length > 0)\n"
-    "        {\n"
-    "            // Wenn ich Kinder habe gibt es Monster-Probleme. Er entfernt immer alle data()-Inhalte, wenn ich die Kinder überschreibe\n"
-    "            // obowhl ich sie vorher geklont habe und später anfüge, nützt selbst das nichts. Deswegen zwischenspeichern der Kinder IM DOM\n"
-    "            $('body').append('<div id=\"tempPlace__\"></div>');\n"
-    "            $('#tempPlace__').append(kinderVorDemAppenden); //Children rübermoven\n"
-    "            $(id).replaceWith(obj.inherit.contentHTML);\n"
-    "            id = document.getElementById(id.id);\n"
-    "\n"
-    "            $(id).append(kinderVorDemAppenden);\n"
-    "            $('#tempPlace__').remove();\n"
-    "        }\n"
-    "        else\n"
-    "        {\n"
-    "            $(id).replaceWith(obj.inherit.contentHTML);\n"
-    "        }\n"
-    "\n"
-    "        // Interne ID dieser Funktion neu setzen\n"
-    "        id = document.getElementById(id.id);\n"
-    "        // Und externen Elementnamen neu setzen\n"
-    "        window[id.id] = id;\n"
-    "        // nameProperty im übergeordneten parent-Element korrigieren\n"
-    "        if (parentElement && nameProperty)\n"
-    "        {\n"
-    "            parentElement[nameProperty] = id;\n"
-    "\n"
-    "            if (parentElement2)\n"
-    "                parentElement2[nameProperty] = id;\n"
-    "        }\n"
-    "        if (nameProperty)\n"
-    "        {\n"
-    "            // Auch data-name wieder herstellen, weil viele jQuery-Abfragen über dieses Attribut gehen und nicht über $.data()\n"
-    "            $(id).attr('data-name',nameProperty)\n"
-    "        }\n"
+    "          // Kinder sichern\n"
+    "          // Ist klonen hier überhaupt nötig? Falls jQuery die Kinder aus dem Speicher entfernt,\n"
+    "          // sobald das Elternelement gelöscht ist, zur Sicherheit klonen.\n"
+    "          // var gesicherteKinder = $(id).children().clone(true);\n"
     "\n"
     "\n"
-    "        // Und das gerettete CSS wieder einsetzen\n"
-    "        $(id).attr('style',theSavedCSSFromRemovedElement);\n"
+    "          // Da wir ersetzen, bekommt dieses Element den Universal-id-Namen\n"
+    "          obj.inherit.contentHTML = replaceID(obj.inherit.contentHTML,''+$(id).attr('id'));\n"
+    "          // Super-Spezialfall bei 'edittext', weil 'type'-property im IE nicht änderbar, deswegen noch im String ändern\n"
+    "          if (obj.inherit.name === 'edittext')\n"
+    "          {\n"
+    "              if (iv.password && iv.password === true)\n"
+    "              {\n"
+    "                  obj.inherit.contentHTML = obj.inherit.contentHTML.replace(/text/, 'password'); // ohne 'g'(lobal), nur erster Match\n"
+    "              }\n"
+    "              else if (iv.pattern && iv.pattern === '[0-9a-z@_.\\-]*')\n"
+    "              {\n"
+    "                  obj.inherit.contentHTML = obj.inherit.contentHTML.replace(/text/, 'email'); // ohne 'g'\n"
+    "              }\n"
+    "          }\n"
     "\n"
-    "        // Und die zuvor gesicherten events wieder einsetzen\n"
-    "        if (gesicherteEvents) // Schutz gegen undefined, sonst Absturz bei undefined\n"
-    "        {\n"
-    "            $.each(gesicherteEvents, function() {\n"
-    "                $.each(this, function() {\n"
-    "                    $(id).on(this.type, this.handler);\n"
-    "                });\n"
-    "            });\n"
-    "        }\n"
+    "          // Kurz vorher olel-name sichern, um gleich im parent den Verweis über den Namen zu korrigieren:\n"
+    "          var nameProperty = $(id).data('name');\n"
+    "          var parentElement = id.parent; // Muss ich auch vorher speichern, danach iwie nicht erreichbar\n"
+    "          var parentElement2 = id.immediateparent;\n"
+    "          // Bei element321 (BDSedittext) u. a. ist iwie ein Doppelsprung nötig, weil Elternelement eins tiefer verschachtelt. KA warum (iwie weil Klasse in Klasse instanziert wird)\n"
+    "          if (nameProperty && parentElement && !parentElement[nameProperty])\n"
+    "          {\n"
+    "              while (!parentElement[nameProperty])\n"
+    "              {\n"
+    "                  // Rein als Schutz, falls er die property in gar keinem Elternelement findet\n"
+    "                  if ($(parentElement).length == 0)\n"
+    "                  {\n"
+    "                      console.log('Serious problem in interpretObject(): Could not find a parent element with the name attribue '+nameProperty);\n"
+    "                      break;\n"
+    "                  }\n"
     "\n"
-    "        // Und die Methoden wieder herstellen\n"
-    "        Object.keys(gesicherteMethoden).forEach(function(key)\n"
-    "        {\n"
-    "            id[key] = gesicherteMethoden[key];\n"
-    "        });\n"
+    "                  parentElement = parentElement.immediateparent;\n"
+    "                  if (parentElement === undefined)\n"
+    "                      break;\n"
+    "              }\n"
+    "          }\n"
+    "\n"
+    "          var theSavedCSSFromRemovedElement = $(id).attr('style');\n"
+    "\n"
+    "          if (kinderVorDemAppenden.length > 0)\n"
+    "          {\n"
+    "              // Wenn ich Kinder habe gibt es Monster-Probleme. Er entfernt immer alle data()-Inhalte, wenn ich die Kinder überschreibe\n"
+    "              // obowhl ich sie vorher geklont habe und später anfüge, nützt selbst das nichts. Deswegen zwischenspeichern der Kinder IM DOM\n"
+    "              $('body').append('<div id=\"tempPlace__\"></div>');\n"
+    "              $('#tempPlace__').append(kinderVorDemAppenden); //Children rübermoven\n"
+    "              $(id).replaceWith(obj.inherit.contentHTML);\n"
+    "              id = document.getElementById(id.id);\n"
+    "\n"
+    "              $(id).append(kinderVorDemAppenden);\n"
+    "              $('#tempPlace__').remove();\n"
+    "          }\n"
+    "          else\n"
+    "          {\n"
+    "              $(id).replaceWith(obj.inherit.contentHTML);\n"
+    "          }\n"
+    "\n"
+    "          // Interne ID dieser Funktion neu setzen\n"
+    "          id = document.getElementById(id.id);\n"
+    "          // Und externen Elementnamen neu setzen\n"
+    "          window[id.id] = id;\n"
+    "          // nameProperty im übergeordneten parent-Element korrigieren\n"
+    "          if (parentElement && nameProperty)\n"
+    "          {\n"
+    "              parentElement[nameProperty] = id;\n"
+    "\n"
+    "              if (parentElement2)\n"
+    "                  parentElement2[nameProperty] = id;\n"
+    "          }\n"
+    "          if (nameProperty)\n"
+    "          {\n"
+    "              // Auch data-name wieder herstellen, weil viele jQuery-Abfragen über dieses Attribut gehen und nicht über $.data()\n"
+    "              $(id).attr('data-name',nameProperty)\n"
+    "          }\n"
+    "\n"
+    "\n"
+    "          // Und das gerettete CSS wieder einsetzen\n"
+    "          $(id).attr('style',theSavedCSSFromRemovedElement);\n"
+    "\n"
+    "          // Und die zuvor gesicherten events wieder einsetzen\n"
+    "          if (gesicherteEvents) // Schutz gegen undefined, sonst Absturz bei undefined\n"
+    "          {\n"
+    "              $.each(gesicherteEvents, function() {\n"
+    "                  $.each(this, function() {\n"
+    "                      $(id).on(this.type, this.handler);\n"
+    "                  });\n"
+    "              });\n"
+    "          }\n"
+    "\n"
+    "          // Und die Methoden wieder herstellen\n"
+    "          Object.keys(gesicherteMethoden).forEach(function(key)\n"
+    "          {\n"
+    "              id[key] = gesicherteMethoden[key];\n"
+    "          });\n"
     "\n"
     // Muss derzeit iwie nach den Methoden kommen, damit der Kalender funktioniert
-    "        // Und alle Default-Attribute aller Vererbungsstufen (wieder) herstellen\n"
-    "        inherit_defaultplacement = assignAllDefaultAttributesAndMethods(id,rueckwaertsArray);\n"
-    "        // Und mit den konkreten Instanzvariablen wieder überschreiben\n"
-    "        assignAllInstanceAttributes(id,iv);\n"
+    "          // Und alle Default-Attribute aller Vererbungsstufen (wieder) herstellen\n"
+    "          inherit_defaultplacement = assignAllDefaultAttributesAndMethods(id,rueckwaertsArray);\n"
+    "          // Und mit den konkreten Instanzvariablen wieder überschreiben\n"
+    "          assignAllInstanceAttributes(id,iv);\n"
     "\n"
     //"        // Da wir hier ja austauschen lieber mal onaddsubview triggern, damit sich evtl. SA's anpassen können\n"
     //"        // $(id).parent().triggerHandler('onaddsubview');\n"
@@ -18370,37 +18199,37 @@ BOOL isJSExpression(NSString *s)
     //"        if (kinderVorDemAppenden.length > 0)\n"
     //"            $(id).append(kinderVorDemAppenden);\n"
     //"\n"
-    "        // Dann den kompletten JS-Code ausführen\n"
-    "        executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id'));\n"
+    "          // Dann den kompletten JS-Code ausführen\n"
+    "          executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id'));\n"
     "    }\n"
     "    else\n"
     "    {\n"
-    "      if (obj.inherit.contentHTML.length > 0)\n"
-    "      {\n"
-    "        // Damit es die IDs nicht doppelt gibt, hänge ich 'inherit.name' dran.\n"
-    "        obj.inherit.contentHTML = replaceID(obj.inherit.contentHTML,''+$(id).attr('id')+'_'+obj.inherit.name);\n"
-    //"        obj.inherit.contentHTML = replaceID(obj.inherit.contentHTML,''+$(id).attr('id'));\n"
-    //"        $(id).prepend(obj.inherit.contentHTML);\n"
-    "        if (hasValidDefaultplacement(id,obj))\n"
+    "        if (obj.inherit.contentHTML.length > 0)\n"
     "        {\n"
-    "          var place = obj.inherit.inherit.attributesDict.defaultplacement;\n"
-    "          $(id).find(\"[data-name='\"+place+\"']\").prepend(obj.inherit.contentHTML);\n"
+    "            // Damit es die IDs nicht doppelt gibt, hänge ich 'inherit.name' dran.\n"
+    "            obj.inherit.contentHTML = replaceID(obj.inherit.contentHTML,''+$(id).attr('id')+'_'+obj.inherit.name);\n"
+    //"            obj.inherit.contentHTML = replaceID(obj.inherit.contentHTML,''+$(id).attr('id'));\n"
+    //"            $(id).prepend(obj.inherit.contentHTML);\n"
+    "            if (hasValidDefaultplacement(id,obj))\n"
+    "            {\n"
+    "                var place = obj.inherit.inherit.attributesDict.defaultplacement;\n"
+    "                $(id).find(\"[data-name='\"+place+\"']\").prepend(obj.inherit.contentHTML);\n"
     "\n"
-    "          // Den ursprünglichen parent noch sichern im ersten Element mit id (für Unterscheidung parent/immediateparent)\n"
-    "          $(id).find(\"[data-name='\"+place+\"']\").find('[id]:first').data('defaultparent_',id.id)\n"
+    "                // Den ursprünglichen parent noch sichern im ersten Element mit id (für Unterscheidung parent/immediateparent)\n"
+    "                $(id).find(\"[data-name='\"+place+\"']\").find('[id]:first').data('defaultparent_',id.id);\n"
     "\n"
-    "          $(id).find(\"[data-name='\"+place+\"']\").triggerHandler('onaddsubview');\n"
+    "                $(id).find(\"[data-name='\"+place+\"']\").triggerHandler('onaddsubview');\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                $(id).append(obj.inherit.contentHTML);\n"
+    "                $(id).triggerHandler('onaddsubview');\n"
+    "            }\n"
     "        }\n"
-    "        else\n"
-    "        {\n"
-    "          $(id).append(obj.inherit.contentHTML);\n"
-    "          $(id).triggerHandler('onaddsubview');\n"
-    "        }\n"
-    "      }\n"
     "\n"
     "\n"
-    "      // Dann den kompletten JS-Code ausführen\n"
-    "      executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id')+'_'+obj.inherit.name, $(id).attr('id'));\n"
+    "        // Dann den kompletten JS-Code ausführen\n"
+    "        executeJSCodeOfThisObject(obj.inherit, id, $(id).attr('id')+'_'+obj.inherit.name, $(id).attr('id'));\n"
     "    }\n"
     "\n"
     "    // Falls hier schon von einem Vorfahren eine oninit() hinzugefügt wurde, diese jetzt schon ausführen\n"
@@ -18408,9 +18237,6 @@ BOOL isJSExpression(NSString *s)
     "    // Evtl. nachfolgende oninit()-Methoden überschrieben diese. Aber nicht schlimm, schon ausgeführt.\n"
     "    $(id).triggerHandler('onconstruct');\n"
     "    $(id).triggerHandler('oninit');\n"
-    // "\n"
-    // "    // Objekt der nächsten Vererbungs-Stufe holen\n"
-    // "    obj = obj.inherit;\n" // <-- Nein, wir gehen neuerdings ja über das 'rueckwaertsArray'
     "  }\n"
     "  obj = currentObj; // Wieder unser Original-Objekt setzen\n"
     "\n"
@@ -18464,7 +18290,7 @@ BOOL isJSExpression(NSString *s)
     "      $(id).find(\"[data-name='\"+inherit_defaultplacement+\"']\").prepend(s);\n"
     "\n"
     "      // Den ursprünglichen parent noch sichern im ersten Element mit id (für Unterscheidung parent/immediateparent)\n"
-    "      $(id).find(\"[data-name='\"+inherit_defaultplacement+\"']\").find('[id]:first').data('defaultparent_',id.id)\n"
+    "      $(id).find(\"[data-name='\"+inherit_defaultplacement+\"']\").find('[id]:first').data('defaultparent_',id.id);\n"
     "\n"
     "      $(id).find(\"[data-name='\"+inherit_defaultplacement+\"']\").triggerHandler('onaddsubview');\n"
     "    }\n"
@@ -18485,7 +18311,7 @@ BOOL isJSExpression(NSString *s)
     "  // ********* Damit 'defaultplacement' gesetzt werden kann *********\n"
     "  // ********* Die Variable, auf die defaultplacement verweist, wird hier bekannt gemacht *********\n"
     "    // Replace-IDs von contentJS ersetzen\n"
-    "    var s = replaceID(obj.contentJS,$(id).attr('id'));\n"
+    "    var s = replaceID(obj.contentNamesAndIDs,$(id).attr('id'));\n"
     "    evalCode(s);\n"
     "\n"
     // Zugriff auf 'defaultplacement' per 'id', nicht mehr per 'obj'. Das Attribut wurde ja übertragen in id bereits weiter oben.
@@ -18664,8 +18490,8 @@ BOOL isJSExpression(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "// @arg r = replacement-String\n"
     "// @arg r2 = Ersatz-replacement-String. - Erklärung bei replaceID()\n"
-    "// @arg skipContentJS = weil ich die defaultPlacement-Var, die in contentJS steckt, u. U. gesondert auslese.\n"
-    "function executeJSCodeOfThisObject(obj, id, r, r2, skipContentJS)\n"
+    "// @arg skipNames = weil ich die defaultPlacement-Var, die in contentJS steckt, u. U. gesondert auslese.\n"
+    "function executeJSCodeOfThisObject(obj, id, r, r2, skipNames)\n"
     "{\n"
     "    // Replace-IDs von contentJSHead ersetzen\n"
     "    var s = replaceID(obj.contentJSHead, r, r2);\n"
@@ -18673,11 +18499,14 @@ BOOL isJSExpression(NSString *s)
     "    if (s.length > 0)\n"
     "        evalCode(s);\n"
     "\n"
-    "    // Replace-IDs von contentNamesAndIDs ersetzen\n"
-    "    var s = replaceID(obj.contentNamesAndIDs, r, r2);\n"
-    "    // Dann den jQuery-Content hinzufügen/auswerten\n"
-    "    if (s.length > 0)\n"
-    "        evalCode(s);\n"
+    "    if (!skipNames)\n"
+    "    {\n"
+    "        // Replace-IDs von contentNamesAndIDs ersetzen\n"
+    "        var s = replaceID(obj.contentNamesAndIDs, r, r2);\n"
+    "        // Dann den jQuery-Content hinzufügen/auswerten\n"
+    "        if (s.length > 0)\n"
+    "            evalCode(s);\n"
+    "    }\n"
     "\n"
     "    // Replace-IDs von contentDataset ersetzen\n"
     "    var s = replaceID(obj.contentDataset, r, r2);\n"
@@ -18685,14 +18514,11 @@ BOOL isJSExpression(NSString *s)
     "    if (s.length > 0)\n"
     "        evalCode(s);\n"
     "\n"
-    "    if (!skipContentJS)\n"
-    "    {\n"
-    "        // Replace-IDs von contentJS ersetzen\n"
-    "        var s = replaceID(obj.contentJS, r, r2);\n"
-    "        // Dann den JS-Content hinzufügen/auswerten\n"
-    "        if (s.length > 0)\n"
-    "            evalCode(s);\n"
-    "    }\n"
+    "    // Replace-IDs von contentJS ersetzen\n"
+    "    var s = replaceID(obj.contentJS, r, r2);\n"
+    "    // Dann den JS-Content hinzufügen/auswerten\n"
+    "    if (s.length > 0)\n"
+    "        evalCode(s);\n"
     "\n"
     "    // Replace-IDs von contentLeadingJQuery ersetzen\n"
     "    var s = replaceID(obj.contentLeadingJQuery, r, r2);\n"

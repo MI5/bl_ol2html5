@@ -109,16 +109,6 @@ BOOL ownSplashscreen = NO;
 // je tiefer die Ebene, desto mehr muss ich einrücken
 @property (nonatomic) NSInteger rollUpDownVerschachtelungstiefe;
 
-@property (nonatomic) NSInteger simplelayout_y;
-@property (strong, nonatomic) NSMutableArray *simplelayout_y_spacing;
-@property (nonatomic) NSInteger firstElementOfSimpleLayout_y;
-@property (nonatomic) NSInteger simplelayout_y_tiefe;
-
-@property (nonatomic) NSInteger simplelayout_x;
-@property (strong, nonatomic) NSMutableArray *simplelayout_x_spacing;
-@property (nonatomic) NSInteger firstElementOfSimpleLayout_x;
-@property (nonatomic) NSInteger simplelayout_x_tiefe;
-
 // So können wir stets die von OpenLaszlo gesetzten ids benutzen
 @property (strong, nonatomic) NSString* zuletztGesetzteID;
 
@@ -260,12 +250,6 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize baselistitemCounter = _baselistitemCounter, idZaehler = _idZaehler, pointerWithoutNameZaehler = _pointerWithoutNameZaehler, elementeZaehler = _elementeZaehler, element_merker = _element_merker;
 
-@synthesize simplelayout_y = _simplelayout_y, simplelayout_y_spacing = _simplelayout_y_spacing;
-@synthesize firstElementOfSimpleLayout_y = _firstElementOfSimpleLayout_y, simplelayout_y_tiefe = _simplelayout_y_tiefe;
-
-@synthesize simplelayout_x = _simplelayout_x, simplelayout_x_spacing = _simplelayout_x_spacing;
-@synthesize firstElementOfSimpleLayout_x = _firstElementOfSimpleLayout_x, simplelayout_x_tiefe = _simplelayout_x_tiefe;
-
 @synthesize zuletztGesetzteID = _zuletztGesetzteID;
 
 @synthesize last_resource_name_for_frametag = _last_resource_name_for_frametag, collectedFrameResources = _collectedFrameResources;
@@ -393,16 +377,6 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.pointerWithoutNameZaehler = 0;
         self.elementeZaehler = 0;
         self.element_merker = @"";
-
-        self.simplelayout_y = 0;
-        self.simplelayout_y_spacing = [[NSMutableArray alloc] init];
-        self.firstElementOfSimpleLayout_y = YES;
-        self.simplelayout_y_tiefe = 0;
-
-        self.simplelayout_x = 0;
-        self.simplelayout_x_spacing = [[NSMutableArray alloc] init];
-        self.firstElementOfSimpleLayout_x = YES;
-        self.simplelayout_x_tiefe = 0;
 
         self.zuletztGesetzteID = ID_REPLACE_STRING;
 
@@ -1968,35 +1942,35 @@ void OLLog(xmlParser *self, NSString* s,...)
             self.attributeCount++;
             NSLog(@"Setting the attribute 'layout' as simplelayout with axis:x.");
 
-            [self becauseOfSimpleLayoutXMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:spacing andAttributes:attributeDict];
+            [self becauseOfSimpleLayoutXMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:spacing andAttributes:attributeDict andSetByAttr:@"true"];
         }
         else if ([s rangeOfString:@"axis:y"].location != NSNotFound)
         {
             self.attributeCount++;
             NSLog(@"Setting the attribute 'layout' as simplelayout with axis:y.");
 
-            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:spacing andAttributes:attributeDict];
+            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:spacing andAttributes:attributeDict andSetByAttr:@"true"];
         }
         else if ([s rangeOfString:@"x"].location != NSNotFound) // kann auch ohne 'axis' stehen
         {
             self.attributeCount++;
             NSLog(@"Setting the attribute 'layout' as simplelayout with axis:x.");
 
-            [self becauseOfSimpleLayoutXMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:spacing andAttributes:attributeDict];
+            [self becauseOfSimpleLayoutXMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:spacing andAttributes:attributeDict andSetByAttr:@"true"];
         }
         else if ([s rangeOfString:@"y"].location != NSNotFound) // kann auch ohne 'axis' stehen
         {
             self.attributeCount++;
             NSLog(@"Setting the attribute 'layout' as simplelayout with axis:y.");
 
-            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:spacing andAttributes:attributeDict];
+            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:spacing andAttributes:attributeDict andSetByAttr:@"true"];
         }
         else // kann auch außer 'spacing' gar keine Angaben zum Layout enthalten
         {
             self.attributeCount++;
             NSLog(@"Setting the attribute 'layout' as simplelayout with axis:y.");
             
-            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:spacing andAttributes:attributeDict];
+            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:spacing andAttributes:attributeDict andSetByAttr:@"true"];
         }
     }
 
@@ -2406,256 +2380,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-// Muss immer nach addIDToElement aufgerufen werden,
-// da wir auf die zuletzt gesetzte id zurückgreifen.
-// Das attributeDict brauchen wir nur, falls Y-Wert in Simplelayout Y gesetzt wurde.
-// => Dann muss ich diesen Wert überschreiben, da er keine Auswirkung haben darf.
-- (void) check4Simplelayout:(NSDictionary*) attributeDict
-{
-    // Tote Funktion
-    return;
-
-
-    // simplelayout verlassen, alsbald das letzte Geschwisterchen erreicht ist
-    BOOL wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y = NO;
-    if (self.simplelayout_y-1 == self.verschachtelungstiefe)
-    {
-        self.simplelayout_y = 0;
-        [self.simplelayout_y_spacing removeLastObject];
-        self.firstElementOfSimpleLayout_y = YES;
-        self.simplelayout_y_tiefe--;
-
-        // Wenn wir ein tiefer verschachteltes simlelayout gerade verlassen, merken wir uns das.
-        // Das heißt ein anderes simplelayout (y) ist noch aktiv
-        if (self.simplelayout_y_tiefe > 0)
-            wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y = YES;
-    }
-
-
-    // simplelayout verlassen, alsbald das letzte Geschwisterchen erreicht ist
-    BOOL wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_X = NO;
-    if (self.simplelayout_x-1 == self.verschachtelungstiefe)
-    {
-        self.simplelayout_x = 0;
-        [self.simplelayout_x_spacing removeLastObject];
-        self.firstElementOfSimpleLayout_x = YES;
-        self.simplelayout_x_tiefe--;
-
-
-        // Wenn wir ein tiefer verschachteltes simlelayout gerade verlassen, merken wir uns das.
-        // Das heißt ein anderes simplelayout (x) ist noch aktiv
-        if (self.simplelayout_x_tiefe > 0)
-            wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_X = YES;
-    }
-
-
-
-
-
-
-    NSString *id = self.zuletztGesetzteID;
-    // Hol die aktuell geltende SpacingHöhe (für Simplelayout Y + x)
-    NSInteger spacing_y = [[self.simplelayout_y_spacing lastObject] integerValue];
-    NSInteger spacing_x = [[self.simplelayout_x_spacing lastObject] integerValue];
-
-
-
-    // Simplelayout Y
-    if (wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y)
-    {
-        NSLog(@"'top' korrigieren, weil 2 ineinander verschachtelte Y-Simplelayouts.");
-
-        [self.jsOutput appendString:@"  // Korrektur von 'top' wegen zweier ineinander verschachtelteter Simplelayout Y:\n"];
-        [self.jsOutput appendString:@"  if ("];
-        [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
-        [self.jsOutput appendFormat:@"$('#%@').prev().get(0).lastElementChild)\n",id];
-
-        [self.jsOutput appendString:@"    document.getElementById('"];
-        [self.jsOutput appendString:id];
-
-        // parseInt() removes the "px" at the end
-        [self.jsOutput appendString:@"').style.top = ("];
-
-        [self.jsOutput appendFormat:@"parseInt($('#%@').prev().get(0).lastElementChild.offsetTop)+",id];
-
-        [self.jsOutput appendFormat:@"parseInt($('#%@').prev().get(0).lastElementChild.offsetHeight)+",id];
-
-        [self.jsOutput appendFormat:@"%ld", spacing_y];
-        [self.jsOutput appendString:@") + 'px';\n\n"];
-
-        wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_Y = NO;
-    }
-    else if (self.simplelayout_y == self.verschachtelungstiefe)  // > 0)
-    {
-        // Da Simplelayout Y sich selbst an der Y-Achse ausrichtet, muss eine eventuelle
-        // Y-Angabe in den Attributen ignoriert werden. Deswegen nulle ich hier Y per jQuery.
-        // X-Attribut darf sich hingegen auswirken und darf nicht genullt werden!
-        if ([attributeDict valueForKey:@"y"])
-        {
-            [self.jsOutput appendString:@"\n  // top-css-Eigenschaft nullen, da ein y-wert gesetzt wurde,\n  // obwohl wir in einem Simplelayout Y sind, welches top automatisch ausrichtet.\n"];
-            // Eigenschaft entfernen verwirrt JS etwas (wenn gleich auch nicht jQuery)
-            //[self.jsOutput appendFormat:@"\n$('#%@').css('top','');\n\n",id];
-            // Deswegen einfach auf 0 setzen
-            [self.jsOutput appendFormat:@"  $('#%@').css('top','0');\n\n",id];
-        }
-
-
-        if (!self.firstElementOfSimpleLayout_y)
-        {
-            // Seit wir von absolute auf relative umgestiegen sind und zusätzlich auch noch auf
-            // float:left umgestellt haben, müssen wir die width nur korrigieren, wenn das Element
-            // position:absolute ist. Dann müssen wir es doch immer noch verrücken.
-
-            // Den allerersten sibling auslassen
-            [self.jsOutput appendString:@"  // Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n  // und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Inklusive spacing.\n"];
-            [self.jsOutput appendString:@"  if ("];
-            // Test ob es überhaupt ein vorheriges Geschwisterelement gibt, muss drin sein,
-            // sonst Absturz (wohl kein Absturz mehr seit Umstieg auf jQuery 'prev' auch IN dem
-            // if-Zweig
-            [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
-            [self.jsOutput appendString:@"$('#"];
-            [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').css('position') == 'absolute')\n"];
-
-            [self.jsOutput appendFormat:@"    document.getElementById('%@').style.top = (",id];
-
-            [self.jsOutput appendFormat:@"$('#%@').prev().get(0).offsetTop+",id];
-
-            // Nur bei relative: Dann könnte man die eingerückte Zeilen auskommentieren
-            // Aber sie scheint auch nichts zu schaden.
-            // Bei position:absolute ist sie definitiv erforderlich!
-                [self.jsOutput appendFormat:@"$('#%@').prev().outerHeight()+",id];
-
-            // Spacing-Angabe auch gleich hier mitkorrigieren
-            [self.jsOutput appendFormat:@"%ld", spacing_y];
-            [self.jsOutput appendString:@") + 'px';\n"];
-
-            // Ansonsten müssen wir halt nur entsprechend des spacing-Wertes nach unten
-            // rücken. Mit top klappt es nicht (zumindestens nicht bei mehr als 2 Elementen)
-            // mit padding klappt es auch nicht, aber mit margin... zum Glück
-            // Korrektur: margin bricht position:absolute, weil es dann eventuell rechts runter in die nächste
-            // Zeile fallen kann, deswegen doch mit left arbeiten. Einfach multiplizieren mit Anzahl der sipplings!
-            // Dann klappt left.
-            [self.jsOutput appendString:@"  else\n"];
-            [self.jsOutput appendString:@"    // ansonsten wegen 'spacing' nach unten rücken (spacing * Anzahl vorheriger Geschwister)\n"];
-            [self.jsOutput appendString:@"    $('#"];
-            [self.jsOutput appendString:id];
-            // [self.jsOutput appendString:@"').css('margin-top','"];
-            // [self.jsOutput appendFormat:@"%d", spacing_y];
-            // [self.jsOutput appendString:@"px');\n\n"];
-            [self.jsOutput appendString:@"').css('top',"];
-            // += funzt nicht wegen der Startvorgabe 'auto'. Da kann man nicht draufaddieren. Aber klappt auch ohne +=
-            // [self.jsOutput appendString:@"'+=' + "];
-            [self.jsOutput appendFormat:@"%ld", spacing_y];
-            [self.jsOutput appendFormat:@" * $('#%@').prevAll().length);\n\n",id];
-        }
-        self.firstElementOfSimpleLayout_y = NO;
-    }
-
-
-
-    // Simplelayout X
-    if (wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_X)
-    {
-        NSLog(@"'left' korrigieren, weil 2 ineinander verschachtelte X-Simplelayouts.");
-
-        [self.jsOutput appendString:@"  // Korrektur von 'left' wegen zweier ineinander verschachtelteter Simplelayout X:\n"];
-        [self.jsOutput appendString:@"  if ("];
-        [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
-        [self.jsOutput appendFormat:@"$('#%@').prev().get(0).lastElementChild)\n",id];
-
-        [self.jsOutput appendString:@"    document.getElementById('"];
-        [self.jsOutput appendString:id];
-
-        // parseInt() removes the "px" at the end
-        [self.jsOutput appendString:@"').style.left = ("];
-
-        [self.jsOutput appendFormat:@"parseInt($('#%@').prev().get(0).lastElementChild.offsetLeft)+",id];
-
-        [self.jsOutput appendFormat:@"parseInt($('#%@').prev().get(0).lastElementChild.offsetWidth)+",id];
-
-        [self.jsOutput appendFormat:@"%ld", spacing_x];
-        [self.jsOutput appendString:@") + 'px';\n\n"];
-
-        wirVerlassenGeradeEinTieferVerschachteltesSimpleLayout_X = NO;
-    }
-    else if (self.simplelayout_x == self.verschachtelungstiefe) // > 0)
-    {
-        // Da Simplelayout X sich selbst an der X-Achse ausrichtet, muss eine eventuelle
-        // X-Angabe in den Attributen ignoriert werden. Deswegen nulle ich hier X per jQuery.
-        // Y-Attribut darf sich hingegen auswirken und darf nicht genullt werden!
-        if ([attributeDict valueForKey:@"x"])
-        {
-            [self.jsOutput appendString:@"\n  // left-css-Eigenschaft nullen, da ein x-wert gesetzt wurde,\n  // obwohl wir in einem Simplelayout X sind, welches left automatisch ausrichtet.\n"];
-            [self.jsOutput appendFormat:@"  $('#%@').css('left','0');\n\n",id];
-        }
-
-        if (!self.firstElementOfSimpleLayout_x)
-        {
-            // Seit wir von absolute auf relative umgestiegen sind und zusätzlich auch noch auf
-            // float:left umgestellt haben, müssen wir die width GAR NICHT mehr korrigieren
-            // Stopp: Es gibt eine Ausnahme: Wenn unser Element position:absolute ist dann
-            // müssen wir es doch immer noch verrücken.
-
-            // Den allerersten sibling auslassen
-            [self.jsOutput appendString:@"  // Für den Fall, dass wir position:absolute sind nehmen wir keinen Platz ein\n  // und rücken somit nicht automatisch auf. Dies müssen wir hier nachkorrigieren. Inklusive spacing.\n"];
-            [self.jsOutput appendString:@"  if ("];
-            // Test ob es überhaupt ein vorheriges Geschwisterelement gibt, muss drin sein,
-            // sonst Absturz (wohl kein Absturz mehr seit Umstieg auf jQuery 'prev' auch IN dem
-            // if-Zweig
-            [self.jsOutput appendFormat:@"($('#%@').prev().length > 0) && ",id];
-            [self.jsOutput appendString:@"$('#"];
-            [self.jsOutput appendString:id];
-            [self.jsOutput appendString:@"').css('position') == 'absolute')\n"];
-
-            [self.jsOutput appendString:@"    document.getElementById('"];
-            [self.jsOutput appendString:id];
-
-
-            [self.jsOutput appendString:@"').style.left = ("];
-
-            // Nur bei relative: Dann könnte man die eingerückte Zeilen auskommentieren
-            // Aber sie scheint auch nichts zu schaden.
-            // Bei position:absolute ist sie definitiv erforderlich!
-                [self.jsOutput appendFormat:@"$('#%@').prev().get(0).offsetLeft+",id];
-
-            //[self.jsOutput appendFormat:@"$('#%@').prev()[0].offsetWidth+",id];
-            // entspricht:
-            //[self.jsOutput appendFormat:@"$('#%@').prev().get(0).offsetWidth+",id];
-            // Lieber per jQuery:
-            [self.jsOutput appendFormat:@"$('#%@').prev().outerWidth()+",id];
-
-            // Spacing-Angabe auch gleich hier mitkorrigieren
-            [self.jsOutput appendFormat:@"%ld", spacing_x];
-
-            [self.jsOutput appendString:@") + 'px';\n"];
-
-            // ...Deswegen kommt hier auch ein Else hin
-            [self.jsOutput appendString:@"  else\n"];
-
-            // Ansonsten müssen wir halt nur entsprechend des spacing-Wertes nach rechts
-            // rücken. Mit left klappt es nicht (zumindestens nicht bei mehr als 2 Elementen)
-            // mit padding klappt es auch nicht, aber mit margin... zum Glück
-            // Korrektur: margin bricht position:absolute, weil es dann eventuell rechts runter in die nächste
-            // Zeile fallen kann, deswegen doch mit left arbeiten. Einfach multiplizieren mit Anzahl der sipplings!
-            // Dann klappt left.
-            [self.jsOutput appendString:@"    // ansonsten wegen 'spacing' nach rechts rücken (spacing * Anzahl vorheriger Geschwister)\n"];
-            [self.jsOutput appendString:@"    $('#"];
-            [self.jsOutput appendString:id];
-            // [self.jsOutput appendString:@"').css('margin-left','"];
-            // [self.jsOutput appendFormat:@"%d", spacing_x];
-            // [self.jsOutput appendString:@"px');\n\n"];
-            [self.jsOutput appendString:@"').css('left',"];
-            // += klappt nicht wegen der Startvorgabe 'auto'. Da kann man nicht draufaddieren. Aber klappt auch ohne +=
-            // [self.jsOutput appendString:@"'+=' + "];
-            [self.jsOutput appendFormat:@"%ld", spacing_x];
-            [self.jsOutput appendFormat:@" * $('#%@').prevAll().length);\n\n",id];
-        }
-        self.firstElementOfSimpleLayout_x = NO;
-    }
-}
-
-
 - (void) instableXML:(NSString*)s
 {
     NSLog([NSString stringWithFormat:@"%@",s]);
@@ -2780,12 +2504,12 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 // Muss rückwärts gesetzt werden, weil die Höhe der Kinder ja bereits bekannt sein muss!
--(void) korrigiereHoeheUndBreiteDesUmgebendenDivBeiSimpleLayoutX:(NSString*)spacing beiElement:(NSString*)elem
+-(void) korrigiereHoeheUndBreiteDesUmgebendenDivBeiSimpleLayoutX:(NSString*)spacing beiElement:(NSString*)elem saWurdePerAttrGesetzt:(NSString*)setByAttr
 {
     NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
     [s appendString:@"\n  // Korrekturen wegen SA X:\n"];
-    [s appendFormat:@"  adjustHeightOfEnclosingDivWithHeighestChildOnSimpleLayout(false,%@);\n",elem];
+    [s appendFormat:@"  adjustHeightOfEnclosingDivWithHeighestChildOnSimpleLayout(%@,%@);\n",setByAttr,elem];
 
 
     // Auch noch die Breite setzen! (Damit die Angaben im umgebenden Div stimmen)
@@ -2798,7 +2522,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Auf sowas erstmal zu kommen.... oh man.
     // Neu: Ich richte es immer korrekt aus, selbst bei position:absolute muss ich nachhelfen!
     // Deswegen die Einschränkung auf position:relative unten auskommentiert
-    [s appendFormat:@"  adjustWidthOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutX(false,%@,%@);\n",elem,spacing];
+    [s appendFormat:@"  adjustWidthOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutX(%@,%@,%@);\n",setByAttr,elem,spacing];
 
 
     // An den Anfang des Strings setzen
@@ -2814,17 +2538,17 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 // Muss rückwärts gesetzt werden, weil die Breite der Kinder ja bereits bekannt sein muss!
--(void) korrigiereBreiteUndHoeheDesUmgebendenDivBeiSimpleLayoutY:(NSString*)spacing beiElement:(NSString*)elem
+-(void) korrigiereBreiteUndHoeheDesUmgebendenDivBeiSimpleLayoutY:(NSString*)spacing beiElement:(NSString*)elem saWurdePerAttrGesetzt:(NSString*)setByAttr
 {
     NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
 
     [s appendString:@"\n  // Korrekturen wegen SA Y:\n"];
-    [s appendFormat:@"  adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayoutY(false,%@);\n",elem];
+    [s appendFormat:@"  adjustWidthOfEnclosingDivWithWidestChildOnSimpleLayoutY(%@,%@);\n",setByAttr,elem];
 
 
     // Auch noch die Höhe setzen! (Damit die Angaben im umgebenden Div stimmen). Da sich valign=middle auf
     // die Höhenangabe bezieht, muss diese mit jQueryOutput0 noch vor allen anderen Angaben gesetzt werden.
-    [s appendFormat:@"  adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY(false,%@,%@);\n",elem,spacing];
+    [s appendFormat:@"  adjustHeightOfEnclosingDivWithSumOfAllChildrenOnSimpleLayoutY(%@,%@,%@);\n",setByAttr,elem,spacing];
 
     // An den Anfang des Strings setzen
     // Die Breite und Höhe muss bekannt sein, bevor das Simplelayout als solches ausgeführt wird!
@@ -2905,14 +2629,14 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-- (void) becauseOfSimpleLayoutXMoveTheChildrenOfElement:(NSString*)elem withSpacing:(NSString*)spacing andAttributes:(NSDictionary*)attributeDict
+- (void) becauseOfSimpleLayoutXMoveTheChildrenOfElement:(NSString*)elem withSpacing:(NSString*)spacing andAttributes:(NSDictionary*)attributeDict andSetByAttr:(NSString*)setByAttr
 {
     /*******************/
     // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe
     // der beinhaltenden Elemente an.
     // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
     // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
-    [self korrigiereHoeheUndBreiteDesUmgebendenDivBeiSimpleLayoutX:spacing beiElement:elem];
+    [self korrigiereHoeheUndBreiteDesUmgebendenDivBeiSimpleLayoutX:spacing beiElement:elem saWurdePerAttrGesetzt:setByAttr];
     /*******************/
 
 
@@ -2935,11 +2659,11 @@ void OLLog(xmlParser *self, NSString* s,...)
             inset = [self makeTheComputedValueComputable:inset];
         }
 
-        [o appendFormat:@"  setSimpleLayoutXIn(false,%@,%@,%@);\n",elem,spacing,inset];
+        [o appendFormat:@"  setSimpleLayoutXIn(%@,%@,%@,%@);\n",setByAttr,elem,spacing,inset];
     }
     else
     {
-        [o appendFormat:@"  setSimpleLayoutXIn(false,%@,%@);\n",elem,spacing];
+        [o appendFormat:@"  setSimpleLayoutXIn(%@,%@,%@);\n",setByAttr,elem,spacing];
     }
 
 
@@ -2954,14 +2678,14 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-- (void) becauseOfSimpleLayoutYMoveTheChildrenOfElement:(NSString*)elem withSpacing:(NSString*)spacing andAttributes:(NSDictionary*)attributeDict
+- (void) becauseOfSimpleLayoutYMoveTheChildrenOfElement:(NSString*)elem withSpacing:(NSString*)spacing andAttributes:(NSDictionary*)attributeDict andSetByAttr:(NSString*)setByAttr
 {
     /*******************/
     // Das alle Geschwisterchen umgebende Div nimmt leider nicht die Größe
     // der beinhaltenden Elemente an.
     // Alle Tricks haben nichts geholfen, deswegen hier explizit setzen. 
     // Dies ist nötig, damit nachfolgende simplelayouts richtig aufrücken
-    [self korrigiereBreiteUndHoeheDesUmgebendenDivBeiSimpleLayoutY:spacing beiElement:elem];
+    [self korrigiereBreiteUndHoeheDesUmgebendenDivBeiSimpleLayoutY:spacing beiElement:elem saWurdePerAttrGesetzt:setByAttr];
     /*******************/
 
 
@@ -2984,11 +2708,11 @@ void OLLog(xmlParser *self, NSString* s,...)
             inset = [self makeTheComputedValueComputable:inset];
         }
 
-        [o appendFormat:@"  setSimpleLayoutYIn(false,%@,%@,%@);\n",elem,spacing,inset];
+        [o appendFormat:@"  setSimpleLayoutYIn(%@,%@,%@,%@);\n",setByAttr,elem,spacing,inset];
     }
     else
     {
-        [o appendFormat:@"  setSimpleLayoutYIn(false,%@,%@);\n",elem,spacing];
+        [o appendFormat:@"  setSimpleLayoutYIn(%@,%@,%@);\n",setByAttr,elem,spacing];
     }
 
 
@@ -3305,7 +3029,6 @@ didStartElement:(NSString *)elementName
 
 
 
-    // Sollte als erstes stehen, damit der zuletzt gesetzte Zähler, auf den hier zurückgegriffen wird, noch stimmt.
     if ([elementName isEqualToString:@"simplelayout"])
     {
         element_bearbeitet = YES;
@@ -3341,30 +3064,15 @@ didStartElement:(NSString *)elementName
             [self.jQueryOutput appendFormat:@"  $(%@).data('layout_',%@.%@);\n",elem,elem,[attributeDict valueForKey:@"name"]];
         }
 
-        // Falls kein Wert für axis gesetzt ist, ist es immer y
+        // Falls kein Wert für axis gesetzt ist, ist es immer y bei simplelayout
         // Simplelayout mit Achse Y berücksichtigen
         if ([[attributeDict valueForKey:@"axis"] hasSuffix:@"y"] || ![attributeDict valueForKey:@"axis"])
         {
             if ([[attributeDict valueForKey:@"axis"] hasSuffix:@"y"])
                 self.attributeCount++;
 
-
-            // Anstatt nur TRUE gleichzeitig darin die Verschachtelungstiefe speichern
-            // somit wird simplelayout nur in der richtigen Element-Ebene angewandt
-            self.simplelayout_y = self.verschachtelungstiefe;
-
-
-            // spacing müssen wir auch sichern und später berücksichtigen
-            [self.simplelayout_y_spacing addObject:spacing];
-
-
-            // SimpleLayout-Tiefenzähler (y) um 1 erhöhen
-            self.simplelayout_y_tiefe++;
-
-
-            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2] withSpacing:spacing andAttributes:attributeDict];
+            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2] withSpacing:spacing andAttributes:attributeDict andSetByAttr:@"false"];
         }
-
 
 
         // Simplelayout mit Achse X berücksichtigen
@@ -3372,20 +3080,7 @@ didStartElement:(NSString *)elementName
         {
             self.attributeCount++;
 
-
-            // Anstatt nur TRUE gleichzeitig darin die Verschachtelungstiefe speichern
-            // somit wird simplelayout nur in der richtigen Element-Ebene angewandt
-            self.simplelayout_x = self.verschachtelungstiefe;
-
-            // spacing müssen wir auch sichern und später berücksichtigen
-            [self.simplelayout_x_spacing addObject:spacing];
-
-
-            // SimpleLayout-Tiefenzähler (x) um 1 erhöhen
-            self.simplelayout_x_tiefe++;
-
-
-            [self becauseOfSimpleLayoutXMoveTheChildrenOfElement:[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2] withSpacing:spacing andAttributes:attributeDict];
+            [self becauseOfSimpleLayoutXMoveTheChildrenOfElement:[self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2] withSpacing:spacing andAttributes:attributeDict andSetByAttr:@"false"];
         }
     }
 
@@ -4726,7 +4421,7 @@ didStartElement:(NSString *)elementName
 
         if (![attributeDict valueForKey:@"layout"])
         {
-            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:@"0" andAttributes:attributeDict];
+            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:self.zuletztGesetzteID withSpacing:@"0" andAttributes:attributeDict andSetByAttr:@"true"];
         }
 
         [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
@@ -4786,7 +4481,7 @@ didStartElement:(NSString *)elementName
                 spacing = [attributeDict valueForKey:@"spacing"];
             }
 
-            [self becauseOfSimpleLayoutXMoveTheChildrenOfElement:theId withSpacing:spacing andAttributes:attributeDict];
+            [self becauseOfSimpleLayoutXMoveTheChildrenOfElement:theId withSpacing:spacing andAttributes:attributeDict andSetByAttr:@"false"];
         }
         if ([elementName isEqualToString:@"vbox"])
         {
@@ -4797,7 +4492,7 @@ didStartElement:(NSString *)elementName
                 spacing = [attributeDict valueForKey:@"spacing"];
             }
 
-            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:theId withSpacing:spacing andAttributes:attributeDict];
+            [self becauseOfSimpleLayoutYMoveTheChildrenOfElement:theId withSpacing:spacing andAttributes:attributeDict andSetByAttr:@"false"];
         }
     }
 
@@ -18465,105 +18160,100 @@ BOOL isJSExpression(NSString *s)
     "    var s = replaceID(obj.contentNamesAndIDs,$(id).attr('id'));\n"
     "    evalCode(s);\n"
     "\n"
-    // Zugriff auf 'defaultplacement' per 'id', nicht mehr per 'obj'. Das Attribut wurde ja übertragen in id bereits weiter oben.
-    "  if (kinderVorDemAppenden.length > 0)\n"
-    "  {\n"
-    "    // Abfrage 2 nötig, falls das defaultplacment einen korrupten String enthält (wie in Bsp. 33.16)\n"
-    "    if (id.defaultplacement !== '' && $(id).find(\"[data-name='\"+id.defaultplacement+\"']\").length > 0) // dann die vorher existierenden Kinder korrekt positionieren\n"
+    "\n"
+    "    if (kinderVorDemAppenden.length > 0) // Dann die vorher im element existierenden Kinder korrekt positionieren\n"
     "    {\n"
-    // Rausgenommen aus Performancegründen, aber an sich kein falscher Testcode:
-    //"        if (kinderVorDemAppenden.get(0).parent.id !== kinderVorDemAppenden.get(0).immediateparent.id)\n"
-    //"            alert('(Reiner Test) - I dont think this is possible - Und wenn doch, wäre es interessant.');\n"
     "        var oldParent = kinderVorDemAppenden.get(0).immediateparent.id;\n"
     "\n"
-    "        $(kinderVorDemAppenden).appendTo($(id).find(\"[data-name='\"+id.defaultplacement+\"']\").get(0));\n"
-    "\n"
-    "        // Referenz auf immediateparent in diesem Fall korrigieren\n"
     "        kinderVorDemAppenden.each(function() {\n"
-    "            $(kinderVorDemAppenden).parent().get(0)[$(this).data('name')] = this;\n"
+    "            // Falls ein 'placement'-Attribut im Kind vorliegt, hat dieses stets Vorrang.\n"
+    "            // Selbst wenn es korrupt ist, kommt defaultplacement nicht zum Zug, ergab ein Test\n"
+    "            // Gemäß Code-Inspektion Example 26.22 wirklich mit 'appendTo()' verschieben und nicht mit 'replaceWith()'\n"
+    "            if ($(this).data('placement'))\n"
+    "            {\n"
+    "                if ($(id).find(\"[data-name='\"+$(this).data('placement')+\"']\").length > 0)\n"
+    "                    $(this).appendTo($(id).find(\"[data-name='\"+$(this).data('placement')+\"']\").get(0));\n"
+    "                else\n"
+    "                    $(this).appendTo(id); // Dann Kind aber auf jeden Fall ans Ende verschieben\n"
+    "            }\n"
+    "            // Abfrage 2 nötig, falls das defaultplacment einen korrupten String enthält (wie in Bsp. 33.16)\n"
+    "            else if (id.defaultplacement !== '' && $(id).find(\"[data-name='\"+id.defaultplacement+\"']\").length > 0)\n"
+    "            {\n"
+    "                $(this).appendTo($(id).find(\"[data-name='\"+id.defaultplacement+\"']\").get(0));\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                // Dann Kind aber auf jeden Fall ans Ende verschieben\n"
+    "                $(this).appendTo(id);\n"
+    "            }\n"
+    "\n"
+    "            // _zusätzlich_ auch im neuen parent das Kind-Element über den Namen verankern\n"
+    "            $(this).parent().get(0)[$(this).data('name')] = this;\n"
     "        });\n"
     "\n"
-    "        // Okay, für den oldParent muss ich hier jetzt alles triggern, weil ich daraus ja ein Element entfernt habe\n"
+    "        // trigger some things for the oldParent, beacause I removed a element from it\n"
+    "        // Also necessary if I only _moved_ the element _in_ it?\n"
     "        $('#'+oldParent).triggerHandler('onwidth');\n"
     "        $('#'+oldParent).triggerHandler('onheight');\n"
-    "\n"
     "    }\n"
-    "    else\n"
+    "\n"
+    "\n"
+    "    // JS erst jetzt ausführen, sonst stimmen bestimmte width/height's nicht, weil ja etwas verschoben wurde\n"
+    "    executeJSCodeOfThisObject(obj, id, $(id).attr('id'), undefined, true);\n"
+    "\n"
+    "\n"
+    "    // Example 37.11:\n"
+    "    // Erst hier DataPath setzen, weil erst hier alle Attribute gesetzt wurden, und alles korrekt geklont wurde\n"
+    "    // Und wichtig: Erst hier am Ende ist applyData() bekannt!\n"
+    "    if (iv.datapath)\n"
     "    {\n"
-    "        // Vorher bereits im Div existierende Kinder dann auf jeden Fall ans Ende verschieben\n"
-    "        $(kinderVorDemAppenden).appendTo(id);\n"
+    "        if (iv.datapath.startsWith('${'))\n"
+    "        {\n"
+    "            // Dann ist es ein auszuwertender JS-Ausdruck - Ob wirklich eine Constraint nötig ist, ist eher fraglich.\n"
+    "            iv.datapath = iv.datapath.substring(2,iv.datapath.length-1);\n"
+    "            (function() { with (id) { eval('iv.datapath = ' + iv.datapath + ';');  } }).bind(id)();\n"
+    "        }\n"
+    "        if (iv.datapath.startsWith('$once{'))\n"
+    "        {\n"
+    "            iv.datapath = iv.datapath.substring(6,iv.datapath.length-1);\n"
+    "            (function() { with (id) { eval('iv.datapath = ' + iv.datapath + ';');  } }).bind(id)();\n"
+    "        }\n"
+    "\n"
+    "\n"
+    "        if (!iv.datapath.contains(':'))\n"
+    "        {\n"
+    "            // In dem Fall den XPath erst mal zusammensetzen\n"
+    "            var zusammengesetzterXPath = id.datapath.xpath\n"
+    "            if (!zusammengesetzterXPath.endsWith('/') && !iv.datapath.startsWith('/'))\n"
+    "                zusammengesetzterXPath = zusammengesetzterXPath + '/';\n"
+    "            zusammengesetzterXPath = zusammengesetzterXPath + iv.datapath;\n"
+    "\n"
+    "            setAbsoluteDataPathIn(id,zusammengesetzterXPath);\n"
+    "        }\n"
+    "        else\n"
+    "        {\n"
+    "            setAbsoluteDataPathIn(id,iv.datapath);\n"
+    "        }\n"
+    "\n"
+    "        // oh man... setAbsoluteDataPath tauscht das Element aus... Deswegen muss ich natürlich id hier neu setzen...\n"
+    "        id = $('#'+id.id).get(0);\n"
     "    }\n"
     "\n"
     "\n"
-    "    // Kinder können ein eigenes 'placement'-Attribut haben, dann nochmal verschieben des Kindes\n"
-    "    // Gemäß Code-Inspektion Example 26.22 wirklich mit 'appendTo()' verschieben und nicht mit 'replaceWith()'\n"
-    "    // Jedes Kind einzeln überprüfen\n"
-    "    kinderVorDemAppenden.each(function() {\n"
-    "      if ($(this).data('placement'))\n"
-    "      {\n"
-    "        $(this).appendTo(window[$(this).data('placement')]);\n"
-    "      }\n"
-    "    });\n"
-    "  }\n"
     "\n"
-    "\n"
-    "  // JS erst jetzt ausführen, sonst stimmen bestimmte width/height's nicht, weil ja etwas verschoben wurde\n"
-    "  executeJSCodeOfThisObject(obj, id, $(id).attr('id'), undefined, true);\n"
-    "\n"
-    "\n"
-    "\n"
-    "  // Example 37.11:\n"
-    "  // Erst hier DataPath setzen, weil erst hier alle Attribute gesetzt wurden, und alles korrekt geklont wurde\n"
-    "  // Und wichtig: Erst hier am Ende ist applyData() bekannt!\n"
-    "  if (iv.datapath)\n"
-    "  {\n"
-    "    if (iv.datapath.startsWith('${'))\n"
+    "    // Einen als Attribut gesetzten 'oninit'-Handler, kann ich erst jetzt ausführen, da jetzt erst alle Methoden bekannt sind\n"
+    "    if (onInitFunc)\n"
     "    {\n"
-    "        // Dann ist es ein auszuwertender JS-Ausdruck - Ob wirklich eine Constraint nötig ist, ist eher fraglich.\n"
-    "        iv.datapath = iv.datapath.substring(2,iv.datapath.length-1);\n"
-    "        (function() { with (id) { eval('iv.datapath = ' + iv.datapath + ';');  } }).bind(id)();\n"
+    "        // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
+    "        (function() { with (id) { eval(onInitFunc); } }).bind(id)();\n"
     "    }\n"
-    "    if (iv.datapath.startsWith('$once{'))\n"
+    "\n"
+    "    if (!id.inited)\n"
     "    {\n"
-    "        iv.datapath = iv.datapath.substring(6,iv.datapath.length-1);\n"
-    "        (function() { with (id) { eval('iv.datapath = ' + iv.datapath + ';');  } }).bind(id)();\n"
+    "        $(id).triggerHandler('onconstruct');\n"
+    "        $(id).triggerHandler('oninit');\n"
+    "        id.inited = true;\n"
     "    }\n"
-    "\n"
-    "\n"
-    "    if (!iv.datapath.contains(':'))\n"
-    "    {\n"
-    "        // In dem Fall den XPath erst mal zusammensetzen\n"
-    "        var zusammengesetzterXPath = id.datapath.xpath\n"
-    "        if (!zusammengesetzterXPath.endsWith('/') && !iv.datapath.startsWith('/'))\n"
-    "            zusammengesetzterXPath = zusammengesetzterXPath + '/';\n"
-    "        zusammengesetzterXPath = zusammengesetzterXPath + iv.datapath;\n"
-    "\n"
-    "        setAbsoluteDataPathIn(id,zusammengesetzterXPath);\n"
-    "    }\n"
-    "    else\n"
-    "    {\n"
-    "        setAbsoluteDataPathIn(id,iv.datapath);\n"
-    "    }\n"
-    "\n"
-    "    // oh man... setAbsoluteDataPath tauscht das Element aus... Deswegen muss ich natürlich id hier neu setzen...\n"
-    "    id = $('#'+id.id).get(0);\n"
-    "  }\n"
-    "\n"
-    "\n"
-    "\n"
-    "  // Einen als Attribut gesetzten 'oninit'-Handler, kann ich erst jetzt ausführen, da jetzt erst alle Methoden bekannt sind\n"
-    "  if (onInitFunc)\n"
-    "  {\n"
-    "    // sich selbst ausführende Funktion mit bind, um Scope korrekt zu setzen\n"
-    "    (function() { with (id) { eval(onInitFunc); } }).bind(id)();\n"
-    "  }\n"
-    "\n"
-    "  if (!id.inited)\n"
-    "  {\n"
-    "    $(id).triggerHandler('onconstruct');\n"
-    "    $(id).triggerHandler('oninit');\n"
-    "    id.inited = true;\n"
-    "  }\n"
     "}\n"
     "\n"
     "\n"

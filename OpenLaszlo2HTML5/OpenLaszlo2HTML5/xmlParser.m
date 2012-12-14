@@ -5,7 +5,7 @@
 //
 // - iwie gibt es noch ein Problem mit den pointer-events (globalhelp verdeckt Foren-Button)
 //
-//
+// - determinePlacement()-Implementation fehlt noch, aber für Taxango nicht relevant
 //
 //
 //
@@ -1427,14 +1427,17 @@ void OLLog(xmlParser *self, NSString* s,...)
         if ([attributeDict valueForKey:@"debug"])
         {
             self.attributeCount++;
+
             if ([[attributeDict valueForKey:@"debug"] isEqualToString:@"true"])
             {
-                [self.jQueryOutput appendString:@"\n  // Debug-Konsole aktivieren\n"];
-                [self.jQueryOutput appendString:@"  $('div:first').append('<div id=\"debugWindow\"><div style=\"background-color:black;color:white;width:100%;\">DEBUG WINDOW</div><div id=\"debugInnerWindow\"></div></div>');\n"];
-                [self.jQueryOutput appendString:@"  // Mach Debug-Fenster so breit wie Fenster abzgl. 2x die Top-Angabe\n"];
-                [self.jQueryOutput appendString:@"  $('#debugWindow').width($('div:first').width()-100);\n"];
-                [self.jQueryOutput appendString:@"  $('#debugInnerWindow').width($('div:first').width()-100);\n"];
-                [self.jQueryOutput appendString:@"  $('#debugWindow').draggable();\n"];
+                // Muss gleich am Anfang stehen, weil 'oninit'-Metoden da schon was reinschreiben können
+                // Siehe Example 33.18
+                [self.jsOutput appendString:@"\n  // Debug-Konsole aktivieren\n"];
+                [self.jsOutput appendString:@"  $('div:first').append('<div id=\"debugWindow\"><div style=\"background-color:black;color:white;width:100%;\">DEBUG WINDOW</div><div id=\"debugInnerWindow\"></div></div>');\n"];
+                [self.jsOutput appendString:@"  // Mach Debug-Fenster so breit wie Fenster abzgl. 2x die Top-Angabe\n"];
+                [self.jsOutput appendString:@"  $('#debugWindow').width($('div:first').width()-100);\n"];
+                [self.jsOutput appendString:@"  $('#debugInnerWindow').width($('div:first').width()-100);\n"];
+                [self.jsOutput appendString:@"  $('#debugWindow').draggable();\n"];
 
                 // Soll relativ am Anfang stehen, diese Variable, falls schon andere Sachen
                 // davon abhängig sind (deswegen jsOutput).
@@ -3017,7 +3020,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"inputtext"] ||
         [elementName isEqualToString:@"button"] ||
         //[elementName isEqualToString:@"rollUpDownContainer"] ||
-        [elementName isEqualToString:@"BDStabsheetcontainer"] ||
+        [elementName isEqualToString:@"BDStabsheetcontainerXXX"] ||
         [elementName isEqualToString:@"tabslider"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
         [elementName isEqualToString:@"tabelement"] ||
@@ -3245,11 +3248,11 @@ didStartElement:(NSString *)elementName
 
             if (self.debugConsoleActivated) // Wegen Beispiel 37.13 Abfrage drum herum
             {
-                [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere x-Position haben\n"];
-                [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('left','%@px');",[attributeDict valueForKey:@"x"]];
+                [self.jsOutput appendString:@"\n  // Debug-Fenster soll eine andere x-Position haben\n"];
+                [self.jsOutput appendFormat:@"  $('#debugWindow').css('left','%@px');",[attributeDict valueForKey:@"x"]];
 
-                [self.jQueryOutput appendString:@"\n  // Dann auch Breite des Debug-Fenster anpassen (Elternbreite - Padding - Border - 1 * X)\n"];
-                [self.jQueryOutput appendFormat:@"  $('#debugWindow').width($('#debugWindow').parent().width()-20-10-1*%@);\n",[attributeDict valueForKey:@"x"]];
+                [self.jsOutput appendString:@"\n  // Dann auch Breite des Debug-Fenster anpassen (Elternbreite - Padding - Border - 1 * X)\n"];
+                [self.jsOutput appendFormat:@"  $('#debugWindow').width($('#debugWindow').parent().width()-20-10-1*%@);\n",[attributeDict valueForKey:@"x"]];
             }
         }
 
@@ -3259,8 +3262,8 @@ didStartElement:(NSString *)elementName
 
             if (self.debugConsoleActivated)
             {
-                [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere y-Position haben\n"];
-                [self.jQueryOutput appendFormat:@"  $('#debugWindow').css('top','%@px');\n",[attributeDict valueForKey:@"y"]];
+                [self.jsOutput appendString:@"\n  // Debug-Fenster soll eine andere y-Position haben\n"];
+                [self.jsOutput appendFormat:@"  $('#debugWindow').css('top','%@px');\n",[attributeDict valueForKey:@"y"]];
             }
         }
 
@@ -3270,17 +3273,17 @@ didStartElement:(NSString *)elementName
 
             if (self.debugConsoleActivated)
             {
-                [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere Höhe haben\n"];
-                [self.jQueryOutput appendFormat:@"  $('#debugWindow').height('%@');\n",[attributeDict valueForKey:@"height"]];
+                [self.jsOutput appendString:@"\n  // Debug-Fenster soll eine andere Höhe haben\n"];
+                [self.jsOutput appendFormat:@"  $('#debugWindow').height('%@');\n",[attributeDict valueForKey:@"height"]];
                 // Mindestens bei %-Angaben, aber vermutlich immer, muss ich auch noch
                 // den Rahmen (oben+unten) abziehen und Padding (oben+unten) (Bsp. lz.Formatter - Beispiel 5)
-                [self.jQueryOutput appendString:@"  // Abzüglich Padding oben+unten (2*10) und border-width (2*5);\n"];
-                [self.jQueryOutput appendString:@"  $('#debugWindow').height($('#debugWindow').height()-30);\n"];
+                [self.jsOutput appendString:@"  // Abzüglich Padding oben+unten (2*10) und border-width (2*5);\n"];
+                [self.jsOutput appendString:@"  $('#debugWindow').height($('#debugWindow').height()-30);\n"];
 
                 // Bricht bei %-Angaben:
                 //[self.jQueryOutput appendFormat:@"  $('#debugInnerWindow').css('height','%dpx');\n\n",[[attributeDict valueForKey:@"height"] intValue]-30];
                 // Deswegen einfach direkt auf den eben ausgerechneten Wert beziehen:
-                [self.jQueryOutput appendString:@"  $('#debugInnerWindow').height($('#debugWindow').height()-30);\n\n"];
+                [self.jsOutput appendString:@"  $('#debugInnerWindow').height($('#debugWindow').height()-30);\n\n"];
             }
         }
 
@@ -3290,12 +3293,12 @@ didStartElement:(NSString *)elementName
 
             if (self.debugConsoleActivated)
             {
-                [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere Breite haben\n"];
-                [self.jQueryOutput appendFormat:@"  $('#debugWindow').width('%@');\n",[attributeDict valueForKey:@"width"]];
-                [self.jQueryOutput appendString:@"  // Abzüglich Padding oben+unten (2*10) und border-width (2*5);\n"];
-                [self.jQueryOutput appendString:@"  $('#debugWindow').width($('#debugWindow').height()-30);\n"];
+                [self.jsOutput appendString:@"\n  // Debug-Fenster soll eine andere Breite haben\n"];
+                [self.jsOutput appendFormat:@"  $('#debugWindow').width('%@');\n",[attributeDict valueForKey:@"width"]];
+                [self.jsOutput appendString:@"  // Abzüglich Padding oben+unten (2*10) und border-width (2*5);\n"];
+                [self.jsOutput appendString:@"  $('#debugWindow').width($('#debugWindow').height()-30);\n"];
 
-                [self.jQueryOutput appendString:@"  $('#debugInnerWindow').width($('#debugWindow').width()-30);\n\n"];
+                [self.jsOutput appendString:@"  $('#debugInnerWindow').width($('#debugWindow').width()-30);\n\n"];
             }
         }
 
@@ -3305,8 +3308,8 @@ didStartElement:(NSString *)elementName
 
             if (self.debugConsoleActivated)
             {
-                [self.jQueryOutput appendString:@"\n  // Debug-Fenster soll eine andere Schriftgröße haben\n"];
-                [self.jQueryOutput appendFormat:@"  $('#debugWindow').setAttribute_('fontsize',%@);\n",[attributeDict valueForKey:@"fontsize"]];
+                [self.jsOutput appendString:@"\n  // Debug-Fenster soll eine andere Schriftgröße haben\n"];
+                [self.jsOutput appendFormat:@"  $('#debugWindow').setAttribute_('fontsize',%@);\n",[attributeDict valueForKey:@"fontsize"]];
             }
         }
     }
@@ -4443,7 +4446,7 @@ didStartElement:(NSString *)elementName
         NSString *theId = [self addIdToElement:attributeDict];
 
 
-        if ([attributeDict valueForKey:@"placement"])
+        if ([attributeDict valueForKey:@"placementXXX"])
         {
             // Die zugehörige Klasse 'BDSTabSheetContainer' ist in BDSlib.lzx definiert
             // Solange ich BDSTabSheetContainer nicht auswerte, muss ich hier gesondert auf 'placment' reagieren
@@ -5365,7 +5368,6 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"top:"];
 
         // [self.output appendFormat:@"%d",counter*111];
-        // wtf...
         [self.output appendString:@"6"];
 
         // Und Zähler um eins erhöhen an der richtigen Stelle im Array
@@ -5576,7 +5578,7 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"BDStabsheetcontainer"])
+    if ([elementName isEqualToString:@"BDStabsheetcontainerXXX"])
     {
         element_bearbeitet = YES;
 
@@ -8255,7 +8257,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"button"] ||
         //[elementName isEqualToString:@"rollUpDownContainer"] ||
-        [elementName isEqualToString:@"BDStabsheetcontainer"] ||
+        [elementName isEqualToString:@"BDStabsheetcontainerXXX"] ||
         [elementName isEqualToString:@"tabslider"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
         [elementName isEqualToString:@"tabelement"] ||
@@ -8399,7 +8401,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
-        [elementName isEqualToString:@"BDStabsheetcontainer"] ||
+        [elementName isEqualToString:@"BDStabsheetcontainerXXX"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
         [elementName isEqualToString:@"tabelement"])
     {
@@ -9346,7 +9348,7 @@ BOOL isJSExpression(NSString *s)
 
     // Ich muss alle verwendeten css-background-images auf CSS-Ebene preloaden, sonst werden sie
     // nicht korrekt dargestellt (gerade auch die, die in Klassen erst instanziert werden).
-    // Es klappt nicht in Firefox mehr als 200 Divs übereinander zu stapeln. WTF Firefox???
+    // Es klappt nicht in Firefox mehr als 200 Divs übereinander zu stapeln. Firefox???
     // Deswegen als 'img'-Tag gelöst
     [self.output appendString:@"\n"];
     for(id object in self.allImgPaths)
@@ -14482,15 +14484,15 @@ BOOL isJSExpression(NSString *s)
     //"// Aber HTMLDivElement... wtf Firefox??\n"
     //"// HTMLDivElement.prototype.setAttribute = setAttributeFunc; // <- Nicht mehr nötig seit setAttribute_\n"
     //"// HTMLInputElement.prototype.setAttribute = setAttributeFunc; // <- Nicht mehr nötig seit setAttribute_\n"
-    "\n"
-    "\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// nur für DOM-Elemente machen die getter/setter Sinn  //\n"
-    "// Zusätzlich verlässt sich createObjectFromScript auf diesen Test in den Gettern\n"
-    "/////////////////////////////////////////////////////////\n"
-    "function isDOM(o) {\n"
-    "    return o.nodeName ? true : false;\n"
-    "}\n"
+    //"\n"
+    //"\n"
+    //"/////////////////////////////////////////////////////////\n"
+    //"// nur für DOM-Elemente machen die getter/setter Sinn  //\n"
+    //"// Zusätzlich verlässt sich createObjectFromScript auf diesen Test in den Gettern\n"
+    //"/////////////////////////////////////////////////////////\n"
+    //"function isDOM(o) {\n"
+    //"    return o.nodeName ? true : false;\n"
+    //"}\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -14510,7 +14512,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    $(this).triggerHandler('onaddsubview');\n"
     "}\n"
-    "\n"
     "HTMLDivElement.prototype.addSubview = addSubviewFunction;\n"
     "HTMLInputElement.prototype.addSubview = addSubviewFunction;\n"
     "HTMLSelectElement.prototype.addSubview = addSubviewFunction;\n"
@@ -14531,11 +14532,36 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    $(this).remove();\n"
     "}\n"
-    "\n"
     "HTMLDivElement.prototype.destroy = destroyFunction;\n"
     "HTMLInputElement.prototype.destroy = destroyFunction;\n"
     "HTMLSelectElement.prototype.destroy = destroyFunction;\n"
     "HTMLButtonElement.prototype.destroy = destroyFunction;\n"
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// searchSubnodes()                                    //\n"
+    "// From the docu: Searches subnodes for the given value of the given property.//\n"
+    "// For now, returns when it finds the first one. This is a width first search.//\n"
+    "// @arg prop = The attribute name to search for\n"
+    "// @arg val = The value of the attribute\n"
+    "// @returns = A pointer to the first subnode with the given property or null if none is found\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var searchSubnodesFunction = function (prop,val) {\n"
+    "    var node = null;\n"
+    "\n"
+    "    // Muss hier wohl immer über die property gehen, und nicht über ein HTML-Attribut direkt in find('')\n"
+    "    $(this).find('*').each(function() {\n"
+    "        if (this[prop] == val)\n"
+    "            node = this;\n"
+    "    });\n"
+    "\n"
+    "    return node;\n"
+    "}\n"
+    "HTMLDivElement.prototype.searchSubnodes = searchSubnodesFunction;\n"
+    "HTMLInputElement.prototype.searchSubnodes = searchSubnodesFunction;\n"
+    "HTMLSelectElement.prototype.searchSubnodes = searchSubnodesFunction;\n"
+    "HTMLButtonElement.prototype.searchSubnodes = searchSubnodesFunction;\n"
     "\n"
     "\n"
     "\n"
@@ -14547,7 +14573,6 @@ BOOL isJSExpression(NSString *s)
     "var updateDataFunction = function () {\n"
     "    return void 0;\n"
     "}\n"
-    "\n"
     "HTMLDivElement.prototype.updateData = updateDataFunction;\n"
     "HTMLInputElement.prototype.updateData = updateDataFunction;\n"
     "HTMLSelectElement.prototype.updateData = updateDataFunction;\n"
@@ -14656,7 +14681,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // return new lz.animator(this,prop,to,duration,undefined,undefined,motion,isRelative,false,moreArgs);\n"
     "}\n"
-    "\n"
     "HTMLDivElement.prototype.animate = animateFunction;\n"
     "HTMLInputElement.prototype.animate = animateFunction;\n"
     "HTMLSelectElement.prototype.animate = animateFunction;\n"
@@ -14688,7 +14712,6 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "    }\n"
     "}\n"
-    "\n"
     "HTMLDivElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
     "HTMLInputElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
     "HTMLSelectElement.prototype.applyConstraintMethod = applyConstraintMethodFunction;\n"
@@ -14724,7 +14747,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    console.log('Warning: Can not find a overwritten applyData() for ' + this.id);\n"
     "}\n"
-    "\n"
     "HTMLDivElement.prototype.applyData = applyDataFunction;\n"
     "HTMLInputElement.prototype.applyData = applyDataFunction;\n"
     "HTMLSelectElement.prototype.applyData = applyDataFunction;\n"
@@ -14829,11 +14851,9 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'options', {\n"
     "    get : function() {\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "\n"
     "        return $(this).data('options_');\n"
     "    },\n"
-    "    set : function(newValue){ if (isDOM(this)) $(this).data('options_',newValue); },\n"
+    "    set : function(newValue){ $(this).data('options_',newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -14844,11 +14864,9 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'styleclass', {\n"
     "    get : function() {\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "\n"
     "        return $(this).data('styleclass_');\n"
     "    },\n"
-    "    set : function(newValue){ if (isDOM(this)) this.setAttribute_('styleclass',newValue,undefined,false); },\n"
+    "    set : function(newValue){ this.setAttribute_('styleclass',newValue,undefined,false); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -14859,8 +14877,6 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'transition', {\n"
     "    get : function() {\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "\n"
     "        return $(this).data('transition_');\n"
     "    },\n"
     "    set : function(newValue){ $(this).data('transition_',newValue); },\n"
@@ -15682,8 +15698,6 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLInputElement.prototype, 'type', {\n"
     "    get : function(){\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "\n"
     "        return $(this).data('type_');\n"
     "    },\n"
     "    set : function(newValue){ $(this).data('type_',newValue); },\n"
@@ -15735,10 +15749,9 @@ BOOL isJSExpression(NSString *s)
     "HTMLInputElement.prototype.presentValue = presentValueFunction;\n"
     "\n"
     "// field ist der undokumentierte Zugriff auf das eigentliche input\n"
-    // alt + falsch: "HTMLInputElement.prototype.field = function() { return this; }\n"
     "// Matcht falls 'this' direkt ein input ist, aber auch, wenn es erst verschachtelt irgendwo weiter drinnen liegt\n"
     "Object.defineProperty(HTMLElement.prototype, 'field', {\n"
-    "    get : function(){ if (!isDOM(this)) return undefined; return $(this).find('*').andSelf().filter('input').get(0); },\n"
+    "    get : function(){ return $(this).find('*').andSelf().filter('input').get(0); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -15765,8 +15778,6 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'inset', {\n"
     "    get : function(){\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "\n"
     "        return $(this).data('inset_');\n"
     "    },\n"
     "    set : function(newValue){ this.setAttribute_('inset',newValue,undefined,false); },\n"
@@ -15780,8 +15791,6 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'spacing', {\n"
     "    get : function(){\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "\n"
     "        return $(this).data('spacing_');\n"
     "    },\n"
     "    set : function(newValue){ $(this).data('spacing_',newValue); /* this.setAttribute_('spacing',newValue,undefined,false); */ },\n"
@@ -16041,8 +16050,6 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'aaactive', {\n"
     "    get : function(){\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "\n"
     "        return $(this).data('aaactive_');\n"
     "    },\n"
     "    set : function(newValue){ $(this).data('aaactive_',newValue); },\n"
@@ -16056,8 +16063,6 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'aadescription', {\n"
     "    get : function(){\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "\n"
     "        return $(this).data('aadescription_');\n"
     "    },\n"
     "    set : function(newValue){ $(this).data('aadescription_',newValue); },\n"
@@ -16071,8 +16076,6 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'aaname', {\n"
     "    get : function(){\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "\n"
     "        return $(this).data('aaname_') || $(this).html();\n"
     "    },\n"
     "    set : function(newValue){ $(this).data('aaname_',newValue); },\n"
@@ -16086,8 +16089,6 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'aasilent', {\n"
     "    get : function(){\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "\n"
     "        return $(this).data('aasilent_');\n"
     "    },\n"
     "    set : function(newValue){ $(this).data('aasilent_',newValue); },\n"
@@ -16101,8 +16102,6 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'aatabindex', {\n"
     "    get : function(){\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "\n"
     "        return $(this).data('aatabindex_');\n"
     "    },\n"
     "    set : function(newValue){ $(this).data('aatabindex_',newValue); },\n"
@@ -16117,12 +16116,15 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'layout', {\n"
     "    get : function(){\n"
-    "        if (!isDOM(this)) return undefined;\n"
-    "        if (!$(this).data('layout_')) $(this).data('layout_', new lz.layout());\n"
+    "        // if (!$(this).data('layout_')) $(this).data('layout_', new lz.layout());\n"
+    "        // Wo kam das her? - Bricht meine neu eingeführte Abfrage nach einem vorhandenen Layout in interpretObject(), deswegen auskommentiert\n"
     "\n"
     "        return $(this).data('layout_');\n"
     "    },\n"
-    "    set : function(newValue){ $(this).data('layout_',newValue); $(this).triggerHandler('onlayout', newValue); },\n"
+    "    set : function(newValue){\n"
+    "        $(this).data('layout_',newValue);\n"
+    "        $(this).triggerHandler('onlayout', newValue);\n"
+    "    },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -16187,7 +16189,6 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'parent', {\n"
     "    get : function(){\n"
-    "        if (!isDOM(this)) return undefined;\n"
     "        if ($(this).data('defaultparent_')) return $('#' + $(this).data('defaultparent_')).get(0);\n"
     "        return this.getTheParent();\n"
     "    },\n"
@@ -16201,7 +16202,6 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'immediateparent', {\n"
     "    get : function(){\n"
-    "        if (!isDOM(this)) return undefined;\n"
     "        return this.getTheParent(true);\n"
     "    },\n"
     "    enumerable : false,\n"
@@ -16225,7 +16225,7 @@ BOOL isJSExpression(NSString *s)
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'y', {\n"
-    "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('top')); },\n"
+    "    get : function(){ return parseInt($(this).css('top')); },\n"
     "    set : function(newValue){ $(this).css('top', newValue); $(this).triggerHandler('ony', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -16236,7 +16236,7 @@ BOOL isJSExpression(NSString *s)
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'x', {\n"
-    "    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('left')); },\n"
+    "    get : function(){ return parseInt($(this).css('left')); },\n"
     "    set : function(newValue){ $(this).css('left', newValue); $(this).triggerHandler('onx', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -16247,7 +16247,7 @@ BOOL isJSExpression(NSString *s)
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'bgcolor', {\n"
-    "    get : function(){ if (!isDOM(this)) return undefined; return $(this).css('background-color'); },\n"
+    "    get : function(){ return $(this).css('background-color'); },\n"
     "    set : function(newValue){ $(this).css('background-color', newValue); $(this).triggerHandler('onbgcolor', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -16259,12 +16259,10 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "//// Nicht Object prototypen. Sonst wird auch das 'style'-Objekt prototgetypet und damit\n"
     "//// dort die opacity-Property kaputt gemacht und damit bricht jQuery.\n"
-    "//// Statt dessen an HTMLElement prototypen.\n"
-    "//// Im Prinzip können dann alle Propertys hier im 'HTMLElement' definiert werden.\n"
-    "//// Aber auch nicht 100 % perfekt, da dann ein DOM-Element extended wird. Es ist immer\n"
-    "//// besser reine JS-Objekte zu extenden.\n"
+    "//// Statt dessen an HTMLElement prototypen. Aber auch nicht 100 % perfekt, da dann\n"
+    "//// ein DOM-Element extended wird, was in Teilen der Literatur kritisch gesehen wird.\n"
     "Object.defineProperty(HTMLElement.prototype, 'opacity', {\n"
-    "    get : function(){ if (!isDOM(this)) return undefined; return $(this).css('opacity'); },\n"
+    "    get : function(){ return $(this).css('opacity'); },\n"
     "    set : function(newValue){ this.setAttribute_('opacity', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -16275,10 +16273,10 @@ BOOL isJSExpression(NSString *s)
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'height', {\n"
-    //"    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('height'));  },\n"
+    //"    get : function(){ return parseInt($(this).css('height'));  },\n"
     // Gemäß Beispiel 7.4 sind es die outer-Werte!
-    "    get : function(){ if (!isDOM(this)) return undefined; return $(this).outerHeight();  },\n"
-    "    set : function(newValue){ if (isDOM(this)) $(this).css('height',newValue); $(this).triggerHandler('onheight', newValue); },\n"
+    "    get : function(){ return $(this).outerHeight();  },\n"
+    "    set : function(newValue){ $(this).css('height',newValue); $(this).triggerHandler('onheight', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -16288,10 +16286,10 @@ BOOL isJSExpression(NSString *s)
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'width', {\n"
-    //"    get : function(){ if (!isDOM(this)) return undefined; return parseInt($(this).css('width'));  },\n"
+    //"    get : function(){ return parseInt($(this).css('width'));  },\n"
     // Gemäß Beispiel 7.4 ist es outerWidth!
-    "    get : function(){ if (!isDOM(this)) return undefined; return $(this).outerWidth();  },\n"
-    "    set : function(newValue){ if (isDOM(this)) $(this).css('width',newValue); $(this).triggerHandler('onwidth', newValue); },\n"
+    "    get : function(){ return $(this).outerWidth();  },\n"
+    "    set : function(newValue){ $(this).css('width',newValue); $(this).triggerHandler('onwidth', newValue); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -16301,7 +16299,7 @@ BOOL isJSExpression(NSString *s)
     "// READ-ONLY                                           //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'unstretchedheight', {\n"
-    "    get : function(){ if (!isDOM(this)) return undefined; return $(this).outerHeight(); },\n"
+    "    get : function(){ return $(this).outerHeight(); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -16311,7 +16309,7 @@ BOOL isJSExpression(NSString *s)
     "// READ-ONLY                                           //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'unstretchedwidth', {\n"
-    "    get : function(){ if (!isDOM(this)) return undefined; return $(this).outerWidth(); },\n"
+    "    get : function(){ return $(this).outerWidth(); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -16322,9 +16320,9 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// Es MUSS HTMLElement sein, sonst bricht das sichern der Attribute in 'interpretObject()', weil 'visible' immer undefined zurückliefert (das Objekt in dem gesichert wird, ist kein DOM)\n"
     "Object.defineProperty(HTMLElement.prototype, 'visible', {\n"
-    "    get : function(){ if (!isDOM(this)) return undefined; return $(this).is(':visible');  },\n"
+    "    get : function(){ return $(this).is(':visible');  },\n"
     "    // Eigentlich immer über setAttribute setzen. Falls doch direkte Zuweisung, dann nicht triggern\n"
-    "    set : function(newValue){ if (isDOM(this)) this.setAttribute_('visible',newValue,undefined,false); },\n"
+    "    set : function(newValue){ this.setAttribute_('visible',newValue,undefined,false); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
@@ -16377,7 +16375,7 @@ BOOL isJSExpression(NSString *s)
     //"// READ/WRITE                                          //\n"
     //"/////////////////////////////////////////////////////////\n"
     //"Object.defineProperty(HTMLElement.prototype, 'textalign', {\n"
-    //"    get : function(){ if (!isDOM(this)) return undefined; return $(this).css('text-align'); },\n"
+    //"    get : function(){ return $(this).css('text-align'); },\n"
     //"    set : function(newValue){\n"
     //"        if (newValue !== 'left' && newValue !== 'center' && newValue !== 'right')\n"
     //"            throw new Error('Unsupported value for textalign.');\n"
@@ -17020,10 +17018,9 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "            // Und neu: Den Klon in clones speichern (und dieses per triggerHandler bekannt machen)\n"
-    //"            el.clones.push(clone2.get(0));\n" // <-- geht mit der gleichen Begründung nicht wie das eins drunter.
+    //"            el.clones.push(clone2.get(0)); // <-- Klappt nicht, weil el wohl ausgetauscht\n"
     "            $('#'+el.id).get(0).clones.push(clone2.get(0));\n"
-    //"            $(el).triggerHandler('onclones');\n"
-    // Ähmmm, geht nicht?!?! Wtf. I don't understand. Nur so: // Evtl. weil ich 'el' ja aus dem DOM hier entferne / überschreibe
+    //"            $(el).triggerHandler('onclones'); // <-- Klappt nicht, weil el wohl ausgetauscht\n"
     "            $('#'+el.id).triggerHandler('onclones');\n"
     "            // Und direkt 'oninit' hinterher triggern (Wegen Bsp. 30.3)\n"
     "            $('#'+el.id).triggerHandler('oninit');\n"
@@ -17527,7 +17524,7 @@ BOOL isJSExpression(NSString *s)
     "// super_                                              //\n"
     "// Ermöglicht Zugriff auf alle Methoden des Objekts,   //\n"
     "// von welchem geerbt wurde.                           //\n"
-    "// ...ist noch etwas unausgereift... To Do             //\n"
+    "// ...ist vermutlich noch etwas unausgereift... To Do  //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'super_', {\n"
     "    get : function(){\n"
@@ -17537,56 +17534,45 @@ BOOL isJSExpression(NSString *s)
     "            return { init: function() {} };\n"
     "        }\n"
     "\n"
-    "        if ($(this).data('olel') === 'BDSeditnumber' ||\n"
-    "            $(this).data('olel') === 'BDScombobox' ||\n"
-    "            $(this).data('olel') === 'trashcangridcolumn' ||\n"
-    "            $(this).data('olel') === 'datacombobox' ||\n"
-    "            $(this).data('olel') === 'basewindow')\n"
-    "        {\n"
-    "            var superMethods_ = { init: function() {} };\n"
     "\n"
-    "            var temp = new oo[$(this).data('olel')]('');\n"
+    "        var superMethods_ = { init: function() {} };\n"
     "\n"
-    "            var garbage = {};\n"
-    "            var garbage_1 = {};\n"
-    "            var garbage_2 = {};\n"
-    "            var garbage_3 = {};\n"
-    "            var garbage_4 = {};\n"
-    "            var garbage_5 = {};\n"
-    "            var garbage_6 = {};\n"
+    "        var temp = new oo[$(this).data('olel')]('');\n"
     "\n"
-    "            var s = replaceID(temp.inherit.contentJS,'garbage','superMethods_');\n"
-    "            eval(s);\n"
+    "        var garbage = {};\n"
+    "        var garbage_1 = {};\n"
+    "        var garbage_2 = {};\n"
+    "        var garbage_3 = {};\n"
+    "        var garbage_4 = {};\n"
+    "        var garbage_5 = {};\n"
+    "        var garbage_6 = {};\n"
     "\n"
-    "            for(var prop in superMethods_) {\n"
-    "                if (superMethods_.hasOwnProperty(prop) && typeof superMethods_[prop] === 'function') {\n"
-    "                    // Mit korrigiertem this!!! Ein evtl. benutztes 'this' verweist sonst noch auf den Vorfahren.\n"
-    "                    superMethods_[prop] = superMethods_[prop].bind(this); // Durch das bind wird es im alert zu 'native code'\n"
-    "                }\n"
+    "        var s = replaceID(temp.inherit.contentJS,'garbage','superMethods_');\n"
+    "        eval(s);\n"
+    "\n"
+    "        for(var prop in superMethods_) {\n"
+    "            if (superMethods_.hasOwnProperty(prop) && typeof superMethods_[prop] === 'function') {\n"
+    "                // Mit korrigiertem this!!! Ein evtl. benutztes 'this' verweist sonst noch auf den Vorfahren.\n"
+    "                superMethods_[prop] = superMethods_[prop].bind(this); // Durch das bind wird es im alert zu 'native code'\n"
     "            }\n"
+    "        }\n"
     "\n"
-    "            // Und auch alle Methoden übertragen, die korrekterweise bereits nicht als string vorliegen:\n"
-    "            if ($(this).data('olel') === 'basewindow')\n"
+    "        // Und auch alle Methoden übertragen, die korrekterweise bereits nicht als string vorliegen\n"
+    "        if ($(this).data('olel') === 'basewindow')\n"
+    "        {\n"
+    "            // hmm, why ist es temp.methods und nicht temp.inherit.methods?\n"
+    "            if (temp.methods)\n"
     "            {\n"
-    "                // hmm, why ist es temp.methods und nicht temp.inherit.methods?\n"
-    "                if (temp.methods)\n"
+    "                Object.keys(temp.methods).forEach(function(key)\n"
     "                {\n"
-    "                    Object.keys(temp.methods).forEach(function(key)\n"
-    "                    {\n"
-    "                        superMethods_[key] = temp.methods[key];\n"
-    "                    });\n"
-    "                }\n"
+    "                    superMethods_[key] = temp.methods[key];\n"
+    "                });\n"
     "            }\n"
+    "        }\n"
     "\n"
-    "            // Wird als erstes aufgerufen, deswegen hier zum testen\n"
-    "            // Diese Abfrage muss dann später entfernt werden\n"
-    "            return superMethods_;\n"
-    "        }\n"
-    "        else\n"
-    "        {\n"
-    "            alert('Moment mal bitte! Test und Integration von super_ bei ' + $(this).data('olel'));\n"
-    "            alert(this.id);\n"
-    "        }\n"
+    "        // Wird als erstes aufgerufen, deswegen hier zum testen\n"
+    "        // Diese Abfrage muss dann später entfernt werden\n"
+    "        return superMethods_;\n"
     "    },\n"
     "    /* READ-ONLY set : , */\n"
     "    enumerable : false,\n"
@@ -18040,7 +18026,7 @@ BOOL isJSExpression(NSString *s)
     //"        // $(id).append(gesicherteKinder);\n"
     //"        // Die kinderVorDemAppenden hier benutzen!. Sonst verweist kinderVorDemAppenden auf alte Nicht-DOM-Element\n"
     //"        // Und der weiter unten durchgeführte appendTo-Vorgang führt zu einem einfügen von Nicht-Dom-Elemente, und\n"
-    //"        // nicht zu einer Verschiebung. Dies äußert sich in doppelten ID's! Wtf... das war hart das herauszufinden.\n"
+    //"        // nicht zu einer Verschiebung. Dies äußert sich in doppelten ID's! Das war hart das herauszufinden.\n"
     // bzw. klon-Vorgang von 'gesicherteKinder' ware wohl falsch
     //"        if (kinderVorDemAppenden.length > 0)\n"
     //"            $(id).append(kinderVorDemAppenden);\n"
@@ -18200,6 +18186,15 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // JS erst jetzt ausführen, sonst stimmen bestimmte width/height's nicht, weil ja etwas verschoben wurde\n"
     "    executeJSCodeOfThisObject(obj, id, $(id).attr('id'), undefined, true);\n"
+    "\n"
+    "\n"
+    "    // Hinweis: Falls die Klasse ein layout-Attribut und ein defaultplacement-Attribut gleichzeitig hat,\n"
+    "    // Dann gilt das Layout-Attribut in Wirklichkeit für den defaultplacement (s. Beispiel 33.17 - red view)\n"
+    "    // Aber diese Regel wird schon automatisch von der setSimpleLayoutXIn-Funktion berücksichtigt,\n"
+    "    // deswegen, sofern vorhanden, layout ganz normal setzen, wenn alle Kinder korrekt positioniert sind.\n"
+    "    // 2. Abfrage noch iwie erforderlich - Lösung wäre hier wohl ein lz-layout-Objekt _stets_ reinzupacken\n"
+    "    if ($(id).data('layout_') && typeof $(id).data('layout_') == 'string')\n"
+    "        id.setAttribute_('layout', $(id).data('layout_'));\n"
     "\n"
     "\n"
     "    // Example 37.11:\n"

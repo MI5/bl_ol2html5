@@ -13,8 +13,12 @@
 // - width/height muss nicht mehr initial auf 'auto' gesetzt werden, seitdem der ganze JS-Code
 // in '$(window).load(function()' steckt,
 //
-//- Eigene Klassen müssen als allererstes und nicht als letztes gecheckt werden (Bsp. 15.14 und 15.15)
+// - Eigene Klassen müssen als allererstes und nicht als letztes gecheckt werden (Bsp. 15.14 und 15.15)
 //
+//
+//
+//
+// - Hints: Don't rely on Mousewheels
 //
 //
 //
@@ -3020,7 +3024,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"inputtext"] ||
         [elementName isEqualToString:@"button"] ||
         //[elementName isEqualToString:@"rollUpDownContainer"] ||
-        [elementName isEqualToString:@"BDStabsheetcontainerXXX"] ||
+        [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"tabslider"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
         [elementName isEqualToString:@"tabelement"] ||
@@ -4446,7 +4450,7 @@ didStartElement:(NSString *)elementName
         NSString *theId = [self addIdToElement:attributeDict];
 
 
-        if ([attributeDict valueForKey:@"placementXXX"])
+        if ([attributeDict valueForKey:@"placement"])
         {
             // Die zugehörige Klasse 'BDSTabSheetContainer' ist in BDSlib.lzx definiert
             // Solange ich BDSTabSheetContainer nicht auswerte, muss ich hier gesondert auf 'placment' reagieren
@@ -5578,7 +5582,7 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"BDStabsheetcontainerXXX"])
+    if ([elementName isEqualToString:@"BDStabsheetcontainer"])
     {
         element_bearbeitet = YES;
 
@@ -6751,8 +6755,16 @@ didStartElement:(NSString *)elementName
         // Bei Datapointern und Datasets macht es keinen Sinn mit pointer-events zu arbeiten, da dies keine DOM-Elemente sind
         if (![enclosingElemTyp isEqualToString:@"datapointer"] && ![enclosingElemTyp isEqualToString:@"dataset"])
         {
-            [o appendString:@"\n  // pointer-events zulassen, da ein Handler an dieses Element gebunden ist."];
-            [o appendFormat:@"\n  $('#%@').css('pointer-events','auto');\n",enclosingElem];
+            // Ebensowenig macht es bei einem als Reference gesetzten 'lz.Keys' Sinn...
+            if ([attributeDict valueForKey:@"reference"] && [enclosingElem isEqualToString:@"lz.Keys"])
+            {
+                
+            }
+            else
+            {
+                [o appendString:@"\n  // pointer-events zulassen, da ein Handler an dieses Element gebunden ist."];
+                [o appendFormat:@"\n  $('#%@').css('pointer-events','auto');\n",enclosingElem];
+            }
         }
 
 
@@ -6993,6 +7005,7 @@ didStartElement:(NSString *)elementName
 
         if ([name isEqualToString:@"onkeyup"])
         {
+            /* ka, wo das herkam
             if ([attributeDict valueForKey:@"args"] &&
                 ([[attributeDict valueForKey:@"args"] isEqualToString:@"k"]))
             {
@@ -7005,6 +7018,12 @@ didStartElement:(NSString *)elementName
                 self.attributeCount++;
                 NSLog(@"Considering the argument 'key' as 'var key = e.keyCode;'.");
             }
+             */
+            if ([attributeDict valueForKey:@"args"])
+            {
+                self.attributeCount++;
+                args = [NSString stringWithFormat:@",%@",[attributeDict valueForKey:@"args"]];
+            }
 
 
             self.attributeCount++;
@@ -7013,7 +7032,14 @@ didStartElement:(NSString *)elementName
             [o appendFormat:@"\n  // keyup-Handler für %@\n",enclosingElem];
 
             // die Variable k wird von OpenLaszlo einfach so benutzt. Das muss der keycode sein.
-            [o appendFormat:@"  $('#%@').keyup(function(e)\n  {\n    var k = e.keyCode;\n    var key = e.keyCode;\n\n    ",enclosingElem];
+
+            // Dann ist es u. U. kein DOM-Element und ich muss direkt über den Variablen-Namen gehen
+            if ([attributeDict valueForKey:@"reference"])
+                [o appendFormat:@"  $(%@)",enclosingElem];
+            else
+                [o appendFormat:@"  $('#%@')",enclosingElem];
+
+            [o appendFormat:@".keyup(function(e%@)\n  {\n    //var k = e.keyCode;\n    //var key = e.keyCode;\n\n    ",args];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7024,6 +7050,7 @@ didStartElement:(NSString *)elementName
 
         if ([name isEqualToString:@"onkeydown"])
         {
+            /* ka, wo das herkam
             if ([attributeDict valueForKey:@"args"] &&
                 ([[attributeDict valueForKey:@"args"] isEqualToString:@"k"]))
             {
@@ -7036,13 +7063,25 @@ didStartElement:(NSString *)elementName
                 self.attributeCount++;
                 NSLog(@"Considering the argument 'key' as 'var key = e.keyCode;'.");
             }
+             */
+            if ([attributeDict valueForKey:@"args"])
+            {
+                self.attributeCount++;
+                args = [NSString stringWithFormat:@",%@",[attributeDict valueForKey:@"args"]];
+            }
 
             self.attributeCount++;
             NSLog(@"Binding the method in this handler to a jQuery-keydown-event.");
 
             [o appendFormat:@"\n  // keydown-Handler für %@\n",enclosingElem];
 
-            [o appendFormat:@"  $('#%@').keydown(function(e)\n  {\n    var k = e.keyCode;\n    var key = e.keyCode;\n\n    ",enclosingElem];
+            // Dann ist es u. U. kein DOM-Element und ich muss direkt über den Variablen-Namen gehen
+            if ([attributeDict valueForKey:@"reference"])
+                [o appendFormat:@"  $(%@)",enclosingElem];
+            else
+                [o appendFormat:@"  $('#%@')",enclosingElem];
+
+            [o appendFormat:@".keydown(function(e%@)\n  {\n    //var k = e.keyCode;\n    //var key = e.keyCode;\n\n    ",args];
 
             alsBuildInEventBearbeitet = YES;
 
@@ -7085,7 +7124,16 @@ didStartElement:(NSString *)elementName
                 NSString *enclosingElemOfEnclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-3];
                 if ([enclosingElemOfEnclosingElem isEqualToString:ID_REPLACE_STRING])
                 {
-                    [o appendFormat:@"  $(%@.%@).on('%@',function(e%@)\n  { // extended name\n    ",ID_REPLACE_STRING,enclosingElem,name,args];
+                    // Hmmmmmmm, das stimmt einfach nicht so generell, z. B. wenn ich auf lz.Keys
+                    // stoße, kompiliert er es dann nicht.
+                    if ([enclosingElem isEqualToString:@"lz.Keys"])
+                    {
+                        [o appendFormat:@"  $(%@).on('%@',function(e%@)\n  {\n    ",enclosingElem,name,args];
+                    }
+                    else
+                    {
+                        [o appendFormat:@"  $(%@.%@).on('%@',function(e%@)\n  { // extended name\n    ",ID_REPLACE_STRING,enclosingElem,name,args];
+                    }
                 }
                 else
                 {
@@ -8257,7 +8305,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"button"] ||
         //[elementName isEqualToString:@"rollUpDownContainer"] ||
-        [elementName isEqualToString:@"BDStabsheetcontainerXXX"] ||
+        [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"tabslider"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
         [elementName isEqualToString:@"tabelement"] ||
@@ -8401,7 +8449,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"basebutton"] ||
         [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
-        [elementName isEqualToString:@"BDStabsheetcontainerXXX"] ||
+        [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
         [elementName isEqualToString:@"tabelement"])
     {
@@ -10367,6 +10415,13 @@ BOOL isJSExpression(NSString *s)
     "};\n"
     "\n"
     "\n"
+    "/*! Copyright (c) 2011 Brandon Aaron (http://brandonaaron.net)\n"
+    " * Licensed under the MIT License (http://en.wikipedia.org/wiki/MIT_License).\n"
+    " * Version: 3.0.6\n"
+    " */\n"
+    "(function(a){function d(b){var c=b||window.event,d=[].slice.call(arguments,1),e=0,f=!0,g=0,h=0;return b=a.event.fix(c),b.type='mousewheel',c.wheelDelta&&(e=c.wheelDelta/120),c.detail&&(e=-c.detail/3),h=e,c.axis!==undefined&&c.axis===c.HORIZONTAL_AXIS&&(h=0,g=-1*e),c.wheelDeltaY!==undefined&&(h=c.wheelDeltaY/120),c.wheelDeltaX!==undefined&&(g=-1*c.wheelDeltaX/120),d.unshift(b,e,g,h),(a.event.dispatch||a.event.handle).apply(this,d)}var b=['DOMMouseScroll','mousewheel'];if(a.event.fixHooks)for(var c=b.length;c;)a.event.fixHooks[b[--c]]=a.event.mouseHooks;a.event.special.mousewheel={setup:function(){if(this.addEventListener)for(var a=b.length;a;)this.addEventListener(b[--a],d,!1);else this.onmousewheel=d},teardown:function(){if(this.removeEventListener)for(var a=b.length;a;)this.removeEventListener(b[--a],d,!1);else this.onmousewheel=null}},a.fn.extend({mousewheel:function(a){return a?this.bind('mousewheel',a):this.trigger('mousewheel')},unmousewheel:function(a){return this.unbind('mousewheel',a)}})})(jQuery)\n"
+    "\n"
+    "\n"
     "/////////////////////////////////////////////////////////\n"
     "// sprintf() für format()                                \n"
     "/////////////////////////////////////////////////////////\n"
@@ -11530,6 +11585,37 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        this.clearFocus = function() {\n"
     "            this.getFocus().blur();\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "    this.KeysService = function() {\n"
+    "        // Wird beim instanzieren von KeysService in lz.Keys weiter unten initial einmal ausgeführt\n"
+    "        $(document.documentElement).keyup(function (event) {\n"
+    "            // Docu: Sent whenever a key goes up; sent with keycode for key that was let go.\n"
+    "            $(lz.Keys).triggerHandler('keyup',event.keyCode);\n"
+    "            // Docu: Sent for all key events\n"
+    "            $(lz.Keys).triggerHandler('keyevent');\n"
+    "        });\n"
+    "        $(document.documentElement).keydown(function (event) {\n"
+    "            //Docu: Sent when a key is pressed; sent with keycode for key that was pressed. \n"
+    "            $(lz.Keys).triggerHandler('keydown',event.keyCode);\n"
+    "            // Docu: Sent for all key events\n"
+    "            $(lz.Keys).triggerHandler('keyevent');\n"
+    "        });\n"
+    "        $(document.documentElement).mousewheel( function(e, delta){\n"
+    "            $(lz.Keys).triggerHandler('mousewheeldelta');\n"
+    "            // console.log( delta > 0 ? 'UP':'DOWN'); // Ungetestet;\n"
+    "        });\n"
+    "\n"
+    "        this.callOnKeyCombo = function(handler,keysArray) {\n"
+    "            $(lz.Keys).keydown(function(e,key) {\n"
+    "                // Stimmt noch nicht, weil das eine ist ein KeyCode, das andere ein Buchstabe\n"
+    "                // Bräuchte man wohl ne mapping-Tabelle - To Do Later - Unrelevant für Taxango\n"
+    "                if (jQuery.inArray(key,keysArray) != -1) {\n"
+    "                    handler();\n"
+    "                }\n"
+    "            });\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -13215,6 +13301,8 @@ BOOL isJSExpression(NSString *s)
     "lz.Focus = new lz.FocusService();\n"
     "// lz.Cursor is the single instance of the class lz.CursorService\n"
     "lz.Cursor = new lz.CursorService();\n"
+    "// lz.Keys is the single instance of the class lz.KeysService\n"
+    "lz.Keys = new lz.KeysService();\n"
     "// lz.Timer is the single instance of the class lz.TimerService\n"
     "lz.Timer = new lz.TimerService();\n"
     "// lz.Audio is the single instance of the class lz.AudioService.\n"
@@ -17548,6 +17636,18 @@ BOOL isJSExpression(NSString *s)
     "        var garbage_6 = {};\n"
     "\n"
     "        var s = replaceID(temp.inherit.contentJS,'garbage','superMethods_');\n"
+    "\n"
+    "        // Der braucht noch etwas Nachhilfe\n"
+    "        if ($(this).data('olel') === 'rollUpDown')\n"
+    "        {\n"
+    "            // Alles was ab '// Ein Animator' kommt, muss ich abschneiden vom String,\n"
+    "            // damit ich 'rollUpDown' auswerten kann.\n"
+    "            s = s.substring(0,s.indexOf('// Ein Animator'));\n"
+    "\n"
+    "            // Um zuverhindern dass er in uns wiederum 'super_' aufruft\n"
+    "            s = s.replace(/super_.init/g,'//');\n"
+    "        }\n"
+    "\n"
     "        eval(s);\n"
     "\n"
     "        for(var prop in superMethods_) {\n"

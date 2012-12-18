@@ -18004,8 +18004,8 @@ BOOL isJSExpression(NSString *s)
     "        // Methoden von <text> aufrufen kann (2. Beispiel von <text> in OL-Doku)\n"
     "        // Derzeitige Lösung: Bei Text (und einigen anderen...) nicht appenden, sondern ersetzen...\n"
     "        // (und die Attribute, Methoden, Events und CSS übernehmen)\n"
-    "        if (obj.inherit.name === 'text' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button' || obj.inherit.name === 'basecombobox' || obj.inherit.name === 'baselistitem'\n"
-    "        || obj.inherit.name === 'drawview' || obj.inherit.name === 'edittext')\n"
+    //"        if (obj.inherit.name === 'text' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button' || obj.inherit.name === 'basecombobox' || obj.inherit.name === 'baselistitem' || obj.inherit.name === 'drawview' || obj.inherit.name === 'edittext')\n"
+    "        if (obj.inherit.name === 'text' || obj.inherit.name === 'basewindow' || obj.inherit.name === 'button' || obj.inherit.name === 'basecombobox' || obj.inherit.name === 'baselistitem' || obj.inherit.name === 'drawview' || obj.inherit.name === 'edittext')\n"
     "        {\n"
     // Unnötig seitdem ich rückwärts auswerte:
     //"          // Alle auf vorherigen Vererbungs-Ebenen hinzugefügten Methoden sichern\n"

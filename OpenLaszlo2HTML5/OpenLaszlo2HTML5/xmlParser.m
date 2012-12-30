@@ -16,7 +16,7 @@
 // - Eigene Klassen müssen als allererstes und nicht als letztes gecheckt werden (Bsp. 15.14 und 15.15)
 //
 //
-//
+// - BDStabsheetTaxango ist nicht das Problem -- > Ne, ich denke ich MUSS beide gleichzeitig auswerten
 //
 // - Hints: Don't rely on Mousewheels
 //
@@ -89,8 +89,8 @@ BOOL ownSplashscreen = NO;
 @property (strong, nonatomic) NSMutableString *jsHeadOutput;
 @property (strong, nonatomic) NSMutableString *datasetOutput;
 
-@property (strong, nonatomic) NSMutableString *jsComputedValuesOutput; // kommt DIREKT nach dem DOM
-@property (strong, nonatomic) NSMutableString *jsConstraintValuesOutput; // kommt ebenfalls direkt nach dem DOM
+@property (strong, nonatomic) NSMutableString *jsComputedValuesOutput;
+@property (strong, nonatomic) NSMutableString *jsConstraintValuesOutput;
 
 @property (strong, nonatomic) NSMutableString *jsInitstageDeferOutput;
 @property (strong, nonatomic) NSMutableString *idsAndNamesOutput;
@@ -147,11 +147,11 @@ BOOL ownSplashscreen = NO;
 // damit ich es auch für canvas setzen kann.
 @property (strong, nonatomic) NSString *lastUsedNameAttributeOfMethod;
 
-// "class" muss das name-attribut in den rekursiven Aufruf <evaluateclass> rüberretten,
+// 'class' muss das name-attribut in den rekursiven Aufruf <evaluateclass> rüberretten,
 // damit ich dort die gefundenen Attribute richtig zuweisen kann.
 @property (strong, nonatomic) NSString *lastUsedNameAttributeOfClass;
 
-// "class" muss auch das extends-attribut in den rekursiven Aufruf <evaluateclass> rüberretten,
+// 'class' muss auch das extends-attribut in den rekursiven Aufruf <evaluateclass> rüberretten,
 // damit ich dort darauf reagieren kann (z. B. bei <drawview> der Fall.
 @property (strong, nonatomic) NSString *lastUsedExtendsAttributeOfClass;
 
@@ -211,6 +211,7 @@ BOOL ownSplashscreen = NO;
 @property (nonatomic) BOOL onInitInHandler;
 @property (nonatomic) BOOL initStageDefer;
 @property (nonatomic) BOOL initStageDeferThatWillBeCalledByCompleteInstantiation;
+@property (nonatomic) BOOL classInClass;
 @property (nonatomic) BOOL debugConsoleActivated;
 
 // 'reference'-Variable in einem Handler muss an das korrekte Element gebunden werden
@@ -277,7 +278,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize weAreInRollUpDownWithoutSurroundingRUDContainer = _weAreInRollUpDownWithoutSurroundingRUDContainer;
 @synthesize weAreCollectingTheCompleteContentInClass = _weAreCollectingTheCompleteContentInClass;
 
-@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, initStageDefer = _initStageDefer, initStageDeferThatWillBeCalledByCompleteInstantiation =_initStageDeferThatWillBeCalledByCompleteInstantiation, debugConsoleActivated = _debugConsoleActivated, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler, handlerofDrawview = _handlerofDrawview, lastUsedNameAttributeOfState = _lastUsedNameAttributeOfState;
+@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, initStageDefer = _initStageDefer, initStageDeferThatWillBeCalledByCompleteInstantiation =_initStageDeferThatWillBeCalledByCompleteInstantiation, classInClass = _classInClass, debugConsoleActivated = _debugConsoleActivated, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler, handlerofDrawview = _handlerofDrawview, lastUsedNameAttributeOfState = _lastUsedNameAttributeOfState;
 
 
 
@@ -415,6 +416,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.onInitInHandler = NO;
         self.initStageDefer = NO;
         self.initStageDeferThatWillBeCalledByCompleteInstantiation = NO;
+        self.classInClass = NO;
         self.debugConsoleActivated = NO;
         self.referenceAttributeInHandler = NO;
         self.handlerofDrawview = NO;
@@ -7334,7 +7336,7 @@ didStartElement:(NSString *)elementName
         //[d removeObjectForKey:@"clickable"];
         //[d removeObjectForKey:@"showhandcursor"];
         //[d removeObjectForKey:@"mask"];
-        //[d removeObjectForKey:@"placement"]; // Neu hinzugefügt
+        //[d removeObjectForKey:@"placement"];
         //[d removeObjectForKey:@"ignoreplacement"];
 
         /* [d removeObjectForKey:@"value"]; Auskommentieren, bricht sonst Beispiel <basecombobox> */
@@ -7406,34 +7408,42 @@ didStartElement:(NSString *)elementName
         // Es können ja verschachtelte Klassen auftreten, deswegen muss ich die IDs
         // hier draufpushen, und später wegholen.
         [self.rememberedID4closingSelfDefinedClass addObject:self.zuletztGesetzteID];
+        NSString *idUmgebendesElement = [self.rememberedID4closingSelfDefinedClass lastObject];
 
-
-        // Okay, jQuery-Code mache ich beim schließen, weil ich erst den eventuellen Text der
-        // zwischen den Tags steht, aufsammeln kann, und dann als Parameter übergebe.
 
         // Okay, das geht so nicht, habe den Code wieder nach vorne geholt, denn sonst würde bei ineinander
-        // verschschachtelten Klassen, erst die innere Klasse ausgeführt werden. Aber die innere Klasse muss
-        // bereits die width vom parent wissen (für align)
-        // Falls ich dann doch mal text zwischen den tags habe, dann füge ich ihn dadurch ein, dass ich wieder
+        // verschschachtelten Klassen, erst die innere Klasse ausgeführt werden. Aber die innere Klasse
+        // muss bereits die width vom parent wissen (für align).
+        // Falls ich dann doch mal text zwischen den tags habe, dann füge ich ihn dadurch ein, dass ich
         // hinten was vom Output entferne. Es kann ja nie beides geben. Entweder es gibt ineinander verschachtelte
         // Klassen ODER es gibt einen Textstring, der zwischen öffnendem und schließendem Tag liegt.
 
 
-        NSString *idUmgebendesElement = [self.rememberedID4closingSelfDefinedClass lastObject];
 
         // Und dann kann ich es per jQuery flexibel einfügen.
         // Okay, hier muss ich jetzt per jQuery die Objekte
         // auslesen aus der JS-Datei collectedClasses.js
 
-        [o appendFormat:@"\n  // Instanzvariablen holen, id holen, Instanz erzeugen, Objekt auswerten und 'id' entsprechend ergänzen"];
+        [o appendFormat:@"\n  // Instanzvariablen holen, el holen, Instanz erzeugen, Objekt auswerten und 'el' entsprechend ergänzen"];
         [o appendFormat:@"\n  var iv = { %@};",instanceVars];
-        [o appendFormat:@"\n  var id = document.getElementById('%@');",idUmgebendesElement];
+        [o appendFormat:@"\n  var el = document.getElementById('%@');",idUmgebendesElement];
         [o appendFormat:@"\n  var obj = new oo.%@('');",elementName];
+        [o appendString:@"\n  interpretObject(obj,el,iv);\n"];
 
-        // [o appendFormat:@"\n  if (obj.attributesDict.initstage == 'defer')"]; // try 1 --> Ohne Erfolg...
-        // [o appendFormat:@"\n  if ($(id).is(':visible'))"]; // try 2 --> Ohne Erfolg, bricht viewlose Elemente (swfso z. B.)
 
-        [o appendString:@"\n  interpretObject(obj,id,iv);\n"];
+
+        // Das heißt: Wir sind in einer Klasse auf eine Klasse gestoßen
+        // Diese wird immer mit-ausgewertet, wenn die umgebendende ausgewertet wird,
+        // und kriegt deswegen kein eigenes interpretObject() in output_ol2x.html
+        if ([self.rememberedID4closingSelfDefinedClass count] > 1)
+        {
+            // Doesn't work yet...
+            //self.classInClass = YES;
+        }
+        else
+        {
+            self.classInClass = NO;
+        }
 
 
 
@@ -7449,9 +7459,16 @@ didStartElement:(NSString *)elementName
         }
         else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation)
         {
-            // Dann speichern wir NUR die instanceVars, alles andere klären wir später beim Aufruf von CompleteInstantiation
+            // Dann speichern wir NUR die instanceVars, alles andere klären wir später beim Aufruf von completeInstantiation
             [self.jsInitstageDeferOutput  appendFormat:@"\n  // Klasse '%@' wird später instanziert in '%@' von completeInstantiation",elementName,self.zuletztGesetzteID];
             [self.jsInitstageDeferOutput  appendFormat:@"\n  $(document.getElementById('%@')).data('instanceVars',{ %@});\n",self.zuletztGesetzteID,instanceVars];
+        }
+        else if (self.classInClass)
+        {
+            // Dann speichern wir NUR die instanceVars, alles andere klären wir später
+            // beim Aufrufvon interpretObject() des parents
+            [self.jsOutput  appendFormat:@"\n  // Klasse '%@' wird mit parent zusammen instanziert in '%@'",elementName,self.zuletztGesetzteID];
+            [self.jsOutput  appendFormat:@"\n  $(document.getElementById('%@')).data('instanceVars',{ %@});\n",self.zuletztGesetzteID,instanceVars];
         }
         else
         {
@@ -7727,18 +7744,25 @@ BOOL isJSExpression(NSString *s)
                 // Da ich den string mit ' umschlossen habe, muss ich eventuelle ' im String escapen
                 s = [self protectThisSingleQuotedJavaScriptString:s];
 
-                // Dann IN den Output hinein injecten
                 if (self.initStageDefer)
                 {
-                    [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-(34/*+34*/)];
+                    // Dann IN den Output hinein injecten
+                    [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-34];
                 }
-                else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation)
+                else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation || self.classInClass)
                 {
-                    // Ungetestet:
-                    [self.jsInitstageDeferOutput  appendFormat:@"  $(document.getElementById('%@')).data('textBetweenTags_','%@');\n",self.zuletztGesetzteID,s];
+                    if (self.classInClass)
+                    {
+                        [self.jsOutput  appendFormat:@"  $(document.getElementById('%@')).data('textBetweenTags_','%@');\n",self.zuletztGesetzteID,s];
+                    }
+                    else
+                    {
+                        [self.jsInitstageDeferOutput  appendFormat:@"  $(document.getElementById('%@')).data('textBetweenTags_','%@');\n",self.zuletztGesetzteID,s];
+                    }
                 }
                 else
                 {
+                    // Dann IN den Output hinein injecten
                     [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-34];
                 }
             }
@@ -8270,7 +8294,7 @@ BOOL isJSExpression(NSString *s)
         // auslesen des Strings platzt (XML-Fehler)
         //if (self.weAreSkippingTheCompleteContenInThisElement)
         //    [self.collectedContentOfClass appendString:@"</when>"];
-        // Ne, klappt so nicht. Muss ich über oben direkt in "class" lösen.
+        // Ne, klappt so nicht. Muss ich über oben direkt in 'class' lösen.
 
 
         self.weAreInTheTagSwitchAndNotInTheFirstWhen = YES;
@@ -9146,11 +9170,18 @@ BOOL isJSExpression(NSString *s)
 
             if (self.initStageDefer)
             {
-                [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-(34/*+34*/)];
+                [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-34];
             }
-            else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation)
+            else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation || self.classInClass)
             {
-                [self.jsInitstageDeferOutput  appendFormat:@"  $(document.getElementById('%@')).data('textBetweenTags_','%@');\n",self.zuletztGesetzteID,s];
+                if (self.classInClass)
+                {
+                    [self.jsOutput  appendFormat:@"  $(document.getElementById('%@')).data('textBetweenTags_','%@');\n",self.zuletztGesetzteID,s];
+                }
+                else
+                {
+                    [self.jsInitstageDeferOutput  appendFormat:@"  $(document.getElementById('%@')).data('textBetweenTags_','%@');\n",self.zuletztGesetzteID,s];
+                }
             }
             else
             {
@@ -9653,7 +9684,8 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"  });\n"];
 
 
-
+    [self.output appendString:@"\n  // ab jetzt werden alle per triggerHandler() gesendeten events sofort ausgeführt\n"];
+    [self.output appendString:@"  window.UILoaded = true;\n"];
 
 
     [self.output appendString:@"\n});\n</script>\n\n"];
@@ -14609,6 +14641,16 @@ BOOL isJSExpression(NSString *s)
     //"}\n"
     "\n"
     "\n"
+    "// Seit auswerten 'rollupdown': To Do?\n"
+    "Object.defineProperty(HTMLElement.prototype, 'onvisible', {\n"
+    "    get : function(){\n"
+    "        return { sendEvent: function() { $(this).triggerHandler('onvisible',null); } };\n"
+    "    },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "\n"
     "/////////////////////////////////////////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
     "// Attribute/Methoden von <div> (OL: <node>)           //\n"
@@ -17729,6 +17771,18 @@ BOOL isJSExpression(NSString *s)
     "});\n"
     "\n"
     "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Hilfsfunktion, damit triggerHandler() beim starten  //\n"
+    "// je gleichlautendem event nur einmal ausgeführt wird //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var triggerHandlerOnce = function (el,eventName,vars) {\n"
+    "    if (window.UILoaded)\n"
+    "        $(el).triggerHandler(eventName,vars);\n"
+    "\n"
+    "\n"
+    "}\n"
+    "\n"
+    "\n"
     "\n"
     "\n";
 
@@ -18351,6 +18405,29 @@ BOOL isJSExpression(NSString *s)
     "        $(id).triggerHandler('oninit');\n"
     "        id.inited = true;\n"
     "    }\n"
+
+    // Wenn ich classInClass auswerte, diesen Code wohl mit einfügen (aber dann letzlich vor init)
+    /*
+    $(id).find('*').each(function() {
+        var iv = $(this).data('instanceVars');
+        //alert(iv);
+        if (iv) {
+            // alert('rin');
+            if ($(this).data('textBetweenTags_'))
+            {
+                var obj = new oo[$(this).data('olel')]($(this).data('textBetweenTags_'));
+            }
+            else
+            {
+                var obj = new oo[$(this).data('olel')]('');
+            }
+            
+            interpretObject(obj,this,iv);
+        }
+    });
+     */
+
+
     "}\n"
     "\n"
     "\n"

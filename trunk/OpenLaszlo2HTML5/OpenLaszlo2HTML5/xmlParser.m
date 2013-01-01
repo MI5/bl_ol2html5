@@ -1440,10 +1440,15 @@ void OLLog(xmlParser *self, NSString* s,...)
                 // Muss gleich am Anfang stehen, weil 'oninit'-Metoden da schon was reinschreiben können
                 // Siehe Example 33.18
                 [self.jsOutput appendString:@"\n  // Debug-Konsole aktivieren\n"];
-                [self.jsOutput appendString:@"  $('div:first').append('<div id=\"debugWindow\"><div style=\"background-color:black;color:white;width:100%;\">DEBUG WINDOW</div><div id=\"debugInnerWindow\"></div></div>');\n"];
-                [self.jsOutput appendString:@"  // Mach Debug-Fenster so breit wie Fenster abzgl. 2x die Top-Angabe\n"];
-                [self.jsOutput appendString:@"  $('#debugWindow').width($('div:first').width()-100);\n"];
-                [self.jsOutput appendString:@"  $('#debugInnerWindow').width($('div:first').width()-100);\n"];
+                [self.jsOutput appendString:@"  $('div:first').append('<div id=\"debugWindow\"><div style=\"background-color:black;color:white;width:100%;font-size:12px;\">DEBUG WINDOW</div><div id=\"debugInnerWindow\"></div></div>');\n"];
+                [self.jsOutput appendString:@"  // Mach Debug-Fenster so breit wie Fenster abzgl. 2x die left-Angabe, padding und border-width\n"];
+                [self.jsOutput appendString:@"  $('#debugWindow').width($('div:first').width()-120);\n"];
+                [self.jsOutput appendString:@"  $('#debugInnerWindow').width($('div:first').width()-120);\n"];
+
+
+                [self.jsOutput appendString:@"  // debugwindow sitzt im Normalfall mit 50px Abstand am Boden\n"];
+                [self.jsOutput appendString:@"  $('#debugWindow').css('top',parseInt($('.canvas_standard').css('height'))-(130+50));\n"];
+
                 [self.jsOutput appendString:@"  $('#debugWindow').draggable();\n"];
 
                 // Soll relativ am Anfang stehen, diese Variable, falls schon andere Sachen
@@ -3284,13 +3289,13 @@ didStartElement:(NSString *)elementName
                 [self.jsOutput appendFormat:@"  $('#debugWindow').height('%@');\n",[attributeDict valueForKey:@"height"]];
                 // Mindestens bei %-Angaben, aber vermutlich immer, muss ich auch noch
                 // den Rahmen (oben+unten) abziehen und Padding (oben+unten) (Bsp. lz.Formatter - Beispiel 5)
-                [self.jsOutput appendString:@"  // Abzüglich Padding oben+unten (2*10) und border-width (2*5);\n"];
-                [self.jsOutput appendString:@"  $('#debugWindow').height($('#debugWindow').height()-30);\n"];
+                [self.jsOutput appendString:@"  // Abzüglich Padding oben+unten (2*5) und border-width (2*5);\n"];
+                [self.jsOutput appendString:@"  $('#debugWindow').height($('#debugWindow').height()-20);\n"];
 
                 // Bricht bei %-Angaben:
                 //[self.jQueryOutput appendFormat:@"  $('#debugInnerWindow').css('height','%dpx');\n\n",[[attributeDict valueForKey:@"height"] intValue]-30];
                 // Deswegen einfach direkt auf den eben ausgerechneten Wert beziehen:
-                [self.jsOutput appendString:@"  $('#debugInnerWindow').height($('#debugWindow').height()-30);\n\n"];
+                [self.jsOutput appendString:@"  $('#debugInnerWindow').height($('#debugWindow').height()-20);\n\n"];
             }
         }
 
@@ -3302,10 +3307,10 @@ didStartElement:(NSString *)elementName
             {
                 [self.jsOutput appendString:@"\n  // Debug-Fenster soll eine andere Breite haben\n"];
                 [self.jsOutput appendFormat:@"  $('#debugWindow').width('%@');\n",[attributeDict valueForKey:@"width"]];
-                [self.jsOutput appendString:@"  // Abzüglich Padding oben+unten (2*10) und border-width (2*5);\n"];
-                [self.jsOutput appendString:@"  $('#debugWindow').width($('#debugWindow').height()-30);\n"];
+                [self.jsOutput appendString:@"  // Abzüglich Padding oben+unten (2*5) und border-width (2*5);\n"];
+                [self.jsOutput appendString:@"  $('#debugWindow').width($('#debugWindow').height()-20);\n"];
 
-                [self.jsOutput appendString:@"  $('#debugInnerWindow').width($('#debugWindow').width()-30);\n\n"];
+                [self.jsOutput appendString:@"  $('#debugInnerWindow').width($('#debugWindow').width()-20);\n\n"];
             }
         }
 
@@ -10266,9 +10271,9 @@ BOOL isJSExpression(NSString *s)
     "{\n"
     "    width: 300px;\n"
     "    height: 115px;\n"
-    "    padding: 10px;\n"
+    "    padding: 5px;\n"
     "    position: absolute;\n"
-    "    right: 50px;\n"
+    "    left: 50px;\n"
     "    top: 50px;\n"
     "    background-color: white;\n"
     "    z-index: 100000;\n"
@@ -10283,7 +10288,8 @@ BOOL isJSExpression(NSString *s)
     "#debugInnerWindow\n"
     "{\n"
     "    position:absolute;\n"
-    "    top:30px;\n"
+    "    top:25px;\n"
+    "    left:5px;\n"
     "    height: 85px;\n"
     "    width: 300px;\n"
     "    overflow:scroll;\n"
@@ -14668,10 +14674,23 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    $(this).triggerHandler('onaddsubview');\n"
     "}\n"
-    "HTMLDivElement.prototype.addSubview = addSubviewFunction;\n"
-    "HTMLInputElement.prototype.addSubview = addSubviewFunction;\n"
-    "HTMLSelectElement.prototype.addSubview = addSubviewFunction;\n"
-    "HTMLButtonElement.prototype.addSubview = addSubviewFunction;\n"
+    "HTMLElement.prototype.addSubview = addSubviewFunction;\n"
+    //"HTMLDivElement.prototype.addSubview = addSubviewFunction;\n"
+    //"HTMLInputElement.prototype.addSubview = addSubviewFunction;\n"
+    //"HTMLSelectElement.prototype.addSubview = addSubviewFunction;\n"
+    //"HTMLButtonElement.prototype.addSubview = addSubviewFunction;\n"
+
+    "\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// construct()                                         //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "HTMLElement.prototype.construct = function () {\n"
+    "\n"
+    "\n"
+    "\n"
+    "}\n"
     "\n"
     "\n"
     "\n"
@@ -14688,10 +14707,11 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    $(this).remove();\n"
     "}\n"
-    "HTMLDivElement.prototype.destroy = destroyFunction;\n"
-    "HTMLInputElement.prototype.destroy = destroyFunction;\n"
-    "HTMLSelectElement.prototype.destroy = destroyFunction;\n"
-    "HTMLButtonElement.prototype.destroy = destroyFunction;\n"
+    "HTMLElement.prototype.destroy = destroyFunction;\n"
+    //"HTMLDivElement.prototype.destroy = destroyFunction;\n"
+    //"HTMLInputElement.prototype.destroy = destroyFunction;\n"
+    //"HTMLSelectElement.prototype.destroy = destroyFunction;\n"
+    //"HTMLButtonElement.prototype.destroy = destroyFunction;\n"
     "\n"
     "\n"
     "\n"
@@ -14714,10 +14734,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    return node;\n"
     "}\n"
-    "HTMLDivElement.prototype.searchSubnodes = searchSubnodesFunction;\n"
-    "HTMLInputElement.prototype.searchSubnodes = searchSubnodesFunction;\n"
-    "HTMLSelectElement.prototype.searchSubnodes = searchSubnodesFunction;\n"
-    "HTMLButtonElement.prototype.searchSubnodes = searchSubnodesFunction;\n"
+    "HTMLElement.prototype.searchSubnodes = searchSubnodesFunction;\n"
     "\n"
     "\n"
     "\n"
@@ -14729,10 +14746,7 @@ BOOL isJSExpression(NSString *s)
     "var updateDataFunction = function () {\n"
     "    return void 0;\n"
     "}\n"
-    "HTMLDivElement.prototype.updateData = updateDataFunction;\n"
-    "HTMLInputElement.prototype.updateData = updateDataFunction;\n"
-    "HTMLSelectElement.prototype.updateData = updateDataFunction;\n"
-    "HTMLButtonElement.prototype.updateData = updateDataFunction;\n"
+    "HTMLElement.prototype.updateData = updateDataFunction;\n"
     "\n"
     "\n"
     "\n"
@@ -14744,10 +14758,7 @@ BOOL isJSExpression(NSString *s)
     "    // this.inited = true; // Ne, gesondert setzen, bricht sonst per initstage=defer gesetzte Klassen\n"
     "}\n"
     "\n"
-    "HTMLDivElement.prototype.init = initFunction;\n"
-    "HTMLInputElement.prototype.init = initFunction;\n"
-    "HTMLSelectElement.prototype.init = initFunction;\n"
-    "HTMLButtonElement.prototype.init = initFunction;\n"
+    "HTMLElement.prototype.init = initFunction;\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -17714,7 +17725,7 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "\n"
     "\n"
-    "        var superMethods_ = { init: function() {} };\n"
+    "        var superMethods_ = { init: function() {}, construct: function() {} };\n"
     "\n"
     "        var temp = new oo[$(this).data('olel')]('');\n"
     "\n"
@@ -18254,7 +18265,7 @@ BOOL isJSExpression(NSString *s)
     // obwohl es weiter unten noch gebraucht wird.
     "        var o = rueckwaertsArray[i];\n"
     "\n"
-    "        $(id).triggerHandler('onconstruct');\n"
+    "        $(id).triggerHandler('onconstruct', $(id).data('olel'));\n"
     "\n"
     "        executeJSCodeOfThisClass(o.inherit, id, $(id).attr('id')+'_'+o.inherit.name, $(id).attr('id'));\n"
     "\n"
@@ -18401,9 +18412,18 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    if (!id.inited)\n"
     "    {\n"
-    "        $(id).triggerHandler('onconstruct');\n"
+    "        id.construct();\n"
+    "        $(id).triggerHandler('onconstruct', $(id).data('olel'));\n"
     "        $(id).triggerHandler('oninit');\n"
     "        id.inited = true;\n"
+    "    }\n"
+    "\n"
+    // http://www.openlaszlo.org/lps4.9/laszlo-explorer/editor.jsp?src=docs/developers/programs/class-inheritance-$8.lzx&lzr=dhtml
+    "    // Wenn das Element in dem die Klasse steckt kleiner ist, als wir selber, dann entsprechend verbreitern\n"
+    "    // (Nur nötig bei position: relative, da die Regel sonst ja eh generell gilt)\n"
+    "    if (parseInt($(id).parent().css('width')) < parseInt($(id).css('width')))\n"
+    "    {\n"
+    "        $(id).parent().css('width',$(id).css('width'))\n"
     "    }\n"
 
     // Wenn ich classInClass auswerte, diesen Code wohl mit einfügen (aber dann letzlich vor init)

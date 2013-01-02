@@ -663,7 +663,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-// Alle Aufrufe hier drin leitern weiter zu setAttribute_()
+// Alle Aufrufe hier drin leiten weiter zu setAttribute_()
 // setAttribute_() wird zur absolutern PRIORITY-Function. Über die läuft alles!
 - (void) setTheValue:(NSString *)s ofAttribute:(NSString*)attr
 {
@@ -922,7 +922,6 @@ void OLLog(xmlParser *self, NSString* s,...)
     if ([attributeDict valueForKey:@"fgcolor"])
     {
         self.attributeCount++;
-        NSLog(@"Setting the attribute 'fgcolor' as CSS 'color'.");
 
         if ([[attributeDict valueForKey:@"fgcolor"] hasPrefix:@"$"] || [[attributeDict valueForKey:@"fgcolor"] hasPrefix:@"0x"])
         {
@@ -930,24 +929,14 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
         else
         {
+            NSLog(@"Setting the attribute 'fgcolor' as CSS 'color'.");
+
             [style appendString:@"color:"];
             [style appendString:[attributeDict valueForKey:@"fgcolor"]];
             [style appendString:@";"];
         }
     }
 
-    if ([attributeDict valueForKey:@"topmargin"])
-    {
-        NSString *s = [attributeDict valueForKey:@"topmargin"];
-
-        self.attributeCount++;
-        NSLog(@"Setting the attribute 'topmargin' as CSS 'margin-top'.");
-        [style appendString:@"margin-top:"];
-        [style appendString:s];
-        if ([s rangeOfString:@"%"].location == NSNotFound)
-            [style appendString:@"px"];
-        [style appendString:@";"];
-    }
 
     if ([attributeDict valueForKey:@"valign"])
     {
@@ -996,26 +985,6 @@ void OLLog(xmlParser *self, NSString* s,...)
         heightGesetzt = YES;
     }
 
-    if ([attributeDict valueForKey:@"boxheight"])
-    {
-        self.attributeCount++;
-        NSLog(@"Setting the attribute 'boxheight' as CSS 'height'.");
-
-        NSString *s = [attributeDict valueForKey:@"boxheight"];
-
-        if ([s hasPrefix:@"$"])
-        {
-            [self setTheValue:s ofAttribute:@"height"];
-        }
-        else
-        {
-            [style appendString:@"height:"];
-            [style appendString:s];
-            if ([s rangeOfString:@"%"].location == NSNotFound)
-                [style appendString:@"px"];
-            [style appendString:@";"];
-        }
-    }
 
     // speichern, falls width schon gesetzt wurde (für Attribut resource)
     BOOL widthGesetzt = NO;
@@ -1215,7 +1184,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Neuerding kann auch in 'source' der Pfad zu einer Datei enthalten sein, nicht nur in resource
     if ([attributeDict valueForKey:@"resource"] || [attributeDict valueForKey:@"source"])
     {
-        // frame ermitteln, falls einer gesetzt wurde
+        // Frame ermitteln, falls einer gesetzt wurde
         NSUInteger index = 0;
         if ([attributeDict valueForKey:@"frame"])
         {
@@ -1446,8 +1415,8 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [self.jsOutput appendString:@"  $('#debugInnerWindow').width($('div:first').width()-120);\n"];
 
 
-                [self.jsOutput appendString:@"  // debugwindow sitzt im Normalfall mit 50px Abstand am Boden\n"];
-                [self.jsOutput appendString:@"  $('#debugWindow').css('top',parseInt($('.canvas_standard').css('height'))-(130+50));\n"];
+                [self.jsOutput appendString:@"  // debugwindow sitzt im Normalfall mit 50px Abstand am Boden - aber falls Minuswert, weil canvas zu schmal, dann wenigstens 0 nehmen.\n"];
+                [self.jsOutput appendString:@"  $('#debugWindow').css('top',parseInt($('.canvas_standard').css('height'))-(130+50) > 0 ? parseInt($('.canvas_standard').css('height'))-(130+50) : 0);\n"];
 
                 [self.jsOutput appendString:@"  $('#debugWindow').draggable();\n"];
 
@@ -1793,6 +1762,15 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Remove leading and ending Whitespaces and NewlineCharacters
     s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
+
+    // Leerzeichen zusammenfassen, aber nicht solche in Strings natürlich
+    while ([s rangeOfString:@"  "].location != NSNotFound)
+    {
+        //s = [s stringByReplacingOccurrencesOfString:@"  " withString:@" "];
+        s = [self inString:s searchFor:@"  " andReplaceWith:@" " ignoringTextInQuotes:YES];
+    }
+
+
     return s;
 }
 
@@ -1926,7 +1904,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         // Eventuelle spaces im Attribut rausschmeißen, damit der String-Vergleich nicht scheitert
         s = [s stringByReplacingOccurrencesOfString:@" " withString:@""];
 
-        if ([s rangeOfString:@"class:"].location != NSNotFound)
+        if ([s rangeOfString:@"class:"].location != NSNotFound && [s rangeOfString:@"class:simplelayout"].location == NSNotFound)
         {
             [self instableXML:@"Upps, ich muss dieses Layout noch korrekt auswerten."];
         }
@@ -4184,6 +4162,8 @@ didStartElement:(NSString *)elementName
 
 
 
+
+
                     [o appendFormat:@"  setInitialConstraintValue(%@,'%@','%@');\n",elem,a,s];
 
                     [o appendFormat:@"  // The constraint value depends on %ld other var(s)\n",[vars count]];            
@@ -5265,28 +5245,8 @@ didStartElement:(NSString *)elementName
         // weil es ja verschachtelte rollUpDownContainer geben kann
         // Beim Betreten Element dazunehmen, beim Verlassen entfernen
         [self.rollupDownElementeCounter addObject:[NSNumber numberWithInt:0]];
-/*
-        [self.output appendString:@"<!-- Container für RollUpDown: -->\n"];
-        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
-
-        [self.output appendString:@"<div class=\"div_rudContainer\""];
-
-        [self addIdToElement:attributeDict];
-
-
-
-        // Im Prinzip nur wegen boxheight müssen wir in addCSSAttributes rein
-        [self.output appendString:@" style=\""];
-        [self.output appendString:[self addCSSAttributes:attributeDict forceWidthAndHeight:YES]];
-        [self.output appendString:@"\">\n"];
-
-
-        // Javascript aufrufen hier, im Prinzip nur wegen name
-        [self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
-
- */
         // Setz die MiliSekunden für die Animationszeit, damit die 'rollUpDown'-Elemente darauf zugreifen können
         if ([attributeDict valueForKey:@"animduration"])
         {
@@ -5910,7 +5870,7 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             duration = [attributeDict valueForKey:@"duration"];
 
-            duration = [self removeOccurrencesOfDollarAndCurlyBracketsIn:duration];
+            duration = [self makeTheComputedValueComputable:duration];
         }
 
         NSString *from = @"undefined";
@@ -5928,7 +5888,7 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             target = [attributeDict valueForKey:@"target"];
 
-            target = [self removeOccurrencesOfDollarAndCurlyBracketsIn:target];
+            target = [self makeTheComputedValueComputable:target];
         }
 
         NSString *motion = @"swing";
@@ -6668,8 +6628,10 @@ didStartElement:(NSString *)elementName
 
         // OL benutzt 'classroot' als Variable für den Zugriff auf das erste in einer Klasse
         // definierte Element. Deswegen, falls wir eine Klasse auswerten, einfach die Var setzen
-        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-            [o appendFormat:@"    var classroot = %@;\n\n",ID_REPLACE_STRING];
+        // Denke das ist unnötig geworden:
+        // if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+        //     [o appendFormat:@"    var classroot = %@;\n\n",ID_REPLACE_STRING];
+
 
         // Um es auszurichten mit dem Rest
         [o appendString:@" "];
@@ -7708,12 +7670,6 @@ BOOL isJSExpression(NSString *s)
         s = [s stringByReplacingOccurrencesOfString:@"\t" withString:@"  "];
     }
 
-    // Leerzeichen zusammenfassen
-    while ([s rangeOfString:@"  "].location != NSNotFound)
-    {
-        s = [s stringByReplacingOccurrencesOfString:@"  " withString:@" "];
-    }
-
     // Damit er in jeder Code-Zeile korrekt einrückt
     s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\n       "];
 
@@ -8221,9 +8177,7 @@ BOOL isJSExpression(NSString *s)
         }
 
 
-        // In manchen propertys von duration in Klassen erfolgt der Zugriff auf classroot...
-        // Deswegen schalte ich es hier davor.
-        [self.jsOLClassesOutput appendFormat:@"  this.contentJS = \"var classroot = %@;\\n\" +\n  \"",ID_REPLACE_STRING];
+        [self.jsOLClassesOutput appendString:@"  this.contentJS = \""];
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsOutput];
         [self.jsOLClassesOutput appendString:@"\";\n\n"];
 
@@ -8948,15 +8902,16 @@ BOOL isJSExpression(NSString *s)
 
             NSLog([NSString stringWithFormat:@"Original code defined in handler: \n**********\n%@\n**********",s]);
 
-            s = [self indentTheCode:s];
-
             s = [self modifySomeExpressionsInJSCode:s];
+
+            s = [self indentTheCode:s];
 
 
 
             if (self.handlerofDrawview)
             {
-                // Dann an den context binden des 'canvas', nicht an das canvas selber! (Damit es bei oninit klappt)
+                // Dann an den context binden des 'canvas', nicht an das canvas selber!
+                // (Damit es bei oninit klappt)
                 // enclosingElem = [NSString stringWithFormat:@"%@.getContext('2d')",enclosingElem];
                 // Neu: Ich mappe alles direkt in das HTMLCanvasElement. Erklärung siehe dort.
 
@@ -8967,8 +8922,10 @@ BOOL isJSExpression(NSString *s)
 
             // OL benutzt 'classroot' als Variable für den Zugriff auf das erste in einer Klasse
             // definierte Element. Deswegen, falls wir eine Klasse auswerten, einfach diese Var setzen
-            if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-                [o appendFormat:@"var classroot = %@;\n    ",ID_REPLACE_STRING];
+            // Denke das ist unnötig geworden:
+            // if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+            //     [o appendFormat:@"var classroot = %@;\n    ",ID_REPLACE_STRING];
+
 
             if (self.onInitInHandler)
             {
@@ -9689,8 +9646,8 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"  });\n"];
 
 
-    [self.output appendString:@"\n  // ab jetzt werden alle per triggerHandler() gesendeten events sofort ausgeführt\n"];
-    [self.output appendString:@"  window.UILoaded = true;\n"];
+    //[self.output appendString:@"\n  // ab jetzt werden alle per triggerHandler() gesendeten events sofort ausgeführt\n"];
+    //[self.output appendString:@"  window.UILoaded = true;\n"];
 
 
     [self.output appendString:@"\n});\n</script>\n\n"];
@@ -11079,7 +11036,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "function getSumOfArray(arr)\n"
     "{\n"
-    "    var sum = 0;"
+    "    var sum = 0;\n"
     "    $.each(arr,function(){sum+=parseFloat(this) || 0;});\n"
     "    return sum;\n"
     "}\n"
@@ -13494,8 +13451,8 @@ BOOL isJSExpression(NSString *s)
     "    /////////////////////////////////////////////////////////\n"
     "    $(window).resize(function()\n"
     "    {\n"
-    "          // Erst, wenn DOM schon initialisiert! Deswegen hier drin\n"
-    "          canvas.height = $(window).height();\n"
+    "        // Erst, wenn DOM schon initialisiert! Deswegen hier drin\n"
+    "        canvas.height = $(window).height();\n"
     "\n"
     "        adjustOffsetOnBrowserResize();\n"
     "    });\n"
@@ -16895,6 +16852,7 @@ BOOL isJSExpression(NSString *s)
     "            var topValue = i * spacing;\n"
     "            if (kind.css('position') === 'relative')\n"
     "            {\n"
+    "                // Wenn hinten runtergefallen, dann muss ich nichts weiter machen\n"
     "                // Wenn wir hinten nicht runter gefallen sind (auch nicht ursprünglich)\n"
     "                if ($(el).children().eq(0).position().left != kind.position().left || kind.data('urspruenglichNichtHeruntergefallen_'))\n"
     "                {\n"
@@ -16910,17 +16868,18 @@ BOOL isJSExpression(NSString *s)
     //"                    var leftValue = width * -1;\n"
     // Nicht mehr nachvollziehbar, weil es so eben nicht klappt... deswegen so:
     "\n"
-    "                    if (kind.prev().is('button'))\n"
-    "                    {\n"
-    "                        // Irgendwie nimmt der Button intern keinen Platz ein bei Safari, obwohl position:relative\n"
-    "                        var leftValue = 0;\n"
-    "                        topValue = spacing; // Gilt natürlich dann auch für topValue\n"
-    "                    }\n"
-    "                    else\n"
-    "                    {\n"
-    "                        var leftValue = parseInt(kind.prev().css('left'))-kind.prev().outerWidth();\n"
-    "                    }\n"
+    "                    var leftValue = parseInt(kind.prev().css('left'))-kind.prev().outerWidth();\n"
     "\n"
+    // Nicht mehr nachvollziehbar, woher das kam.
+    // Bricht http://www.openlaszlo.org/lps4.9/docs/reference/lz.event.html -> 1. Beispiel,
+    // deswegen auskommentiert.
+    //"                    if (kind.prev().is('button'))\n"
+    //"                    {\n"
+    //"                        // Irgendwie nimmt der Button intern keinen Platz ein bei Safari, obwohl position:relative\n"
+    //"                        leftValue = 0;\n"
+    //"                        topValue = spacing; // Gilt natürlich dann auch für topValue\n"
+    //"                    }\n"
+    //"\n"
     "                    if (parseInt(kind.css('left')) !== leftValue)\n"
     "                        kind.get(0).setAttribute_('x',leftValue+'px');\n"
     "                }\n"
@@ -17782,16 +17741,77 @@ BOOL isJSExpression(NSString *s)
     "});\n"
     "\n"
     "\n"
-    "/////////////////////////////////////////////////////////\n"
-    "// Hilfsfunktion, damit triggerHandler() beim starten  //\n"
-    "// je gleichlautendem event nur einmal ausgeführt wird //\n"
-    "/////////////////////////////////////////////////////////\n"
-    "var triggerHandlerOnce = function (el,eventName,vars) {\n"
-    "    if (window.UILoaded)\n"
-    "        $(el).triggerHandler(eventName,vars);\n"
-    "\n"
-    "\n"
-    "}\n"
+/*  // Bringt nichts bzw., doesn't work as expected
+    // Falls neuer Versuch eher mit dem oberen triggerHandlerOnce-Ansatz, da direktes
+    // extenden problematisch, da jQuery auch selber triggerHandler benutzt für getData/setData
+    "//////////////////////////////////////////////////////////////////\n"
+    "// Erweitern von triggerHandler() - Damit triggerHandler() beim //\n"
+    "// starten je gleichlautendem event nur einmal ausgeführt wird  //\n"
+    "//////////////////////////////////////////////////////////////////\n"
+    //"var triggerHandlerOnce = function (el,eventName,vars) {\n"
+    //"    if (typeof el === 'string')\n"
+    //"        el = $('#'+el).get(0);\n"
+    //"\n"
+    //"    //if (window.UILoaded)\n"
+    //"        $(el).triggerHandler(eventName,vars);\n"
+    //"\n"
+    //"}\n"
+
+
+    thArgsArray = [];
+    
+    alreadyArray = [];
+    
+    
+    
+    (function($)
+    {
+        // maintain a reference to the existing function
+        var oldth = $.fn.triggerHandler;
+        // ...before overwriting the jQuery extension point
+        $.fn.triggerHandler = function()
+        {
+            if (window.UILoaded || arguments[0] == 'getData!' || arguments[0] == 'setData!')
+            {
+                // original behavior - use function.apply to preserve context
+                var ret = oldth.apply(this, arguments);
+                
+                // extended code
+                
+                // preserve return value (probably the jQuery object...)
+                return ret;
+            }
+            else
+            {
+                if (alreadyArray.indexOf(this.get(0).id + arguments[0]) != -1)
+                    return;
+                
+                if (arguments.length < 1 || arguments.length > 2)
+                    alert('This should not happen');
+                
+                // Jedes Event soll nur einmal ausgelöst werden, dazu sammeln der Events
+                // Aber nur wenn es das event noch nicht gab
+                
+                // for (var i = 0; i < thArgsArray.length; i++) {
+                 // auf 'thArgsArray[i][2]' teste ich bewusst nicht
+               //  if (thArgsArray[i][0] == this.get(0).id &&
+               //  thArgsArray[i][1] == arguments[0])
+               //  {
+               //  return;
+               //  }
+               //  }
+                
+                alreadyArray.push(this.get(0).id + arguments[0]);
+                
+                
+                //  alert(this.get(0).id);
+                //  alert(arguments[0]);
+                //  alert(arguments[1]);
+                thArgsArray.push([this.get(0).id,arguments[0],arguments[1]]);
+            }
+        };
+    })(jQuery);
+*/
     "\n"
     "\n"
     "\n"
@@ -17906,8 +17926,6 @@ BOOL isJSExpression(NSString *s)
     "    // Muss in interpretObject() stecken, damit ich Zugriff auf die var onInitFunc habe\n"
     "    // assign erfolgt inklusive der geerbten! Das ist das entscheidende\n"
     "    function assignAllDefaultAttributesAndMethods(id, rueckwaertsArray) {\n"
-    "        var inherit_defaultplacement = undefined;\n"
-    "\n"
     "        if (id.id === 'globalcalendar')\n"
     "        {\n"
     "            // Legacy bzw. To Do...\n"
@@ -18045,8 +18063,6 @@ BOOL isJSExpression(NSString *s)
     "                });\n"
     "            }\n"
     "        }\n"
-    "\n"
-    "        return inherit_defaultplacement;\n"
     "    }\n"
     "\n"
     "\n"
@@ -18223,6 +18239,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "    var onInitFunc = null;\n"
+    "    var inherit_defaultplacement = null;\n"
     "\n"
     "    // http://www.openlaszlo.org/lps4.9/docs/developers/introductory-classes.html#introductory-classes.placement\n"
     "    // 2.5 Placement -> By default, instances which appear inside a class are made children of the top level instance of the class.\n"
@@ -18250,8 +18267,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "    // Durchlauf 2: Alle selbst definierten Attribute (und Methoden) werden an das Element gebunden\n"
-    "    // Dies muss als zweites passieren, damit in Unterklassen definierte Methoden oder Attrbute bereits darauf zugreifen können\n"
-    "    var inherit_defaultplacement = assignAllDefaultAttributesAndMethods(id,rueckwaertsArray);\n"
+    "    // Dies muss als zweites passieren, damit in Unterklassen definierte Methoden oder Attribute bereits darauf zugreifen können\n"
+    "    assignAllDefaultAttributesAndMethods(id,rueckwaertsArray);\n"
     "\n"
     "\n"
     "    // Danach setzen der konkreten Instanzvariablen der Instanz\n"

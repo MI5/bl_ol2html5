@@ -21,6 +21,8 @@
 // - Hints: Don't rely on Mousewheels
 //
 //
+// - IE-Support definitiv erst ab IE 8, weil IE 7 und IE 6 CSS-Angabe inherit nicht unterstützen
+//
 //
 // Als Optionen mit anbieten
 // - skip build-in-splash-Tag
@@ -5257,7 +5259,6 @@ didStartElement:(NSString *)elementName
         {
             self.animDuration = @"slow";
         }
-
     }
 
 
@@ -5282,12 +5283,6 @@ didStartElement:(NSString *)elementName
 
         int breiteVonRollUpDown = 760;
         int abstandNachAussenBeiVerschachtelung = 20;
-
-        // -2 einmal für den Container und einmal für das rollUpDown-Element selber,
-        // so kommen wir bei 0 raus für die allererste Ebene.
-        // Alte Lösung: (Dann rückt er aber bei dreifach verschachtelten RollUpDowns zu viel ein)
-        // int abstand = (self.rollUpDownVerschachtelungstiefe-2)*abstandNachAussenBeiVerschachtelung;
-        // Neue Lösung:
         int abstand = 0;
 
 
@@ -5303,13 +5298,8 @@ didStartElement:(NSString *)elementName
         }
 
 
-        // Alte Lösung:
-        // breiteVonRollUpDown = (breiteVonRollUpDown - abstand*2);
-        // Folgeänderung Neue Lösung:
         breiteVonRollUpDown = (breiteVonRollUpDown - (abstand*2*((int)self.rollUpDownVerschachtelungstiefe-2)));
 
-        // Auch noch die Breite des Rahmens (links und rechts) abziehen.
-        // Erst dann ist es geometrisch.
         breiteVonRollUpDown -= 2*2*(self.rollUpDownVerschachtelungstiefe-2);
 
 
@@ -5337,10 +5327,7 @@ didStartElement:(NSString *)elementName
         int counter = [[self.rollupDownElementeCounter objectAtIndex:self.rollUpDownVerschachtelungstiefe-2] intValue];
 
         [self.output appendString:@" style=\""];
-        [self.output appendString:@"top:"];
-
-        // [self.output appendFormat:@"%d",counter*111];
-        [self.output appendString:@"6"];
+        [self.output appendString:@"top:6"];
 
         // Und Zähler um eins erhöhen an der richtigen Stelle im Array
         [self.rollupDownElementeCounter replaceObjectAtIndex:self.rollUpDownVerschachtelungstiefe-2 withObject:[NSNumber numberWithInt:(counter+1)]];
@@ -8703,18 +8690,14 @@ BOOL isJSExpression(NSString *s)
 
 
     // Historisch bedingt, dass ich hier im Code noch was mache, obwohl es eine self-Defined class ist.
-    // Schließen von rollUpDownContainer
     if ([elementName isEqualToString:@"rollUpDownContainer"])
     {
         // Beim Betreten eins hochzählen, beim Verlassen runterzählen
         self.rollUpDownVerschachtelungstiefe--;
         // Beim Betreten Element dazunehmen, beim Verlassen entfernen
         [self.rollupDownElementeCounter removeLastObject];
-        /*
-        element_geschlossen = YES;
-        
-        [self.output appendString:@"</div>\n"];
-         */
+
+        // element_geschlossen = YES;
     }
 
 
@@ -9740,13 +9723,6 @@ BOOL isJSExpression(NSString *s)
 {
     NSString *css = @"/* FILE: styles.css */\n"
     "\n"
-    "/* Enthaelt standard-Definitionen, die das Aussehen von OpenLaszlo simulieren */\n"
-    "/*\n"
-    "Known issues:\n"
-    "inherit => Not supported by IE6 & IE 7\n"
-    "\n"
-    "\n"
-    " */\n"
     "\n"
     "body, html\n"
     "{\n"
@@ -9981,12 +9957,6 @@ BOOL isJSExpression(NSString *s)
     "    border-width:0; /* Um den von jQuery UI gesetzten Rand zu überschreiben */\n"
     "}\n"
     "\n"
-    "/* CSS-Angaben für den RollUpDownContainer */\n"
-    ".div_rudContainer\n"
-    "{\n"
-    "    margin-left:14px;\n"
-    "}\n"
-    "\n"
     "/* CSS-Angaben für ein RollUpDownElement */\n"
     ".div_rudElement\n"
     "{\n"
@@ -9997,7 +9967,7 @@ BOOL isJSExpression(NSString *s)
     "    pointer-events: auto;\n"
     "}\n"
     "\n"
-    "/* CSS-Angaben für ein RollUpDownPanel (gleichzeit Erkennungszeichen für getTheParent() */\n"
+    "/* CSS-Angaben für ein RollUpDownPanel (gleichzeit Erkennungszeichen in getTheParent() */\n"
     ".div_rudPanel\n"
     "{\n"
     "    position: relative;\n"
@@ -10140,8 +10110,8 @@ BOOL isJSExpression(NSString *s)
     ".noPointerEvents\n"
     "{\n"
     "    pointer-events: none; /* Sonst kann ein drüber liegendes div Click-Events wegnehmen */\n"
-    "                         /* Wird auf 'auto' gesetzt, wenn wirklich ein event dort ist.*/\n"
-    "                         /* Won't work on IE */\n"
+    "                          /* Wird auf 'auto' gesetzt, wenn wirklich ein event dort ist.*/\n"
+    "                          /* Won't work on IE */\n"
     "}\n"
     "\n"
     // Muss nach div_text kommen, damit es dieses überschreiben kann
@@ -17876,8 +17846,7 @@ BOOL isJSExpression(NSString *s)
     "// @arg to = replacement-String                              //\n"
     "// @arg to2 = Ersatz-replacement-String                      //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "function replaceID(s,to,to2)\n"
-    "{\n"
+    "function replaceID(s,to,to2) {\n"
     "    if (s === undefined || s === '')\n"
     "        return '';\n"
     "\n"
@@ -17918,14 +17887,10 @@ BOOL isJSExpression(NSString *s)
     "// Aus 'obj' ziehen wir den ganzen Inhalt raus, wie das Objekt aussehen muss\n"
     "// und 'id' wird dem entsprechend mit diesen Attributen und Methoden erweitert.\n"
     "// 'iv' enthält mögliche InstanzVariablen der Instanz\n"
-    // Diese wurden früher vor interpretObject() gesetzt. Später wurde hier beim setzen der 'Klassenwert' der Variablen
-    // getestet, ob dieser undefined war und nur dann gesetzt (um InstanzVariablen nicht zu überschreiben).
-    // Jedoch haben die getter (von z. B. 'bgcolor') das gebrochen, da diese ja nicht undefined zurückliefern.
-    "function interpretObject(obj,id,iv)\n"
-    "{\n"
+    "function interpretObject(obj,id,iv) {\n"
     "    // Muss in interpretObject() stecken, damit ich Zugriff auf die var onInitFunc habe\n"
-    "    // assign erfolgt inklusive der geerbten! Das ist das entscheidende\n"
-    "    function assignAllDefaultAttributesAndMethods(id, rueckwaertsArray) {\n"
+    "    // Bei Objekten gilt 'call by reference', deswegen kann ich 'id' in der Funktion erweitern\n"
+    "    function assignAllAttributesAndMethods(id, rueckwaertsArray, attrs) {\n"
     "        if (id.id === 'globalcalendar')\n"
     "        {\n"
     "            // Legacy bzw. To Do...\n"
@@ -17964,7 +17929,7 @@ BOOL isJSExpression(NSString *s)
     "                    // Assertion:\n"
     "                    if (value === undefined)\n"
     "                    {\n"
-    "                        console.log('Warning: Undefined key or value in assignAllDefaultAttributesAndMethods().');\n"
+    "                        console.log('Warning: Undefined key or value in assignAllAttributesAndMethods().');\n"
     "                        alert(key + '  /  ' + value + '  /  ' + id.id);\n"
     "                    }\n"
     "\n"
@@ -17999,27 +17964,17 @@ BOOL isJSExpression(NSString *s)
     "                            eval('$(id).on(key, function() { with (this) { '+value+'; } });');\n"
     "                        }\n"
     "                    }\n"
-    "                    else if (typeof value === 'string' && (value.startsWith('$')))\n"
-    "                    {\n"
-    "                        // Wird in diesem Fall erst im nächsten Object.keys-Durchlauf ausgewertet\n"
-    "                    }\n"
-    "                    else if (typeof value === 'string' && value.startsWith('@§.'))\n"
+    "                    else if (typeof value === 'string' && (value.startsWith('$') || value.startsWith('@§.')))\n"
     "                    {\n"
     "                        // Wird in diesem Fall erst im nächsten Object.keys-Durchlauf ausgewertet\n"
     "                    }\n"
     "                    else\n"
     "                    {\n"
-    "                        id[key] = value;\n"
+    "                        if (key !== 'datapath')\n"
+    "                            id[key] = value;\n"
+    "\n"
     "                        // War so bei dem alten Schema, aber denke falsch, dass getriggert wird:\n"
     "                        // id.setAttribute_(key,value);\n"
-    "                    }\n"
-    "\n"
-    "                    if (i == rueckwaertsArray.length-2) // zusätzlich -1, weil das Ausgangselement unberücksichtigt bleibt\n"
-    "                    {\n"
-    "                        if (key == 'defaultplacement')\n"
-    "                        {\n"
-    "                            inherit_defaultplacement = value;\n"
-    "                        }\n"
     "                    }\n"
     "                });\n"
     "\n"
@@ -18029,7 +17984,7 @@ BOOL isJSExpression(NSString *s)
     "                {\n"
     "                    var value = obj.attributesDict[key];\n"
     "\n"
-    "                    if (typeof value === 'string') // Davorgezogen, um nur einmal testen zu müssen\n"
+    "                    if (typeof value === 'string' && key !== 'datapath') // Davorgezogen, um nur einmal testen zu müssen\n"
     "                    {\n"
     "                        if (value.startsWith('$')) // = Constraint value\n"
     "                        {\n"
@@ -18065,9 +18020,6 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "    }\n"
     "\n"
-    "\n"
-    "    // Muss in interpretObject() stecken, damit ich Zugriff auf die var onInitFunc habe\n"
-    "    // Bei Objekten gilt 'call by reference', deswegen kann ich 'id' in der Funktion erweitern\n"
     "    function assignAllInstanceAttributes(id, iv) {\n"
     "        Object.keys(iv).forEach(function(key)\n"
     "        {\n"
@@ -18248,6 +18200,9 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    var currentObj = obj; // Zwischenspeichern\n"
     "    var rueckwaertsArray = [];\n"
+    "\n"
+    "\n"
+    "\n"
     "    while (obj.inherit !== undefined)\n"
     "    {\n"
     "        rueckwaertsArray.push(obj);\n"
@@ -18259,6 +18214,39 @@ BOOL isJSExpression(NSString *s)
     "    rueckwaertsArray.reverse();\n"
     "\n"
     "\n"
+    "    // Schema von http://www.openlaszlo.org/lps4.9/docs/developers/initialization-and-instantiation.html\n"
+    "\n"
+    "    // 1. A single dictionary is created which combines the attributes of the instance with the attributes of the class\n"
+    "    var attrs = {};\n"
+    "    for (var i = 0;i<rueckwaertsArray.length;i++) {\n"
+    "        if (rueckwaertsArray[i].attributesDict)\n"
+    "        {\n"
+    "            // Falls gleiche Attributnamen: Es gelten die vom allernächsten Erben\n"
+    "            $.extend(attrs,rueckwaertsArray[i].attributesDict);\n"
+    "\n"
+    "\n"
+    
+    
+    "                // Legacy bzw. to Eliminate somehow\n"
+    "                Object.keys(rueckwaertsArray[i].attributesDict).forEach(function(key)\n"
+    "                {\n"
+    "                    if (key == 'defaultplacement' && i == rueckwaertsArray.length-2) // zusätzlich -1, weil das Ausgangselement unberücksichtigt bleibt\n"
+    "                    {\n"
+    "                        inherit_defaultplacement = rueckwaertsArray[i].attributesDict[key];\n"
+    "                    }\n"
+    "                });\n"
+    
+    
+    
+    "\n"
+    "        }\n"
+    "    }\n"
+    "    // Höchste Priorität haben letzlich die Instanzvariablen\n"
+    "    $.extend(attrs,iv);\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
     "    // Durchlauf 1: HTML-Content der Vorfahren einfügen und individuelle ID vergeben.\n"
     "    for (var i = 0;i<rueckwaertsArray.length;i++)\n"
     "    {\n"
@@ -18268,7 +18256,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Durchlauf 2: Alle selbst definierten Attribute (und Methoden) werden an das Element gebunden\n"
     "    // Dies muss als zweites passieren, damit in Unterklassen definierte Methoden oder Attribute bereits darauf zugreifen können\n"
-    "    assignAllDefaultAttributesAndMethods(id,rueckwaertsArray);\n"
+    "    assignAllAttributesAndMethods(id,rueckwaertsArray,attrs);\n"
     "\n"
     "\n"
     "    // Danach setzen der konkreten Instanzvariablen der Instanz\n"
@@ -18282,8 +18270,9 @@ BOOL isJSExpression(NSString *s)
     // obwohl es weiter unten noch gebraucht wird.
     "        var o = rueckwaertsArray[i];\n"
     "\n"
-    "        $(id).triggerHandler('onconstruct', $(id).data('olel'));\n"
-    "\n"
+    // Woher kam das? Ich triggere 'onconstruct' für 'id' doch schon unten. Deswegen auskommentiert
+    //"        $(id).triggerHandler('onconstruct', $(id).data('olel'));\n"
+    //"\n"
     "        executeJSCodeOfThisClass(o.inherit, id, $(id).attr('id')+'_'+o.inherit.name, $(id).attr('id'));\n"
     "\n"
     "        // Falls von einem Vorfahren ein oninit() hinzugefügt wurde, dieses jetzt schon ausführen\n"

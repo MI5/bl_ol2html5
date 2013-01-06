@@ -10264,6 +10264,8 @@ BOOL isJSExpression(NSString *s)
 - (void) createJSFile:(NSString*)path
 {
     NSString *js = @"/* FILE: jsHelper.js */\n"
+    "// \"use strict\"; // Wirft noch ein paar Fehler... (To Do)\n"
+    "\n"
     "/////////////////////////////////////////////////////////\n"
     "// jQuery UI Datepicker auf Deutsch setzen               \n"
     "/////////////////////////////////////////////////////////\n"
@@ -11278,7 +11280,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// Liest per ?arg=value&arg2=value2 übergebene URL-Parameter aus\n"
     "/////////////////////////////////////////////////////////\n"
-    "getInitArg = function getURLParameter(name) {\n"
+    "var getInitArg = function getURLParameter(name) {\n"
     "    return decodeURIComponent((new RegExp('[?|&]' + name + '=' + '([^&;]+?)(&|#|;|$)').exec(location.search)||[,\"\"])[1].replace(/\\+/g, '%20'))||null;\n"
     "}\n"
     "\n"
@@ -11454,7 +11456,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "// Wenn sich datasets durch andere Datapointer verändern, muss ich auf diesem Dataset aufsetzenden Pointern das 'ondata'-event triggern\n"
     "// Deswegen sammle ich alle instanzierten Datapointer in einem Array, um Zugriff auf diese zu haben\n"
-    "allMyDatapointer_ = [];\n"
+    "var allMyDatapointer_ = [];\n"
     "\n"
     "\n"
     "\n"
@@ -13384,7 +13386,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// Das Debug-Objekt                                    //\n"
     "/////////////////////////////////////////////////////////\n"
-    "Debug = {};\n"
+    "var Debug = {};\n"
     "Debug.debug = function(s,v0,v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14,v15,v16,v17,v18,v19) {\n"
     "    // Damit Example 5 von lz.Formatter kompiliert (jedoch ohne zu klappen):\n"
     "    s = s.replace(/%w/g,'%s');\n"
@@ -17812,6 +17814,7 @@ BOOL isJSExpression(NSString *s)
 - (void) createCollectedClassesFile:(NSString*)path
 {
     NSString *js = @"/* FILE: collectedClasses.js */\n"
+    "// \"use strict\"; // Klappt nicht wegen der vielen with-Anweisungen\n"
     "\n"
     "//////////////////////////////////////////////////////////////////////////////////////////\n"
     "// Beinhaltet alle von OpenLaszlo mittels <class> definierte Klassen. Es werden korrespondierende //\n"

@@ -3,6 +3,11 @@
 //  OpenLaszlo2HTML5
 //
 //
+//
+// - IE-Support erst ab IE 8 (weil IE 7 und IE 6 CSS-Angabe inherit nicht unterstützen)
+//
+//
+//
 // - iwie gibt es noch ein Problem mit den pointer-events (globalhelp verdeckt Foren-Button)
 //
 // - determinePlacement()-Implementation fehlt noch, aber für Taxango nicht relevant
@@ -20,8 +25,6 @@
 //
 // - Hints: Don't rely on Mousewheels
 //
-//
-// - IE-Support definitiv erst ab IE 8, weil IE 7 und IE 6 CSS-Angabe inherit nicht unterstützen
 //
 //
 // Als Optionen mit anbieten
@@ -3004,9 +3007,8 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"basebutton"] ||
-        [elementName isEqualToString:@"imgbutton"] ||
+        [elementName isEqualToString:@"imgbuttonxxx"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
-        [elementName isEqualToString:@"BDStext___DeleteMe"] ||
         [elementName isEqualToString:@"statictext"] ||
         [elementName isEqualToString:@"text"] ||
         [elementName isEqualToString:@"inputtext"] ||
@@ -4605,7 +4607,7 @@ didStartElement:(NSString *)elementName
 
 
     if ([elementName isEqualToString:@"basebutton"] ||
-        [elementName isEqualToString:@"imgbutton"] || // ist selfdefined class
+        [elementName isEqualToString:@"imgbuttonxxx"] || // ist selfdefined class
         [elementName isEqualToString:@"multistatebutton"])
     {
         element_bearbeitet = YES;
@@ -4648,11 +4650,7 @@ didStartElement:(NSString *)elementName
 
 
 
-    // Eigentlich sollte das hier selbständig hinzugefügt werden und anhand
-    // der definierten Klasse erkannt werden.
-    // Ich denke ich lasse 'BDStext' für Taxango erstmal so, da es nur ein 'text' mit unnötigen Zusatz-Attributen ist
-    // Neu: Ich muss 'BDStext' zwingend auswerten, damit ich darauf visible-Eigenschaften korrekt anwenden kann
-    if ([elementName isEqualToString:@"BDStext___DeleteMe"] || [elementName isEqualToString:@"statictext"])
+    if ([elementName isEqualToString:@"statictext"])
     {
         element_bearbeitet = YES;
 
@@ -8281,7 +8279,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
         [elementName isEqualToString:@"tabelement"] ||
         [elementName isEqualToString:@"basebutton"] ||
-        [elementName isEqualToString:@"imgbutton"] ||
+        [elementName isEqualToString:@"imgbuttonxxx"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
         [elementName isEqualToString:@"baselist"] ||
         [elementName isEqualToString:@"list"])
@@ -8418,7 +8416,7 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"vbox"] ||
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"basebutton"] ||
-        [elementName isEqualToString:@"imgbutton"] ||
+        [elementName isEqualToString:@"imgbuttonxxx"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
@@ -8652,7 +8650,7 @@ BOOL isJSExpression(NSString *s)
 
 
     // Schließen von statictext
-    if ([elementName isEqualToString:@"BDStext___DeleteMe"] || [elementName isEqualToString:@"statictext"])
+    if ([elementName isEqualToString:@"statictext"])
     {
         element_geschlossen = YES;
 
@@ -9158,8 +9156,8 @@ BOOL isJSExpression(NSString *s)
 
 
 
-    // Bei den HTML-Tags innerhalb von BDS-(text) darf ich self.textInProgress nicht auf nil setzen,
-    // da ich den Text ja weiter ergänze. Erst ganz am Ende beim Schließen von BDSText mache ich das
+    // Bei den HTML-Tags innerhalb von 'text' darf ich self.textInProgress nicht auf nil setzen,
+    // da ich den Text ja weiter ergänze. Erst ganz am Ende beim Schließen von 'text' mache ich das
     if (!self.weAreCollectingTextAndThereMayBeHTMLTags)
     {
         if (self.textInProgress != nil && [[self.textInProgress stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]] length] > 0)
@@ -10071,7 +10069,7 @@ BOOL isJSExpression(NSString *s)
     "    pointer-events: auto;\n"
     "}\n"
     "\n"
-    "/* Standard-Text (Text/BDStext) */\n"
+    "/* Standard-Text (Text) */\n"
     ".div_text\n"
     "{\n"
     "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
@@ -14010,7 +14008,7 @@ BOOL isJSExpression(NSString *s)
     "    else if (attributeName === 'initstage')\n"
     "    {\n"
     "        if (value === 'defer')\n"
-    "            ;//$(me).hide(); // ToDo: Bricht Anzeige Kinder\n"
+    "            ;//$(me).hide(); // Muss ich an anderer Stelle abfangen. Bricht z. B. Anzeige Kinder\n"
     "\n"
     "        if (value === 'immediate' || value === 'early' || value === 'normal' || value === 'late')\n"
     "            jQuery.noop(); /* no operation */\n"

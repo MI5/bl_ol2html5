@@ -1411,26 +1411,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
             if ([[attributeDict valueForKey:@"debug"] isEqualToString:@"true"])
             {
-                // Muss gleich am Anfang stehen, weil 'oninit'-Metoden da schon was reinschreiben können
-                // Siehe Example 33.18
-                [self.jsOutput appendString:@"\n  // Debug-Konsole aktivieren\n"];
-                [self.jsOutput appendString:@"  $('div:first').append('<div id=\"debugWindow\"><div style=\"background-color:black;color:white;width:100%;font-size:12px;\">DEBUG WINDOW</div><div id=\"debugInnerWindow\"></div></div>');\n"];
-                [self.jsOutput appendString:@"  // Mach Debug-Fenster so breit wie Fenster abzgl. 2x die left-Angabe, padding und border-width\n"];
-                [self.jsOutput appendString:@"  $('#debugWindow').width($('div:first').width()-120);\n"];
-                [self.jsOutput appendString:@"  $('#debugInnerWindow').width($('div:first').width()-120);\n"];
-
-
-                [self.jsOutput appendString:@"  // debugwindow sitzt im Normalfall mit 50px Abstand am Boden - aber falls Minuswert, weil canvas zu schmal, dann wenigstens 0 nehmen.\n"];
-                [self.jsOutput appendString:@"  $('#debugWindow').css('top',parseInt($('.canvas_standard').css('height'))-(130+50) > 0 ? parseInt($('.canvas_standard').css('height'))-(130+50) : 0);\n"];
-
-                [self.jsOutput appendString:@"  $('#debugWindow').draggable();\n"];
-
-                // Soll relativ am Anfang stehen, diese Variable, falls schon andere Sachen
-                // davon abhängig sind (deswegen jsOutput).
-                [self.jsOutput appendString:@"\n  // Debug-Mode wurde aktiviert! Anhand dieser Variable kann im Skript erkannt werden, dass wir im Debugmode sind\n"];
-                [self.jsOutput appendString:@"  $debug = true;\n\n"];
-
-                // Auch Der Konverter soll erkennen können, ob wir die Konsole aktiviert haben oder nicht
+                // Der Konverter muss erkennen können, ob wir die Konsole aktiviert haben oder nicht
                 self.debugConsoleActivated = YES;
             }
         }
@@ -3289,10 +3270,10 @@ didStartElement:(NSString *)elementName
             {
                 [self.jsOutput appendString:@"\n  // Debug-Fenster soll eine andere Breite haben\n"];
                 [self.jsOutput appendFormat:@"  $('#debugWindow').width('%@');\n",[attributeDict valueForKey:@"width"]];
-                [self.jsOutput appendString:@"  // Abzüglich Padding oben+unten (2*5) und border-width (2*5);\n"];
-                [self.jsOutput appendString:@"  $('#debugWindow').width($('#debugWindow').height()-20);\n"];
-
-                [self.jsOutput appendString:@"  $('#debugInnerWindow').width($('#debugWindow').width()-20);\n\n"];
+                // Falls %-Angabe kann ich nicht direkt oben minus nehmen, deswegen in einem 2. Schritt
+                [self.jsOutput appendString:@"  // Abzüglich Padding oben + unten (2*5) und border-width (2*5);\n"];
+                [self.jsOutput appendString:@"  $('#debugWindow').width($('#debugWindow').width()-20);\n"];
+                [self.jsOutput appendString:@"  $('#debugInnerWindow').width($('#debugWindow').width());\n\n"];
             }
         }
 
@@ -9292,9 +9273,10 @@ BOOL isJSExpression(NSString *s)
     // auf diese fertige Lösung zurück)
     [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.21/themes/humanity/jquery-ui.css\">\n"];
 
-    // CSS-Stylesheet-Datei // Diese MUSS nach der Humanity-css kommen, da ich bestimmte Sachen
-    // überschreibe
+    // CSS-Stylesheet-Datei
+    // Diese MUSS nach der Humanity-css kommen, da ich bestimmte Sachen überschreibe
     [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"styles.css\">\n"];
+
 
     // IE-Fallback für canvas (falls ich es benutze)
     // [pre appendString:@"<!--[if IE]><script src=\"excanvas.js\"></script><![endif]-->\n"];
@@ -9311,6 +9293,7 @@ BOOL isJSExpression(NSString *s)
     [pre appendString:@"<script type=\"text/javascript\" src=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.21/jquery-ui.min.js\"></script>\n"];
 
     // Warum auch immer: general.js wird automatisch importiert
+    // -> To Do -> wird im umgebenden Skript referenziert
     [pre appendString:@"<script type=\"text/javascript\" src=\"includes/general.js\"></script>\n"];
 
     // Unser eigenes Skript lieber zuerst
@@ -9391,13 +9374,21 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"\n<script type=\"text/javascript\">\n"];
 
     [self.output appendString:@"// Make all id's global (For Firefox) and init 'canvas'\n"];
-    [self.output appendString:@"makeIDsGlobalAndInitStuff();\n\n\n"];
+    [self.output appendString:@"makeIDsGlobalAndInitStuff();\n\n"];
+
+
+    // Erst hiernach, weil in makeIDsGlobalAndInitStuff() wird $debug initial auf false gesetzt
+    if (self.debugConsoleActivated)
+    {
+        [self.output appendString:@"// Debug-Mode wurde skript-seitig aktiviert!\n"];
+        [self.output appendString:@"$debug = true;\n\n"];
+    }
 
 
     // Weitere JS-Anweisungen:
 
     //[self.output appendString:@"\n\n// '$(function() {' ist leider zu unverlässig. Bricht z. B. das korrekte setzen der Breite von element9, weil es die direkten Kinder-Elemente nicht richtig auslesen kann\n// Dieses Problem trat nur beim Reloaden auf, nicht beim direkten Betreten der Seite per URL. Very strange!\n// Jedenfalls lässt sich das Problem über '$(window).load(function() {});' anstatt '$(document).ready(function() {});' lösen.\n// http://stackoverflow.com/questions/6504982/jquery-behaving-strange-after-page-refresh-f5-in-chrome\n// Dadurch muss ich auch nicht mehr alle width/height-Startwerte per css auf 'auto' setzen.\n"];
-    [self.output appendString:@"$(window).load(function()\n{\n"];
+    [self.output appendString:@"\n$(window).load(function()\n{\n"];
 
 
     // So lange ich den TabSheetContainer nicht auswerte, muss ich diese Methoden nachimplementieren...
@@ -9421,6 +9412,12 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"  if (window['cbpdfemail']) cbpdfemail.checked = false;\n\n"];
 
 
+    [self.output appendString:@"  // Debug-Konsole aktivieren, wenn Variable intern oder extern gesetzt\n"];
+    [self.output appendString:@"  if ($debug || lz.Browser.getInitArg('debug') === 'true')\n"];
+    [self.output appendString:@"  {\n"];
+    [self.output appendString:@"      activateDebugMode_();\n"];
+    [self.output appendString:@"      $debug = true; // Falls extern gesetzt, Variable nachsetzen\n"];
+    [self.output appendString:@"  }\n"];
 
 
     // Vorgezogene Javascript-Anweisungen
@@ -10851,7 +10848,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    canvas.lpsrelease = 'XML2HTML5 Converter';\n"
     "    canvas.lpsbuilddate = '2012-07-01';\n"
-    "    canvas.lpsversion = '1.0';\n"
+    "    canvas.lpsversion = '4.9.0.0';\n"
     "    canvas.version = '1.0';\n"
     "    canvas.percentcreated = 1;\n"
     "    canvas.runtime = 'html5';\n"
@@ -10890,8 +10887,8 @@ BOOL isJSExpression(NSString *s)
     "        if (typeof axis !== 'string' || (axis !== 'x' && axis !== 'y'))\n"
     "            throw new Error('canvas.getMouse() - No axis or wrong axis.');\n"
     "\n"
-    "        if (axis === 'x') return window.mouseXPos;\n"
-    "        if (axis === 'y') return window.mouseYPos;\n"
+    "        if (axis === 'x') return (window.mouseXPos ? window.mouseXPos : 0);\n"
+    "        if (axis === 'y') return (window.mouseYPos ? window.mouseYPos : 0);\n"
     "    }\n"
     "\n"
     "\n"
@@ -11298,14 +11295,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Liest per ?arg=value&arg2=value2 übergebene URL-Parameter aus\n"
-    "/////////////////////////////////////////////////////////\n"
-    "var getInitArg = function getURLParameter(name) {\n"
-    "    return decodeURIComponent((new RegExp('[?|&]' + name + '=' + '([^&;]+?)(&|#|;|$)').exec(location.search)||[,\"\"])[1].replace(/\\+/g, '%20'))||null;\n"
-    "}\n"
-    "\n"
-    "\n"
-    "/////////////////////////////////////////////////////////\n"
     "// Objekte, welche im Skript erzeugt werden            //\n"
     "/////////////////////////////////////////////////////////\n"
     "var objectFromScriptCounter = 1;\n"
@@ -11639,7 +11628,20 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "    this.BrowserService = function() {\n"
-    "        this.getInitArg = getInitArg;\n"
+    "        /////////////////////////////////////////////////////////\n"
+    "        // Liest per ?arg=value&arg2=value2 übergebene URL-Parameter aus\n"
+    "        // function müsste im Prinzip heißen: getURLParameter()\n"
+    "        /////////////////////////////////////////////////////////\n"
+    "        this.getInitArg = function(name) {\n"
+    "            if (!name)\n"
+    "            {\n"
+    "                return decodeURIComponent(location.search);\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                return decodeURIComponent((new RegExp('[?|&]' + name + '=' + '([^&;]+?)(&|#|;|$)').exec(location.search)||[,\"\"])[1].replace(/\\+/g, '%20'))||null;\n"
+    "            }\n"
+    "        }\n"
     "        this.callJS = function(method,callback,args) {\n"
     "            window[method](args);\n"
     "        }\n"
@@ -11722,6 +11724,7 @@ BOOL isJSExpression(NSString *s)
     "        this.bugReport = function(error,verbose) {\n"
     "        }\n"
     "        this.ensureVisible = function() {\n"
+    "            return $('#debugWindow').length != 0;\n"
     "        }\n"
     "        this.monitor = function() {\n"
     "            Debug.write('MONITOR: ...');\n"
@@ -13490,6 +13493,40 @@ BOOL isJSExpression(NSString *s)
     "    // context zurückgeben\n"
     "    return window[context];\n"
     "};\n"
+    "\n"
+    "\n"
+    "\n"
+    "function activateDebugMode_() {\n"
+    "    // Garantiert, dass die Debug-Konsole nur einmal geöffnet wird\n"
+    "    if(!Debug.ensureVisible())\n"
+    "    {\n"
+    "        $('div:first').append('<div id=\"debugWindow\"><div style=\"background-color:black;color:white;width:100%;font-size:12px;\">DEBUG WINDOW</div><div id=\"debugInnerWindow\"></div></div>');\n"
+    "\n"
+    "        // Mach Debug-Fenster so breit wie Fenster abzgl. 2x die left-Angabe, padding und border-width\n"
+    "        $('#debugWindow').width($('div:first').width()-120);\n"
+    "        $('#debugInnerWindow').width($('div:first').width()-120);\n"
+    "\n"
+    "        // debugwindow sitzt im Normalfall mit 50px Abstand am Boden - aber falls Minuswert, weil canvas zu schmal, dann wenigstens 0 nehmen.\n"
+    "        $('#debugWindow').css('top',parseInt($('.canvas_standard').css('height'))-(130+50) > 0 ? parseInt($('.canvas_standard').css('height'))-(130+50) : 0);\n"
+    "\n"
+    "        // Falls Canvas nicht hoch genug, Höhe anpassen, aber Mindestgröße beachten\n"
+    "        if ($('div:first').height() < 135) {\n"
+    "            $('#debugWindow').height($('div:first').height()-30 > 80 ? $('div:first').height()-30 : 80);\n"
+    "            $('#debugInnerWindow').height($('div:first').height()-30-30 > 50 ? $('div:first').height()-30-30 : 50);\n"
+    "        }\n"
+    "\n"
+    "        $('#debugWindow').draggable();\n"
+    "\n"
+    "\n"
+    "        // Wenn Debug-Konsole aktiviert, dann leite auch die JS-Errors in die Konsole um\n"
+    "        window.onerror = function(msg, url, line) {\n"
+    "            Debug.error(msg);\n"
+    "            Debug.info('The Error encountered in ' + url + ' on line ' + line);\n"
+    "\n"
+    "            return false; // 'true' Unterdrückt die Ausgabe in der Konsole\n"
+    "        }\n"
+    "    }\n"
+    "}\n"
     "\n"
     "\n"
     "\n"
@@ -17697,7 +17734,8 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "    // Und schließlich das eigentliche MouseEvent setzen\n"
-    "    $('#'+el).on(event, func);\n"
+    "    // Muss ich an 'canvas' binden, wegen Beispiel 51.3\n"
+    "    $('#'+el).on(event, func.bind(canvas));\n"
     "\n"
     "    // Falls es geklonte Geschwister gibt:\n"
     "    var c = 2;\n"

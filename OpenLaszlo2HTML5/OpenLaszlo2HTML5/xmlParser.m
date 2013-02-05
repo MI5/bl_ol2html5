@@ -3224,10 +3224,23 @@ didStartElement:(NSString *)elementName
             if (self.debugConsoleActivated) // Wegen Beispiel 37.13 Abfrage drum herum
             {
                 [self.jsOutput appendString:@"\n  // Debug-Fenster soll eine andere x-Position haben\n"];
-                [self.jsOutput appendFormat:@"  $('#debugWindow').css('left','%@px');",[attributeDict valueForKey:@"x"]];
 
-                [self.jsOutput appendString:@"\n  // Dann auch Breite des Debug-Fenster anpassen (Elternbreite - Padding - Border - 1 * X)\n"];
-                [self.jsOutput appendFormat:@"  $('#debugWindow').width($('#debugWindow').parent().width()-20-10-1*%@);\n",[attributeDict valueForKey:@"x"]];
+
+                if ([[attributeDict valueForKey:@"x"] hasSuffix:@"%"])
+                {
+                    [self.jsOutput appendFormat:@"  $('#debugWindow').css('left','%@');",[attributeDict valueForKey:@"x"]];
+                }
+                else
+                {
+                    [self.jsOutput appendFormat:@"  $('#debugWindow').css('left','%@px');",[attributeDict valueForKey:@"x"]];
+                }
+
+
+                [self.jsOutput appendString:@"\n  // Dann auch Breite des Debug-Fenster anpassen (Elternbreite - Padding - Border - X)\n"];
+                // Über $('#debugWindow').position().left gesetzten Wert auslesen,
+                // falls per Prozentangabe gesetzt wurde
+                [self.jsOutput appendFormat:@"  $('#debugWindow').width($('#debugWindow').parent().width()-20-10-$('#debugWindow').position().left);\n"];
+                [self.jsOutput appendString:@"  $('#debugInnerWindow').width($('#debugWindow').width());\n"];
             }
         }
 
@@ -3238,7 +3251,14 @@ didStartElement:(NSString *)elementName
             if (self.debugConsoleActivated)
             {
                 [self.jsOutput appendString:@"\n  // Debug-Fenster soll eine andere y-Position haben\n"];
-                [self.jsOutput appendFormat:@"  $('#debugWindow').css('top','%@px');\n",[attributeDict valueForKey:@"y"]];
+                if ([[attributeDict valueForKey:@"y"] hasSuffix:@"%"])
+                {
+                    [self.jsOutput appendFormat:@"  $('#debugWindow').css('top','%@');\n",[attributeDict valueForKey:@"y"]];
+                }
+                else
+                {
+                    [self.jsOutput appendFormat:@"  $('#debugWindow').css('top','%@px');\n",[attributeDict valueForKey:@"y"]];
+                }
             }
         }
 
@@ -3811,6 +3831,13 @@ didStartElement:(NSString *)elementName
         }
 
 
+        // Scheint mir eine Art von Zuordnung des Attributs auf eine StyleSheet-Angabe zu sein
+        if ([attributeDict valueForKey:@"style"])
+        {
+            NSLog(@"Skipping the attribute 'style'.");
+            self.attributeCount++;
+        }
+
 
         // Es gibt auch attributes ohne Startvalue, dann mit einem leeren String initialisieren
         NSString *value;
@@ -3849,10 +3876,11 @@ didStartElement:(NSString *)elementName
             {
                 // value = @""; // Quotes werden dann automatisch unten reingesetzt
 
-                // Wenn bei einer 'expression', 'string', 'number' kein value gesetzt ist, ist es gemäß OL-Test immer undefined
-                value = @"undefined";
-                // Ist das sicher???? -> Mein "trying to set a property that never was declared"-Test, geht nur auf,
-                // wenn ich es auf null setze.
+                // Wenn bei einer 'expression', 'string', 'number' kein value gesetzt ist,
+                // ist es gemäß OL-Test immer undefined
+                // value = @"undefined";
+                // Ist das sicher???? -> Mein "trying to set a property that never was declared"-Test,
+                // geht nur auf, wenn ich es auf null setze.
                 value = @"null";
 
                 // Text vor Example 28.10:
@@ -4216,7 +4244,19 @@ didStartElement:(NSString *)elementName
                     }
                     else
                     {
-                        [self.jsOutput appendString:o];
+                        // Erst mit Beispiel 51.6 aufgefallen: Wenn ich ein Attribut habe, dass per
+                        // constraint gesetzt wurde, sich aber dabei auf eine Klasse verläßt, dann kann
+                        // ich das Attribut erst setzen, nachdem ich die Klasse ausgewertet habe!
+                        // Dies erkenne ich daran, dass elemtyp eine 'view' ist und wir gerade NICHT
+                        // in einer Klasse sind
+                        if ([elemTyp isEqualToString:@"view"] && ![[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+                        {
+                            [self.jQueryOutput appendString:o];
+                        }
+                        else
+                        {
+                            [self.jsOutput appendString:o];
+                        }
                     }
                 }
             }
@@ -9413,10 +9453,9 @@ BOOL isJSExpression(NSString *s)
 
 
     [self.output appendString:@"  // Debug-Konsole aktivieren, wenn Variable intern oder extern gesetzt\n"];
-    [self.output appendString:@"  if ($debug || lz.Browser.getInitArg('debug') === 'true')\n"];
-    [self.output appendString:@"  {\n"];
-    [self.output appendString:@"      activateDebugMode_();\n"];
+    [self.output appendString:@"  if ($debug || lz.Browser.getInitArg('debug') === 'true') {\n"];
     [self.output appendString:@"      $debug = true; // Falls extern gesetzt, Variable nachsetzen\n"];
+    [self.output appendString:@"      activateDebugMode_();\n"];
     [self.output appendString:@"  }\n"];
 
 
@@ -10847,11 +10886,11 @@ BOOL isJSExpression(NSString *s)
     "        throw new Error('No element <canvas> found. The root must be <canvas>.');\n"
     "\n"
     "    canvas.lpsrelease = 'XML2HTML5 Converter';\n"
-    "    canvas.lpsbuilddate = '2012-07-01';\n"
-    "    canvas.lpsversion = '4.9.0.0';\n"
+    "    canvas.lpsbuilddate = '2013-MARCH-04';\n"
+    "    canvas.lpsversion = '1.0.1';\n"
     "    canvas.version = '1.0';\n"
     "    canvas.percentcreated = 1;\n"
-    "    canvas.runtime = 'html5';\n"
+    "    canvas.runtime = 'HTML5';\n"
     "    canvas.framerate = 30;\n"
     "    canvas.versionInfoString = function() { return '1.0'; }\n"
     "\n"
@@ -11677,12 +11716,16 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
+    "        this.clear = function() { // ... undokumentiert, aber taucht in Example 51.6 auf\n"
+    "            if (this.ensureVisible())\n"
+    "                $('#debugInnerWindow').empty();\n"
+    "        }\n"
     "        this.format = function() {\n"
     "            // Argumente durchschleifen an sprintf\n"
     "            var returnedS = sprintf.apply(this,arguments);\n"
     "\n"
-    "            // Dann 'returnedS' ausgeben, Ausgabe erfolgt jedoch nur, wenn Debug-Windows aktiviert\n"
-    "            if ($('#debugInnerWindow').length)\n"
+    "            // Ausgabe erfolgt jedoch nur, wenn Debug-Windows aktiviert\n"
+    "            if (this.ensureVisible())\n"
     "            {\n"
     "                $('#debugInnerWindow').append(returnedS + '<br />');\n"
     "            }\n"
@@ -11733,24 +11776,34 @@ BOOL isJSExpression(NSString *s)
     "            Debug.write('TRACE: ...');\n"
     "        }\n"
     "        this.versionInfo = function() {\n"
-    "            // ToDo;\n"
+    "            Debug.write('URL: ',location.href);\n"
+    "            Debug.write('<b>'+canvas.lpsrelease+'</b>');\n"
+    "            Debug.write('Version: ',canvas.lpsversion);\n"
+    "            Debug.write('Release: ','Production');\n"
+    "            Debug.write('Build: ','branches/4.9');\n"
+    "            Debug.write('Date: ',canvas.lpsbuilddate);\n"
+    "            Debug.write('<b>'+'Application'+'</b>');\n"
+    "            Debug.write('Date: ',document.lastModified);\n"
+    "            Debug.write('Target: ',canvas.runtime);\n"
+    "            Debug.write('Runtime: ',navigator.userAgent);\n"
+    "            Debug.write('OS: ',navigator.platform);\n"
     "        }\n"
     "        this.write = function(s1,v) {\n"
     "            if (v === undefined)\n"
     "                v = '';\n"
     "\n"
     "            var s = s1 + ' ' + v;\n"
-    "            if ($('#debugInnerWindow').length) // Ausgabe erfolgt nur, wenn Debug-Windows aktiviert\n"
+    "            if (this.ensureVisible()) // Ausgabe erfolgt nur, wenn Debug-Windows aktiviert\n"
     "            {\n"
     "                $('#debugInnerWindow').append(s + '<br />');\n"
     "            }\n"
     "            else\n"
     "            {\n"
     "                console.log(s);\n"
-    "                //alert(s);\n"
     "            }\n"
     "        }\n"
     "        this.explainStyleBindings = function(t) {\n"
+    "            this.write('I will explain you the style bindings... one day...');\n"
     "        }\n"
     "    }\n"
     "\n"
@@ -12986,7 +13039,7 @@ BOOL isJSExpression(NSString *s)
     "                // Ansonsten neue Textnode anfügen\n"
     "                if(!einKindMitDemTextGesetzt)\n"
     "                {\n"
-    "                    this.p.appendChild(new lz.DataText(text))\n"
+    "                    this.p.appendChild(new lz.DataText(text));\n"
     "                }\n"
     "            }\n"
     "        }\n"

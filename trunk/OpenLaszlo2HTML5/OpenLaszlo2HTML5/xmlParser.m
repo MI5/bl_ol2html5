@@ -214,7 +214,7 @@ BOOL ownSplashscreen = NO;
 
 // oninit-Code in einem Handler wird direkt ausgeführt (load-Handler ist unpassend)
 @property (nonatomic) BOOL onInitInHandler;
-@property (nonatomic) BOOL initStageDefer;
+@property (nonatomic) int initStageDefer;
 @property (nonatomic) BOOL initStageDeferThatWillBeCalledByCompleteInstantiation;
 @property (nonatomic) BOOL classInClass;
 @property (nonatomic) BOOL debugConsoleActivated;
@@ -419,7 +419,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.weAreCollectingTheCompleteContentInClass = NO;
         self.ignoreAddingIDsBecauseWeAreInClass = NO;
         self.onInitInHandler = NO;
-        self.initStageDefer = NO;
+        self.initStageDefer = -1;
         self.initStageDeferThatWillBeCalledByCompleteInstantiation = NO;
         self.classInClass = NO;
         self.debugConsoleActivated = NO;
@@ -7200,11 +7200,27 @@ didStartElement:(NSString *)elementName
 
 
 
-        // To Do: Nicht 'deferview' oder die anderen elementNames,
-        // sondern das vorhandene attribut initstage=defer ist hier eigentlich entscheidend.
-        if ([elementName isEqualToString:@"deferview"])
+        NSMutableDictionary *attrDictOfClass = [self.allFoundClasses objectForKey:elementName];
+
+        // Attribut kann in der Klasse stecken (1. Abfrage) oder im Element selber (2. Abfrage)
+        if ( ([attrDictOfClass objectForKey:@"initstage"] != nil &&
+             [[attrDictOfClass objectForKey:@"initstage"] isEqualToString:@"defer"])
+              ||
+              (false))
         {
-            self.initStageDefer = YES;
+            // War früher ein Boolescher Wert, aber beinhaltet jetzt direkt die Ebene, damit
+            // ich beim schließen die korrekte Ebene habe und nicht das initstage=defer-Attribut
+            // durchschleifen muss (Attribute sind nur im öffnenden Tag bekannt, nicht im schließenden).
+            if (self.initStageDefer != -1)
+            {
+                // Dann liegt ein initstage=defer-Attribut in einem initstage=defer-Attribut.
+                // Dann bleibt der alte Wert bestehen, da sonst die Verschachtelungsebene überschrieben
+                // wird und somit der initstage=defer-Prozess zu früh geschlossen werden würde.
+            }
+            else
+            {
+                self.initStageDefer = self.verschachtelungstiefe;
+            }
         }
         if ([elementName isEqualToString:@"nicemodaldialog"])
         {
@@ -7426,7 +7442,7 @@ didStartElement:(NSString *)elementName
         // b) damit Simplelayout hiernach NICHT EINMAL ausgeführt werden kann
         // War früher jQueryOutput.
         // analog auch beim beenden beachten. (Falls es hier geändert wird, dort mitändern!)
-        if (self.initStageDefer)
+        if (self.initStageDefer != -1)
         {
             [self.jsInitstageDeferOutput appendString:o];
         }
@@ -7711,7 +7727,7 @@ BOOL isJSExpression(NSString *s)
                 // Da ich den string mit ' umschlossen habe, muss ich eventuelle ' im String escapen
                 s = [self protectThisSingleQuotedJavaScriptString:s];
 
-                if (self.initStageDefer)
+                if (self.initStageDefer != -1)
                 {
                     // Dann IN den Output hinein injecten
                     [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-34];
@@ -9132,7 +9148,7 @@ BOOL isJSExpression(NSString *s)
             s = [self protectThisSingleQuotedJavaScriptString:s];
 
 
-            if (self.initStageDefer)
+            if (self.initStageDefer != -1)
             {
                 [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-34];
             }
@@ -9154,12 +9170,11 @@ BOOL isJSExpression(NSString *s)
         }
 
 
-        //NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-1];
-        //if ([enclosingElemTyp isEqualToString:@"deferview"])
-        // So ist es wohl richtig: So werden auch Objekte IN deferview's erst verzögert geladen:
-        if ([elementName isEqualToString:@"deferview"])
+        // Ich muss darauf achten, dass auch Objekte IN initstage=defer erst verzögert geladen werden!
+        // Deswegen Abfrage über die bei Eintritt in das Element gespeicherte Verschachtelungsebene.
+        if (self.initStageDefer-1 == self.verschachtelungstiefe)
         {
-            self.initStageDefer = NO;
+            self.initStageDefer = -1;
         }
 
         if ([elementName isEqualToString:@"nicemodaldialog"])
@@ -17018,9 +17033,9 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        // Wenn Element unsichtbar, dann ohne die Höhe des Elements und ohne spacing-Angabe\n"
     "        // Ich kann nicht direkt auf die Visibility testen, sondern nur auf die explizit von setAttribute_() gesetzte\n"
-    "        if (typeof kind.data('visible_') === 'boolean' && kind.data('visible_') === false) topValue = parseInt(kind.prev().css('top'));\n"
+    "        if (typeof kind.data('visible_') === 'boolean' && kind.data('visible_') === false)\n"
+    "            topValue = parseInt(kind.prev().css('top'));\n"
     "\n"
-    //"        if (!$(kind.prev()).is(':visible')) { topValue = !isNaN(parseInt(kind.prev().css('top'))) ? parseInt(kind.prev().css('top')) : 0; } // Well... Why does this work? (Bsp. <checkbox>)\n"
     "        if (parseInt(kind.css('top')) !== topValue) // Erspart uns spürbar Aufrufe von setAttribute_()\n"
     "            kind.get(0).setAttribute_('y',topValue+'px');\n"
     "\n"

@@ -215,7 +215,7 @@ BOOL ownSplashscreen = NO;
 // oninit-Code in einem Handler wird direkt ausgeführt (load-Handler ist unpassend)
 @property (nonatomic) BOOL onInitInHandler;
 @property (nonatomic) int initStageDefer;
-@property (nonatomic) BOOL initStageDeferThatWillBeCalledByCompleteInstantiation;
+@property (nonatomic) int initStageDeferThatWillBeCalledByCompleteInstantiation;
 @property (nonatomic) BOOL classInClass;
 @property (nonatomic) BOOL debugConsoleActivated;
 
@@ -420,7 +420,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.ignoreAddingIDsBecauseWeAreInClass = NO;
         self.onInitInHandler = NO;
         self.initStageDefer = -1;
-        self.initStageDeferThatWillBeCalledByCompleteInstantiation = NO;
+        self.initStageDeferThatWillBeCalledByCompleteInstantiation = -1;
         self.classInClass = NO;
         self.debugConsoleActivated = NO;
         self.referenceAttributeInHandler = NO;
@@ -799,7 +799,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         // Wenn wir gerade in einem (Unterlement von) initStageDefer sind, dann hängt unsere
         // constraint u. U. von dem initStageDefer-Element ab - Deswegen constraint erst dort ausgeben.
-        if (self.initStageDeferThatWillBeCalledByCompleteInstantiation)
+        if (self.initStageDeferThatWillBeCalledByCompleteInstantiation != -1)
         {
             [self.jsInitstageDeferOutput appendString:o];
         }
@@ -3001,7 +3001,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"tabelement"] ||
         [elementName isEqualToString:@"baselist"] ||
         [elementName isEqualToString:@"list"] ||
-        [elementName isEqualToString:@"rollUpDown"])
+        [elementName isEqualToString:@"rollUpDownxxx"])
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
@@ -4227,7 +4227,7 @@ didStartElement:(NSString *)elementName
             {
                 // Weil initstage=defer erst verzögert aufgerufen wird, auch die Attribute
                 // dieser Klasseninstanz verzögert setzen.
-                if (self.initStageDeferThatWillBeCalledByCompleteInstantiation)
+                if (self.initStageDeferThatWillBeCalledByCompleteInstantiation != -1)
                 {
                     [self.jsInitstageDeferOutput appendString:o];
                 }
@@ -5285,7 +5285,7 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"rollUpDown"])
+    if ([elementName isEqualToString:@"rollUpDownxxx"])
     {
         element_bearbeitet = YES;
 
@@ -7202,10 +7202,15 @@ didStartElement:(NSString *)elementName
 
         NSMutableDictionary *attrDictOfClass = [self.allFoundClasses objectForKey:elementName];
 
+
+        if ([attributeDict valueForKey:@"initstage"] && [[attributeDict valueForKey:@"initstage"] isEqualToString:@"defer"])
+        {
+            int ixy = 99;
+        }
+
+
         // Attribut kann in der Klasse stecken (1. Abfrage) oder im Element selber (2. Abfrage)
-        if ( ([attrDictOfClass objectForKey:@"initstage"] != nil &&
-             [[attrDictOfClass objectForKey:@"initstage"] isEqualToString:@"defer"])
-              ||
+        if ( 
               (false))
         {
             // War früher ein Boolescher Wert, aber beinhaltet jetzt direkt die Ebene, damit
@@ -7222,9 +7227,24 @@ didStartElement:(NSString *)elementName
                 self.initStageDefer = self.verschachtelungstiefe;
             }
         }
-        if ([elementName isEqualToString:@"nicemodaldialog"])
+
+
+        //  ([elementName isEqualToString:@"nicemodaldialog"]) || <--- Kann endgültig gekillt werden
+        // Die Probleme mit dem Dialog 'dlgsummenwerte' (hatte als einziger kein initstage=defer)
+        // scheinen behoben
+
+        // Die obere Oder-Bedingung war vorher weiter oben in der Abfrage...
+        // Klappt das so im Zusammenhang mit rollupdown-xxx?
+        if (([attrDictOfClass objectForKey:@"initstage"] != nil &&
+             [[attrDictOfClass objectForKey:@"initstage"] isEqualToString:@"defer"])
+    
+            ||
+
+            ([attributeDict valueForKey:@"initstage"] && [[attributeDict valueForKey:@"initstage"] isEqualToString:@"defer"]))
         {
-            self.initStageDeferThatWillBeCalledByCompleteInstantiation = YES;
+            // Überschreib-Schutz, falls initstageDefer-Element in initstageDefer-Element
+            if (self.initStageDeferThatWillBeCalledByCompleteInstantiation == -1)
+                self.initStageDeferThatWillBeCalledByCompleteInstantiation = self.verschachtelungstiefe;
         }
 
 
@@ -7238,7 +7258,7 @@ didStartElement:(NSString *)elementName
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
-        if (self.initStageDeferThatWillBeCalledByCompleteInstantiation)
+        if (self.initStageDeferThatWillBeCalledByCompleteInstantiation != -1)
         {
             // Nicht sichtbar, weil es ja erst später instanziert wird
             [self.output appendString:@"display:none;\" data-initstage=\"defer\">\n"];
@@ -7446,7 +7466,7 @@ didStartElement:(NSString *)elementName
         {
             [self.jsInitstageDeferOutput appendString:o];
         }
-        else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation)
+        else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation != -1)
         {
             // Dann speichern wir NUR die instanceVars, alles andere klären wir später beim Aufruf von completeInstantiation
             [self.jsInitstageDeferOutput  appendFormat:@"\n  // Klasse '%@' wird später instanziert in '%@' von completeInstantiation",elementName,self.zuletztGesetzteID];
@@ -7732,7 +7752,8 @@ BOOL isJSExpression(NSString *s)
                     // Dann IN den Output hinein injecten
                     [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-34];
                 }
-                else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation || self.classInClass)
+                else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation != -1 ||
+                         self.classInClass)
                 {
                     if (self.classInClass)
                     {
@@ -8739,7 +8760,7 @@ BOOL isJSExpression(NSString *s)
 
 
     // Schließen von rollUpDown
-    if ([elementName isEqualToString:@"rollUpDown"])
+    if ([elementName isEqualToString:@"rollUpDownxxx"])
     {
         self.weAreInRollUpDownWithoutSurroundingRUDContainer = NO;
 
@@ -9152,7 +9173,8 @@ BOOL isJSExpression(NSString *s)
             {
                 [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-34];
             }
-            else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation || self.classInClass)
+            else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation != -1 ||
+                     self.classInClass)
             {
                 if (self.classInClass)
                 {
@@ -9177,9 +9199,10 @@ BOOL isJSExpression(NSString *s)
             self.initStageDefer = -1;
         }
 
-        if ([elementName isEqualToString:@"nicemodaldialog"])
+
+        if (self.initStageDeferThatWillBeCalledByCompleteInstantiation-1 == self.verschachtelungstiefe)
         {
-            self.initStageDeferThatWillBeCalledByCompleteInstantiation = NO;
+            self.initStageDeferThatWillBeCalledByCompleteInstantiation = -1;
         }
 
 
@@ -16807,11 +16830,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Das gilt jedoch nur, wenn das Layout per Attribut gesetzt wurde,\n"
     "    // nicht wenn es per tag <simplelayout> gesetzt wurde - Beispiel 33.17\n"
-    "    if (el.defaultplacement && el.defaultplacement != '' && el[el.defaultplacement] && saSetByAttr)\n"
-    "       el = el[el.defaultplacement];\n"
-    "\n"
-    "    if ($(el).hasClass('div_window'))\n"
-    "        el = $('#'+el.id+'_content_').get(0);\n"
+    "    if (saSetByAttr && el.defaultplacement && el.defaultplacement != '' && $(el).find(\"[data-name='\"+el.defaultplacement+\"']\").length > 0)\n"
+    "       el = $(el).find(\"[data-name='\"+el.defaultplacement+\"']\").get(0);\n"
     "\n"
     "    if ($(el).children().length == 0) return; // Schutz, falls es gar keine Kinder gibt\n"
     "\n"
@@ -16850,11 +16870,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Das gilt jedoch nur, wenn das Layout per Attribut gesetzt wurde,\n"
     "    // nicht wenn es per tag <simplelayout> gesetzt wurde - Beispiel 33.17\n"
-    "    if (el.defaultplacement && el.defaultplacement != '' && el[el.defaultplacement] && saSetByAttr)\n"
-    "       el = el[el.defaultplacement];\n"
-    "\n"
-    "    if ($(el).hasClass('div_window'))\n"
-    "        el = $('#'+el.id+'_content_').get(0);\n"
+    "    if (saSetByAttr && el.defaultplacement && el.defaultplacement != '' && $(el).find(\"[data-name='\"+el.defaultplacement+\"']\").length > 0)\n"
+    "       el = $(el).find(\"[data-name='\"+el.defaultplacement+\"']\").get(0);\n"
     "\n"
     "    var heights = $(el).children().map(function () { return $(this).outerHeight(true); }).get();\n"
     "    // Erste Bedingung, weil 'canvas'-Elemente somehow keine style-Property haben\n"
@@ -16883,11 +16900,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Das gilt jedoch nur, wenn das Layout per Attribut gesetzt wurde,\n"
     "    // nicht wenn es per tag <simplelayout> gesetzt wurde - Beispiel 33.17\n"
-    "    if (el.defaultplacement && el.defaultplacement != '' && el[el.defaultplacement] && saSetByAttr)\n"
-    "       el = el[el.defaultplacement];\n"
-    "\n"
-    "    if ($(el).hasClass('div_window'))\n"
-    "        el = $('#'+el.id+'_content_').get(0);\n"
+    "    if (saSetByAttr && el.defaultplacement && el.defaultplacement != '' && $(el).find(\"[data-name='\"+el.defaultplacement+\"']\").length > 0)\n"
+    "       el = $(el).find(\"[data-name='\"+el.defaultplacement+\"']\").get(0);\n"
     "\n"
     "    var sumH = 0;\n"
     "    $(el).children().each(function() {\n"
@@ -16926,11 +16940,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Das gilt jedoch nur, wenn das Layout per Attribut gesetzt wurde,\n"
     "    // nicht wenn es per tag <simplelayout> gesetzt wurde - Beispiel 33.17\n"
-    "    if (el.defaultplacement && el.defaultplacement != '' && el[el.defaultplacement] && saSetByAttr)\n"
-    "       el = el[el.defaultplacement];\n"
-    "\n"
-    "    if ($(el).hasClass('div_window'))\n"
-    "        el = $('#'+el.id+'_content_').get(0);\n"
+    "    if (saSetByAttr && el.defaultplacement && el.defaultplacement != '' && $(el).find(\"[data-name='\"+el.defaultplacement+\"']\").length > 0)\n"
+    "       el = $(el).find(\"[data-name='\"+el.defaultplacement+\"']\").get(0);\n"
     "\n"
     "    var sumW = 0;\n"
     "    $(el).children().each(function() {\n"
@@ -16967,11 +16978,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Das gilt jedoch nur, wenn das Layout per Attribut gesetzt wurde,\n"
     "    // nicht wenn es per tag <simplelayout> gesetzt wurde - Beispiel 33.17\n"
-    "    if (el.defaultplacement && el.defaultplacement != '' && el[el.defaultplacement] && saSetByAttr)\n"
-    "       el = el[el.defaultplacement];\n"
-    "\n"
-    "    if ($(el).hasClass('div_window'))\n"
-    "        el = $('#'+el.id+'_content_').get(0);\n"
+    "    if (saSetByAttr && el.defaultplacement && el.defaultplacement != '' && $(el).find(\"[data-name='\"+el.defaultplacement+\"']\").length > 0)\n"
+    "       el = $(el).find(\"[data-name='\"+el.defaultplacement+\"']\").get(0);\n"
     "\n"
     "    if ($(el).data('layout_') && $(el).data('layout_').locked)\n"
     "        return;\n"
@@ -17070,11 +17078,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Das gilt jedoch nur, wenn das Layout per Attribut gesetzt wurde,\n"
     "    // nicht wenn es per tag <simplelayout> gesetzt wurde - Beispiel 33.17\n"
-    "    if (el.defaultplacement && el.defaultplacement != '' && el[el.defaultplacement] && saSetByAttr)\n"
-    "       el = el[el.defaultplacement];\n"
-    "\n"
-    "    if ($(el).hasClass('div_window'))\n"
-    "        el = $('#'+el.id+'_content_').get(0);\n"
+    "    if (saSetByAttr && el.defaultplacement && el.defaultplacement != '' && $(el).find(\"[data-name='\"+el.defaultplacement+\"']\").length > 0)\n"
+    "       el = $(el).find(\"[data-name='\"+el.defaultplacement+\"']\").get(0);\n"
     "\n"
     "    if ($(el).data('layout_') && $(el).data('layout_').locked)\n"
     "        return;\n"

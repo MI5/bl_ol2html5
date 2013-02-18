@@ -1452,6 +1452,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 - (void) adjustHeightAndWidthOfElement:(NSString*) elemName
 {
+    return;
     if (positionAbsolute == YES)
     {
         // Aus Sicht des umgebenden Divs gelöst.
@@ -3001,7 +3002,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"tabelement"] ||
         [elementName isEqualToString:@"baselist"] ||
         [elementName isEqualToString:@"list"] ||
-        [elementName isEqualToString:@"rollUpDownxxx"])
+        [elementName isEqualToString:@"rollUpDown"])
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
@@ -5285,7 +5286,7 @@ didStartElement:(NSString *)elementName
 
 
 
-    if ([elementName isEqualToString:@"rollUpDownxxx"])
+    if ([elementName isEqualToString:@"rollUpDown"])
     {
         element_bearbeitet = YES;
 
@@ -7242,7 +7243,7 @@ didStartElement:(NSString *)elementName
 
             ([attributeDict valueForKey:@"initstage"] && [[attributeDict valueForKey:@"initstage"] isEqualToString:@"defer"]))
         {
-            // Überschreib-Schutz, falls initstageDefer-Element in initstageDefer-Element
+            // Überschreib-Schutz, falls initStageDefer-Element in initStageDefer-Element
             if (self.initStageDeferThatWillBeCalledByCompleteInstantiation == -1)
                 self.initStageDeferThatWillBeCalledByCompleteInstantiation = self.verschachtelungstiefe;
         }
@@ -8760,7 +8761,7 @@ BOOL isJSExpression(NSString *s)
 
 
     // Schließen von rollUpDown
-    if ([elementName isEqualToString:@"rollUpDownxxx"])
+    if ([elementName isEqualToString:@"rollUpDown"])
     {
         self.weAreInRollUpDownWithoutSurroundingRUDContainer = NO;
 
@@ -18511,6 +18512,9 @@ BOOL isJSExpression(NSString *s)
     "                if ($(id).find(\"[data-name='\"+$(this).data('placement')+\"']\").length > 0)\n"
     "                {\n"
     "                    $(this).appendTo($(id).find(\"[data-name='\"+$(this).data('placement')+\"']\").get(0));\n"
+    "\n"
+    "                    // Den parent auch für die Kinder noch anpassen für Unterscheidung parent/immediateparent\n"
+    "                    $(this).data('defaultparent_',id.id);\n"
     "                }\n"
     "                else\n"
     "                {\n"
@@ -18522,6 +18526,9 @@ BOOL isJSExpression(NSString *s)
     "            else if (id.defaultplacement !== '' && $(id).find(\"[data-name='\"+id.defaultplacement+\"']\").length > 0)\n"
     "            {\n"
     "                $(this).appendTo($(id).find(\"[data-name='\"+id.defaultplacement+\"']\").get(0));\n"
+    "\n"
+    "                // Den parent auch für die Kinder noch anpassen für Unterscheidung parent/immediateparent\n"
+    "                $(this).data('defaultparent_',id.id);\n"
     "            }\n"
     "            else\n"
     "            {\n"

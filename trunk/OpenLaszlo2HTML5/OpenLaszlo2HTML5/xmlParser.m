@@ -6486,12 +6486,10 @@ didStartElement:(NSString *)elementName
 
                 if (numberOfMatches > 0)
                 {
-                    NSMutableString *neueArgs = [[NSMutableString alloc] initWithString:@""];
-
                     // Es kann ja auch eine Mischung geben, von sowohl Argumenten mit
                     // Defaultwerten als auch solchen ohne. Deswegen hier erstmal ohne
                     // Defaultargumente setzen und dann gleich die alle mit.
-                    neueArgs = [self holAlleArgumentDieKeineDefaultArgumenteSind:args];
+                    NSMutableString *neueArgs = [self holAlleArgumentDieKeineDefaultArgumenteSind:args];
 
                     NSLog([NSString stringWithFormat:@"There is/are %ld argument(s) with a default argument. I will regexp them.",numberOfMatches]);
 
@@ -7900,8 +7898,6 @@ BOOL isJSExpression(NSString *s)
     // Handle unknown closing Elements in dataset
     if (self.weAreInDatasetAndNeedToCollectTheFollowingTags)
     {
-        element_geschlossen = YES;
-
         self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
 
         NSString *gesammelterText = [self holDenGesammeltenTextUndLeereIhn];
@@ -8838,11 +8834,10 @@ BOOL isJSExpression(NSString *s)
             NSUInteger numberOfMatches = [regexp2 numberOfMatchesInString:args options:0 range:NSMakeRange(0, [args length])];
             if (numberOfMatches > 0)
             {
-                NSMutableString *neueArgs = [[NSMutableString alloc] initWithString:@""];
                 // Es kann ja auch eine Mischung geben, von sowohl Argumenten mit
                 // Defaultwerten als auch solchen ohne. Deswegen hier erstmal ohne
                 // Defaultargumente setzen und dann gleich die alle mit.
-                neueArgs = [self holAlleArgumentDieKeineDefaultArgumenteSind:args];
+                NSMutableString *neueArgs = [self holAlleArgumentDieKeineDefaultArgumenteSind:args];
                 NSLog([NSString stringWithFormat:@"There is/are %ld argument(s) with a default argument. I will regexp them.",numberOfMatches]);
 
                 NSArray *matches = [regexp2 matchesInString:args options:0 range:NSMakeRange(0, [args length])];
@@ -8869,9 +8864,9 @@ BOOL isJSExpression(NSString *s)
                 }
 
                 // ... und hier setzen
-                args = neueArgs;
+                // args = neueArgs; // Analyzer sagt: 'Value stored to args is never read'
 
-                // Den funktionskopf von oben jetzt benutzen. In diesem die Argumente ersetzen...
+                // Den Funktionskopf von oben jetzt benutzen. In diesem die Argumente ersetzen...
                 NSUInteger posOeffnendeKlammer = [funktionskopf rangeOfString:@"("].location;
                 funktionskopf = [funktionskopf substringToIndex:posOeffnendeKlammer];
                 funktionskopf = [NSString stringWithFormat:@"%@(%@) {",funktionskopf,neueArgs];

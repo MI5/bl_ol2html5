@@ -38,7 +38,7 @@
 // not suitable in all situations e. g. oninit creates new elements)
 //
 //  Created by Matthias Blanquett on 13.04.12.
-//  Copyright (c) 2012 Buhl. All rights reserved.
+//  Copyright (c) 2013 Buhl. All rights reserved.
 //
 
 BOOL debugmode = YES;
@@ -5252,6 +5252,7 @@ didStartElement:(NSString *)elementName
 
 
     // Historisch bedingt, dass ich hier im Code noch was mache, obwohl es eine self-Defined class ist.
+    // Erst muss roll_Up_Down wohl ausgewertet werden
     if ([elementName isEqualToString:@"rollUpDownContainer"])
     {
         //element_bearbeitet = YES;
@@ -5467,13 +5468,17 @@ didStartElement:(NSString *)elementName
 
         // Die jQuery-Ausgabe
         if (callback)
+        {
             [self.jQueryOutput appendString:@"\n  // Animation bei Klick auf die Leiste (mit callback)"];
+        }
         else
+        {
             [self.jQueryOutput appendString:@"\n  // Animation bei Klick auf die Leiste (ohne callback)"];
+        }
 
         [self.jQueryOutput appendString:@"\n  // Vorher alle Panels gleicher Ebene schließen, aber nicht unser aktuell geklicktes"];
 
-        [self.jQueryOutput appendFormat:@"\n  $('#%@').click(function(){ $('#%@').parent().parent().children().children('.div_rudPanel:not(\"#%@\")').slideUp(%@); $('#%@').slideToggle(%@",id4flipleiste,id4flipleiste,id4panel,self.animDuration,id4panel,self.animDuration];
+        [self.jQueryOutput appendFormat:@"\n  $('#%@').click(function(){ /* if (true) alert('Aha'); */ $('#%@').parent().parent().children().children('.div_rudPanel:not(\"#%@\")').slideUp(%@); $('#%@').slideToggle(%@",id4flipleiste,id4flipleiste,id4panel,self.animDuration,id4panel,self.animDuration];
         if (callback)
         {
             [self.jQueryOutput appendString:@","];
@@ -10040,7 +10045,7 @@ BOOL isJSExpression(NSString *s)
     "    pointer-events: auto;\n"
     "}\n"
     "\n"
-    "/* CSS-Angaben für ein RollUpDownPanel (gleichzeit Erkennungszeichen in getTheParent() */\n"
+    "/* CSS-Angaben für ein RollUpDownPanel (gleichzeitig Erkennungszeichen in getTheParent() ) */\n"
     ".div_rudPanel\n"
     "{\n"
     "    position: relative;\n"
@@ -10055,6 +10060,12 @@ BOOL isJSExpression(NSString *s)
     "    background-color:white;\n"
     "\n"
     "    pointer-events: auto;\n"
+    "}\n"
+    "/* Für den Fall von positionAbsolute=yes funktioniert das vertikale Ausrichten (übereinander- */\n"
+    "/* stapeln) so auch in rollUpDown, ohne rollUpDown als Klasse auszuwerten. */\n"
+    ".div_rudPanel > div\n"
+    "{\n"
+    "    position: relative;\n"
     "}\n"
     "\n"
     "/* Standard-checkbox (das umgebende Div) */\n"

@@ -2,8 +2,6 @@
 //  xmlParser.m
 //  OpenLaszlo2HTML5
 //
-//
-//
 // - IE-Support erst ab IE 8 (weil IE 7 und IE 6 CSS-Angabe inherit nicht unterstützen)
 //
 //
@@ -38,11 +36,10 @@
 // not suitable in all situations e. g. oninit creates new elements)
 //
 //  Created by Matthias Blanquett on 13.04.12.
-//  Copyright (c) 2013 Buhl. All rights reserved.
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = NO; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
+BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
                              // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
 
 
@@ -88,7 +85,10 @@ BOOL ownSplashscreen = NO;
 
 @property (strong, nonatomic) NSMutableString *output;
 @property (strong, nonatomic) NSMutableString *jsOutput;
-@property (strong, nonatomic) NSMutableString *jsOLClassesOutput; // Gefundene <class> werden hier gesammelt
+
+// Gefundene <class> werden hier gesammelt
+@property (strong, nonatomic) NSMutableString *jsOLClassesOutput;
+
 @property (strong, nonatomic) NSMutableString *jQueryOutput0;
 @property (strong, nonatomic) NSMutableString *jQueryOutput;
 @property (strong, nonatomic) NSMutableString *jsHeadOutput;
@@ -100,9 +100,12 @@ BOOL ownSplashscreen = NO;
 @property (strong, nonatomic) NSMutableString *jsInitstageDeferOutput;
 @property (strong, nonatomic) NSMutableString *idsAndNamesOutput;
 
-@property (strong, nonatomic) NSMutableString *cssOutput; // CSS-Ausgaben, die gesammelt werden, derzeit @Font-Face
+// CSS-Ausgaben, die gesammelt werden, derzeit @Font-Face
+@property (strong, nonatomic) NSMutableString *cssOutput;
 
-@property (strong, nonatomic) NSMutableString *externalJSFilesOutput; // per <script src=''> angegebene externe Skripte
+
+// per <script src=''> angegebene externe Skripte
+@property (strong, nonatomic) NSMutableString *externalJSFilesOutput;
 
 @property (strong, nonatomic) NSMutableString *collectedContentOfClass;
 
@@ -112,7 +115,10 @@ BOOL ownSplashscreen = NO;
 @property (nonatomic) NSInteger idZaehler;
 @property (nonatomic) NSInteger pointerWithoutNameZaehler;
 @property (nonatomic) NSInteger elementeZaehler;
-@property (strong, nonatomic) NSString* element_merker; // Für <class>, um erkennen zu können, ob sich das Tag sich direkt wieder schließt: <tag />
+
+// Für <class>, um erkennen zu können, ob sich das Tag sich direkt wieder schließt: <tag /> ?
+@property (strong, nonatomic) NSString* element_merker;
+
 // NSUInteger, damit ich es mit [NSArray count]; verrechnen kann, was ebenfalls NSUInteger zurückgibt
 @property (nonatomic) NSUInteger verschachtelungstiefe;
 
@@ -130,9 +136,6 @@ BOOL ownSplashscreen = NO;
 
 // Für jeden Container die Elemente durchzählen, um den Abstand regeln zu können
 @property (strong, nonatomic) NSMutableArray *rollupDownElementeCounter;
-
-// Für das Element RollUpDownContainer
-@property (strong, nonatomic) NSString *animDuration;
 
 // Für das Element Replicator (wird erst beim schließen angelegt, deswegen Attribut retten)
 @property (strong, nonatomic) NSString *nodesAttrOfReplicator;
@@ -178,8 +181,8 @@ BOOL ownSplashscreen = NO;
 // Gefundene <class>-Tags, die definiert wurden
 @property (strong, nonatomic) NSMutableDictionary *allFoundClasses;
 
-// Gefundene <include>-Tags, die bereits inkludiert wurden (Denn jedes darf nur einmal inkludiert werden,
-// auch wenn es mehrmals aufgerufen wird - z. B. bei 'certdatepicker' der Fall im GFlender-Code)
+// Gefundene <include>-Tags, die bereits inkludiert wurden (Denn jedes darf nur einmal inkludiert
+// werden, auch wenn es mehrmals aufgerufen wird - z. B. bei 'certdatepicker' der Fall im Code)
 @property (strong, nonatomic) NSMutableArray *allIncludedIncludes;
 
 
@@ -214,7 +217,6 @@ BOOL ownSplashscreen = NO;
 
 // oninit-Code in einem Handler wird direkt ausgeführt (load-Handler ist unpassend)
 @property (nonatomic) BOOL onInitInHandler;
-@property (nonatomic) int initStageDefer;
 @property (nonatomic) int initStageDeferThatWillBeCalledByCompleteInstantiation;
 @property (nonatomic) BOOL classInClass;
 @property (nonatomic) BOOL debugConsoleActivated;
@@ -267,7 +269,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize datasetItemsCounter = _datasetItemsCounter, rollupDownElementeCounter = _rollupDownElementeCounter;
 
-@synthesize animDuration = _animDuration, nodesAttrOfReplicator = _nodesAttrOfReplicator, collectTheNextIDForReplicator = _collectTheNextIDForReplicator, lastUsedTabSheetContainerID = _lastUsedTabSheetContainerID, rememberedID4closingSelfDefinedClass = _rememberedID4closingSelfDefinedClass, defaultplacement = _defaultplacement, lastUsedNameAttributeOfMethod = _lastUsedNameAttributeOfMethod, lastUsedNameAttributeOfClass = _lastUsedNameAttributeOfClass, lastUsedExtendsAttributeOfClass =_lastUsedExtendsAttributeOfClass, lastUsedNameAttributeOfFont = _lastUsedNameAttributeOfFont, lastUsedNameAttributeOfDataPointer = _lastUsedNameAttributeOfDataPointer;
+@synthesize nodesAttrOfReplicator = _nodesAttrOfReplicator, collectTheNextIDForReplicator = _collectTheNextIDForReplicator, lastUsedTabSheetContainerID = _lastUsedTabSheetContainerID, rememberedID4closingSelfDefinedClass = _rememberedID4closingSelfDefinedClass, defaultplacement = _defaultplacement, lastUsedNameAttributeOfMethod = _lastUsedNameAttributeOfMethod, lastUsedNameAttributeOfClass = _lastUsedNameAttributeOfClass, lastUsedExtendsAttributeOfClass =_lastUsedExtendsAttributeOfClass, lastUsedNameAttributeOfFont = _lastUsedNameAttributeOfFont, lastUsedNameAttributeOfDataPointer = _lastUsedNameAttributeOfDataPointer;
 
 @synthesize allJSGlobalVars = _allJSGlobalVars, allImgPaths = _allImgPaths;
 
@@ -283,7 +285,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 @synthesize weAreInRollUpDownWithoutSurroundingRUDContainer = _weAreInRollUpDownWithoutSurroundingRUDContainer;
 @synthesize weAreCollectingTheCompleteContentInClass = _weAreCollectingTheCompleteContentInClass;
 
-@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, initStageDefer = _initStageDefer, initStageDeferThatWillBeCalledByCompleteInstantiation =_initStageDeferThatWillBeCalledByCompleteInstantiation, classInClass = _classInClass, debugConsoleActivated = _debugConsoleActivated, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler, handlerofDrawview = _handlerofDrawview, lastUsedNameAttributeOfState = _lastUsedNameAttributeOfState;
+@synthesize ignoreAddingIDsBecauseWeAreInClass = _ignoreAddingIDsBecauseWeAreInClass, onInitInHandler = _onInitInHandler, initStageDeferThatWillBeCalledByCompleteInstantiation =_initStageDeferThatWillBeCalledByCompleteInstantiation, classInClass = _classInClass, debugConsoleActivated = _debugConsoleActivated, referenceAttributeInHandler = _referenceAttributeInHandler, methodAttributeInHandler = _methodAttributeInHandler, handlerofDrawview = _handlerofDrawview, lastUsedNameAttributeOfState = _lastUsedNameAttributeOfState;
 
 
 
@@ -394,7 +396,6 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.last_resource_name_for_frametag = @"";
         self.collectedFrameResources = [[NSMutableArray alloc] init];
 
-        self.animDuration = @"slow";
         self.nodesAttrOfReplicator = nil;
         self.collectTheNextIDForReplicator = @"";
         self.lastUsedTabSheetContainerID = @"";
@@ -419,7 +420,6 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.weAreCollectingTheCompleteContentInClass = NO;
         self.ignoreAddingIDsBecauseWeAreInClass = NO;
         self.onInitInHandler = NO;
-        self.initStageDefer = -1;
         self.initStageDeferThatWillBeCalledByCompleteInstantiation = -1;
         self.classInClass = NO;
         self.debugConsoleActivated = NO;
@@ -5255,7 +5255,7 @@ didStartElement:(NSString *)elementName
     // Erst muss roll_Up_Down wohl ausgewertet werden
     if ([elementName isEqualToString:@"rollUpDownContainer"])
     {
-        //element_bearbeitet = YES;
+        // element_bearbeitet = YES;
 
 
         self.weAreInRollUpDownWithoutSurroundingRUDContainer = NO;
@@ -5268,18 +5268,6 @@ didStartElement:(NSString *)elementName
         // weil es ja verschachtelte rollUpDownContainer geben kann
         // Beim Betreten Element dazunehmen, beim Verlassen entfernen
         [self.rollupDownElementeCounter addObject:[NSNumber numberWithInt:0]];
-
-
-        // Setz die MiliSekunden für die Animationszeit, damit die 'rollUpDown'-Elemente darauf zugreifen können
-        if ([attributeDict valueForKey:@"animduration"])
-        {
-            self.attributeCount++;
-            self.animDuration = [attributeDict valueForKey:@"animduration"];
-        }
-        else
-        {
-            self.animDuration = @"slow";
-        }
     }
 
 
@@ -5466,25 +5454,12 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"\">\n"];
 
 
-        // Die jQuery-Ausgabe
+        [self.jQueryOutput appendString:@"\n  // Vorher alle Panels gleicher Ebene schließen, aber nicht unser aktuell geklicktes (und completeInit)"];
+
+        [self.jQueryOutput appendFormat:@"\n  $('#%@').click(function() { handleRollUpDownClick_(this",id4flipleiste];
         if (callback)
         {
-            [self.jQueryOutput appendString:@"\n  // Animation bei Klick auf die Leiste (mit callback)"];
-        }
-        else
-        {
-            [self.jQueryOutput appendString:@"\n  // Animation bei Klick auf die Leiste (ohne callback)"];
-        }
-
-        [self.jQueryOutput appendString:@"\n  // Vorher alle Panels gleicher Ebene schließen, aber nicht unser aktuell geklicktes"];
-
-        [self.jQueryOutput appendFormat:@"\n  $('#%@').click(function(){ /* if (true) alert('Aha'); */ $('#%@').parent().parent().children().children('.div_rudPanel:not(\"#%@\")').slideUp(%@); $('#%@').slideToggle(%@",id4flipleiste,id4flipleiste,id4panel,self.animDuration,id4panel,self.animDuration];
-        if (callback)
-        {
-            [self.jQueryOutput appendString:@","];
-            [self.jQueryOutput appendString:@"function() {"];
-            [self.jQueryOutput appendString:callback];
-            [self.jQueryOutput appendString:@"}"];
+            [self.jQueryOutput appendFormat:@",function() { %@ }",callback];
         }
         [self.jQueryOutput appendString:@");});\n"];
 
@@ -5692,7 +5667,7 @@ didStartElement:(NSString *)elementName
         // Sonst verrutscht es alles wegen der zwischengeschobenen Leiste
         // Etwas geschummelt, aber nun gut.
         // Auch das width muss ich hier explizit übernehmen.
-        [self.output appendString:@" style=\"top:50px;width:inherit;height:inherit;"];
+        [self.output appendString:@" style=\"top:90px;width:inherit;height:inherit;"];
 
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
@@ -7207,48 +7182,24 @@ didStartElement:(NSString *)elementName
         NSMutableDictionary *attrDictOfClass = [self.allFoundClasses objectForKey:elementName];
 
 
-        if ([attributeDict valueForKey:@"initstage"] && [[attributeDict valueForKey:@"initstage"] isEqualToString:@"defer"])
-        {
-            int ixy = 99;
-        }
-
-
         // Attribut kann in der Klasse stecken (1. Abfrage) oder im Element selber (2. Abfrage)
-        if ( 
-              (false))
-        {
-            // War früher ein Boolescher Wert, aber beinhaltet jetzt direkt die Ebene, damit
-            // ich beim schließen die korrekte Ebene habe und nicht das initstage=defer-Attribut
-            // durchschleifen muss (Attribute sind nur im öffnenden Tag bekannt, nicht im schließenden).
-            if (self.initStageDefer != -1)
-            {
-                // Dann liegt ein initstage=defer-Attribut in einem initstage=defer-Attribut.
-                // Dann bleibt der alte Wert bestehen, da sonst die Verschachtelungsebene überschrieben
-                // wird und somit der initstage=defer-Prozess zu früh geschlossen werden würde.
-            }
-            else
-            {
-                self.initStageDefer = self.verschachtelungstiefe;
-            }
-        }
-
-
-        //  ([elementName isEqualToString:@"nicemodaldialog"]) || <--- Kann endgültig gekillt werden
-        // Die Probleme mit dem Dialog 'dlgsummenwerte' (hatte als einziger kein initstage=defer)
-        // scheinen behoben
-
-        // Die obere Oder-Bedingung war vorher weiter oben in der Abfrage...
-        // Klappt das so im Zusammenhang mit rollupdown-xxx?
         if (([attrDictOfClass objectForKey:@"initstage"] != nil &&
              [[attrDictOfClass objectForKey:@"initstage"] isEqualToString:@"defer"])
-    
+
             ||
 
             ([attributeDict valueForKey:@"initstage"] && [[attributeDict valueForKey:@"initstage"] isEqualToString:@"defer"]))
         {
             // Überschreib-Schutz, falls initStageDefer-Element in initStageDefer-Element
+            // So bleibt der alte Wert bestehen, da sonst die Verschachtelungsebene überschrieben
+            // wird und somit der initstage=defer-Prozess zu früh geschlossen werden würde.
             if (self.initStageDeferThatWillBeCalledByCompleteInstantiation == -1)
+            {
+                // War früher ein Boolescher Wert, aber beinhaltet jetzt direkt die Ebene, damit
+                // beim schließen die korrekte Ebene habe und nicht das initstage=defer-Attribut durch-
+                // schleifen muss (Attribute sind nur im öffnenden Tag bekannt, nicht im schließenden).
                 self.initStageDeferThatWillBeCalledByCompleteInstantiation = self.verschachtelungstiefe;
+            }
         }
 
 
@@ -7460,17 +7411,7 @@ didStartElement:(NSString *)elementName
 
 
 
-        // in jQueryOutput0! Damit a) keine weiteren Elemente überschrieben werden,
-        // weil anhand der gesetzten css wird erkannt, welche überschrieben werden dürfen
-        // und welche nicht.
-        // b) damit Simplelayout hiernach NICHT EINMAL ausgeführt werden kann
-        // War früher jQueryOutput.
-        // analog auch beim beenden beachten. (Falls es hier geändert wird, dort mitändern!)
-        if (self.initStageDefer != -1)
-        {
-            [self.jsInitstageDeferOutput appendString:o];
-        }
-        else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation != -1)
+        if (self.initStageDeferThatWillBeCalledByCompleteInstantiation != -1)
         {
             // Dann speichern wir NUR die instanceVars, alles andere klären wir später beim Aufruf von completeInstantiation
             [self.jsInitstageDeferOutput  appendFormat:@"\n  // Klasse '%@' wird später instanziert in '%@' von completeInstantiation",elementName,self.zuletztGesetzteID];
@@ -7485,6 +7426,8 @@ didStartElement:(NSString *)elementName
         }
         else
         {
+            // War früher jQueryOutput.
+            // Falls es hier geändert wird, analog auch beim Beenden mitändern!
             [self.jQueryOutput0 appendString:o];
         }
 
@@ -7751,13 +7694,9 @@ BOOL isJSExpression(NSString *s)
                 // Da ich den string mit ' umschlossen habe, muss ich eventuelle ' im String escapen
                 s = [self protectThisSingleQuotedJavaScriptString:s];
 
-                if (self.initStageDefer != -1)
-                {
-                    // Dann IN den Output hinein injecten
-                    [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-34];
-                }
-                else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation != -1 ||
-                         self.classInClass)
+
+                if (self.initStageDeferThatWillBeCalledByCompleteInstantiation != -1 ||
+                    self.classInClass)
                 {
                     if (self.classInClass)
                     {
@@ -9170,12 +9109,8 @@ BOOL isJSExpression(NSString *s)
             s = [self protectThisSingleQuotedJavaScriptString:s];
 
 
-            if (self.initStageDefer != -1)
-            {
-                [self.jsInitstageDeferOutput insertString:s atIndex:[self.jsInitstageDeferOutput length]-34];
-            }
-            else if (self.initStageDeferThatWillBeCalledByCompleteInstantiation != -1 ||
-                     self.classInClass)
+            if (self.initStageDeferThatWillBeCalledByCompleteInstantiation != -1 ||
+                self.classInClass)
             {
                 if (self.classInClass)
                 {
@@ -9193,18 +9128,14 @@ BOOL isJSExpression(NSString *s)
         }
 
 
+
         // Ich muss darauf achten, dass auch Objekte IN initstage=defer erst verzögert geladen werden!
         // Deswegen Abfrage über die bei Eintritt in das Element gespeicherte Verschachtelungsebene.
-        if (self.initStageDefer-1 == self.verschachtelungstiefe)
-        {
-            self.initStageDefer = -1;
-        }
-
-
         if (self.initStageDeferThatWillBeCalledByCompleteInstantiation-1 == self.verschachtelungstiefe)
         {
             self.initStageDeferThatWillBeCalledByCompleteInstantiation = -1;
         }
+
 
 
         self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
@@ -17898,6 +17829,31 @@ BOOL isJSExpression(NSString *s)
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// handleRollUpDownClick_                              //\n"
+    "// wird benötigt, solange ich rollUpDown nicht als Klasse auswerte //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "var handleRollUpDownClick_ = function (el,callback) {\n"
+    "    // complete init und anschließend sichtbar machen\n"
+    "    // Den ':first'-filter erst nach children() und nicht in children() zu setzen, geht gemäß Doku schneller\n"
+    "    $(el).next().children().filter(':first').get(0).completeInstantiation();\n"
+    "    $(el).next().children().filter(':first').show();\n"
+    "\n"
+    "\n"
+    "    // Alte Logik\n"
+    "    // var dur = $(el).parents(\"[data-olel='rollUpDownContainer']\").get(0).animduration ? $(el).parents(\"[data-olel='rollUpDownContainer']\").get(0).animduration : 'slow';\n"
+    "    // Aber der Schnelligkeit wegen, und weil eh immer 800:\n"
+    "    var dur = 800;\n"
+    "\n"
+    "    var panel = $(el).next().get(0).id;\n"
+    "\n"
+    "    // Alle anderen, außer den aktuellen Panel, zuschieben.\n"
+    "    $(el).parent().parent().children().children('.div_rudPanel:not(\"#' + panel + '\")').slideUp(dur);\n"
+    "    // Der callback kann auch undefined sein, dann wird eben undefined übergeben\n"
+    "    $('#'+panel).slideToggle(dur, callback);\n"
+    "}\n"
     "\n"
     "\n"
 /*  // Bringt nichts bzw., doesn't work as expected

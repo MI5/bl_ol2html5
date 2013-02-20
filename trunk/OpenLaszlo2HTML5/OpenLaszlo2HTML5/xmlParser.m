@@ -39,15 +39,12 @@
 //
 
 BOOL debugmode = YES;
-BOOL positionAbsolute = YES; // Yes ist 100% gemäß OL-Code-Inspektion richtig, aber leider ist der
-                             // Code noch an zu vielen Stellen auf position: relative ausgerichtet.
-
-
 
 
 
 
 BOOL ownSplashscreen = NO;
+
 
 
 #import "xmlParser.h"
@@ -1051,9 +1048,6 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [style appendString:@"px"];
             [style appendString:@";"];
         }
-
-        if (positionAbsolute == NO)
-            [style appendString:@"float:none;position:absolute;"];
     }
 
     if ([attributeDict valueForKey:@"y"])
@@ -1075,9 +1069,6 @@ void OLLog(xmlParser *self, NSString* s,...)
                 [style appendString:@"px"];
             [style appendString:@";"];
         }
-
-        if (positionAbsolute == NO)
-            [style appendString:@"float:none;position:absolute;"];
     }
 
 
@@ -1453,40 +1444,41 @@ void OLLog(xmlParser *self, NSString* s,...)
 - (void) adjustHeightAndWidthOfElement:(NSString*) elemName
 {
     return;
-    if (positionAbsolute == YES)
+
+
+
+
+    // Aus Sicht des umgebenden Divs gelöst.
+
+    NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
+
+    // Bei 'window' muss auch der content vergrößert werden
+    if ([elemName isEqualToString:@"window"])
     {
-        // Aus Sicht des umgebenden Divs gelöst.
-
-        NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
-
-        // Bei 'window' muss auch der content vergrößert werden
-        if ([elemName isEqualToString:@"window"])
-        {
-            [s appendString:@"\n  // Höhe/Breite des umgebenden Elements u. U. vergrößern\n"];
-            [s appendFormat:@"  adjustHeightAndWidth(%@_content_);\n",elemName];
-        }
-
         [s appendString:@"\n  // Höhe/Breite des umgebenden Elements u. U. vergrößern\n"];
-        [s appendFormat:@"  adjustHeightAndWidth(%@);\n",elemName];
-
-
-        // ... dann ganz am Anfang adden (damit die Kinder immer vorher bekannt sind)
-        [self.jQueryOutput insertString:s atIndex:0];
-
-
-        /*
-         // Aus Sicht des Kindes (Dieser Code hatte zu viel Schwächen):
-         
-         [self.jQueryOutput appendString:@"\n  // Eine x- oder y-Angabe! Wir müssen eventuell deswegen die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n  // Wir überschreiben jedoch keinen explizit vorher gesetzten Wert,\n  // deswegen test auf '' (nur mit JS möglich, nicht mit jQuery) \n"];
-         [self.jQueryOutput appendFormat:@"  var h = $('#%@').position().top+($('#%@').outerHeight('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-         [self.jQueryOutput appendFormat:@"  if (h > $('#%@').parent().height())\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-         [self.jQueryOutput appendFormat:@"    $('#%@').parent().height(h);\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
-         [self.jQueryOutput appendString:@"  // Analog muss die Breite gesetzt werden\n"];
-         [self.jQueryOutput appendFormat:@"  var w = parseInt($('#%@').position().left)+($('#%@').outerWidth('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-         [self.jQueryOutput appendFormat:@"  if ($('#%@').parent().get(0).style.width == '' && w > $('#%@').parent().width())\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
-         [self.jQueryOutput appendFormat:@"    $('#%@').parent().width(w);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
-         */
+        [s appendFormat:@"  adjustHeightAndWidth(%@_content_);\n",elemName];
     }
+
+    [s appendString:@"\n  // Höhe/Breite des umgebenden Elements u. U. vergrößern\n"];
+    [s appendFormat:@"  adjustHeightAndWidth(%@);\n",elemName];
+
+
+    // ... dann ganz am Anfang adden (damit die Kinder immer vorher bekannt sind)
+    [self.jQueryOutput insertString:s atIndex:0];
+
+
+    /*
+    // Aus Sicht des Kindes (Dieser Code hatte zu viel Schwächen):
+
+    [self.jQueryOutput appendString:@"\n  // Eine x- oder y-Angabe! Wir müssen eventuell deswegen die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n  // nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n  // Wir überschreiben jedoch keinen explizit vorher gesetzten Wert,\n  // deswegen test auf '' (nur mit JS möglich, nicht mit jQuery) \n"];
+    [self.jQueryOutput appendFormat:@"  var h = $('#%@').position().top+($('#%@').outerHeight('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+    [self.jQueryOutput appendFormat:@"  if (h > $('#%@').parent().height())\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+    [self.jQueryOutput appendFormat:@"    $('#%@').parent().height(h);\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
+    [self.jQueryOutput appendString:@"  // Analog muss die Breite gesetzt werden\n"];
+    [self.jQueryOutput appendFormat:@"  var w = parseInt($('#%@').position().left)+($('#%@').outerWidth('true'));\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+    [self.jQueryOutput appendFormat:@"  if ($('#%@').parent().get(0).style.width == '' && w > $('#%@').parent().width())\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
+    [self.jQueryOutput appendFormat:@"    $('#%@').parent().width(w);\n\n",self.zuletztGesetzteID,self.zuletztGesetzteID,self.zuletztGesetzteID];
+    */
 }
 
 
@@ -2496,7 +2488,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Da sich valign=middle auf die Höhenangabe bezieht, muss diese mit jQueryOutput0
     // noch vor allen anderen Angaben gesetzt werden.
     // Update: Bricht Element9 (z.B.), es wird dann zu breit, deswegen bei
-    // position:absolute es sich per CSS-Angabe -> width:Auto und float:left sich selbst
+    // position:absolute es sich per CSS-Angabe -> width:Auto sich selbst
     // optimal ausrichten lassen.
     // Nur bei position:relative muss ich nachhelfen, weil es dort sonst 0 wäre
     // Auf sowas erstmal zu kommen.... oh man.
@@ -9269,14 +9261,8 @@ BOOL isJSExpression(NSString *s)
 
 
     // Als <title> nutzen wir den Dateinamen der Datei
-    NSString *titleForDebug = @"";
 
-    if (debugmode && positionAbsolute)
-        titleForDebug = @" (PositionAbsolute = YES)";
-    if (debugmode && !positionAbsolute)
-        titleForDebug = @" (PositionAbsolute = NO)";
-
-    [pre appendFormat:@"<title>%@%@</title>\n",[[self.pathToFile lastPathComponent] stringByDeletingPathExtension],titleForDebug];
+    [pre appendFormat:@"<title>%@</title>\n",[[self.pathToFile lastPathComponent] stringByDeletingPathExtension]];
 
     // CSS-Stylesheet-Datei für das Layout der TabSheets (wohl leider nicht CSS-konform, aber
     // die CSS-Konformität herzustellen ist wohl leider zu viel Aufwand, von daher greifen wir
@@ -9863,7 +9849,7 @@ BOOL isJSExpression(NSString *s)
     "}\n"
     ".div_windowContent\n"
     "{\n"
-	"    position:relative;\n"
+	"    position:absolute;\n"
 	"    top:22px;\n"
     "    width:inherit;\n"
     "    height:18px;\n"
@@ -9873,7 +9859,7 @@ BOOL isJSExpression(NSString *s)
     "/* Das Standard-OL-HTML-Element (=iframe) */\n"
     ".iframe_standard\n"
     "{\n"
-	"    position:relative;\n"
+	"    position:absolute;\n"
 	"    top:0px;\n"
 	"    left:0px;\n"
     "}\n"
@@ -9885,7 +9871,7 @@ BOOL isJSExpression(NSString *s)
 	"    width:auto;  /* Sonst kann JS die Variable nicht richtig auslesen. */\n"
     "\n"
     "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
-	"    position:relative;\n"
+	"    position:absolute;\n"
 	"    top:0px; /* Wichtig, damit ein numerischer Wert zurückgeliefert wird bei Aufruf von parseInt() */\n"
 	"    left:0px;\n"
     "\n"
@@ -9901,7 +9887,7 @@ BOOL isJSExpression(NSString *s)
 	"    height:auto;\n"
 	"    width:auto;\n"
     "\n"
-	"    position:relative;\n"
+	"    position:absolute;\n"
 	"    top:0px;\n"
 	"    left:0px;\n"
     "}\n"
@@ -9913,7 +9899,7 @@ BOOL isJSExpression(NSString *s)
 	"    width:auto;\n"
     "\n"
     "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
-	"    position:relative;\n"
+	"    position:absolute;\n"
 	"    top:0px;\n"
 	"    left:0px;\n"
     "\n"
@@ -9927,7 +9913,7 @@ BOOL isJSExpression(NSString *s)
     "{\n"
     "    height:auto;\n"
     "    width:auto;\n"
-    "    position:relative;\n"
+    "    position:absolute;\n"
     "    top:0px;\n"
     "    left:0px;\n"
     "\n"
@@ -9942,7 +9928,7 @@ BOOL isJSExpression(NSString *s)
     "{\n"
     "    height:auto;\n"
     "    width:auto;\n"
-    "    position:relative;\n"
+    "    position:absolute;\n"
     "    top:0px;\n"
     "    left:0px;\n"
     "\n"
@@ -9955,7 +9941,7 @@ BOOL isJSExpression(NSString *s)
     "{\n"
     "    height:auto;\n"
     "    width:auto;\n"
-    "    position:relative;\n"
+    "    position:absolute;\n"
     "    top:2px;\n"
     "    left:0px;\n"
     "    border-width:0; /* Um den von jQuery UI gesetzten Rand zu überschreiben */\n"
@@ -9987,8 +9973,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    pointer-events: auto;\n"
     "}\n"
-    "/* Für den Fall von positionAbsolute=yes funktioniert das vertikale Ausrichten (übereinander- */\n"
-    "/* stapeln) so auch in rollUpDown, ohne rollUpDown als Klasse auszuwerten. */\n"
+    "/* So funktioniert das vertikale Ausrichten (übereinanderstapeln */\n"
+    "/* auch in rollUpDown, ohne rollUpDown als Klasse auszuwerten. */\n"
     ".div_rudPanel > div\n"
     "{\n"
     "    position: relative;\n"
@@ -9998,7 +9984,7 @@ BOOL isJSExpression(NSString *s)
     "/* Standard-radiobutton (das umgebende Div) */\n"
     ".div_checkbox\n"
     "{\n"
-    "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
+    "    position:absolute; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
     "    width:100%; /* Eine checkbox soll immer die ganze Zeile einnehmen. */\n"
     "    text-align:left;\n"
@@ -10012,8 +9998,6 @@ BOOL isJSExpression(NSString *s)
     "/* Standard-radiobutton (der button selber) */\n"
     ".input_checkbox\n"
     "{\n"
-    //"    position:relative;\n" <-- Auskommentiert, verschiebt sonst den Text der checkbox AUF die checkbox
-    //"\n"                           Und die checkbox kann wohl 'static' bleiben.
     "    margin-right:5px;\n"
     "    vertical-align:top; /* Damit checkbox mit nebenstehendem Text auf einer Höhe */\n"
     "\n"
@@ -10024,7 +10008,7 @@ BOOL isJSExpression(NSString *s)
     "/* Standard-combobox (das umgebende Div) */\n"
     ".div_combobox\n"
     "{\n"
-    "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
+    "    position:absolute; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
     "    width:100%; /* Eine combobox soll immer die ganze Zeile einnehmen. */\n"
     "    text-align:left;\n"
@@ -10037,7 +10021,7 @@ BOOL isJSExpression(NSString *s)
     "/* Standard-Select-combobox (die combobox selber) */\n"
     ".select_standard\n"
     "{\n"
-    "    position:relative;\n"
+    "    position:absolute;\n"
     "    width:100px;\n"
     "\n"
     "    margin-left:5px;\n"
@@ -10051,7 +10035,7 @@ BOOL isJSExpression(NSString *s)
     ".div_slider\n"
     "{\n"
     "    width:100%; /* Eine combobox soll immer die ganze Zeile einnehmen. */\n"
-    "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
+    "    position:absolute; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
     "    text-align:left;\n"
     "    padding:4px;\n"
@@ -10064,7 +10048,7 @@ BOOL isJSExpression(NSString *s)
     "/* Das darf nicht width:100% sein, sonst fällt der Search-Button hinten runter. */\n"
     ".div_textfield\n"
     "{\n"
-    "    position:relative; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
+    "    position:absolute; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
     "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
     "    text-align:left;\n"
@@ -10085,7 +10069,7 @@ BOOL isJSExpression(NSString *s)
     ".div_text\n"
     "{\n"
     "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
-    "    position:relative;\n"
+    "    position:absolute;\n"
     "    text-align:left;\n"
     "    padding:2px;\n"
     "\n"
@@ -10233,33 +10217,11 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    pointer-events: auto;\n"
     "}";
-    if (positionAbsolute)
-    {
-      css = [css stringByReplacingOccurrencesOfString:@"float:left;" withString:@""];
-      css = [css stringByReplacingOccurrencesOfString:@"width:100%;" withString:@""];
-      css = [css stringByReplacingOccurrencesOfString:@"position:relative;" withString:@"position:absolute;"];
-    }
-    else
-    {
-        NSString *css2 = @"\n\n"
-        //"/* Ziemlich dirty Trick um '<input>', '<select>' und 'Text' innerhalb der TabSheets besser */\n"
-        //"/* ausrichten zu können. So, dass sie nicht umbrechen, weil Sie position: absolute sind. */\n"
-        //"/* div > div > div > div > div > div > div > div > input, */\n"
-        //"/* div > div > div > div > div > div > div > div > select,*/\n"
-        //"/* div > div > div > div > div > div > div > div[class=\"div_text\"] */\n"
-        //".div_rudPanel .div_text /* wenn ein div_text in einem div_rudPanel ist */\n"
-        //"{\n"
-        //"    width:100%;\n"
-        //"}\n"
-        "/* Übergangsweise, damit der Kalender die Überschrift mittig anzeigt, */\n"
-        "/* für alle Elemente im Kalender die float-Angabe aufheben */\n"
-        ".ui-datepicker *\n"
-        "{\n"
-        "    float:none;\n"
-        "}\n";
 
-        css = [NSString stringWithFormat:@"%@%@",css,css2];
-    }
+
+  //  css = [css stringByReplacingOccurrencesOfString:@"float:left;" withString:@""];
+    css = [css stringByReplacingOccurrencesOfString:@"width:100%;" withString:@""];
+
 
     bool success = [css writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
 
@@ -16657,8 +16619,7 @@ BOOL isJSExpression(NSString *s)
     "// adjustHeightAndWidth()                              //\n"
     "/////////////////////////////////////////////////////////\n"
     // Code-Logik:
-    // Bei (positionAbsolute == YES),
-    // wenn entweder der x- oder der y-Wert (eines Kindes) gesetzt wurde,
+    // Wenn entweder der x- oder der y-Wert (eines Kindes) gesetzt wurde,
     // dann muss ich die Größe des umgebenden Elements erweitern,
     // aber nur wenn im aktuellen View keine height angegeben wurde,
     // dann setz als height die des (höchsten Kindes + top-wert).
@@ -16939,9 +16900,6 @@ BOOL isJSExpression(NSString *s)
     "        if (inset != undefined)\n"
     "            kind.get(0).setAttribute_('y',inset+'px');\n"
     "\n"
-    //"        if (@@positionAbsoluteReplaceMe@@)\n"
-    // Das macht iwie keinen Sinn mehr, dies immer auf false zu setzen bei position:relative. Er muss auch bei positon:relative
-    // u. U. hier oben rein, und zwar immer dann wenn unser Kindelement doch iwie position:absolute ist
     "        if (kind.css('position') === 'absolute')\n"
     "        {\n"
     // var topValue = kind.prev().get(0).offsetTop + kind.prev().outerHeight() + spacing; <- Kommt aus der alten interpretObject()-Auswertung
@@ -16951,9 +16909,6 @@ BOOL isJSExpression(NSString *s)
     "        else\n"
     "        {\n"
     "            var topValue = i * spacing;\n"
-    // Ich habe mich auch mit position:relative schon sehr angenähert
-    // Aber http://www.openlaszlo.org/lps4.9/docs/reference/lz.event.html -> 1. Beispiel,
-    // bleibt ungelöst, aber dies ist vernachläßigbar
     "            if (kind.css('position') === 'relative')\n"
     "            {\n"
     "                // Wenn hinten runtergefallen, dann muss ich nichts weiter machen\n"
@@ -17039,14 +16994,8 @@ BOOL isJSExpression(NSString *s)
     "        if (inset != undefined)\n"
     "            kind.get(0).setAttribute_('x',inset+'px');\n"
     "\n"
-    "        if (@@positionAbsoluteReplaceMe@@) {\n"
-    // var leftValue = kind.prev().get(0).offsetLeft + kind.prev().outerWidth() + spacing; <- Kommt aus der alten interpretObject()-Auswertung
-    "            var leftValue = parseInt(kind.prev().css('left')) + kind.prev().outerWidth() + spacing;\n"
-    "            if (i == 0) leftValue = 0; // Korrektur des ersten Kindes, falls vorher abweichender 'x'-Wert gesetzt wurde\n"
-    "        }\n"
-    "        else {\n"
-    "            var leftValue = spacing * i;\n"
-    "        }\n"
+    "        var leftValue = parseInt(kind.prev().css('left')) + kind.prev().outerWidth() + spacing;\n"
+    "        if (i == 0) leftValue = 0; // Korrektur des ersten Kindes, falls vorher abweichender 'x'-Wert gesetzt wurde\n"
     "\n"
     "        // Wenn Element unsichtbar, dann ohne die Breite des Elements und ohne spacing-Angabe\n"
     "        // Ich kann nicht direkt auf die Visibility testen, sondern nur auf die explizit von setAttribute_() gesetzte\n"
@@ -17089,14 +17038,6 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "    if ($(el).children().length > 2) {\n"
-    // @"    $(el).children().eq(2).css('top',$(el).height()-$(el).children().eq(2).height()+'px');\n"
-    // So funktioniert es besser:
-    // Er will die Y und Y- Werte auslesen. Wenn ich in position:relative bin, klappt
-    // das aber nicht, weil er ja automatisch nach rechts rutscht oder runter rutscht
-    // deswegen muss ich, auch bei 'relative', hier alle Kinder 'absolute' machen.
-    "        if (!@@positionAbsoluteReplaceMe@@)\n"
-    "            $(el).children().each(function() { $(this).css('position','absolute'); });\n"
-    "\n"
     "        $(el).children().eq(1).get(0).setAttribute_('y',$(el).children().first().css('height'));\n"
     "        $(el).children().eq(1).get(0).setAttribute_('height',$(el).height()-$(el).children().first().height()-$(el).children().eq(2).height());\n"
     "        $(el).children().eq(2).get(0).setAttribute_('y',$(el).children().eq(0).height()+$(el).children().eq(1).height()+'px');\n"
@@ -17124,15 +17065,6 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "    if ($(el).children().length > 2) {\n"
-    //[o appendFormat:@"    alert($('#%@').children().length);\n",idUmgebendesElement];
-
-    //[o appendFormat:@"    $('#%@').children().eq(2).css('left','auto'); // sonst nimmt er 'right' nicht an.\n",idUmgebendesElement];
-    //[o appendFormat:@"    $('#%@').children().eq(2).css('right','0');\n",idUmgebendesElement];
-    // Habe Angst, dass er mir so irgendwas zerhaut, weil ich left auf 'auto' setze, aber andere Stellen sich
-    // darauf verlassen, dass in 'left' ein numerischer Wert ist. Deswegen lieber so:
-    "        if (!@@positionAbsoluteReplaceMe@@)\n"
-    "            $(el).children().each(function() { $(this).css('position','absolute'); });\n"
-    "\n"
     // So funktioniert es besser?
     // "  $(el).children().eq(2).css('left',$(el).children().eq(0).width()+$(el).children().eq(1).width()+'px');\n"
     "        $(el).children().eq(1).get(0).setAttribute_('x',$(el).children().first().css('width'));\n"
@@ -17746,7 +17678,10 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Und schließlich das eigentliche MouseEvent setzen\n"
     "    // Muss ich an 'canvas' binden, wegen Beispiel 51.3\n"
-    "    $('#'+el).on(event, func.bind(canvas));\n"
+    "    // $('#'+el).on(event, func.bind(canvas));\n"
+    "    // Aber wegen http://www.openlaszlo.org/lps4.9/docs/reference/lz.event.html -> 1. Beispiel\n"
+    "    // Dieser Konflikt muss noch aufgelöst werden - To Do\n"
+    "    $('#'+el).on(event, func.bind($('#'+el).get(0)));\n"
     "\n"
     "    // Falls es geklonte Geschwister gibt:\n"
     "    var c = 2;\n"
@@ -17932,16 +17867,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n";
 
-
-
-    if (positionAbsolute == YES)
-    {
-        js = [js stringByReplacingOccurrencesOfString:@"@@positionAbsoluteReplaceMe@@" withString:@"true"];
-    }
-    else
-    {
-        js = [js stringByReplacingOccurrencesOfString:@"@@positionAbsoluteReplaceMe@@" withString:@"false"];
-    }
 
     bool success = [js writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];
 

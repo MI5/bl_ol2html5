@@ -1698,6 +1698,11 @@ void OLLog(xmlParser *self, NSString* s,...)
     s = [self inString:s searchFor:@".dataset" andReplaceWith:@".myDataset" ignoringTextInQuotes:YES];
 
 
+    // align ist eine interne Property...
+    // Mit '.' davor
+    s = [self inString:s searchFor:@".align" andReplaceWith:@".myAlign" ignoringTextInQuotes:YES];
+
+
 
     // title ist eine interne Property von HTML 5...
 
@@ -1794,6 +1799,9 @@ void OLLog(xmlParser *self, NSString* s,...)
 {
     if ([s isEqualToString:@"dataset"])
         s = @"myDataset";
+
+    if ([s isEqualToString:@"align"])
+        s = @"myAlign";
 
     if ([s isEqualToString:@"title"])
         s = @"myTitle";
@@ -3850,8 +3858,6 @@ didStartElement:(NSString *)elementName
             // </canvas>
             // Das Beispiel zeigt, dass auf height und width auch per Objekt-Property zugegriffen
             // werden kann per String-Access (die eckigen Klammern)
-            // Deswegen müssen alle Variablennamen  die den String-Wert 'height' oder 'width'
-            // haben, angepasst werden
             if ([type_ isEqualToString:@"string"])
                 value = [self somePropertysNeedToBeRenamed:value];
         }
@@ -7306,8 +7312,7 @@ didStartElement:(NSString *)elementName
         // ...dann die übrig gebliebenen Attribute (die von der Instanz selbst definierten) setzen
         if ([d count] > 0)
         {
-
-            // '__strong', damit ich object modifizieren kann
+            // '__strong', damit ich key modifizieren kann
             for (NSString __strong *key in d)
             {
                 self.attributeCount++;
@@ -7331,16 +7336,11 @@ didStartElement:(NSString *)elementName
 
                 if ([s hasPrefix:@"$"])
                 {
-                    if (false)
-                    {
-                        s = [self makeTheComputedValueComputable:s];
-                        weNeedQuotes = NO;
-                    }
-                    else
-                    {
-                        // Stattdessen nur:
-                        s = [self modifySomeExpressionsInJSCode:s];
-                    }
+                    // s = [self makeTheComputedValueComputable:s];
+                    // weNeedQuotes = NO;
+
+                    // Stattdessen nur:
+                    s = [self modifySomeExpressionsInJSCode:s];
                 }
 
                 key = [self somePropertysNeedToBeRenamed:key];
@@ -8064,7 +8064,8 @@ BOOL isJSExpression(NSString *s)
         NSArray *keys = [self.allFoundClasses objectForKey:self.lastUsedNameAttributeOfClass];
         if ([keys count] > 0)
         {
-            for (NSString *key in keys)
+            // '__strong', damit ich key modifizieren kann
+            for (NSString __strong *key in keys)
             {
                 NSString *value = [keys valueForKey:key];
 
@@ -8086,6 +8087,7 @@ BOOL isJSExpression(NSString *s)
                     weNeedQuotes = NO;
 
 
+                key = [self somePropertysNeedToBeRenamed:key];
 
                 if (!weNeedQuotes)
                 {
@@ -14125,6 +14127,9 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "    else if (attributeName === 'align')\n"
     "    {\n"
+    "        // Speichern, falls Wert über den getter ausgelesen wird\n"
+    "        $(me).data('align_',value);\n"
+    "\n"
     "        if (value === 'center')\n"
     "        {\n"
     "            // this.align = value; // hmmm, Zugriff auf die Original-JS-Propertys erstmal\n"
@@ -16312,6 +16317,24 @@ BOOL isJSExpression(NSString *s)
     "});\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'myAlign'                         //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// 'align' ist eine nicht überschreibbare Original-Eigenschaft eines HTML-Elements\n"
+    "// Deswegen muss ich mit 'myAlign' arbeiten\n"
+    "Object.defineProperty(HTMLElement.prototype, 'myAlign', {\n"
+    "    get : function(){\n"
+    "        if ($(this).data('align_'))\n"
+    "            return $(this).data('align_');\n"
+    "\n"
+    "        return 'left'; // => Default value\n"
+    "    },\n"
+    "    set : function(newValue){ this.setAttribute_('align',newValue,undefined,false); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// Getter/Setter for 'clip'                            //\n"
     "// initialize-only (READ-ONLY AFTER INIT)              //\n"
     "/////////////////////////////////////////////////////////\n"
@@ -16320,7 +16343,7 @@ BOOL isJSExpression(NSString *s)
     "        if ($(this).data('clip_'))\n"
     "            return $(this).data('clip_');\n"
     "\n"
-    "        return false; // = Default value\n"
+    "        return false; // => Default value\n"
     "    },\n"
     "    set : function(newValue){\n"
     "        if ($(this).data('clip_'))\n"
@@ -16543,10 +16566,8 @@ BOOL isJSExpression(NSString *s)
     "// Getter/Setter for 'visible'                         //\n"
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Es MUSS HTMLElement sein, sonst bricht das sichern der Attribute in 'interpretObject()', weil 'visible' immer undefined zurückliefert (das Objekt in dem gesichert wird, ist kein DOM)\n"
     "Object.defineProperty(HTMLElement.prototype, 'visible', {\n"
-    "    get : function(){ return $(this).is(':visible');  },\n"
-    "    // Eigentlich immer über setAttribute setzen. Falls doch direkte Zuweisung, dann nicht triggern\n"
+    "    get : function(){ return $(this).is(':visible'); },\n"
     "    set : function(newValue){ this.setAttribute_('visible',newValue,undefined,false); },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -17449,12 +17470,6 @@ BOOL isJSExpression(NSString *s)
     "        {\n"
     "            var varName = Ergebnis[i];\n"
     "\n"
-    // Neu: Steht bereits vor der Methode, Unsinn hier alle einzeln in der Schleife durchzugehen
-    //"            // Dann noch eventuelle spezielle Wörter austauschen\n"
-    //"            varName = varName.replace(/\\.dataset/g,'.myDataset');\n"
-    //"            varName = varName.replace(/\\.title/g,'.myTitle');\n"
-    //"            varName = varName.replace(/\\.value/g,'.myValue');\n"
-    "\n"
     "            // Falls ganz vorne jetzt 'immediateparent.' oder 'parent.' steht, dann muss ich unser aktuelles Element\n"
     "            // davorsetzen. Weil jetzt nochmal extra mit 'with () {}' zu arbeiten ist wohl nicht nötig\n"
     "            // da wir ja auf Ebene der einzelnen Variable sind und individuell reagieren können.\n"
@@ -17610,6 +17625,7 @@ BOOL isJSExpression(NSString *s)
     "    // setAttribute_ verschickt events nur an 'onvalue' usw..., weil auch nur auf 'onvalue' gelauscht wird.\n"
     "    if (prop === 'myValue') prop = 'value';\n"
     "    if (prop === 'myDataset') prop = 'dataset';\n"
+    "    if (prop === 'myAlign') prop = 'align';\n"
     "    if (prop === 'myTitle') prop = 'title'; // To Do -> Are you sure with this? - Already tested - still don't know.\n"
     "\n"
     "    // Falls er z. B. über das 'name'-Attribut geht, muss ich ein with() darum packen\n"
@@ -17945,7 +17961,7 @@ BOOL isJSExpression(NSString *s)
     "    if (!obj.inherit.inherit.attributesDict) return false;\n"
     "    if (!obj.inherit.inherit.attributesDict.defaultplacement) return false;\n"
     "    if (obj.inherit.inherit.attributesDict.defaultplacement == '') return false;\n"
-    "    if ($(el).find(\"[data-name='\"+obj.inherit.inherit.attributesDict.defaultplacement+\"']\").length == 0) return false\n"
+    "    if ($(el).find(\"[data-name='\"+obj.inherit.inherit.attributesDict.defaultplacement+\"']\").length == 0) return false;\n"
     "\n"
     "    return true;\n"
     "}\n"
@@ -17990,12 +18006,12 @@ BOOL isJSExpression(NSString *s)
     "            }\n"
     "\n"
     "\n"
-    "            if (obj.attributesDict)\n"
+    "            if (attrs)\n"
     "            {\n"
-    "                // Erst alle unberechneten, direkt auslesbare Werte...\n"
-    "                Object.keys(obj.attributesDict).forEach(function(key)\n"
+    "                // Erst alle unberechneten, direkt auslesbaren Werte...\n"
+    "                Object.keys(attrs).forEach(function(key)\n"
     "                {\n"
-    "                    var value = obj.attributesDict[key];\n"
+    "                    var value = attrs[key];\n"
     "\n"
     "                    // Assertion:\n"
     "                    if (value === undefined)\n"
@@ -18016,6 +18032,7 @@ BOOL isJSExpression(NSString *s)
     "                            // Da es JS-Code ist, Anpassungen vornehmen.\n"
     "                            value = value.replace(/setAttribute/g,'setAttribute_');\n"
     "                            value = value.replace(/\\.dataset/g,'.myDataset');\n"
+    "                            value = value.replace(/\\.align/g,'.myAlign');\n"
     "                            value = value.replace(/\\.title/g,'.myTitle');\n"
     "                            value = value.replace(/\\.value/g,'.myValue');\n"
     "\n"
@@ -18051,9 +18068,9 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "                // ...dann erst alle berechneten Werte, da sich diese\n"
     "                //  u. U. auf die Existenz der unberechneten verlassen!\n"
-    "                Object.keys(obj.attributesDict).forEach(function(key)\n"
+    "                Object.keys(attrs).forEach(function(key)\n"
     "                {\n"
-    "                    var value = obj.attributesDict[key];\n"
+    "                    var value = attrs[key];\n"
     "\n"
     "                    if (typeof value === 'string' && key !== 'datapath') // Davorgezogen, um nur einmal testen zu müssen\n"
     "                    {\n"
@@ -18262,7 +18279,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "    var onInitFunc = null;\n"
-    "    var inherit_defaultplacement = null;\n"
     "\n"
     "    // http://www.openlaszlo.org/lps4.9/docs/developers/introductory-classes.html#introductory-classes.placement\n"
     "    // 2.5 Placement -> By default, instances which appear inside a class are made children of the top level instance of the class.\n"
@@ -18288,28 +18304,13 @@ BOOL isJSExpression(NSString *s)
     "    // Schema von http://www.openlaszlo.org/lps4.9/docs/developers/initialization-and-instantiation.html\n"
     "\n"
     "    // 1. A single dictionary is created which combines the attributes of the instance with the attributes of the class\n"
+    "    // ... \n"
     "    var attrs = {};\n"
     "    for (var i = 0;i<rueckwaertsArray.length;i++) {\n"
     "        if (rueckwaertsArray[i].attributesDict)\n"
     "        {\n"
     "            // Falls gleiche Attributnamen: Es gelten die vom allernächsten Erben\n"
     "            $.extend(attrs,rueckwaertsArray[i].attributesDict);\n"
-    "\n"
-    "\n"
-    
-    
-    "                // Legacy bzw. to Eliminate somehow\n"
-    "                Object.keys(rueckwaertsArray[i].attributesDict).forEach(function(key)\n"
-    "                {\n"
-    "                    if (key == 'defaultplacement' && i == rueckwaertsArray.length-2) // zusätzlich -1, weil das Ausgangselement unberücksichtigt bleibt\n"
-    "                    {\n"
-    "                        inherit_defaultplacement = rueckwaertsArray[i].attributesDict[key];\n"
-    "                    }\n"
-    "                });\n"
-    
-    
-    
-    "\n"
     "        }\n"
     "    }\n"
     "    // Höchste Priorität haben letzlich die Instanzvariablen\n"
@@ -18359,6 +18360,14 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // ******* Ich muss jedoch auch MICH selber an die richtige Stelle vom inherit setzen *******\n"
     "    // ******* Wenn der ein defaultplacement hat, muss ich da rein schlüpfen *******\n"
+    "\n"
+    "    var inherit_defaultplacement = null;\n"
+    "\n"
+    "    // zusätzlich -1, weil das Ausgangselement unberücksichtigt bleibt\n"
+    "    if (rueckwaertsArray.length > 1 && rueckwaertsArray[rueckwaertsArray.length-2].attributesDict)\n"
+    "        inherit_defaultplacement = rueckwaertsArray[rueckwaertsArray.length-2].attributesDict['defaultplacement'];\n"
+    "\n"
+    "\n"
     "    if (inherit_defaultplacement && inherit_defaultplacement !== '')\n"
     "    {\n"
     "        // Da der 'name' als inherit gesetzt wurde, spreche ich es darüber an\n"
@@ -18598,6 +18607,7 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "    v = v.replace(/\\.dataset/g,'.myDataset');\n"
+    "    v = v.replace(/\\.align/g,'.myAlign');\n"
     "    v = v.replace(/\\.title/g,'.myTitle');\n"
     "    v = v.replace(/\\.value/g,'.myValue');\n"
     "\n"

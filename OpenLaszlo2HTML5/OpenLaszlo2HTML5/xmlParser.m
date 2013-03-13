@@ -2989,7 +2989,6 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"drawview"] ||
         [elementName isEqualToString:@"basebutton"] ||
-        [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
         [elementName isEqualToString:@"statictext"] ||
         [elementName isEqualToString:@"text"] ||
@@ -4627,7 +4626,6 @@ didStartElement:(NSString *)elementName
 
 
     if ([elementName isEqualToString:@"basebutton"] ||
-        [elementName isEqualToString:@"imgbutton"] || // ist selfdefined class
         [elementName isEqualToString:@"multistatebutton"])
     {
         element_bearbeitet = YES;
@@ -4644,17 +4642,11 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@"\">\n"];
 
 
-        // ToDo: Wird derzeit nicht ausgewertet - ist zum ersten mal bei einem imgbutton aufgetaucht (nur da?)
+
+
+        /////////// 'nur' Multistatebutton-Attribute - To Do //////////////
         if ([attributeDict valueForKey:@"text"])
-        {
             self.attributeCount++;
-            NSLog(@"Skipping the attribute 'text' for now.");
-        }
-
-
-
-
-        /////////// 'nur'-Multistatebutton-Attribute - To Do //////////////
         if ([attributeDict valueForKey:@"maxstate"])
             self.attributeCount++;
         if ([attributeDict valueForKey:@"statelength"])
@@ -8272,7 +8264,6 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
         [elementName isEqualToString:@"tabelement"] ||
         [elementName isEqualToString:@"basebutton"] ||
-        [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
         [elementName isEqualToString:@"baselist"] ||
         [elementName isEqualToString:@"list"])
@@ -8409,7 +8400,6 @@ BOOL isJSExpression(NSString *s)
         [elementName isEqualToString:@"vbox"] ||
         [elementName isEqualToString:@"splash"] ||
         [elementName isEqualToString:@"basebutton"] ||
-        [elementName isEqualToString:@"imgbutton"] ||
         [elementName isEqualToString:@"multistatebutton"] ||
         [elementName isEqualToString:@"BDStabsheetcontainer"] ||
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
@@ -9054,8 +9044,10 @@ BOOL isJSExpression(NSString *s)
         {
             // in der init-Methode werden u. U. computedValues-Werte überschrieben,
             // deswegen die init-Methode erst danach ausführen
-            [self.jsComputedValuesOutput appendString:@"\n  // Oben definierte init-Methode wird erst hier ausgeführt\n"];
-            [self.jsComputedValuesOutput appendFormat:@"  %@.init();\n",[self.enclosingElementsIds lastObject]];
+            // [self.jsComputedValuesOutput appendString:@"\n  // Oben definierte init-Methode wird erst hier ausgeführt\n"];
+            // [self.jsComputedValuesOutput appendFormat:@"  %@.init();\n",[self.enclosingElementsIds lastObject]];
+            // Neu: Wie gemäß Doku vorgesehen steckt der Aufruf von init() nun in interpretObject()
+            // Das ist gut! Damit haben wir einen Aufruf weniger der per String erledigt wird.
         }
 
 
@@ -9405,7 +9397,7 @@ BOOL isJSExpression(NSString *s)
     [self.output appendString:@"  if (window['SonstigeAusgaben']) SonstigeAusgaben.addrow = function() { };\n\n"];
 
     [self.output appendString:@"  // seit ich BDScheckbox auswerte:\n"];
-    // Problem ist hier: Es steckt in einem 'initstage=defer', Darin selber ist aber eine normale view,
+    // Problem ist hier: Es steckt in einem 'initstage=defer', darin selber ist aber eine normale view,
     // deren 'visible'-Eigenschaft sich von 'cbpdfemail' ableitet (das wird aber erst später gesetzt...)
     [self.output appendString:@"  if (window['cbpdfemail']) cbpdfemail.checked = false;\n\n"];
 
@@ -10455,24 +10447,57 @@ BOOL isJSExpression(NSString *s)
     "                    case 'o': arg = arg.toString(8); break;\n"
     "                    case 's': arg = ((arg = String(arg)) && match[7] ? arg.substring(0, match[7]) : arg); break;\n"
     "                    /******** ADDED by mbl - w ********/\n"
-    "                    case 'w': if (arg.name === undefined && arg.id === undefined) {\n"
-    "                                  var s = '{';\n"
+    "                    case 'w': if (arg && arg.name === undefined && arg.id === undefined) {\n"
+    "                                  var s = '';\n"
+    "                                  if ($.isArray(arg)) { // Array muss ich extra behandeln\n"
+    "                                      s = '[';\n"
+    "                                      for (var j=0;j<arg.length;j++) {\n"
+    "                                        // Wenn Array-Element eine id hat (ein DOM-Objekt ist),\n"
+    "                                        // dann das DOM-Objekt unmittelbar ausgeben.\n"
+    "                                        // Ansonsten die Variable ausgeben.\n"
+    "                                        arg[j].id ? s += arg[j].id : s += arg[j];\n"
+    "                                      }\n"
+    "                                      s += ']';\n"
+    "                                  }\n"
+    "                                  else {\n"
+    "                                      s = '{';\n"
     "\n"
-    "                                  Object.keys(arg).forEach(function(key) {\n"
-    "                                      if (typeof arg[key] === 'string')\n"
-    "                                          s = s + key + ': \\'' + arg[key] + '\\', ';\n"
-    "                                      else\n"
-    "                                          s = s + key + ': ' + arg[key] + ', ';\n"
-    "                                  });\n"
-    "                                  if (s.endsWith(', '))\n"
-    "                                      s = s.substring(0, s.length - 2)\n"
+    "                                      Object.keys(arg).forEach(function(key) {\n"
+    "                                          if (typeof arg[key] === 'string')\n"
+    "                                              s = s + key + ': \\'' + arg[key] + '\\', ';\n"
+    "                                          else\n"
+    "                                              s = s + key + ': ' + arg[key] + ', ';\n"
+    "                                      });\n"
+    "                                      if (s.endsWith(', '))\n"
+    "                                          s = s.substring(0, s.length - 2)\n"
     "\n"
-    "                                  s += '}';\n"
+    "                                      s += '}';\n"
+    "                                  }\n"
     "\n"
     "                                  arg = '<a href=\"javascript:Debug.inspect(' + s + ');\">' + s + '</a>';\n"
     "                              }\n"
     "                              else {\n"
-    "                                  arg = 'ToDo';\n"
+    "                                  // Beispiel 33.19: Dann wird kaskadenartig die id\n"
+    "                                  // oder bevorzugt der name ausgegeben\n"
+    "                                  // Übergeben an Debug.inspect wird aber nur das letzte Element\n"
+    "                                  var s = '';\n"
+    "                                  var tempArg = arg;\n"
+    "                                  while (!$(tempArg).parent().is('body')) {\n"
+    "                                      s = tempArg.name ? tempArg.name+s : tempArg.id+s;\n"
+    "                                      tempArg = $(tempArg).parent().get(0);\n"
+    "                                      if (!$(tempArg).parent().is('body'))\n"
+    "                                          s = '/@' + s;\n"
+    "                                      else\n"
+    "                                          s = '#' + s;\n"
+    "                                  }\n"
+    "                                  // Bin mir noch nicht ganz sicher, aber wegen Beispiel 33.21\n"
+    "                                  // gebe ich wohl, wenn Objekt noch nicht fertig konstruiert,\n"
+    "                                  // statt dessen immer den Namen der Klasse aus.\n"
+    "                                  // Deswegen wird in so einem Fall s überschrieben.\n"
+    "                                  // Gilt nicht für normale views\n"
+    "                                  if (!arg.inited && $(arg).data('olel') != 'view')\n"
+    "                                      s = '/' + $(arg).data('olel');\n"
+    "                                  arg = '<a href=\"javascript:Debug.inspect(' + arg.id + ');\">' + s + '</a>';\n"
     "                              }\n"
     "                    break;\n"
     "                    case 'u': arg = Math.abs(arg); break;\n"
@@ -11086,7 +11111,7 @@ BOOL isJSExpression(NSString *s)
     "            // Zum Glück habe ich dieses per HTML5-Annotation mitgespeichert\n"
     "            if (!$(this).data('initstage') || $(this).data('initstage') != 'defer')\n"
     "            {\n"
-    "                $(this).triggerHandler('onconstruct');\n"
+    "                $(this).triggerHandler('onconstruct', this);\n"
     "                $(this).triggerHandler('oninit');\n"
     "                this.inited = true;\n"
     "            }\n"
@@ -11696,13 +11721,25 @@ BOOL isJSExpression(NSString *s)
     "            this.format.apply(this,arguments);\n"
     "        }\n"
     "        this.inspect = function(obj) {\n"
-    "            Debug.write('Type: ' + typeof obj + ' {');\n"
+    "            if ($.isArray(obj)) {\n"
+    "                Debug.write('[');\n"
+    "                for (var j=0;j<obj.length;j++) {\n"
+    "                    Debug.write('&nbsp;&nbsp;&nbsp;&nbsp;' + j + ': ' + obj[j]);\n"
+    "                }\n"
+    "                Debug.write(']');\n"
+    "            } else {\n"
+    "                Debug.write('Type: ' + typeof obj + ' {');\n"
     "\n"
-    "            Object.keys(obj).forEach(function(key) {\n"
-    "                Debug.write('&nbsp;&nbsp;&nbsp;&nbsp;' + key + ': ' + obj[key]);\n"
-    "            });\n"
+    "                Object.keys(obj).forEach(function(key) {\n"
+    "                    // outerHTML/innerHTML sind interne DOM-Propertys, die sonst ein <div> ausgeben\n"
+    "                    if (key !== 'outerHTML' && key !== 'innerHTML' &&\n"
+    "                        key !== 'innerText' && key !== 'outerText' && key !== 'textContent' &&\n"
+    "                        typeof obj[key] !== 'function')\n"
+    "                        Debug.write('&nbsp;&nbsp;&nbsp;&nbsp;' + key + ': ' + obj[key]);\n"
+    "                });\n"
     "\n"
-    "            Debug.write('}');\n"
+    "                Debug.write('}');\n"
+    "            }\n"
     "        }\n"
     "        this.bugReport = function(error,verbose) {\n"
     "        }\n"
@@ -13793,7 +13830,7 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        $(me).css('font-family',value+',Verdana,sans-serif');\n"
     "        // Die Eigenschaft font-family überträgt sich auf alle Kinder und Enkel\n"
-    "        $(me).find('div').css('font-family',value+',Verdana,sans-serif')\n"
+    "        $(me).find('div').css('font-family',value+',Verdana,sans-serif');\n"
     "    }\n"
     "    else if (attributeName == 'fontsize')\n"
     "    {\n"
@@ -13801,27 +13838,27 @@ BOOL isJSExpression(NSString *s)
     "        // Die Eigenschaft font-size überträgt sich auf alle Kinder und Enkel\n"
     // Früher war es anstatt 'div' '.div_text'.
     // Das geht nicht, falls der Text eine Klasse ist. Klassen sind immer 'div_standard', nicht 'div_text'
-    "        $(me).find('div').css('font-size',value+'px')\n"
+    "        $(me).find('div').css('font-size',value+'px');\n"
     "    }\n"
     "    else if (attributeName == 'fontstyle')\n"
     "    {\n"
     "        if (value === 'plain')\n"
     "        {\n"
     "            $(me).css('font-style','normal');\n"
-    "            $(me).find('.div_text').css('font-style','normal')\n"
+    "            $(me).find('.div_text').css('font-style','normal');\n"
     "            $(me).css('font-weight','normal');\n"
-    "            $(me).find('div').css('font-weight','normal')\n"
+    "            $(me).find('div').css('font-weight','normal');\n"
     "        }\n"
     "        // contains() und nicht ===, weil mit der Angabe 'bolditalic' auch beides auf einmal gelten kann\n"
     "        if (value.contains('bold'))\n"
     "        {\n"
     "            $(me).css('font-weight','bold');\n"
-    "            $(me).find('div').css('font-weight','bold')\n"
+    "            $(me).find('div').css('font-weight','bold');\n"
     "        }\n"
     "        if (value.contains('italic'))\n"
     "        {\n"
     "            $(me).css('font-style','italic');\n"
-    "            $(me).find('div').css('font-style','italic')\n"
+    "            $(me).find('div').css('font-style','italic');\n"
     "        }\n"
     "    }\n"
     "    else if (attributeName == 'bgcolor')\n"
@@ -14739,6 +14776,8 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "HTMLElement.prototype.construct = function () {\n"
     "\n"
+    "    // Among other things, the construct method is the method where the class being constructed\n"
+    "    // places itself in its container by calling its parent's determinePlacement() method.\n"
     "\n"
     "\n"
     "}\n"
@@ -15472,17 +15511,19 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Attribute/Methoden von <button> (OL: <button>)//\n"
+    "// Attribute/Methoden von <button> (OL: <button>)      //\n"
     "/////////////////////////////////////////////////////////\n"
     "////////////////////////INCOMPLETE///////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
     "// _title ist der undokumentierte Zugriff auf den Text im Button\n"
-    "// Verweist derzeit statt dessen einfach auf den button selber\n"
+    "// Verweist derzeit statt dessen einfach auf den Button selber\n"
+    "// Seitdem ich 'imgbutton' auswerte, erweitere ich nicht mehr den\n"
+    "// HTMLButtonElement.prototype, sondern den HTMLElement.prototype\n"
     "/////////////////////////////////////////////////////////\n"
     "// Getter for '_title'                                 //\n"
     "// READ-ONLY                                           //\n"
     "/////////////////////////////////////////////////////////\n"
-    "Object.defineProperty(HTMLButtonElement.prototype, '_title', {\n"
+    "Object.defineProperty(HTMLElement.prototype, '_title', {\n"
     "    get : function(){ return this; },\n"
     "    /* READ-ONLY set : , */\n"
     "    enumerable : false,\n"
@@ -18353,9 +18394,6 @@ BOOL isJSExpression(NSString *s)
     // obwohl es weiter unten noch gebraucht wird.
     "        var o = rueckwaertsArray[i];\n"
     "\n"
-    // Woher kam das? Ich triggere 'onconstruct' für 'id' doch schon unten. Deswegen auskommentiert
-    //"        $(id).triggerHandler('onconstruct', $(id).data('olel'));\n"
-    //"\n"
     "        executeJSCodeOfThisClass(o.inherit, id, $(id).attr('id')+'_'+o.inherit.name, $(id).attr('id'));\n"
     "\n"
     "        // Falls von einem Vorfahren ein oninit() hinzugefügt wurde, dieses jetzt schon ausführen\n"
@@ -18508,6 +18546,17 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
+    "    // Reihenfolge aus http://www.openlaszlo.org/lps4.9/docs/developers/class-inheritance.html 9.4\n"
+    "\n"
+    "    id.construct($(id).parent().get(0), {});\n"
+    "    $(id).triggerHandler('onconstruct', id);\n"
+    "\n"
+    "    // createChildren();\n"
+    "\n"
+    "    // The init() is called\n"
+    "    // ToDo -> triggerHandler('oninit') wird jetzt 2 x ausgeführt\n"
+    "    id.init();\n"
+    "\n"
     "    // Einen als Attribut gesetzten 'oninit'-Handler, kann ich erst jetzt ausführen, da jetzt erst alle Methoden bekannt sind\n"
     "    if (onInitFunc)\n"
     "    {\n"
@@ -18515,13 +18564,10 @@ BOOL isJSExpression(NSString *s)
     "        (function() { with (id) { eval(onInitFunc); } }).bind(id)();\n"
     "    }\n"
     "\n"
-    "    if (!id.inited)\n"
-    "    {\n"
-    "        id.construct();\n"
-    "        $(id).triggerHandler('onconstruct', $(id).data('olel'));\n"
-    "        $(id).triggerHandler('oninit');\n"
-    "        id.inited = true;\n"
-    "    }\n"
+    "    $(id).triggerHandler('oninit');\n"
+    "    id.inited = true;\n"
+    "\n"
+    "\n"
     "\n"
     // http://www.openlaszlo.org/lps4.9/laszlo-explorer/editor.jsp?src=docs/developers/programs/class-inheritance-$8.lzx&lzr=dhtml
     "    // Wenn das Element in dem die Klasse steckt kleiner ist, als wir selber, dann entsprechend verbreitern\n"
@@ -18531,21 +18577,19 @@ BOOL isJSExpression(NSString *s)
     "        $(id).parent().css('width',$(id).css('width'))\n"
     "    }\n"
     "\n"
-    "    // Kommt von Beispiel 51.6\n"
-    "    // Wenn ich Geschwister habe, die vor mir liegen, dann muss ich entsprechend deren Breite nach links rücken\n"
-    "    // Nur nötig bei position: relative, da die Regel sonst ja eh generell gilt\n"
-    "    if ($(id).css('position') === 'relative' && $(id).prevAll().length > 0)\n"
-    "    {\n"
-    "        if (true || $(id).prevAll().length == 1) // ursprünglich mal getestet, ob andere Behandlung bei mehr als 1 vorherigem Geschwister\n"
-    "        {\n"
-    "            // $(id).position().left liefert den tatsächlichen Abstannd nach links zum parent\n"
-    "            // so als wären wir in einer position:absolute-Umgebung.\n"
-    "            // Deswegen diesen Wert einfach abziehen von der aktuellen left-Angabe\n"
-    "            // Ich muss über den offset gehen, falls ein x-wert gesetzt wurde\n"
-    "            // (bricht bei %-Angaben für left...)\n"
-    "            $(id).css('left',(parseInt($(id).css('left'))-$(id).position().left)+'px');\n"
-    "        }\n"
-    "    }\n"
+    // Wohl eher Spezialcode für Taxango, aber bin mir unsicher ob das noch nötig ist.
+    // Probeweise mal auskommentiert
+    //"    // Wenn ich Geschwister habe, die vor mir liegen, dann muss ich entsprechend deren Breite nach links rücken\n"
+    //"    // Nur nötig bei position: relative, da die Regel sonst ja eh generell gilt\n"
+    //"    if ($(id).css('position') === 'relative' && $(id).prevAll().length > 0)\n"
+    //"    {\n"
+    //"        // $(id).position().left liefert den tatsächlichen Abstannd nach links zum parent\n"
+    //"        // so als wären wir in einer position:absolute-Umgebung.\n"
+    //"        // Deswegen diesen Wert einfach abziehen von der aktuellen left-Angabe\n"
+    //"        // Ich muss über den offset gehen, falls ein x-wert gesetzt wurde\n"
+    //"        // (bricht bei %-Angaben für left...)\n"
+    //"        $(id).css('left',(parseInt($(id).css('left'))-$(id).position().left)+'px');\n"
+    //"    }\n"
 
     // Wenn ich classInClass auswerte, diesen Code wohl mit einfügen (aber dann letzlich vor init)
     /*

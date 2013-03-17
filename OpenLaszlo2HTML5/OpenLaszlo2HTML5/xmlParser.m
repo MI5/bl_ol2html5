@@ -3840,6 +3840,7 @@ didStartElement:(NSString *)elementName
 
         // Es gibt auch attributes ohne Startvalue, dann mit einem leeren String initialisieren
         NSString *value;
+
         if ([attributeDict valueForKey:@"value"])
         {
             NSLog(@"Setting the attribute 'value' as value of the class-member (see next line).");
@@ -3984,7 +3985,6 @@ didStartElement:(NSString *)elementName
             }
 
             // Hmmm, dann packe ich mal ${} drum herum, damit er unten korrekt rein geht.
-            // Aber das ist noch nicht die ganze Wahrheit. Er legt unten ja iwie keine Constraints an
             if ([[attributeDict valueForKey:@"when"] isEqualToString:@"always"])
             {
                 NSLog(@"Using the attribute 'when' to create a constraint value.");
@@ -3998,6 +3998,7 @@ didStartElement:(NSString *)elementName
 
         NSLog([NSString stringWithFormat:@"Setting '%@' as object-attribute in JavaScript-object.",a]);
 
+
         BOOL weNeedQuotes = YES;
         if ([type_ isEqualTo:@"boolean"] || [type_ isEqualTo:@"number"]  || [type_ isEqualTo:@"expression"])
             weNeedQuotes = NO;
@@ -4007,42 +4008,10 @@ didStartElement:(NSString *)elementName
         if ([value hasPrefix:@"'"] && [value hasSuffix:@"'"])
             weNeedQuotes = NO;
 
-        // Kann auch ein berechneter Werte sein ($ davor). Wenn ja dann $ usw. entfernen
-        // und wir arbeiten dann natürlich ohne Quotes.
-        BOOL berechneterWert = NO;
-        NSString* valueVorAenderung = value;
-        if (true)
-        {
-            // Bei $path darf er nicht hier reingehen! Deswegen test auf '${'
-            if ([value hasPrefix:@"${"])
-            {
-                // Wenn wir in einer Klasse sind, die von state erbt, ist das Eltern-Element nicht der state,
-                // sondern das davon umgebende Element (quasi wie ein Extrasprung)
-                if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && [self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"])
-                {
-                    value = [self makeTheComputedValueComputable:value withAndBindEquals:[NSString stringWithFormat:@"%@.getTheParent()",elem]];
-                }
-                else
-                {
-                    value = [self makeTheComputedValueComputable:value withAndBindEquals:elem];
-                }
-
-                weNeedQuotes = NO;
-
-                berechneterWert = YES;
-            }
-        }
-        else
-        {
-            // Das hier ist eigentlich richtig: // To Do
-            if ([value hasPrefix:@"${"])
-            {
-                value = [self modifySomeExpressionsInJSCode:value];
-            }
-        }
 
 
-        // Ist dann kein constraint value
+
+        // Ist dann kein constraint value, sondern ein initial einmal berechneter Wert
         BOOL onceWert = NO;
         if ([value hasPrefix:@"$once{"])
         {
@@ -4068,46 +4037,54 @@ didStartElement:(NSString *)elementName
 
             NSMutableDictionary *attrDictOfClass = [self.allFoundClasses objectForKey:className];
 
-/*
-            if ([valueVorAenderung hasPrefix:@"${"])
-            {
-                valueVorAenderung = [self modifySomeExpressionsInJSCode:valueVorAenderung];
-                [attrDictOfClass setObject:valueVorAenderung forKey:a];
-            }
-*/
 
-            if (berechneterWert)
+
+
+            // Wenn wir in einer Klasse sind, die von state erbt, ist das Eltern-Element nicht der state,
+            // sondern das davon umgebende Element (quasi wie ein Extrasprung)
+            if ([value hasPrefix:@"${"] && [self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"])
             {
-                [attrDictOfClass setObject:[NSString stringWithFormat:@"@§.BERECHNETERWERT.§@%@",value] forKey:a];
+                // nach einer Umstellung nicht nochmals getestet - To Check
+                // Alter Code (aber passt nicht mehr in dem neuen Zusammenhang:
+                // value = [self makeTheComputedValueComputable:value withAndBindEquals:[NSString stringWithFormat:@"%@.getTheParent()",elem]];
+                // Neuer Code:
+                value = [NSString stringWithFormat:@"%@%@%@", @"${getTheParent().", [self removeOccurrencesOfDollarAndCurlyBracketsIn:value], @"}"];
+            }
+
+
+
+            if ([value hasPrefix:@"${"])
+            {
+                value = [self modifySomeExpressionsInJSCode:value];
+            }
+
+
+
+            if (onceWert)
+            {
+                [attrDictOfClass setObject:[NSString stringWithFormat:@"@§.BERECHNETERWERTABERONCE.§@%@",value] forKey:a];
             }
             else
             {
-                if (onceWert)
+                // Wenn wir in einer Klasse sind nochmals gesondert auf setter reagieren, sonst geht er iwie verloren
+                if ([attributeDict valueForKey:@"setter"])
                 {
-                    [attrDictOfClass setObject:[NSString stringWithFormat:@"@§.BERECHNETERWERTABERONCE.§@%@",value] forKey:a];
-                }
-                else
-                {
-                    // Wenn wir in einer Klasse sind nochmals gesondert auf setter reagieren, sonst geht er iwie verloren
-                    if ([attributeDict valueForKey:@"setter"])
-                    {
-                        NSString *setter = [attributeDict valueForKey:@"setter"];
-                        setter = [self modifySomeExpressionsInJSCode:setter];
+                    NSString *setter = [attributeDict valueForKey:@"setter"];
+                    setter = [self modifySomeExpressionsInJSCode:setter];
 
-                        if (![value isEqualToString:@"null"])
-                        {
-                            // Darauf reagiere ich noch nicht, falls sowas überhaupt möglich:
-                            [self instableXML:@"Hmm, dann wurde setter und ein value gleichzeitg gesetzt. Kann sowas sein?"];
-                        }
-                        else
-                        {
-                            [attrDictOfClass setObject:[NSString stringWithFormat:@"@§.SETTER.§@%@",setter] forKey:a];
-                        }
+                    if (![value isEqualToString:@"null"])
+                    {
+                        // Darauf reagiere ich noch nicht, falls sowas überhaupt möglich:
+                        [self instableXML:@"Hmm, dann wurde setter und ein value gleichzeitg gesetzt. Kann sowas sein?"];
                     }
                     else
                     {
-                        [attrDictOfClass setObject:value forKey:a];
+                        [attrDictOfClass setObject:[NSString stringWithFormat:@"@§.SETTER.§@%@",setter] forKey:a];
                     }
+                }
+                else
+                {
+                    [attrDictOfClass setObject:value forKey:a];
                 }
             }
         }
@@ -4146,6 +4123,19 @@ didStartElement:(NSString *)elementName
                 }
 
 
+                // Kann auch ein berechneter Werte sein ($ davor).
+                // und wir arbeiten dann natürlich ohne Quotes.
+                BOOL berechneterWert = NO;
+                if ([value hasPrefix:@"${"])
+                {
+                    value = [self makeTheComputedValueComputable:value withAndBindEquals:elem];
+
+                    weNeedQuotes = NO;
+
+                    berechneterWert = YES;
+                }
+
+
                 [o appendFormat:@"%@ = ",a];
                 if (weNeedQuotes)
                     [o appendString:@"\""];
@@ -4159,6 +4149,7 @@ didStartElement:(NSString *)elementName
                 // Und erstmal nicht, wenn wir in canvas sind (globale Attribute)
                 if (berechneterWert)
                 {
+                    // Ab hier dann wieder mit dem ursprünglichen 'value' arbeiten.
                     NSString *s = [attributeDict valueForKey:@"value"];
 
 
@@ -18190,14 +18181,6 @@ BOOL isJSExpression(NSString *s)
     "                        else if (value.startsWith('@§.BERECHNETERWERTABERONCE.§@'))\n"
     "                        {\n"
     "                            value = value.substr(29);\n"
-    "                            value = replaceID(value,''+$(id).attr('id'));\n"
-    "\n"
-    "                            var evalString = 'id[key] = ' + value + ';'\n"
-    "                            eval(evalString);\n"
-    "                        }\n"
-    "                        else if (value.startsWith('@§.BERECHNETERWERT.§@'))//=historisch, ToDo weg!\n"
-    "                        {\n"
-    "                            value = value.substr(21);\n"
     "                            value = replaceID(value,''+$(id).attr('id'));\n"
     "\n"
     "                            var evalString = 'id[key] = ' + value + ';'\n"

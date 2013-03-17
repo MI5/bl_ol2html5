@@ -145,7 +145,7 @@ BOOL ownSplashscreen = NO;
 @property (strong, nonatomic) NSString *lastUsedTabSheetContainerID;
 
 @property (strong, nonatomic) NSMutableArray *rememberedID4closingSelfDefinedClass;
-@property (strong, nonatomic) NSString *defaultplacement;
+@property (strong, nonatomic) NSString *freeToUse;
 
 
 // "method" muss das name-attribut nach didEndElement rüberretten,
@@ -266,7 +266,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize datasetItemsCounter = _datasetItemsCounter, rollupDownElementeCounter = _rollupDownElementeCounter;
 
-@synthesize nodesAttrOfReplicator = _nodesAttrOfReplicator, collectTheNextIDForReplicator = _collectTheNextIDForReplicator, lastUsedTabSheetContainerID = _lastUsedTabSheetContainerID, rememberedID4closingSelfDefinedClass = _rememberedID4closingSelfDefinedClass, defaultplacement = _defaultplacement, lastUsedNameAttributeOfMethod = _lastUsedNameAttributeOfMethod, lastUsedNameAttributeOfClass = _lastUsedNameAttributeOfClass, lastUsedExtendsAttributeOfClass =_lastUsedExtendsAttributeOfClass, lastUsedNameAttributeOfFont = _lastUsedNameAttributeOfFont, lastUsedNameAttributeOfDataPointer = _lastUsedNameAttributeOfDataPointer;
+@synthesize nodesAttrOfReplicator = _nodesAttrOfReplicator, collectTheNextIDForReplicator = _collectTheNextIDForReplicator, lastUsedTabSheetContainerID = _lastUsedTabSheetContainerID, rememberedID4closingSelfDefinedClass = _rememberedID4closingSelfDefinedClass, freeToUse = _freeToUse, lastUsedNameAttributeOfMethod = _lastUsedNameAttributeOfMethod, lastUsedNameAttributeOfClass = _lastUsedNameAttributeOfClass, lastUsedExtendsAttributeOfClass =_lastUsedExtendsAttributeOfClass, lastUsedNameAttributeOfFont = _lastUsedNameAttributeOfFont, lastUsedNameAttributeOfDataPointer = _lastUsedNameAttributeOfDataPointer;
 
 @synthesize allJSGlobalVars = _allJSGlobalVars, allImgPaths = _allImgPaths;
 
@@ -397,7 +397,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         self.collectTheNextIDForReplicator = @"";
         self.lastUsedTabSheetContainerID = @"";
         self.rememberedID4closingSelfDefinedClass = [[NSMutableArray alloc] init];
-        self.defaultplacement = @"";
+        self.freeToUse = @"";
         self.lastUsedDataset = @"";
         self.lastUsedNameAttributeOfMethod = @"";
         self.lastUsedNameAttributeOfClass = @"";
@@ -485,7 +485,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // Zur Sicherheit mache ich von allem ne Copy.
         // Nicht, dass es beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.datasetOutput copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.defaultplacement copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.jsInitstageDeferOutput copy],[self.idsAndNamesOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy],[[NSNumber numberWithInteger:self.pointerWithoutNameZaehler] copy], nil];
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.datasetOutput copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.freeToUse copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.jsInitstageDeferOutput copy],[self.idsAndNamesOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy],[[NSNumber numberWithInteger:self.pointerWithoutNameZaehler] copy], nil];
         return r;
     }
 }
@@ -2458,9 +2458,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         // id-Zähler wieder übernehmen, sonst werden IDs doppelt vergeben!
         self.idZaehler = [[result objectAtIndex:11] integerValue];
 
-        // ka, ob wirklich nötig, aber schadet wohl auch nicht und ist Erinnerung,
-        // dass Array im index 12 was zurückliefert.
-        self.defaultplacement = [result objectAtIndex:12];
+        // Nicht wirklich nötig, aber ist Erinnerung, dass Array im index 12 was zurückliefert.
+        self.freeToUse = [result objectAtIndex:12];
 
         [self.jsComputedValuesOutput appendString:[result objectAtIndex:13]];
         [self.jsConstraintValuesOutput appendString:[result objectAtIndex:14]];
@@ -3977,7 +3976,7 @@ didStartElement:(NSString *)elementName
 
         if ([attributeDict valueForKey:@"when"])
         {
-            // Sollte der Standard sein bei Atributen
+            // Sollte der Standard sein bei Attributen
             if ([[attributeDict valueForKey:@"when"] isEqualToString:@"once"])
             {
                 NSLog(@"Skipping the attribute 'when'.");
@@ -4069,12 +4068,13 @@ didStartElement:(NSString *)elementName
 
             NSMutableDictionary *attrDictOfClass = [self.allFoundClasses objectForKey:className];
 
-
-            //if ([valueVorAenderung hasPrefix:@"${"])
-            //{
-            //    value = [self modifySomeExpressionsInJSCode:valueVorAenderung];
-            //}
-
+/*
+            if ([valueVorAenderung hasPrefix:@"${"])
+            {
+                valueVorAenderung = [self modifySomeExpressionsInJSCode:valueVorAenderung];
+                [attrDictOfClass setObject:valueVorAenderung forKey:a];
+            }
+*/
 
             if (berechneterWert)
             {
@@ -4259,19 +4259,6 @@ didStartElement:(NSString *)elementName
                 }
             }
         }
-
-
-
-
-
-        // 'defaultplacement' wird, falls wir in einer Klasse sind, ausgelesen und gesetzt.
-        // Das ist evtl. nicht mehr nötig, seitdem ich ALLE Attribute einer Klasse auslese
-        // Aber wegen Zugriff auf obj.inherit.defaultplacement noch drin (Bei entfernen von defaultplacement, müsste man
-        // auf das attributesDict zugreifen, und schauen ob da drin eine var 'defaultplacement' steckt)
-        // hmm, ich schreibe jetzt nicht mehr vor der klasse, sondern erst am Anfang von interpretObject (bzw. teils/teils)
-        if (self.ignoreAddingIDsBecauseWeAreInClass && [a isEqualToString:@"defaultplacement"])
-            self.defaultplacement = [attributeDict valueForKey:@"value"];
-
 
 
 
@@ -7952,7 +7939,7 @@ BOOL isJSExpression(NSString *s)
         //if ([rekursiveRueckgabeAllFoundClasses count] > 0)
         //   [self instableXML:@"<class> liefert was in 10 zurück. Da muss ich mir was überlegen!"];
 
-        self.defaultplacement = [result objectAtIndex:12];
+        self.freeToUse = [result objectAtIndex:12];
 
         NSString *rekursiveRueckgabeJsComputedValuesOutput = [result objectAtIndex:13];
         if (![rekursiveRueckgabeJsComputedValuesOutput isEqualToString:@""])
@@ -8103,14 +8090,6 @@ BOOL isJSExpression(NSString *s)
             self.jsOLClassesOutput = [[NSMutableString alloc] initWithString:[self.jsOLClassesOutput substringToIndex:[self.jsOLClassesOutput length] - 1]];
 
         [self.jsOLClassesOutput appendFormat:@" };\n\n"];
-
-
-        // defaultplacement immer mit speichern, damit es besser ausgelesen werden kann, falls gesetzt.
-        // self.defaultplacement = [self protectThisSingleQuotedJavaScriptString:self.defaultplacement];
-        // [self.jsOLClassesOutput appendFormat:@"  this.defaultplacement = '%@';\n\n",self.defaultplacement];
-        // Neu: Wird nicht mehr hier ausgegeben. Steckt als ganz normale Variable im attributesDict
-        // Nachdem ausgelesen, wieder zurücksetzen:
-        self.defaultplacement = @"";
 
 
         [self.jsOLClassesOutput appendString:@"  this.contentHTML = '"];
@@ -14858,7 +14837,7 @@ BOOL isJSExpression(NSString *s)
     "// init() - nachimplementiert                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "var initFunction = function () {\n"
-    "    $(this).triggerHandler('oninit');\n"
+    "    // $(this).triggerHandler('oninit'); // Ne, wird sonst 2 x ausgeführt\n"
     "    // this.inited = true; // Ne, gesondert setzen, bricht sonst per initstage=defer gesetzte Klassen\n"
     "}\n"
     "\n"
@@ -15194,17 +15173,6 @@ BOOL isJSExpression(NSString *s)
     "    configurable : true\n"
     "});\n"
     "\n"
-    //"/////////////////////////////////////////////////////////\n"
-    //"// Getter/Setter for 'defaultplacement'                //\n"
-    //"// INIT-ONLY                                           //\n"
-    //"/////////////////////////////////////////////////////////\n"
-    //"Object.defineProperty(HTMLElement.prototype, 'defaultplacement', {\n"
-    //"    get : function(){\n"
-    //"        return $(this).data('defaultplacement_');\n"
-    //"    },\n"
-    //"    enumerable : false,\n"
-    //"    configurable : true\n"
-    //"});\n"
     "\n"
     "\n"
     "\n"
@@ -18635,7 +18603,6 @@ BOOL isJSExpression(NSString *s)
     "    // createChildren();\n"
     "\n"
     "    // The init() is called\n"
-    "    // ToDo -> triggerHandler('oninit') wird jetzt 2 x ausgeführt\n"
     "    id.init();\n"
     "\n"
     "    // Einen als Attribut gesetzten 'oninit'-Handler, kann ich erst jetzt ausführen, da jetzt erst alle Methoden bekannt sind\n"

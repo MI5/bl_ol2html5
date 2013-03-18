@@ -5,6 +5,9 @@
 // - IE-Support erst ab IE 8 (weil IE 7 und IE 6 CSS-Angabe inherit nicht unterstützen)
 //
 //
+// Weitere OL-Dateien:
+// http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/utils/
+//
 //
 // - iwie gibt es noch ein Problem mit den pointer-events (globalhelp verdeckt Foren-Button)
 //
@@ -1456,11 +1459,11 @@ void OLLog(xmlParser *self, NSString* s,...)
     if ([elemName isEqualToString:@"window"])
     {
         [s appendString:@"\n  // Höhe/Breite des umgebenden Elements u. U. vergrößern\n"];
-        [s appendFormat:@"  adjustHeightAndWidth(%@_content_);\n",elemName];
+        [s appendFormat:@"  adjustHeightAndWidthOld(%@_content_);\n",elemName];
     }
 
     [s appendString:@"\n  // Höhe/Breite des umgebenden Elements u. U. vergrößern\n"];
-    [s appendFormat:@"  adjustHeightAndWidth(%@);\n",elemName];
+    [s appendFormat:@"  adjustHeightAndWidthOld(%@);\n",elemName];
 
 
     // ... dann ganz am Anfang adden (damit die Kinder immer vorher bekannt sind)
@@ -2508,9 +2511,9 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Die Breite und die Höhe muss bekannt sein, bevor das Simplelayout als solches ausgeführt wird!
     // Andererseits muss es nach evtl. klonen (multiple datapaths) kommen, die in ComputeValues stecken.
     // Beispiel 11.3
-    // Außerdem muss es vor adjustHeightAndWidth bekannt sein, damit hier diese Korrektur als erstes
+    // Außerdem muss es vor adjustHeightAndWidthOld bekannt sein, damit hier diese Korrektur als erstes
     // ausgeführt wird (aufaddieren von children, im Gegensatz zu nur dem breitesten children).
-    // Denn SA-Korrekturen haben immer Vorrang vor dem normalen adjustHeightAndWidth().
+    // Denn SA-Korrekturen haben immer Vorrang vor dem normalen adjustHeightAndWidthOld().
     [self.jsConstraintValuesOutput insertString:s atIndex:0];
 }
 
@@ -2533,9 +2536,9 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Die Breite und Höhe muss bekannt sein, bevor das Simplelayout als solches ausgeführt wird!
     // Andererseits muss es nach evtl. klonen (multiple datapaths) kommen, die in ComputeValues stecken.
     // Beispiel 11.3
-    // Außerdem muss es vor adjustHeightAndWidth() bekannt sein, damit hier diese Korrektur als erstes
+    // Außerdem muss es vor adjustHeightAndWidthOld() bekannt sein, damit diese Korrektur als erstes
     // ausgeführt wird (aufaddieren von children, im Gegensatz zu nur dem breitesten children).
-    // Denn SA-Korrekturen haben immer Vorrang vor dem normalen adjustHeightAndWidth().
+    // Denn SA-Korrekturen haben immer Vorrang vor dem normalen adjustHeightAndWidthOld().
     [self.jsConstraintValuesOutput insertString:s atIndex:0];
 }
 
@@ -2823,7 +2826,7 @@ didStartElement:(NSString *)elementName
         {
             NSLog([NSString stringWithFormat:@"\nSkipping the Element <%@>, because it's an HTML-Tag", elementName]);
 
-            [self.textInProgress appendFormat:@"<span style=\"float:none;"];
+            [self.textInProgress appendFormat:@"<span style=\""];
             for (id e in attributeDict)
             {
                 // Alle Elemente in 'font' (color usw...) als css ausgeben, da das <font>-tag deprecated ist
@@ -2835,7 +2838,7 @@ didStartElement:(NSString *)elementName
                 else if ([e isEqualToString:@"face"])
                 {
                     NSString *v = [attributeDict valueForKey:e];
-                    // Falls die font Leerzeichen beinhaltet (z. B. 'Times New Roman', dann Hochkomma drum herum
+                    // Falls die font Leerzeichen beinhaltet (z. B. 'Times New Roman', dann Hochkommata drum herum
                     if ([v rangeOfString:@" "].location != NSNotFound)
                         v = [NSString stringWithFormat:@"'%@'",v];
 
@@ -9573,19 +9576,7 @@ BOOL isJSExpression(NSString *s)
             // dass er direkt weiter den Code ausführt, ka.
     [self.output appendString:@"  window.setTimeout(function() { triggerOnInitForAllElements(); }, 20);\n"];
 
-    // Speziell für Taxango:
-    [self.output appendString:@"\n  // Für alle Date-Felder datePicker() bzw. unter iOS Original-Build-in-Datepicker\n"];
-    [self.output appendString:@"  $(\"[data-olel='BDSeditdate']\").each(function() {\n"];
-    [self.output appendString:@"    if (isiOS())\n"];
-    [self.output appendString:@"      $(this).find('input').get(0).setAttribute('type', 'date');\n"];
-    [self.output appendString:@"    else\n"];
-    [self.output appendString:@"      $(this).find('input').datepicker();\n"];
-    [self.output appendString:@"  });\n"];
-    [self.output appendString:@"  codeAtEndOfLaunch();\n"];
-
-    //[self.output appendString:@"\n  // ab jetzt werden alle per triggerHandler() gesendeten events sofort ausgeführt\n"];
-    //[self.output appendString:@"  window.UILoaded = true;\n"];
-
+    [self.output appendString:@"\n  codeAtEndOfLaunch();\n"];
 
     [self.output appendString:@"\n});\n</script>\n\n"];
 
@@ -9768,11 +9759,12 @@ BOOL isJSExpression(NSString *s)
     "    border: 0 none;\n"
     "}\n"
     "\n"
-    "div, span, input, select, button, textarea\n"
-    "{\n"
-    "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
-    "}\n"
-    "\n"
+    // Keine Ahnung mehr woher das kam, aber inzwischen scheinbar unnötig
+    //"div, span, input, select, button, textarea\n"
+    //"{\n"
+    //"    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
+    //"}\n"
+    //"\n"
     "div, button /* Alle Elemente auf die Simplelayout stoßen kann. */\n"
     "{           /* Damit SA nie auf 'auto' stößt, sondern bei $(el).css('top') immer einen numerischen Wert zurück bekommt (über parseInt()). */\n"
 	"    top:0;  /* Ich muss mit css('top') arbeiten, da position().top bei versteckten Elementen bricht. */\n"
@@ -9800,7 +9792,7 @@ BOOL isJSExpression(NSString *s)
     "    background-color:lightgrey;\n"
 	"    height:40px;\n"
 	"    width:50px;\n"
-	"    position:absolute;\n" // Auch bei relative hier absolute, sonst verschiebt sich das Hintergrundbild bei Taxango.
+	"    position:absolute;\n"
 	"    top:20px;\n"
 	"    left:20px;\n"
     "    text-align:left;\n"
@@ -9834,7 +9826,7 @@ BOOL isJSExpression(NSString *s)
 	"    height:auto; /* Damit es einen Startwert gibt. */\n"
 	"    width:auto;  /* Sonst kann JS die Variable nicht richtig auslesen. */\n"
     "\n"
-    "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
+    //"    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
 	"    position:absolute;\n"
 	"    top:0px; /* Wichtig, damit ein numerischer Wert zurückgeliefert wird bei Aufruf von parseInt() */\n"
 	"    left:0px;\n"
@@ -9862,7 +9854,7 @@ BOOL isJSExpression(NSString *s)
 	"    height:auto;\n"
 	"    width:auto;\n"
     "\n"
-    "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
+    //"    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
 	"    position:absolute;\n"
 	"    top:0px;\n"
 	"    left:0px;\n"
@@ -10014,7 +10006,7 @@ BOOL isJSExpression(NSString *s)
     "{\n"
     "    position:absolute; /* relative! Damit es Platz einnimmt, sonst staut es sich im Tab. */\n"
     "                       /* Und nur so wird bei Änderung der Visibility aufgerückt. */\n"
-    "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
+    //"    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
     "    text-align:left;\n"
     "    padding:2px;\n"
     "\n"
@@ -10032,7 +10024,7 @@ BOOL isJSExpression(NSString *s)
     "/* Standard-Text (Text) */\n"
     ".div_text\n"
     "{\n"
-    "    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
+    //"    float:left; /* Nur soviel Platz einnehmen, wie das Element auch braucht. */\n"
     "    position:absolute;\n"
     "    text-align:left;\n"
     "    padding:2px;\n"
@@ -10182,8 +10174,7 @@ BOOL isJSExpression(NSString *s)
     "    pointer-events: auto;\n"
     "}";
 
-
-  //  css = [css stringByReplacingOccurrencesOfString:@"float:left;" withString:@""];
+    // To check / To remove ?!
     css = [css stringByReplacingOccurrencesOfString:@"width:100%;" withString:@""];
 
 
@@ -11016,7 +11007,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Heighest height of all children of an element       //\n"
-    "// returns an integer                                  //\n"
+    "// @return: integer                                    //\n"
     "/////////////////////////////////////////////////////////\n"
     "function getHeighestHeightOfChildren(el)\n"
     "{\n"
@@ -11033,8 +11024,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Heighest size of all children of an element         //\n"
-    "// (includes a top-value, measureHeight will call this)//\n"
-    "// returns an integer                                  //\n"
+    "// (includes a top-value)                              //\n"
+    "// @return: integer                                    //\n"
     "/////////////////////////////////////////////////////////\n"
     "function getHeighestSizeOfChildren(el)\n"
     "{\n"
@@ -11053,8 +11044,26 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Widest size of all children of an element           //\n"
+    "// (includes a left-value)                              //\n"
+    "// @return: integer                                    //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "function getWidestSizeOfChildren(el)\n"
+    "{\n"
+    "    var widestSize = 0;\n"
+    "    $(el).children().each(function() {\n"
+    "        var sizeOfChild = $(this).outerWidth(true) + parseInt($(this).css('left'));\n"
+    "        if (sizeOfChild > widestSize)\n"
+    "            widestSize = sizeOfChild;\n"
+    "    });\n"
+    "\n"
+    "    return widestSize;\n"
+    "}\n"
+    "\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// Widest width of all children of an element          //\n"
-    "// returns an integer                                  //\n"
+    "// @return: integer                                    //\n"
     "/////////////////////////////////////////////////////////\n"
     "function getWidestWidthOfChildren(el)\n"
     "{\n"
@@ -11176,7 +11185,8 @@ BOOL isJSExpression(NSString *s)
     "///////////////////////////////////////////////////////////\n"
     "function getTheTextWidth(s)\n"
     "{\n"
-    "    $('<div id=\"___removeMeFromDOM___\">'+s+'</div>').appendTo('body');\n"
+    "    // float-Angabe, damit der Text nur soviel platz einnimmt, wie tatsächlich benötigt\n"
+    "    $('<div id=\"___removeMeFromDOM___\" style=\"float:left;\">'+s+'</div>').appendTo('body');\n"
     "    var textWidth = $('#___removeMeFromDOM___').outerWidth();\n"
     "    $('#___removeMeFromDOM___').remove();\n"
     "    return textWidth;\n"
@@ -14252,7 +14262,7 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "\n"
     "        // After all 'valign' is a natural constraint\n"
-    "        // if the parents height changes, we need to recalc the 'valign'\n"
+    "        // if the parents width changes, we need to recalc the 'valign'\n"
     "        $(me).parent().off('onwidth.valign');\n"
     "        $(me).parent().on('onwidth.valign', function() { me.setAttribute_('valign',value); });\n"
     "\n"
@@ -16662,7 +16672,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Hilfsfunktion, um height/width von Div's anzupassen //\n"
-    "// adjustHeightAndWidth()                              //\n"
+    "// adjustHeightAndWidthOld()                           //\n"
     "/////////////////////////////////////////////////////////\n"
     // Code-Logik:
     // Wenn entweder der x- oder der y-Wert (eines Kindes) gesetzt wurde,
@@ -16671,13 +16681,13 @@ BOOL isJSExpression(NSString *s)
     // dann setz als height die des (höchsten Kindes + top-wert).
     // Jedoch wird nie das umgebende canvas verändert und bei rudElement bleibt es bei auto, damit es scrollt
     "// Falls ein Kind eine x, y, width oder height-Angabe hat: Wir müssen dann die Höhe des Eltern-Elements anpassen, da absolute-Elemente\n"
-    "// nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch sein muss, dass es dieses mit umfasst.\n"
+    "// nicht im Fluss auftauchen, aber das umgebende Element trotzdem mindestens so hoch und breit sein muss, dass es dieses mit umfasst.\n"
     "// Wir überschreiben jedoch keinen explizit vorher gesetzten Wert,\n"
     "// deswegen test auf '' (nur mit JS möglich, nicht mit jQuery)\n"
     // position().top klappt nicht, weil das Elemente versteckt sein kann,
     // aber mit css('top') klappt es (gleiches gilt für position().left).
     // '0'+ als Schutz gegen 'auto', so, dass parseInt() auf jeden Fall ne Nummer findet.
-    "var adjustHeightAndWidth = function (el) {\n"
+    "var adjustHeightAndWidthOld = function (el) {\n"
     "    // Text SOLL (im Normalfall) resizen, deswegen für 'text' keine fixe Breite/Höhe und raus hier.\n"
     "    // Auch wenn wir gar keine Kinder haben, dann sofort raus hier.\n"
     "    if ($(el).data('olel') === 'text' || $(el).children().length == 0)\n"
@@ -16691,15 +16701,15 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        // Falls es Änderungen an den Kindern gibt, muss ich stets die Größe anpassen!\n"
     "        // dazu per 'on' auf onx,ony,onwidth und onheight horchen, vorher aber per off entfernen, falls rekursiver Aufruf\n"
-    "        $(this).off('onx.adjustHeightAndWidth');\n"
-    "        $(this).off('ony.adjustHeightAndWidth');\n"
-    "        $(this).off('onwidth.adjustHeightAndWidth');\n"
-    "        $(this).off('onheight.adjustHeightAndWidth');\n"
+    "        $(this).off('onx.adjustHeightAndWidthOld');\n"
+    "        $(this).off('ony.adjustHeightAndWidthOld');\n"
+    "        $(this).off('onwidth.adjustHeightAndWidthOld');\n"
+    "        $(this).off('onheight.adjustHeightAndWidthOld');\n"
     "\n"
-    "        $(this).on('onx.adjustHeightAndWidth', function() { adjustHeightAndWidth(el); } );\n"
-    "        $(this).on('ony.adjustHeightAndWidth', function() { adjustHeightAndWidth(el); } );\n"
-    "        $(this).on('onwidth.adjustHeightAndWidth', function() { adjustHeightAndWidth(el); } );\n"
-    "        $(this).on('onheight.adjustHeightAndWidth', function() { adjustHeightAndWidth(el); } );\n"
+    "        $(this).on('onx.adjustHeightAndWidthOld', function() { adjustHeightAndWidthOld(el); } );\n"
+    "        $(this).on('ony.adjustHeightAndWidthOld', function() { adjustHeightAndWidthOld(el); } );\n"
+    "        $(this).on('onwidth.adjustHeightAndWidthOld', function() { adjustHeightAndWidthOld(el); } );\n"
+    "        $(this).on('onheight.adjustHeightAndWidthOld', function() { adjustHeightAndWidthOld(el); } );\n"
     "\n"
     "\n"
     "        var n = this.nodeName.toLowerCase();\n"
@@ -16748,7 +16758,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        if (!($(el).hasClass('canvas_standard')))\n"
     "        {\n"
-    "            el.setAttribute_('width',getMaxOfArray(widths))\n"
+    "            el.setAttribute_('width',getMaxOfArray(widths));\n"
     "            $(el).data('widthOnlySetByHelperFn',true); // wrappinglayout z. B. testet darauf\n"
     "        }\n"
     "    }\n"
@@ -16757,8 +16767,30 @@ BOOL isJSExpression(NSString *s)
     "    var c = 2;\n"
     "    while ($('#'+el.id+'_repl'+c).length)\n"
     "    {\n"
-    "        adjustHeightAndWidth($('#'+el.id+'_repl'+c).get(0));\n"
+    "        adjustHeightAndWidthOld($('#'+el.id+'_repl'+c).get(0));\n"
     "        c++;\n"
+    "    }\n"
+    "}\n"
+    "\n"
+    "\n"
+    "// Neuimplementierung, derzeit noch ohne Event-Listener, um massiv Zeit zu sparen\n"
+    "// Wird für alle Elemente aufgerufen nach dem Start\n"
+    "// Und dann für alle im Nachhinein zur Laufzeit instanzierten Klassen (ToDo)\n"
+    "var adjustHeightAndWidth = function (el) {\n"
+    "    if ($(el).data('olel') === 'text' || $(el).children().length == 0)\n"
+    "        return;\n"
+    "\n"
+    "    if (($(el).hasClass('div_rudElement')) || ($(el).hasClass('canvas_standard')))\n"
+    "        return;\n"
+    "\n"
+    "    // Test wirklich nur so möglich, ob height nicht gesetzt\n"
+    "    if ($(el).get(0).style.height == '' /* || $(el).data('heightOnlySetByHelperFn') */) {\n"
+    "        el.setAttribute_('height',getHeighestSizeOfChildren(el));\n"
+    "    }\n"
+    "\n"
+    "    // Test wirklich nur so möglich, ob width nicht gesetzt\n"
+    "    if ($(el).get(0).style.width == '' /* || $(el).data('widthOnlySetByHelperFn') */) {\n"
+    "        el.setAttribute_('width',getWidestSizeOfChildren(el));\n"
     "    }\n"
     "}\n"
     "\n"
@@ -16895,11 +16927,6 @@ BOOL isJSExpression(NSString *s)
     // Muss natürlich auch den x-spacing-Abstand zwischen den Elementen mit berücksichtigen
     // und auf die Breite aufaddieren.
     "    sumW += ($(el).children().length-1) * spacing;\n"
-    // Keine Einschränkung mehr auf position:relative
-    // [s appendString:@"  if ($('#"];
-    // [s appendString:self.zuletztGesetzteID];
-    // [s appendString:@"').css('position') == 'relative'"];
-    // [s appendString:@")\n"];
     "    if (el.style && el.style.width == '')\n"
     "        el.setAttribute_('width',sumW);\n"
     "\n"
@@ -17895,7 +17922,20 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "\n"
+    // Speziell für Taxango die iOS-Datepicker aktivieren:
+    "    // Für alle Date-Felder datePicker() bzw. unter iOS Original-Build-in-Datepicker\n"
+    "    $(\"[data-olel='BDSeditdate']\").each(function() {\n"
+    "        if (isiOS())\n"
+    "            $(this).find('input').get(0).setAttribute('type', 'date');\n"
+    "        else\n"
+    "            $(this).find('input').datepicker();\n"
+    "    });\n"
     "\n"
+    "\n"
+    "    // Kostet mich derzeit unter Taxango ganze 12 Sekunden... To check\n"
+    "    $('body').find('div, button').each( function() {\n"
+    "        adjustHeightAndWidth(this);\n"
+    "    });\n"
     "}\n"
     "\n"
     "\n"
@@ -18572,7 +18612,7 @@ BOOL isJSExpression(NSString *s)
     "            setAbsoluteDataPathIn(id,iv.datapath);\n"
     "        }\n"
     "\n"
-    "        // oh man... setAbsoluteDataPath tauscht das Element aus... Deswegen muss ich natürlich id hier neu setzen...\n"
+    "        // setAbsoluteDataPath tauscht das Element aus... Deswegen muss ich natürlich id hier neu setzen...\n"
     "        id = $('#'+id.id).get(0);\n"
     "    }\n"
     "\n"

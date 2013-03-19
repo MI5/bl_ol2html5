@@ -99,6 +99,7 @@ BOOL ownSplashscreen = NO;
 
 @property (strong, nonatomic) NSMutableString *jsInitstageDeferOutput;
 @property (strong, nonatomic) NSMutableString *idsAndNamesOutput;
+@property (strong, nonatomic) NSMutableString *directMethodsOfClassOutput;
 
 // CSS-Ausgaben, die gesammelt werden, derzeit @Font-Face
 @property (strong, nonatomic) NSMutableString *cssOutput;
@@ -257,7 +258,7 @@ bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress
 
 @synthesize output = _output, jsOutput = _jsOutput, jsOLClassesOutput = _jsOLClassesOutput, jQueryOutput0 = _jQueryOutput0, jQueryOutput = _jQueryOutput, jsHeadOutput = _jsHeadOutput, datasetOutput = _datasetOutput, jsComputedValuesOutput = _jsComputedValuesOutput, jsConstraintValuesOutput = _jsConstraintValuesOutput, cssOutput = _cssOutput, externalJSFilesOutput = _externalJSFilesOutput, collectedContentOfClass = _collectedContentOfClass;
 
-@synthesize jsInitstageDeferOutput = _jsInitstageDeferOutput, idsAndNamesOutput = _idsAndNamesOutput;
+@synthesize jsInitstageDeferOutput = _jsInitstageDeferOutput, idsAndNamesOutput = _idsAndNamesOutput, directMethodsOfClassOutput = _directMethodsOfClassOutput;
 
 @synthesize errorParsing = _errorParsing, verschachtelungstiefe = _verschachtelungstiefe, rollUpDownVerschachtelungstiefe = _rollUpDownVerschachtelungstiefe;
 
@@ -377,6 +378,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         self.jsInitstageDeferOutput = [[NSMutableString alloc] initWithString:@""];
         self.idsAndNamesOutput = [[NSMutableString alloc] initWithString:@""];
+        self.directMethodsOfClassOutput = [[NSMutableString alloc] initWithString:@""];
 
         self.cssOutput = [[NSMutableString alloc] initWithString:@""];
         self.externalJSFilesOutput = [[NSMutableString alloc] initWithString:@""];
@@ -487,8 +489,8 @@ void OLLog(xmlParser *self, NSString* s,...)
         [self.parser parse];
 
         // Zur Sicherheit mache ich von allem ne Copy.
-        // Nicht, dass es beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.datasetOutput copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.freeToUse copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.jsInitstageDeferOutput copy],[self.idsAndNamesOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy],[[NSNumber numberWithInteger:self.pointerWithoutNameZaehler] copy], nil];
+        // Nicht, dass Objekt beim Verlassen der Rekursion zerstört wird
+        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.datasetOutput copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.freeToUse copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.jsInitstageDeferOutput copy],[self.idsAndNamesOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy],[[NSNumber numberWithInteger:self.pointerWithoutNameZaehler] copy],[self.directMethodsOfClassOutput copy], nil];
         return r;
     }
 }
@@ -1582,7 +1584,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
         else
         {
-            // nach OL-Test: parent UND immediateparent kriegen die Referenz über das Name-Attribut gesetzt...
+            // nach OL-Test: parent UND immediateparent kriegen eine Referenz auf das Name-Attribut
             [self.idsAndNamesOutput appendFormat:@"  document.getElementById('%@').parent.%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, name, self.zuletztGesetzteID];
             // Wirkt sich hier noch nicht aus! Erst wenn ich ne Klasse instanziere
             //[self.jsOutput appendFormat:@"  document.getElementById('%@').immediateparent.%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, name, self.zuletztGesetzteID];
@@ -2478,6 +2480,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         // pointerWithoutNameZaehler wieder übernehmen, sonst werden pointer-Namen doppelt vergeben!
         self.pointerWithoutNameZaehler = [[result objectAtIndex:19] integerValue];
+
+        [self.directMethodsOfClassOutput appendString:[result objectAtIndex:20]];
     }
 
     NSLog(@"Leaving recursion");
@@ -4014,17 +4018,7 @@ didStartElement:(NSString *)elementName
 
 
 
-        // Ist dann kein constraint value, sondern ein initial einmal berechneter Wert
-        BOOL onceWert = NO;
-        if ([value hasPrefix:@"$once{"])
-        {
-            onceWert = YES;
-            value = [self makeTheComputedValueComputable:value withAndBindEquals:elem];
-            weNeedQuotes = NO;
-        }
-
-
-        // Wenn wir in einer Klasse sind, alle Attribute der Klasse intern mitspeichern
+        // Wenn wir in einer Klasse sind, alle Attribute der Klasse intern mitspeichern.
         // Denn sie müssen bei jedem instanzieren der Klasse mit ihren Startwerten
         // initialisiert werden (Überschreibungen durch Instanzvariablen sind möglich).
         // if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
@@ -4043,9 +4037,10 @@ didStartElement:(NSString *)elementName
 
 
 
-            // Wenn wir in einer Klasse sind, die von state erbt, ist das Eltern-Element nicht der state,
-            // sondern das davon umgebende Element (quasi wie ein Extrasprung)
-            if ([value hasPrefix:@"${"] && [self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"])
+            // Sind wir in einer Klasse, die von state erbt, ist das Eltern-Element nicht der state,
+            // sondern das davon umgebende Element (quasi wie ein Extrasprung).
+            if ([value hasPrefix:@"${"] &&
+                [self.lastUsedExtendsAttributeOfClass isEqualToString:@"state"])
             {
                 // nach einer Umstellung nicht nochmals getestet - To Check
                 // Alter Code (aber passt nicht mehr in dem neuen Zusammenhang:
@@ -4056,39 +4051,32 @@ didStartElement:(NSString *)elementName
 
 
 
-            if ([value hasPrefix:@"${"])
+            if ([value hasPrefix:@"${"] || [value hasPrefix:@"$once{"])
             {
                 value = [self modifySomeExpressionsInJSCode:value];
             }
 
 
+            // Da wir in einer Klasse sind nochmals gesondert auf setter reagieren,
+            // sonst geht er iwie verloren.
+            if ([attributeDict valueForKey:@"setter"])
+            {
+                NSString *setter = [attributeDict valueForKey:@"setter"];
+                setter = [self modifySomeExpressionsInJSCode:setter];
 
-            if (onceWert)
-            {
-                [attrDictOfClass setObject:[NSString stringWithFormat:@"@§.BERECHNETERWERTABERONCE.§@%@",value] forKey:a];
-            }
-            else
-            {
-                // Wenn wir in einer Klasse sind nochmals gesondert auf setter reagieren, sonst geht er iwie verloren
-                if ([attributeDict valueForKey:@"setter"])
+                if (![value isEqualToString:@"null"])
                 {
-                    NSString *setter = [attributeDict valueForKey:@"setter"];
-                    setter = [self modifySomeExpressionsInJSCode:setter];
-
-                    if (![value isEqualToString:@"null"])
-                    {
-                        // Darauf reagiere ich noch nicht, falls sowas überhaupt möglich:
-                        [self instableXML:@"Hmm, dann wurde setter und ein value gleichzeitg gesetzt. Kann sowas sein?"];
-                    }
-                    else
-                    {
-                        [attrDictOfClass setObject:[NSString stringWithFormat:@"@§.SETTER.§@%@",setter] forKey:a];
-                    }
+                    // Darauf reagiere ich noch nicht, falls sowas überhaupt möglich:
+                    [self instableXML:@"Hmmm. Dann wurde setter und ein value gleichzeitg gesetzt. Kann sowas sein?"];
                 }
                 else
                 {
-                    [attrDictOfClass setObject:value forKey:a];
+                    [attrDictOfClass setObject:[NSString stringWithFormat:@"@§.SETTER.§@%@",setter] forKey:a];
                 }
+            }
+            else
+            {
+                [attrDictOfClass setObject:value forKey:a];
             }
         }
         else
@@ -4126,10 +4114,11 @@ didStartElement:(NSString *)elementName
                 }
 
 
+
                 // Kann auch ein berechneter Werte sein ($ davor).
                 // und wir arbeiten dann natürlich ohne Quotes.
                 BOOL berechneterWert = NO;
-                if ([value hasPrefix:@"${"])
+                if ([value hasPrefix:@"${"] || [value hasPrefix:@"$once{"])
                 {
                     value = [self makeTheComputedValueComputable:value withAndBindEquals:elem];
 
@@ -6543,12 +6532,12 @@ didStartElement:(NSString *)elementName
             {
                 //if ([elemTyp isEqualToString:@"evaluateclass"]) // Weil ich dort rückwärts auswerte
                 //    [o appendFormat:@"  if (%@.%@ == undefined)\n",elem,[attributeDict valueForKey:@"name"]];
-                // Unsinn! Ich wärte vorwärts aus! Methoden sollen BEWUSST überschrieben werden
+                // Unsinn! Ich werte vorwärts aus! Methoden sollen BEWUSST überschrieben werden
 
 
                 //NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
-                // Da ich bei canvas alle handler an den context binde, muss ich, falls in handlern methoden aufgerufen
-                // werden, diese auch direkt an den Context binden.
+                // Da ich bei canvas alle handler an den context binde, muss ich, falls in handlern
+                // methoden aufgerufen werden, diese auch direkt an den Context binden.
                 // Dies gilt auch Falls wir eine Klasse auswerten, die von drawview erbt natürlich.
                 //if ([enclosingElemTyp isEqualToString:@"drawview"] || ([enclosingElemTyp isEqualToString:@"evaluateclass"] && [self.lastUsedExtendsAttributeOfClass isEqualToString:@"drawview"]))
                 //    [o appendFormat:@"  %@.getContext('2d').",elem];
@@ -6558,8 +6547,11 @@ didStartElement:(NSString *)elementName
             }
         }
 
-        [o appendString:[attributeDict valueForKey:@"name"]];
-        [o appendFormat:@" = function(%@)\n  {\n",args];
+
+        [o appendFormat:@"%@ = function(%@)\n  {\n",[attributeDict valueForKey:@"name"],args];
+
+        [self.directMethodsOfClassOutput appendFormat:@"    %@: function(%@) {\n",[attributeDict valueForKey:@"name"],args];
+
 
         if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"] || [elemTyp isEqualToString:@"datapath"])
         {
@@ -6598,9 +6590,13 @@ didStartElement:(NSString *)elementName
         // Sogar jsOutput und damit noch früher! Damit der 'oninit'-Code auf die Methoden zugreifen kann!
         // (Der 'oninit'-Code steckt ja auch in jQueryOutput0, wurde aber u. U. schon davor geschrieben)
         if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"] || [elemTyp isEqualToString:@"datapath"])
+        {
             [self.jQueryOutput0 appendString:o];
+        }
         else
+        {
             [self.jsOutput appendString:o];
+        }
 
         // Okay, jetzt Text der Methode sammeln und beim schließen einfügen
     }
@@ -7882,7 +7878,7 @@ BOOL isJSExpression(NSString *s)
 
         NSString *rekursiveRueckgabeJsOutput = [result objectAtIndex:1];
         if (![rekursiveRueckgabeJsOutput isEqualToString:@""])
-            NSLog(@"String 1 aus der Rekursion wird unser JS-content für JS-Objekt.");
+            NSLog(@"String 1 aus der Rekursion wird unser JS-content für das JS-Objekt.");
 
         NSString *rekursiveRueckgabeJsOLClassesOutput = [result objectAtIndex:2];
         if (![rekursiveRueckgabeJsOLClassesOutput isEqualToString:@""])
@@ -7898,11 +7894,11 @@ BOOL isJSExpression(NSString *s)
 
         NSString *rekursiveRueckgabeJsHeadOutput = [result objectAtIndex:5];
         if (![rekursiveRueckgabeJsHeadOutput isEqualToString:@""])
-            NSLog(@"String 5 aus der Rekursion wird unser Leading-JS-Head-content für JS-Objekt");
+            NSLog(@"String 5 aus der Rekursion wird unser Leading-JS-Head-content für das JS-Objekt");
 
         NSString *rekursiveRueckgabeDatasetOutput = [result objectAtIndex:6];
         if (![rekursiveRueckgabeDatasetOutput isEqualToString:@""])
-            NSLog(@"String 6 aus der Rekursion wird unser dataset-content für JS-Objekt");
+            NSLog(@"String 6 aus der Rekursion wird unser dataset-content für das JS-Objekt");
 
         NSString *rekursiveRueckgabeCssOutput = [result objectAtIndex:7];
         if (![rekursiveRueckgabeCssOutput isEqualToString:@""])
@@ -7957,7 +7953,7 @@ BOOL isJSExpression(NSString *s)
 
         [self.allImgPaths addObjectsFromArray:[result objectAtIndex:17]];
 
-        // Nur Erinnerung, dass es index 18 gibt. Es können in einer Klasse wohl keine includes auftauchen
+        // Erinnerung, dass es index 18 gibt. Es können in einer Klasse wohl keine includes auftauchen
         // self.allIncludedIncludes = [[NSMutableArray alloc] initWithArray:[result objectAtIndex:18]];
 
 
@@ -7967,6 +7963,13 @@ BOOL isJSExpression(NSString *s)
         // Deswegen nur setzen wenn neuer Wert höher als alter ist.
         if ([[result objectAtIndex:19] integerValue] > self.pointerWithoutNameZaehler)
             self.pointerWithoutNameZaehler = [[result objectAtIndex:19] integerValue];
+
+        NSString *rekursiveRueckgabeDirectMethodsOfClassOutput = [result objectAtIndex:20];
+        if (![rekursiveRueckgabeDirectMethodsOfClassOutput isEqualToString:@""])
+            NSLog(@"String 20 aus der Rekursion wird unser directMethods-content für das JS-Objekt");
+
+
+
 
 
 
@@ -7985,6 +7988,8 @@ BOOL isJSExpression(NSString *s)
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         rekursiveRueckgabeIDsAndNamesOutput = [rekursiveRueckgabeIDsAndNamesOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
+        rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
+
 
 
         // In manchen JS/jQuery tauchen " auf, die müssen escaped werden
@@ -7994,8 +7999,9 @@ BOOL isJSExpression(NSString *s)
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeIDsAndNamesOutput = [rekursiveRueckgabeIDsAndNamesOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+        //rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
 
-        // STATT DESSEN: Bei jsOutput:
+        // STATT DESSEN: Bei jsOutput (und directMethodsOfClass):
 
         // Ich muss im Quellcode bereits vorab geschriebene Escape-Sequenzen berücksichtigen:
         // In jsOutput taucht folgendes auf: "\"", aber auch "\\" 
@@ -8009,6 +8015,14 @@ BOOL isJSExpression(NSString *s)
         rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly2" withString:@"\\\\\\\""];
         // Jetzt kann ich nach \\" bzw den ersetzten String suchen und ersetzen
         rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly1" withString:@"\\\\\\\\\\\""];
+
+
+        rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput stringByReplacingOccurrencesOfString:@"\\\\\"" withString:@"ugly%$§§$%ugly1"];
+        rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput stringByReplacingOccurrencesOfString:@"\\\"" withString:@"ugly%$§§$%ugly2"];
+        rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+        rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly2" withString:@"\\\\\\\""];
+        rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly1" withString:@"\\\\\\\\\\\""];
+
 
 
 
@@ -8029,7 +8043,6 @@ BOOL isJSExpression(NSString *s)
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
         rekursiveRueckgabeIDsAndNamesOutput = [rekursiveRueckgabeIDsAndNamesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
-
 
 
         [self.jsOLClassesOutput appendFormat:@"  this.attributesDict = {"];
@@ -8098,6 +8111,11 @@ BOOL isJSExpression(NSString *s)
 
         if (rekursiveRueckgabeJsHeadOutput.length > 0)
         {
+            // Hier sollte ich eigentlich nie reinkommen, da JSHead nur Resourcen enthält,
+            // welche in Klassen selber wohl eher nicht definiert werden.
+            [self instableXML:@"Oh. In einer Klasse wurde eine Resource definiert."];
+            // Falls das hier doch mal anschlägt, muss ich das unten auskommentierte
+            // 'contentJSHead' wieder auskommentieren.
             [self.jsOLClassesOutput appendString:@"  this.contentJSHead = \""];
             [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsHeadOutput];
             [self.jsOLClassesOutput appendString:@"\";\n\n"];
@@ -8119,6 +8137,15 @@ BOOL isJSExpression(NSString *s)
             [self.jsOLClassesOutput appendString:@"\";\n\n"];
         }
 
+        if (rekursiveRueckgabeDirectMethodsOfClassOutput.length > 0)
+        {
+            // Das letzte Komma wieder entfernen:
+            rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput substringToIndex:[rekursiveRueckgabeDirectMethodsOfClassOutput length] - 1];
+
+            [self.jsOLClassesOutput appendString:@"  this.directMethods = {\n"];
+            [self.jsOLClassesOutput appendString:rekursiveRueckgabeDirectMethodsOfClassOutput];
+            [self.jsOLClassesOutput appendString:@"\n  }\n\n"];
+        }
 
         [self.jsOLClassesOutput appendString:@"  this.contentJS = \""];
         [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsOutput];
@@ -9027,9 +9054,19 @@ BOOL isJSExpression(NSString *s)
         // jQueryOutput0 (Begründung siehe öffnendes Tag)
         // jsOutput (Begründung siehe öffnendes Tag)
         if ([enclosingElemTyp isEqualToString:@"dataset"] || [enclosingElemTyp isEqualToString:@"datapointer"] || [enclosingElemTyp isEqualToString:@"datapath"])
+        {
             [self.jQueryOutput0 appendString:o];
+        }
         else
+        {
             [self.jsOutput appendString:o];
+        }
+
+        // Derzeit: Wenn wir in einer Klasse sind zusätzlich die direkten Methoden ausgeben in:
+        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+        {
+            [self.directMethodsOfClassOutput appendString:@"    },"];
+        }
     }
 
 
@@ -9560,13 +9597,15 @@ BOOL isJSExpression(NSString *s)
         [self.output appendString:@"\n"];
         [self.output appendString:@"    // Extra-SpezialCode für Taxango:\n"];
         [self.output appendString:@"    // Führe CalcEingaben aus, immer dann wenn sich in inputs oder selects etwas ändert\n"];
-        [self.output appendString:@"    // Ersetzt das 'ondocumentchange' von weiter oben.\n"];
+        [self.output appendString:@"    // Ersetzt derzeit das 'ondocumentchange' von weiter oben.\n"];
         [self.output appendString:@"    $('input, select').on('blur', function() { CalcEingaben($(this).val()); } );\n"];
 
 
         [self.output appendString:@"  });\n"];
     }
 
+
+    [self.output appendString:@"\n  codeAtEndOfLaunch();\n"];
 
 
     [self.output appendString:@"\n  // To Speed up Loading I will trigger 'oninit' after everything is displayed (not suitable in every situation)\n"];
@@ -9575,8 +9614,6 @@ BOOL isJSExpression(NSString *s)
             // Vermutlich checkt er intern nicht jede ms, und deswegen kann es u. U. passieren,
             // dass er direkt weiter den Code ausführt, ka.
     [self.output appendString:@"  window.setTimeout(function() { triggerOnInitForAllElements(); }, 20);\n"];
-
-    [self.output appendString:@"\n  codeAtEndOfLaunch();\n"];
 
     [self.output appendString:@"\n});\n</script>\n\n"];
 
@@ -16777,10 +16814,16 @@ BOOL isJSExpression(NSString *s)
     "// Wird für alle Elemente aufgerufen nach dem Start\n"
     "// Und dann für alle im Nachhinein zur Laufzeit instanzierten Klassen (ToDo)\n"
     "var adjustHeightAndWidth = function (el) {\n"
+    "    // Alle 'text'-Elemente und alle kinderlosen Elemente ausschließen\n"
     "    if ($(el).data('olel') === 'text' || $(el).children().length == 0)\n"
     "        return;\n"
     "\n"
+    "    // Bestimmte css-Klassen ausschließen\n"
     "    if (($(el).hasClass('div_rudElement')) || ($(el).hasClass('canvas_standard')))\n"
+    "        return;\n"
+    "\n"
+    "    // Bestimmte id's ausschließen\n"
+    "    if (el.id == 'debugWindow' || el.id == 'debugInnerWindow')\n"
     "        return;\n"
     "\n"
     "    // Test wirklich nur so möglich, ob height nicht gesetzt\n"
@@ -18204,7 +18247,7 @@ BOOL isJSExpression(NSString *s)
     "                {\n"
     "                    var value = attrs[key];\n"
     "\n"
-    "                    if (typeof value === 'string' && key !== 'datapath') // Davorgezogen, um nur einmal testen zu müssen\n"
+    "                    if (typeof value === 'string' && key !== 'datapath')\n"
     "                    {\n"
     "                        if (value.startsWith('$')) // = Constraint value\n"
     "                        {\n"
@@ -18216,14 +18259,6 @@ BOOL isJSExpression(NSString *s)
     "                            value = replaceID(value,''+$(id).attr('id'));\n"
     "                            // Den setter als Methode im Objekt speichern, die dann von setAttribute_() aufgerufen wird\n"
     "                            var evalString = \"id['mySetterFor_'+key+'_'] = function(\" + key + ') { with (' + $(id).attr('id') + ') { ' + value + ' }};';\n"
-    "                            eval(evalString);\n"
-    "                        }\n"
-    "                        else if (value.startsWith('@§.BERECHNETERWERTABERONCE.§@'))\n"
-    "                        {\n"
-    "                            value = value.substr(29);\n"
-    "                            value = replaceID(value,''+$(id).attr('id'));\n"
-    "\n"
-    "                            var evalString = 'id[key] = ' + value + ';'\n"
     "                            eval(evalString);\n"
     "                        }\n"
     "                    }\n"
@@ -18704,7 +18739,9 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        v = '${' + v.substring(6);\n"
     "        v = v.substring(2,v.length-1);\n"
-    "        v = eval(v); // Sonst sind JS-Ausdrücke einfach nur strings\n"
+    "        // Damit JS-Ausdrücke nicht einfach nur strings sind.\n"
+    "        // Und damit scope stimmt zusätzlich with()/bind() drum herum.\n"
+    "        (function() { with (el) { v = eval(v); } }).bind(el)();\n"
     //"        el.setAttribute_(a,v);\n"
     // So, damit kein "Trying to set a property that never was declared"-Fehler kommt:
     "        el[a] = v;\n"
@@ -18754,15 +18791,15 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
-    "// executes the complete JS-Code of the given Class          //\n"
+    "// executes the complete JS-Code of the Class                //\n"
     "///////////////////////////////////////////////////////////////\n"
     "function executeJSCodeOfThisClass(obj, id, r, r2)\n"
     "{\n"
-    "    // Replace-IDs von contentJSHead ersetzen\n"
-    "    var s = replaceID(obj.contentJSHead, r, r2);\n"
+    //"    // Replace-IDs von contentJSHead ersetzen\n"
+    //"    var s = replaceID(obj.contentJSHead, r, r2);\n"
     //"    if (s.length > 0)\n"
-    "    evalCode(s);\n"
-    "\n"
+    //"    evalCode(s);\n"
+    //"\n"
     "    // Replace-IDs von contentNamesAndIDs ersetzen\n"
     "    s = replaceID(obj.contentNamesAndIDs, r, r2);\n"
     //"    if (s.length > 0)\n"

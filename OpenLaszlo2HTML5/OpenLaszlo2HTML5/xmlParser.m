@@ -6550,39 +6550,40 @@ didStartElement:(NSString *)elementName
 
         [o appendFormat:@"%@ = function(%@)\n  {\n",[attributeDict valueForKey:@"name"],args];
 
-        [self.directMethodsOfClassOutput appendFormat:@"    %@: function(%@) {\n",[attributeDict valueForKey:@"name"],args];
+        // Parallel hierein:
+        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+        {
+            [self.directMethodsOfClassOutput appendFormat:@"    %@: function(%@) {\n",[attributeDict valueForKey:@"name"],args];
+        }
 
 
         if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"] || [elemTyp isEqualToString:@"datapath"])
         {
-            [o appendFormat:@"    with (%@) {\n",benutzMich];
+            [o appendFormat:@"    with (%@) {\n  ",benutzMich];
         }
         else if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
         {
             // Auch dann brauche ich unbedingt 'with (canvas)'! Damit er auf die in 'canvas.x' gesetzten globalen Vars zugreifen kann
-            [o appendFormat:@"    with (canvas) {\n"];
+            [o appendFormat:@"    with (canvas) {\n  "];
         }
         else
         {
-            [o appendFormat:@"    with (%@) {\n",elem];
+            [o appendFormat:@"    with (%@) {\n  ",elem];
         }
+
 
         // Falls es default values für die Argumente gibt, muss ich diese hier setzen
         if (![defaultValues isEqualToString:@""])
         {
-            [o appendString:defaultValues];
-            [o appendString:@"\n"];
+            [o appendFormat:@"%@\n ",defaultValues];
+
+
+            if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+            {
+                [self.directMethodsOfClassOutput appendFormat:@"  %@\n",defaultValues];
+            }
         }
 
-        // OL benutzt 'classroot' als Variable für den Zugriff auf das erste in einer Klasse
-        // definierte Element. Deswegen, falls wir eine Klasse auswerten, einfach die Var setzen
-        // Denke das ist unnötig geworden:
-        // if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-        //     [o appendFormat:@"    var classroot = %@;\n\n",ID_REPLACE_STRING];
-
-
-        // Um es auszurichten mit dem Rest
-        [o appendString:@" "];
 
 
         // jQueryOutput0, damit es noch vor den Computed Values und Constraint Values bekannt ist
@@ -7964,8 +7965,8 @@ BOOL isJSExpression(NSString *s)
         if ([[result objectAtIndex:19] integerValue] > self.pointerWithoutNameZaehler)
             self.pointerWithoutNameZaehler = [[result objectAtIndex:19] integerValue];
 
-        NSString *rekursiveRueckgabeDirectMethodsOfClassOutput = [result objectAtIndex:20];
-        if (![rekursiveRueckgabeDirectMethodsOfClassOutput isEqualToString:@""])
+        NSString *rekursiveRueckgabeDirekteMethodenDerKlasse = [result objectAtIndex:20];
+        if (![rekursiveRueckgabeDirekteMethodenDerKlasse isEqualToString:@""])
             NSLog(@"String 20 aus der Rekursion wird unser directMethods-content für das JS-Objekt");
 
 
@@ -7988,7 +7989,6 @@ BOOL isJSExpression(NSString *s)
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
         rekursiveRueckgabeIDsAndNamesOutput = [rekursiveRueckgabeIDsAndNamesOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
-        rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput stringByReplacingOccurrencesOfString:@"\'" withString:@"\\\'"];
 
 
 
@@ -7999,9 +7999,8 @@ BOOL isJSExpression(NSString *s)
         rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
         rekursiveRueckgabeIDsAndNamesOutput = [rekursiveRueckgabeIDsAndNamesOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
-        //rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
 
-        // STATT DESSEN: Bei jsOutput (und directMethodsOfClass):
+        // STATT DESSEN: Bei jsOutput:
 
         // Ich muss im Quellcode bereits vorab geschriebene Escape-Sequenzen berücksichtigen:
         // In jsOutput taucht folgendes auf: "\"", aber auch "\\" 
@@ -8015,13 +8014,6 @@ BOOL isJSExpression(NSString *s)
         rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly2" withString:@"\\\\\\\""];
         // Jetzt kann ich nach \\" bzw den ersetzten String suchen und ersetzen
         rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly1" withString:@"\\\\\\\\\\\""];
-
-
-        rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput stringByReplacingOccurrencesOfString:@"\\\\\"" withString:@"ugly%$§§$%ugly1"];
-        rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput stringByReplacingOccurrencesOfString:@"\\\"" withString:@"ugly%$§§$%ugly2"];
-        rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
-        rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly2" withString:@"\\\\\\\""];
-        rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput stringByReplacingOccurrencesOfString:@"ugly%$§§$%ugly1" withString:@"\\\\\\\\\\\""];
 
 
 
@@ -8137,13 +8129,13 @@ BOOL isJSExpression(NSString *s)
             [self.jsOLClassesOutput appendString:@"\";\n\n"];
         }
 
-        if (rekursiveRueckgabeDirectMethodsOfClassOutput.length > 0)
+        if (rekursiveRueckgabeDirekteMethodenDerKlasse.length > 0)
         {
             // Das letzte Komma wieder entfernen:
-            rekursiveRueckgabeDirectMethodsOfClassOutput = [rekursiveRueckgabeDirectMethodsOfClassOutput substringToIndex:[rekursiveRueckgabeDirectMethodsOfClassOutput length] - 1];
+            rekursiveRueckgabeDirekteMethodenDerKlasse = [rekursiveRueckgabeDirekteMethodenDerKlasse substringToIndex:[rekursiveRueckgabeDirekteMethodenDerKlasse length] - 2];
 
             [self.jsOLClassesOutput appendString:@"  this.directMethods = {\n"];
-            [self.jsOLClassesOutput appendString:rekursiveRueckgabeDirectMethodsOfClassOutput];
+            [self.jsOLClassesOutput appendString:rekursiveRueckgabeDirekteMethodenDerKlasse];
             [self.jsOLClassesOutput appendString:@"\n  }\n\n"];
         }
 
@@ -8883,13 +8875,6 @@ BOOL isJSExpression(NSString *s)
 
 
 
-            // OL benutzt 'classroot' als Variable für den Zugriff auf das erste in einer Klasse
-            // definierte Element. Deswegen, falls wir eine Klasse auswerten, einfach diese Var setzen
-            // Denke das ist unnötig geworden:
-            // if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-            //     [o appendFormat:@"var classroot = %@;\n    ",ID_REPLACE_STRING];
-
-
             if (self.onInitInHandler)
             {
                 [o appendString:s];
@@ -9022,8 +9007,18 @@ BOOL isJSExpression(NSString *s)
         NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
 
-        [o appendString:@"   "];
-        [o appendString:s];
+        [o appendFormat:@"   %@",s];
+
+
+
+        // Derzeit: Wenn wir in einer Klasse sind zusätzlich die direkten Methoden ausgeben in:
+        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+        {
+            // ToDo: Erst eliminieren, dass classroot ersetzt wird in Methoden.
+            // [self.directMethodsOfClassOutput appendFormat:@"    %@",s];
+            [self.directMethodsOfClassOutput appendString:@"\n    },\n"];
+        }
+
 
 
         // Einmal extra schließen wegen 'with (x)'
@@ -9060,12 +9055,6 @@ BOOL isJSExpression(NSString *s)
         else
         {
             [self.jsOutput appendString:o];
-        }
-
-        // Derzeit: Wenn wir in einer Klasse sind zusätzlich die direkten Methoden ausgeben in:
-        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-        {
-            [self.directMethodsOfClassOutput appendString:@"    },"];
         }
     }
 

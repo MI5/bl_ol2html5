@@ -1231,8 +1231,10 @@ void OLLog(xmlParser *self, NSString* s,...)
             // Dann wurde es per <attribute> gesetzt -
             // Nur dafür speichere ich alle <attribute>'s intern mit...
             src = [self removeOccurrencesOfDollarAndCurlyBracketsIn:src];
+
             src = [src stringByReplacingOccurrencesOfString:@"classroot" withString:@""];
             src = [src stringByReplacingOccurrencesOfString:@"." withString:@""];
+
             if (![src isEqualToString:@"resource"])
             {
                 // Hier greife ich das erste mal auf die intern gespeicherten Vars zu,
@@ -1241,13 +1243,9 @@ void OLLog(xmlParser *self, NSString* s,...)
             }
         }
 
-        // Dann erfolgt ein Zugriff auf die interne resource-Var, aber puh...
+        // Wohl nur, wenn kein Zugriff auf die interne resource-Var erfolgt, aber puh...
         // ... to think about.
-        if ([src isEqualToString:@"resource"])
-        {
-            //[self instableXML:[self makeTheComputedValueComputable:@"${classroot.stateres}"]];
-        }
-        else
+        if (![src isEqualToString:@"resource"])
         {
             // Ich setze es per setAttribute_ auf JS-Ebene.
             // Geht wohl nur dann wenn ich DIESE CSS-Angaben noch vor alles andere setze, sonst
@@ -1279,17 +1277,11 @@ void OLLog(xmlParser *self, NSString* s,...)
             {
                 // Möglichkeit 1: Resource wird direkt als String angegeben!
 
-                // <----- (hier mit '' setzen, da ja ein String!
-                //[self.jsOutput appendFormat:@"\n  $('#%@').get(0).resource = '%@';\n",self.zuletztGesetzteID,src];
-
                 s = src;
             }
             else
             {
                 // Möglichkeit 2: Resource wurde vorher extern gesetzt+
-
-                // <-----
-                //[self.jsOutput appendFormat:@"\n  $('#%@').get(0).resource = %@;\n",self.zuletztGesetzteID,src];
 
                 // Namen des Bildes aus eigener vorher angelegter Res-DB ermitteln
                 if ([[self.allJSGlobalVars valueForKey:src] isKindOfClass:[NSArray class]])
@@ -3537,6 +3529,12 @@ didStartElement:(NSString *)elementName
             // Hmmm, lieber so: Wir haben hier ja keine zuletzt benutzte id:
             dp = [self removeOccurrencesOfDollarAndCurlyBracketsIn:dp];
             dp = [self modifySomeExpressionsInJSCode:dp];
+
+            // Historisch dass hier doppelt classroot ausgetauscht wird.
+            // Da ich viel mit classroot als getter experimentiert hatte
+            // Falls es kein getter wird, kann ich die Abfrage hier wieder rausschmeißen
+            if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+                dp = [self inString:dp searchFor:@"classroot" andReplaceWith:ID_REPLACE_STRING ignoringTextInQuotes:YES];
         }
         else
         {
@@ -6449,7 +6447,7 @@ didStartElement:(NSString *)elementName
 
 
                         ///////////////////// Default- Variablen für JS setzen - Anfang /////////////////////
-                        [defaultValues appendFormat:@"    if(typeof(%@)==='undefined') ",varName];
+                        [defaultValues appendFormat:@"      if (typeof(%@)==='undefined') ",varName];
                         [defaultValues appendFormat:@"%@ = %@;\n",varName,defaultValue];
                         ///////////////////// Default- Variablen für JS setzen - Ende /////////////////////
                     }
@@ -6478,9 +6476,10 @@ didStartElement:(NSString *)elementName
 
 
         // http://www.openlaszlo.org/lps4.9/docs/reference/ <method> => s. Attribut 'name'
-        // Deswegen bei canvas und library 'method' als Funktionen global verfügbar machen
-        // UND an canvas binden.
-        // Ansonsten 'method' als Methode an das umgebende Objekt koppeln.
+        // Deswegen bei canvas und library 'method' als Funktionen global verfügbar machen UND an canvas binden.
+        // => Das ist nach einem OL-Code-Test mit 4.9 definitiv NICHT so.
+        // Methoden direkt in <canvas> stecken NUR im canvas-Objekt und sind NICHT global.
+        // Deswegen gilt: Methoden stets an das umgebende Objekt koppeln. Punkt.
 
         // Hier drin sammle ich erstmal die Ausgabe
         NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
@@ -6495,17 +6494,11 @@ didStartElement:(NSString *)elementName
         if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
         {
             [o appendString:@"  "];
-            //[o appendFormat:@"  if (window.%@ == undefined)\n  ",[attributeDict valueForKey:@"name"]];
-            // Neue Logik: Methoden werden erst nach ausgewerteten Klassen gesetzt.
-            // Deswegen MUSS jetzt sogar überschrieben werden
+
+            elem = @"canvas";
         }
         else
         {
-            // Folgendes Szenario: Wenn eine selbst definierte Klasse eine Methode definiert,
-            // aber gleichzeitig diese erbt, dann hat die selbst definierte Vorrang! Deswegen
-            // überschreibe ich mit der Methode innerhalb der Klasse nicht! Dazu teste ich
-            // einfach vorher ob sie auch wirklich undefined ist!
-
             // Tja... auch Datasets können jetzt Methoden haben...
             // In so einem Fall immer an das letzte Dataset binden, nicht an die ID.
             // Denn Datasets werden unter Umständen auch per 'name'-Attribut angesprochen! (und nicht per id)
@@ -6518,9 +6511,6 @@ didStartElement:(NSString *)elementName
                 else
                     benutzMich = self.lastUsedNameAttributeOfDataPointer;
 
-                //if ([elemTyp isEqualToString:@"evaluateclass"]) // Weil ich dort rückwärts auswerte
-                //    [o appendFormat:@"  if (%@.%@ == undefined)\n",benutzMich,[attributeDict valueForKey:@"name"]];
-                // Unsinn! Ich wärte vorwärts aus! Methoden sollen BEWUSST überschrieben werden
                 [o appendFormat:@"  %@.",benutzMich];
             }
             else if ([elemTyp isEqualToString:@"datapath"])
@@ -6530,11 +6520,6 @@ didStartElement:(NSString *)elementName
             }
             else
             {
-                //if ([elemTyp isEqualToString:@"evaluateclass"]) // Weil ich dort rückwärts auswerte
-                //    [o appendFormat:@"  if (%@.%@ == undefined)\n",elem,[attributeDict valueForKey:@"name"]];
-                // Unsinn! Ich werte vorwärts aus! Methoden sollen BEWUSST überschrieben werden
-
-
                 //NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
                 // Da ich bei canvas alle handler an den context binde, muss ich, falls in handlern
                 // methoden aufgerufen werden, diese auch direkt an den Context binden.
@@ -6559,31 +6544,25 @@ didStartElement:(NSString *)elementName
 
         if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"] || [elemTyp isEqualToString:@"datapath"])
         {
-            [o appendFormat:@"    with (%@) {\n  ",benutzMich];
-        }
-        else if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
-        {
-            // Auch dann brauche ich unbedingt 'with (canvas)'! Damit er auf die in 'canvas.x' gesetzten globalen Vars zugreifen kann
-            [o appendFormat:@"    with (canvas) {\n  "];
+            [o appendFormat:@"    with (%@) {\n",benutzMich];
         }
         else
         {
-            [o appendFormat:@"    with (%@) {\n  ",elem];
+            [o appendFormat:@"    with (%@) {\n",elem];
         }
 
 
         // Falls es default values für die Argumente gibt, muss ich diese hier setzen
         if (![defaultValues isEqualToString:@""])
         {
-            [o appendFormat:@"%@\n ",defaultValues];
+            [o appendFormat:@"%@\n",defaultValues];
 
 
             if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
             {
-                [self.directMethodsOfClassOutput appendFormat:@"  %@\n",defaultValues];
+                [self.directMethodsOfClassOutput appendFormat:@"%@\n",defaultValues];
             }
         }
-
 
 
         // jQueryOutput0, damit es noch vor den Computed Values und Constraint Values bekannt ist
@@ -9007,7 +8986,7 @@ BOOL isJSExpression(NSString *s)
         NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
 
-        [o appendFormat:@"   %@",s];
+        [o appendFormat:@"    %@",s];
 
 
 
@@ -9015,7 +8994,12 @@ BOOL isJSExpression(NSString *s)
         if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
         {
             // ToDo: Erst eliminieren, dass classroot ersetzt wird in Methoden.
-            // [self.directMethodsOfClassOutput appendFormat:@"    %@",s];
+            // Ich habe zuvor alle Vorkommen von classroot durch den replace-String ersetzt
+            // Aber für die Nicht-String-Methoden ersetze ich es nun wieder durch this.
+            // So dass für alle direkten Methoden letzlich classroot zu this wird
+            s = [self inString:s searchFor:ID_REPLACE_STRING andReplaceWith:@"this" ignoringTextInQuotes:YES];
+
+            [self.directMethodsOfClassOutput appendFormat:@"    %@",s];
             [self.directMethodsOfClassOutput appendString:@"\n    },\n"];
         }
 
@@ -9028,6 +9012,8 @@ BOOL isJSExpression(NSString *s)
 
         // Falls wir in canvas/library sind, dann muss es nicht nur global verfügbar sein,
         // sondern auch über 'canvas.' ansprechbar sein.
+        // Begründung:
+        // http://www.openlaszlo.org/lps4.9/docs/reference/ <method> => s. Attribut 'name'
         if ([enclosingElemTyp isEqualToString:@"canvas"] || [enclosingElemTyp isEqualToString:@"library"])
         {
             [o appendString:@"  // Diese Methode ebenfalls an canvas binden\n"];
@@ -9587,7 +9573,7 @@ BOOL isJSExpression(NSString *s)
         [self.output appendString:@"    // Extra-SpezialCode für Taxango:\n"];
         [self.output appendString:@"    // Führe CalcEingaben aus, immer dann wenn sich in inputs oder selects etwas ändert\n"];
         [self.output appendString:@"    // Ersetzt derzeit das 'ondocumentchange' von weiter oben.\n"];
-        [self.output appendString:@"    $('input, select').on('blur', function() { CalcEingaben($(this).val()); } );\n"];
+        [self.output appendString:@"    $('input, select').on('blur', function() { canvas.CalcEingaben($(this).val()); } );\n"];
 
 
         [self.output appendString:@"  });\n"];
@@ -15199,6 +15185,41 @@ BOOL isJSExpression(NSString *s)
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
+    // Einen Getter für classroot einzubauen hat einfach nicht geklappt... es gab zu viele Ausnahmen, wo es nicht klappte
+    // Deswegen auskommentiert und classroot wird derzeit in jedem JS-Code textuell ersetzt
+    //"Object.defineProperty(HTMLElement.prototype, 'classroot', {\n"
+    //"    get : function() {\n"
+    //"\n"
+    //"        // Wir können es auch selber sein:\n"
+    //"        if ($(this).data('olel') == 'BDScheckbox' && $(this).data('classroot')) {\n"
+    //"            return this;\n"
+    //"        }\n"
+    //"\n"
+    //"\n"
+    //"        var p = $(this).parents('[data-classroot]');\n"
+    //"\n"
+    //"\n"
+    //"        if (p.length == 1) {\n"
+    //"            return p.get(0);\n"
+    //"        }\n"
+    //"        else if (p.length == 2) {\n"
+    //"\n"
+    //"\n"
+    //"            if (this.id == 'dlgsummenwerte_nicedialog_2' || this.id == 'htmlwin_2') {\n"
+    //"                return p.get(1);\n"
+    //"            }\n"
+    //"\n"
+    //"            return p.get(0);\n"
+    //"\n"
+    //"        } else { // Alles ab 3\n"
+    //"\n"
+    //"            return p.get(0);\n"
+    //"        }\n"
+    //"    },\n"
+    //"    /* READ-ONLY set : , */\n"
+    //"    enumerable : false,\n"
+    //"    configurable : true\n"
+    //"});\n"
     "\n"
     "\n"
     "\n"
@@ -18472,6 +18493,7 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        addHTMLCodeOfThisClass(rueckwaertsArray[i]);\n"
     "    }\n"
+    // "    $(id).attr('data-classroot','true');\n"
     "\n"
     "\n"
     "    // Durchlauf 2: Alle selbst definierten Attribute (und Methoden) werden an das Element gebunden\n"

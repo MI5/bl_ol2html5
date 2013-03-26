@@ -6477,99 +6477,68 @@ didStartElement:(NSString *)elementName
 
         // http://www.openlaszlo.org/lps4.9/docs/reference/ <method> => s. Attribut 'name'
         // Deswegen bei canvas und library 'method' als Funktionen global verfügbar machen UND an canvas binden.
-        // => Das ist nach einem OL-Code-Test mit 4.9 definitiv NICHT so.
+        // => Das ist nach einem OL-Code-Test mit 4.9 definitiv nicht so.
         // Methoden direkt in <canvas> stecken NUR im canvas-Objekt und sind NICHT global.
         // Deswegen gilt: Methoden stets an das umgebende Objekt koppeln. Punkt.
-
-        // Hier drin sammle ich erstmal die Ausgabe
-        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
-
-
-        [o appendFormat:@"\n  // Binding a method on this object (objecttype: %@)\n", elemTyp];
-
-
-        NSString *benutzMich = @""; // Um nur einen s für dataset, datapointer und datapath zu haben
 
 
         if ([elemTyp isEqualToString:@"canvas"] || [elemTyp isEqualToString:@"library"])
         {
-            [o appendString:@"  "];
-
+            // Sonst wäre es 'element1'. Letzlich egal, weil 'element1' === 'canvas', aber so ist es "sprechender".
             elem = @"canvas";
         }
-        else
+
+        // Auch Datasets können Methoden haben. In so einem Fall immer an das letzte Dataset binden, nicht an die ID.
+        // Denn Datasets werden unter Umständen auch per 'name'-Attribut angesprochen! (und nicht per id)
+        if ([elemTyp isEqualToString:@"dataset"])
         {
-            // Tja... auch Datasets können jetzt Methoden haben...
-            // In so einem Fall immer an das letzte Dataset binden, nicht an die ID.
-            // Denn Datasets werden unter Umständen auch per 'name'-Attribut angesprochen! (und nicht per id)
-            // Tja....... sogar Datapointer können Methoden haben...
-            // Und ebenso datapath's... ! (dann eine Ebene weiter zurück springen, um korrektes el zu erwischen)
-            if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"])
-            {
-                if ([elemTyp isEqualToString:@"dataset"])
-                    benutzMich = self.lastUsedDataset;
-                else
-                    benutzMich = self.lastUsedNameAttributeOfDataPointer;
+            elem = self.lastUsedDataset;
+        }
 
-                [o appendFormat:@"  %@.",benutzMich];
-            }
-            else if ([elemTyp isEqualToString:@"datapath"])
-            {
-                benutzMich = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-3];
-                [o appendFormat:@"  %@.",benutzMich];
-            }
-            else
-            {
-                //NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
-                // Da ich bei canvas alle handler an den context binde, muss ich, falls in handlern
-                // methoden aufgerufen werden, diese auch direkt an den Context binden.
-                // Dies gilt auch Falls wir eine Klasse auswerten, die von drawview erbt natürlich.
-                //if ([enclosingElemTyp isEqualToString:@"drawview"] || ([enclosingElemTyp isEqualToString:@"evaluateclass"] && [self.lastUsedExtendsAttributeOfClass isEqualToString:@"drawview"]))
-                //    [o appendFormat:@"  %@.getContext('2d').",elem];
-                //else
+        // Auch Datapointer können Methoden haben...
+        if ([elemTyp isEqualToString:@"datapointer"])
+        {
+            elem = self.lastUsedNameAttributeOfDataPointer;
+        }
 
-                [o appendFormat:@"  %@.",elem];
-            }
+        // Und ebenso datapath's... (Dann eine Ebene weiter zurück springen, um korrektes Element zu erwischen)
+        if ([elemTyp isEqualToString:@"datapath"])
+        {
+            elem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-3];
         }
 
 
-        [o appendFormat:@"%@ = function(%@)\n  {\n",[attributeDict valueForKey:@"name"],args];
 
-        // Parallel hierein:
-        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-        {
-            [self.directMethodsOfClassOutput appendFormat:@"    %@: function(%@) {\n",[attributeDict valueForKey:@"name"],args];
-        }
+        // Hier drin sammle ich erstmal die Ausgabe
+        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
+        [o appendFormat:@"\n  // Binding a method on this object (objecttype: %@)\n", elemTyp];
 
-        if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"] || [elemTyp isEqualToString:@"datapath"])
-        {
-            [o appendFormat:@"    with (%@) {\n",benutzMich];
-        }
-        else
-        {
-            [o appendFormat:@"    with (%@) {\n",elem];
-        }
+        [o appendFormat:@"  %@.%@ = function(%@)\n  {\n",elem,[attributeDict valueForKey:@"name"],args];
 
+        [o appendFormat:@"    with (%@) {\n",elem];
 
         // Falls es default values für die Argumente gibt, muss ich diese hier setzen
         if (![defaultValues isEqualToString:@""])
-        {
             [o appendFormat:@"%@\n",defaultValues];
 
 
-            if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-            {
+        // Wenn wir eine Klasse auswerten und auf der innersten Ebene sind (direkte Methoden der Klasse),
+        // gesondertes sammeln der Methoden (damit ich sie nicht als String auswerten muss)
+        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && self.verschachtelungstiefe == 2)
+        {
+            [self.directMethodsOfClassOutput appendFormat:@"    %@: function(%@) {\n",[attributeDict valueForKey:@"name"],args];
+
+            if (![defaultValues isEqualToString:@""])
                 [self.directMethodsOfClassOutput appendFormat:@"%@\n",defaultValues];
-            }
+
+            [self.directMethodsOfClassOutput appendFormat:@"      with (this) {\n"];
         }
-
-
         // jQueryOutput0, damit es noch vor den Computed Values und Constraint Values bekannt ist
         // Denn diese greifen u. U. schon auf Methoden zu
         // Sogar jsOutput und damit noch früher! Damit der 'oninit'-Code auf die Methoden zugreifen kann!
         // (Der 'oninit'-Code steckt ja auch in jQueryOutput0, wurde aber u. U. schon davor geschrieben)
-        if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"] || [elemTyp isEqualToString:@"datapath"])
+        else if ([elemTyp isEqualToString:@"dataset"] || [elemTyp isEqualToString:@"datapointer"] || [elemTyp isEqualToString:@"datapath"])
         {
             [self.jQueryOutput0 appendString:o];
         }
@@ -8113,7 +8082,7 @@ BOOL isJSExpression(NSString *s)
             // Das letzte Komma wieder entfernen:
             rekursiveRueckgabeDirekteMethodenDerKlasse = [rekursiveRueckgabeDirekteMethodenDerKlasse substringToIndex:[rekursiveRueckgabeDirekteMethodenDerKlasse length] - 2];
 
-            [self.jsOLClassesOutput appendString:@"  this.directMethods = {\n"];
+            [self.jsOLClassesOutput appendString:@"  this.methods = {\n"];
             [self.jsOLClassesOutput appendString:rekursiveRueckgabeDirekteMethodenDerKlasse];
             [self.jsOLClassesOutput appendString:@"\n  }\n\n"];
         }
@@ -8957,15 +8926,23 @@ BOOL isJSExpression(NSString *s)
         }
 
         s = [self modifySomeExpressionsInJSCode:s];
-        // In String auftauchende '\n' müssen ersetzt werden, sonst JS-Error. Gilt das sogar global?
+        // In String auftauchende '\n' müssen ersetzt werden, sonst JS-Error.
         //s = [s stringByReplacingOccurrencesOfString:@"\\n" withString:@"\\\\n"];
         // Puh, das war ein collectedClasses-Problem. Strings müssen untouched bleiben hier.
 
 
-        // Damit er in jeder Code-Zeile korrekt einrückt
-        s = [NSString stringWithFormat:@"  %@",s]; // Erste Zeile um 2 Leerzeichen ergänzen
-        s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\n     "];
-
+        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && self.verschachtelungstiefe == 1)
+        {
+            // Damit er in jeder Code-Zeile korrekt einrückt
+            s = [NSString stringWithFormat:@"    %@",s]; // Erste Zeile um 4 Leerzeichen ergänzen
+            s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\n       "];
+        }
+        else
+        {
+            // Damit er in jeder Code-Zeile korrekt einrückt
+            s = [NSString stringWithFormat:@"  %@",s]; // Erste Zeile um 2 Leerzeichen ergänzen
+            s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\n     "];
+        }
 
 
         NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-1];
@@ -8982,45 +8959,6 @@ BOOL isJSExpression(NSString *s)
         NSLog([NSString stringWithFormat:@"Modified code changed to in method: \n**********\n%@\n**********",s]);
 
 
-        // Hier drin sammle ich erstmal die Ausgabe
-        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
-
-
-        [o appendFormat:@"    %@",s];
-
-
-
-        // Derzeit: Wenn wir in einer Klasse sind zusätzlich die direkten Methoden ausgeben in:
-        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-        {
-            // ToDo: Erst eliminieren, dass classroot ersetzt wird in Methoden.
-            // Ich habe zuvor alle Vorkommen von classroot durch den replace-String ersetzt
-            // Aber für die Nicht-String-Methoden ersetze ich es nun wieder durch this.
-            // So dass für alle direkten Methoden letzlich classroot zu this wird
-            s = [self inString:s searchFor:ID_REPLACE_STRING andReplaceWith:@"this" ignoringTextInQuotes:YES];
-
-            [self.directMethodsOfClassOutput appendFormat:@"    %@",s];
-            [self.directMethodsOfClassOutput appendString:@"\n    },\n"];
-        }
-
-
-
-        // Einmal extra schließen wegen 'with (x)'
-        [o appendString:@"\n    }"];
-        [o appendString:@"\n  }\n"];
-
-
-        // Falls wir in canvas/library sind, dann muss es nicht nur global verfügbar sein,
-        // sondern auch über 'canvas.' ansprechbar sein.
-        // Begründung:
-        // http://www.openlaszlo.org/lps4.9/docs/reference/ <method> => s. Attribut 'name'
-        if ([enclosingElemTyp isEqualToString:@"canvas"] || [enclosingElemTyp isEqualToString:@"library"])
-        {
-            [o appendString:@"  // Diese Methode ebenfalls an canvas binden\n"];
-            [o appendFormat:@"  canvas.%@ = %@;\n",self.lastUsedNameAttributeOfMethod,self.lastUsedNameAttributeOfMethod];
-        }
-
-
         if ([self.lastUsedNameAttributeOfMethod isEqualToString:@"init"])
         {
             // in der init-Methode werden u. U. computedValues-Werte überschrieben,
@@ -9032,14 +8970,38 @@ BOOL isJSExpression(NSString *s)
         }
 
 
-        // jQueryOutput0 (Begründung siehe öffnendes Tag)
-        // jsOutput (Begründung siehe öffnendes Tag)
-        if ([enclosingElemTyp isEqualToString:@"dataset"] || [enclosingElemTyp isEqualToString:@"datapointer"] || [enclosingElemTyp isEqualToString:@"datapath"])
+        // Hier drin sammle ich erstmal die Ausgabe
+        NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
+
+
+        [o appendFormat:@"    %@",s];
+
+        // Einmal extra schließen wegen 'with (x)'
+        [o appendString:@"\n    }"];
+        [o appendString:@"\n  }\n"];
+
+
+
+        // Wenn wir in einer Klasse sind die direkten Methoden ausgeben in:
+        if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && self.verschachtelungstiefe == 1)
         {
+            // Ich habe eben alle Vorkommen von classroot durch den replace-String ersetzt
+            // Aber für die Nicht-String-Methoden ersetze ich es nun wieder durch this.
+            // So dass für alle direkten Methoden letzlich classroot zu this wird (wie es auch sein muss).
+            s = [self inString:s searchFor:ID_REPLACE_STRING andReplaceWith:@"this" ignoringTextInQuotes:YES];
+
+            [self.directMethodsOfClassOutput appendFormat:@"    %@",s];
+            [self.directMethodsOfClassOutput appendString:@"\n      }"];
+            [self.directMethodsOfClassOutput appendString:@"\n    },\n"];
+        }
+        else if ([enclosingElemTyp isEqualToString:@"dataset"] || [enclosingElemTyp isEqualToString:@"datapointer"] || [enclosingElemTyp isEqualToString:@"datapath"])
+        {
+            // Begründung siehe öffnendes Tag
             [self.jQueryOutput0 appendString:o];
         }
         else
         {
+            // Begründung siehe öffnendes Tag
             [self.jsOutput appendString:o];
         }
     }
@@ -13421,7 +13383,7 @@ BOOL isJSExpression(NSString *s)
     "// lz.History is the single instance of the class lz.HistoryService.\n"
     "lz.History = new lz.HistoryService();\n"
     "// Debug is the single instance of the class lz.DebugService.\n"
-    "Debug = new lz.DebugService();\n"
+    "var Debug = new lz.DebugService();\n"
     "\n"
     "lz.ModeManager = new lz.ModeManagerService();\n"
     "\n"
@@ -17857,67 +17819,39 @@ BOOL isJSExpression(NSString *s)
     "// super_                                              //\n"
     "// Ermöglicht Zugriff auf alle Methoden des Objekts,   //\n"
     "// von welchem geerbt wurde.                           //\n"
-    "// ...ist vermutlich noch etwas unausgereift... To Do  //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'super_', {\n"
     "    get : function(){\n"
-    "        if ($(this).data('olel') === 'BDSgridcolumn')\n"
-    "        {\n"
-    "            // So far doesn't work... with 'BDSgridcolumn'\n"
-    "            return { init: function() {} };\n"
-    "        }\n"
+    // Keine Ahnung mehr wo das her kam, es scheint auch so zu klappen und nicht mehr notwendig zu sein
+    //"        if ($(this).data('olel') === 'BDSgridcolumn')\n"
+    //"        {\n"
+    //"            // So far doesn't work... with 'BDSgridcolumn'\n"
+    //"            return { init: function() {} };\n"
+    //"        }\n"
+    "        // 'init' und 'construct' müssen vorhanden sein, selbst wenn nicht von der übergeordneten Klasse definiert\n"
+    "        var returnMethods = { init: function() {}, construct: function() {} };\n"
     "\n"
+    "        var superMethods = (new oo[$(this).data('olel')]('')).inherit.methods;\n"
     "\n"
-    "        var superMethods_ = { init: function() {}, construct: function() {} };\n"
+    //"for(var prop in superMethods) {\n"
+    //"    if (superMethods.hasOwnProperty(prop) && typeof superMethods[prop] === 'function') {\n"
+    //"        // Mit korrigiertem this!!! Ein evtl. benutztes 'this' verweist sonst noch auf den Vorfahren.\n"
+    //"        returnMethods[prop] = superMethods[prop].bind(this); // Durch das bind wird es im alert zu 'native code'\n"
+    //"    }\n"
+    //"}\n"
+    // Effizienter wohl über Object.keys:
+    "        // Um das 'this' in der Funktion erreichen zu können (in der Funktion gilt ein anderes this)\n"
+    "        var me = this;\n"
     "\n"
-    "        var temp = new oo[$(this).data('olel')]('');\n"
-    "\n"
-    "        var garbage = {};\n"
-    "        var garbage_1 = {};\n"
-    "        var garbage_2 = {};\n"
-    "        var garbage_3 = {};\n"
-    "        var garbage_4 = {};\n"
-    "        var garbage_5 = {};\n"
-    "        var garbage_6 = {};\n"
-    "\n"
-    "        var s = replaceID(temp.inherit.contentJS,'garbage','superMethods_');\n"
-    "\n"
-    "        // Der braucht noch etwas Nachhilfe\n"
-    "        if ($(this).data('olel') === 'rollUpDown')\n"
-    "        {\n"
-    "            // Alles was ab '// Ein Animator' kommt, muss ich abschneiden vom String,\n"
-    "            // damit ich 'rollUpDown' auswerten kann.\n"
-    "            s = s.substring(0,s.indexOf('// Ein Animator'));\n"
-    "\n"
-    "            // Um zuverhindern dass er in uns wiederum 'super_' aufruft\n"
-    "            s = s.replace(/super_.init/g,'//');\n"
-    "        }\n"
-    "\n"
-    "        eval(s);\n"
-    "\n"
-    "        for(var prop in superMethods_) {\n"
-    "            if (superMethods_.hasOwnProperty(prop) && typeof superMethods_[prop] === 'function') {\n"
+    "        if (superMethods) {\n"
+    "            Object.keys(superMethods).forEach(function(key) {\n"
     "                // Mit korrigiertem this!!! Ein evtl. benutztes 'this' verweist sonst noch auf den Vorfahren.\n"
-    "                superMethods_[prop] = superMethods_[prop].bind(this); // Durch das bind wird es im alert zu 'native code'\n"
-    "            }\n"
+    "                // Hinweis: Durch das bind wird es im alert zu 'native code', also nicht erschrecken.\n"
+    "                returnMethods[key] = superMethods[key].bind(me);\n"
+    "            });\n"
     "        }\n"
     "\n"
-    "        // Und auch alle Methoden übertragen, die korrekterweise bereits nicht als string vorliegen\n"
-    "        if ($(this).data('olel') === 'basewindow')\n"
-    "        {\n"
-    "            // hmm, why ist es temp.methods und nicht temp.inherit.methods?\n"
-    "            if (temp.methods)\n"
-    "            {\n"
-    "                Object.keys(temp.methods).forEach(function(key)\n"
-    "                {\n"
-    "                    superMethods_[key] = temp.methods[key];\n"
-    "                });\n"
-    "            }\n"
-    "        }\n"
-    "\n"
-    "        // Wird als erstes aufgerufen, deswegen hier zum testen\n"
-    "        // Diese Abfrage muss dann später entfernt werden\n"
-    "        return superMethods_;\n"
+    "        return returnMethods;\n"
     "    },\n"
     "    /* READ-ONLY set : , */\n"
     "    enumerable : false,\n"
@@ -18163,19 +18097,6 @@ BOOL isJSExpression(NSString *s)
     "    // Muss in interpretObject() stecken, damit ich Zugriff auf die var onInitFunc habe\n"
     "    // Bei Objekten gilt 'call by reference', deswegen kann ich 'id' in der Funktion erweitern\n"
     "    function assignAllAttributesAndMethods(id, rueckwaertsArray, attrs) {\n"
-    "        if (id.id === 'globalcalendar')\n"
-    "        {\n"
-    "            // Legacy bzw. To Do...\n"
-    "            // Muss ich vorher reinbauen diese Methode, solange ich die String-Methoden nicht vor dem setzen der Vars auswerte.\n"
-    "            id.setCurrentdate = function() {\n"
-    "                var today = new Date();\n"
-    "                this.currentYear  = today.getFullYear();\n"
-    "                this.currentMonth = today.getMonth();\n"
-    "                this.currentDay   = today.getDate();\n"
-    "                return today;\n"
-    "            }\n"
-    "        }\n"
-    "\n"
     "        for (var i = 0;i<rueckwaertsArray.length;i++)\n"
     "        {\n"
     "            var obj = rueckwaertsArray[i];\n"

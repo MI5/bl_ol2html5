@@ -1548,12 +1548,22 @@ void OLLog(xmlParser *self, NSString* s,...)
 {
     if ([attributeDict valueForKey:@"name"])
     {
+        self.attributeCount++;
+
+
+        if ([self.enclosingElements count] == 1 && [[self.enclosingElements objectAtIndex:0] isEqualToString:@"canvas"])
+        {
+            // Dann hat das canvas-Element ein Name-Attribut.
+            // Das ist wohl gültig, aber wird hier nicht weiter berücksichtigt, deswegen dann einfach raus.
+            return;
+        }
+
+
         NSString *name = [attributeDict valueForKey:@"name"];
 
         NSString *elemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
 
         NSLog(@"Setting the attribute 'name' as global JS variable or as hook in the parent.");
-        self.attributeCount++;
 
         // 'name'-Attribute wurden bisher immer global gemacht. Dies ist aber nicht per se korrekt.
         // Nur wenn die View auf erster Ebene ist, muss das name-Attribut weiterhin global bleiben!
@@ -6722,7 +6732,7 @@ didStartElement:(NSString *)elementName
         // Alles was in init ist, einfach direkt ausführen
         // Falls es doch mal das init eines windows (canvas) sein sollte, nicht schlimm,
         // denn wir führen schon von vorne herein den gesamten Code in $(window).load(function() aus!
-        // Ich muss das bei DOM-Elementen so frühzeitig ausführen, sonst wird 'initxml' bei Taango zu spät ausgeführt
+        // Ich muss das bei DOM-Elementen so frühzeitig ausführen, sonst wird 'initxml' bei Taxango zu spät ausgeführt
         // Wenn wir aber in einer Klasse sind, dann gilt:
         // Seitdem ich alle handler in jQueryOutput0 ausgebe, sind die in der oninit-Methode benutzten Methoden noch
         // nicht alle bekannt. Deswegen bei Klassen als reguläre oninit-Handler setzen und  später 'oninit' triggern.
@@ -10868,10 +10878,10 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            $(this).triggerHandler('onchecked',$(this).is(':checked')); // <-- darauf lauschen die constraints bei Checkboxen!\n"
     "        });\n"
-    "\n"
-    "        // To Do - Eventuell hinfällig, wenn Checkbox als Klasse ausgewertet?\n"
-    "        // Den Mousecursor ändern vom benachbarten span\n"
-    "        $(this).next().css('cursor','pointer');\n"
+    //"\n"
+    //"        // Wohl hinfällig, seit Checkbox als Klasse ausgewertet:\n"
+    //"        // Den Mousecursor ändern vom benachbarten span\n"
+    //"        $(this).next().css('cursor','pointer');\n"
     "    });\n"
     "\n"
     "    // Davon unabhängig: Triggern, damit da dran hängende Constraints die Änderung mitbekommen\n"
@@ -10889,13 +10899,13 @@ BOOL isJSExpression(NSString *s)
     "            // $(this).triggerHandler('onmyValue',$(this).val()); // Ich denke das ist unnötig\n"
     "        });\n"
     "    });\n"
-    "\n"
-    "    // To Do - Eventuell hinfällig, wenn Radiobutton als Klasse ausgewertet?\n"
-    "    // Auch bei radio-buttons den Cursor stets anpassen vom benachbarten Text\n"
-    "    $('input[type=radio]').each( function() {\n"
-    "        // Den Mousecursor ändern vom benachbarten span\n"
-    "        $(this).next().css('cursor','pointer');\n"
-    "    });\n"
+    //"\n"
+    //"    // Wohl hinfällig, seit Radiobutton als Klasse ausgewertet:\n"
+    //"    // Auch bei radio-buttons den Cursor stets anpassen vom benachbarten Text\n"
+    //"    $('input[type=radio]').each( function() {\n"
+    //"        // Den Mousecursor ändern vom benachbarten span\n"
+    //"        $(this).next().css('cursor','pointer');\n"
+    //"    });\n"
     "}\n"
     "\n"
     "\n"
@@ -11243,12 +11253,6 @@ BOOL isJSExpression(NSString *s)
     "            info += '<br />';\n"
     "  }\n"
     "  globalhelp.info.setAttribute_('text',info)\n"
-    "\n"
-    "\n"
-    "\n"
-    //"  // Zusatz-Code -  Das hier muss noch zu ECHTEM generierten Code werden // To Do\n"
-    //"  $(globalhelp_6).height(globalhelp._inner.height+35-35);\n"
-    //"  $(globalhelp_10).css('top',globalhelp._inner.height+50-50+15);\n"
     "}\n"
     "\n"
     "\n"
@@ -12004,7 +12008,8 @@ BOOL isJSExpression(NSString *s)
     "            return this.nextSibling;\n"
     "        }\n"
     "        this.getOffset = function() {\n"
-    "            return 'To Do';\n"
+    "            if (!this.parentNode) return 0;\n"
+    "            return -1;\n"
     "        }\n"
     "        this.getParent = function() {\n"
     "            return this.parentNode;\n"
@@ -13602,9 +13607,38 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "    return p.get(0);\n"
-    //"    }\n"
     "}\n"
     "});\n"
+    "\n"
+    "\n"
+    "//////////////////////////////////////////////////////////\n"
+    "// Passt toString() für alle Elemente an die OL-Logik an//\n"
+    "//////////////////////////////////////////////////////////\n"
+    "HTMLElement.prototype.toString = function() {\n"
+    "    var olel = $(this).data('olel');\n"
+    "    var s = '';\n"
+    "\n"
+    "    if (olel == 'canvas') {\n"
+    "        s = 'This is the canvas';\n"
+    "    }\n"
+    "    else if (olel == 'text') {\n"
+    "        s = 'LzText: ' + $(this).html();\n"
+    "    } else {\n"
+    "        s = olel;\n"
+    "\n"
+    "        if (this.name)\n"
+    "            s = s + ' name: ' + this.name;\n"
+    "\n"
+    "        // Shows even the internal id, but that's okay.\n"
+    "        if (this.id)\n"
+    "            s = s + ' id: ' + this.id;\n"
+    "    }\n"
+    "\n"
+    "\n"
+    "\n"
+    "\n"
+    "    return s;\n"
+    "};\n"
     "\n"
     "\n"
     "//////////////////////////////////////////////////////////\n"
@@ -13632,7 +13666,7 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "\n"
     "    function preload(arrayOfImages) {\n"
-    "        $(arrayOfImages).each(function(){\n"
+    "        $(arrayOfImages).each(function() {\n"
     "            $('<img/>')[0].src = this;\n"
     "            // Alternatively you could use:\n"
     "            // (new Image()).src = this;\n"
@@ -13751,7 +13785,15 @@ BOOL isJSExpression(NSString *s)
     //"            $(me).html(value);\n"
     // Wegen Bsp. 37.2 wohl eher text()
     // ne, muss html() bleiben, damit keine <br>'s auftauchen auf der Taxango-Startseite.
-    "            $(me).html(value);\n"
+    "            if (typeof value === 'object')\n"
+    "            {\n"
+    "                // jQuery rafft es nicht, bei Objekten toString() zu nehmen, deswegen hier explizit toString aufrufen\n"
+    "                $(me).html(value.toString());\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                $(me).html(value);\n"
+    "            }\n"
     "\n"
     "            if (me.resize)\n"
     "            {\n"
@@ -15127,7 +15169,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'nodeLevel', {\n"
     "    get : function() {\n"
-    "        return 3; // To Do\n"
+    "        return $(this).parents('*').not('body,html').length;\n"
     "    },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -15310,8 +15352,11 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// getSelectionPosition()                              //\n"
     "/////////////////////////////////////////////////////////\n"
-    "// To Do: Wenn das Element keinen Focus hat, eigentlich -1 zurückliefern\n"
     "var getSelectionPositionFunction = function () {\n"
+    "    // Wenn wir keinen Focus haben, müssen wir -1 zurückliefern\n"
+    "    if (!$(this).is(':focus'))\n"
+    "        return -1;\n"
+    "\n"
     "    if ('selectionStart' in this) {\n"
     "        // Standard-compliant browsers\n"
     "        return this.selectionStart;\n"

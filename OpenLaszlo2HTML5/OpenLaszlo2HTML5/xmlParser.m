@@ -1913,7 +1913,10 @@ void OLLog(xmlParser *self, NSString* s,...)
 
             NSMutableString *t = [NSMutableString stringWithFormat:@"%@",s];
             [t insertString:defaultValues atIndex:[match rangeAtIndex:0].location+[match rangeAtIndex:0].length-n_entfernteZeichen];
-            s = [NSString stringWithFormat:t];
+            // s = [NSString stringWithFormat:t];
+            // wtf... nie niemals darf man das tun! Dann werden alle %-Zeichen verschluckt und der String wird verändert
+            // Alternative wäre "stringWithString"
+            s = [NSString stringWithFormat:@"%@",t];
         }
     }
 
@@ -6697,7 +6700,6 @@ didStartElement:(NSString *)elementName
         }
 
 
-
         // Hier drin sammle ich erstmal die Ausgabe
         NSMutableString *o = [[NSMutableString alloc] initWithString:@""];
 
@@ -9220,25 +9222,28 @@ BOOL isJSExpression(NSString *s)
 
 
 
-// This method can get called multiple times for the
-// text in a single element
+// This method can get called multiple times for the text in a single element
 - (void)parser:(NSXMLParser *)parser foundCharacters:(NSString *)string
 {
     [self.textInProgress appendString:string];
 }
 
 
-
+// This method can get called multiple times for the text in a single CDATABlock within an element
 - (void)parser:(NSXMLParser *)parser foundCDATA:(NSData *)CDATABlock
 {
     NSString *s = [[NSString alloc] initWithData:CDATABlock encoding:NSUTF8StringEncoding];
-    self.textInProgress = [[NSMutableString alloc] initWithString:s];
+    // self.textInProgress = [[NSMutableString alloc] initWithString:s];
+    // Puh, erst April 2013 diesen Bug entdeckt... natürlich muss ich self.textInProgress appenden... oh man
+    [self.textInProgress appendString:s];
+
 
     // Müsste ich machen gemäß Bsp. 21.5, aber bricht einfach zu viel
+    // To Do - Klappt doch vielleicht jetzt seit dem Fix vom April 2013
     /*
     NSString *former_ms = [self escapeCDATAChars:[NSString stringWithString:self.textInProgress]];
     self.textInProgress = [NSMutableString stringWithString:former_ms];
-     */
+    */
 }
 
 

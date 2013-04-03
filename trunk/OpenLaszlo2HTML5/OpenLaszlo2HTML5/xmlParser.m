@@ -2,6 +2,7 @@
 //  xmlParser.m
 //  OpenLaszlo2HTML5
 //
+// Hinweise:
 // - IE-Support erst ab IE 8 (weil IE 7 und IE 6 CSS-Angabe inherit nicht unterstützen)
 //
 //
@@ -52,6 +53,8 @@ BOOL ownSplashscreen = NO;
 
 #import "xmlParser.h"
 
+#import "xmlParserPreCollectClasses.h"
+
 #import "globalVars.h"
 
 #import "ausgabeText.h"
@@ -72,11 +75,10 @@ BOOL ownSplashscreen = NO;
 
 @property (strong, nonatomic) NSMutableString *log;
 
-@property (strong, nonatomic) NSURL * pathToFile;
+@property (strong, nonatomic) NSURL *pathToFile;
 
 @property (strong, nonatomic) NSMutableArray *items;
 
-@property (strong, nonatomic) NSMutableDictionary *bookInProgress;
 @property (strong, nonatomic) NSString *keyInProgress;
 @property (strong, nonatomic) NSMutableString *textInProgress;
 
@@ -209,7 +211,6 @@ BOOL ownSplashscreen = NO;
 
 
 @property (nonatomic) BOOL weAreCollectingTheCompleteContentInClass;
-//auch ein 2. und 3., sonst gibt es Interferenzen wenn ein zu skippendes Element in einem anderen zu skippenden liegt
 
 
 // Wenn wir <class> auswerten dann haben wir generelle Klassen und dürfen keine
@@ -251,8 +252,7 @@ BOOL ownSplashscreen = NO;
 
 @synthesize pathToFile = _pathToFile;
 
-@synthesize items = _items,
-bookInProgress = _bookInProgress, keyInProgress = _keyInProgress, textInProgress = _textInProgress;
+@synthesize items = _items, keyInProgress = _keyInProgress, textInProgress = _textInProgress;
 
 @synthesize enclosingElements = _enclosingElements, enclosingElementsIds = _enclosingElementsIds;
 
@@ -335,7 +335,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 -(id)init
 {
-    @throw [NSException exceptionWithName:NSInternalInconsistencyException reason:@"-init is not a valid initializer for the class xmlParser. use initWith:(NSURL*) pathToFile instead" userInfo:nil];
+    @throw [NSException exceptionWithName:NSInternalInconsistencyException reason:@"-init is not a valid initializer for the class xmlParser. Use initWith:(NSURL*) pathToFile instead." userInfo:nil];
 
     return [self initWith:[NSURL URLWithString:@""]];
 }
@@ -343,10 +343,29 @@ void OLLog(xmlParser *self, NSString* s,...)
 // Eigener Konstruktor:
 -(id)initWith:(NSURL*) pathToFile
 {
-    return [self initWith:pathToFile recursiveCall:NO];
+    // Vorab einmal komplett mit einem eigenen Parser die Klassennamen aufsammeln
+    xmlParserPreCollectClasses *x = [[xmlParserPreCollectClasses alloc] initWith:pathToFile];
+    NSArray* result = [x startWithString:@""];
+
+    // Vorher initialisieren, damit ich im Anschluss allFoundClasses setzen kann,
+    // ohne das es überschrieben wird.
+    id me = [self initWith:pathToFile recursiveCall:NO];
+
+    // Ich übernehme das Ergebnis direkt in allFoundClasses. Damit sind alle Klassen und deren
+    // unmittelbare Attribute vorab bekannt. Wenn ich nun alles nochmals durchlaufe und dann "regulär"
+    // auf die Klassen treffe, werden die Einträge einfach überschrieben. Ich kann die Ergebnisse nicht
+    // direkt übernehmen, da per <attribute /> gesetzte Attribute erst hier ergänzt werden.
+    // Ein so gesetztes initstage=defer-Attribut geht somit evtl. verloren... Aber auch falls
+    // von der Klasse von der geerbt wird ein initstage=defer-Attribut gesetzt wird, geht dieses
+    // ja verloren.... Hmmm... Deswegen erstmal kein Fix dafür.
+    // (Falls es überhaupt vererbbar ist und somit ein Bug wäre).
+    [self.allFoundClasses setDictionary:[result objectAtIndex:0]];
+
+    return me;
 }
 
-// Eigener Konstruktor, den rekursive Instanzen aufrufen:
+// Eigener Konstruktor, den rekursive Instanzen aufrufen
+// Ich muss manchmal rekursive Aufrufe erkennen können!
 -(id)initWith:(NSURL*) pathToFile recursiveCall:(BOOL)isRecursive
 {
     if (self = [super init])
@@ -455,8 +474,6 @@ void OLLog(xmlParser *self, NSString* s,...)
     BOOL fileExists = [[NSFileManager defaultManager] fileExistsAtPath:[self.pathToFile path]];
     if (!fileExists)
     {
-        // NSLog(@"XML-File not found. Did you initialise with initWith: pathTofile?");
-
         // Ich frage den String in diesem Array beim verlassen der Rekursion ab,
         // falls er zwischendurch mal eine Datei nicht findet.
         NSArray *r = [NSArray arrayWithObjects:@"XML-File not found", nil];
@@ -603,7 +620,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             NSString *varName = [s substringWithRange:matchRange];
 
             // Dann noch eventuelle spezielle Wörter austauschen
-            varName = [self modifySomeExpressionsInJSCode:varName];
+            varName = [self modifySomeExpressionsInJSCode:varName alsoModifyWhitespaces:YES];
 
             // Falls ganz vorne jetzt 'immediateparent.' / 'parent.' steht, dann muss ich unser aktuelles Element
             // davorsetzen. Weil jetzt nochmal extra mit 'with () {}' zu arbeiten ist wohl nicht nötig
@@ -764,7 +781,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
         NSString *e = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
-        e = [self modifySomeExpressionsInJSCode:e];
+        e = [self modifySomeExpressionsInJSCode:e alsoModifyWhitespaces:YES];
         // Escape ' in e
         e = [e stringByReplacingOccurrencesOfString:@"'" withString:@"\\\'"];
 
@@ -1648,7 +1665,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 - (NSString*) makeTheComputedValueComputable:(NSString*)s
 {
     s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
-    s = [self modifySomeExpressionsInJSCode:s];
+    s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
 
     // s = [NSString stringWithFormat:@"%@.%@",self.zuletztGesetzteID,s];
@@ -1672,7 +1689,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 - (NSString*) makeTheComputedValueComputable:(NSString*)s withAndBindEquals:(NSString*)scope
 {
     s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
-    s = [self modifySomeExpressionsInJSCode:s];
+    s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
     s = [NSString stringWithFormat:@"(function() { with (%@) { return %@; } }).bind(%@)()",scope,s,scope];
 
@@ -1685,7 +1702,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 // Dazu muss ich dann nur das this immer aktualisieren, da es auch passieren kann, dass
 // setAttribute ohne vorangehende Variable aufgerufen wird.
 // Neu: Nicht mehr nötig. Wir beachten einfach den Scope von dem aus es aufgerufen wurde.
-- (NSString*) modifySomeExpressionsInJSCode:(NSString*)s
+- (NSString*) modifySomeExpressionsInJSCode:(NSString*)s alsoModifyWhitespaces:(BOOL)b
 {
     if (s == nil)
         [self instableXML:@"Sag mal, so kannst du mich nicht aufrufen. Brauche schon nen String!"];
@@ -1749,16 +1766,16 @@ void OLLog(xmlParser *self, NSString* s,...)
     // super ist nicht erlaubt in JS (reserviert) und gibt es auch noch nicht.
     s = [self inString:s searchFor:@"super" andReplaceWith:@"super_" ignoringTextInQuotes:YES];
 
-
-    // Remove leading and ending Whitespaces and NewlineCharacters
-    s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
-
-    // Leerzeichen zusammenfassen, aber nicht solche in Strings natürlich
-    while ([s rangeOfString:@"  "].location != NSNotFound)
+    if (b)
     {
-        //s = [s stringByReplacingOccurrencesOfString:@"  " withString:@" "];
-        s = [self inString:s searchFor:@"  " andReplaceWith:@" " ignoringTextInQuotes:YES];
+        // Remove leading and ending Whitespaces and NewlineCharacters
+        s = [s stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+        // Leerzeichen zusammenfassen, aber nicht solche in Strings natürlich
+        while ([s rangeOfString:@"  "].location != NSNotFound)
+        {
+            s = [self inString:s searchFor:@"  " andReplaceWith:@" " ignoringTextInQuotes:YES];
+        }
     }
 
 
@@ -1800,6 +1817,108 @@ void OLLog(xmlParser *self, NSString* s,...)
 }
 
 
+// Wandelt vor allem Funktionsköpfe mit Defaultvalues in JS-kompatiblen Code um
+// Das war ein hartes Stück Arbeit...
+- (NSString*) convertSciptCodeToJSCode:(NSString*)s
+{
+    // Natürlich auch hier setAttribute durch setAttribute_ ersetzen usw.
+    // Damit ich Dateien nicht nur wegen ein paar Whitespaces austauschen muss,
+    // diese in diesem Fall nicht korrigieren.
+    s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:NO];
+
+
+
+    // Jetzt wird's richtig schmutzig...
+    // Ich muss defaultarguments raus-regexpen, weil es die in JS nicht gibt.
+    NSError *error = NULL;
+    // Öffnende Klammer der Funktion mitnehmen, damit ich später die defaultArgs injecten kann
+    // * nach dem Leerzeichen und dem \w und kein +! Nur so matcht er auch anonyme Funktionen ohne Namen
+    NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:@"function[ ]*\\w*\\((.+)\\)\\s\\{" options:NSRegularExpressionCaseInsensitive error:&error];
+
+    NSArray *matches = [regexp matchesInString:s options:0 range:NSMakeRange(0, [s length])];
+
+    for (NSTextCheckingResult *match in matches)
+    {
+        NSString *funktionskopf = [s substringWithRange:[match rangeAtIndex:0]];
+
+        NSRange argsRange = [match rangeAtIndex:1];
+
+        NSString *args = [s substringWithRange:argsRange];
+        args = [args stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        args = [args stringByReplacingOccurrencesOfString:@" " withString:@""];
+        NSLog([NSString stringWithFormat:@"Found argsString: %@. I will continue my work now.",args]);
+
+
+
+
+        // Falls es default Values gibt, muss ich diese in JS extra setzen
+        NSMutableString *defaultValues = [[NSMutableString alloc] initWithString:@""];
+
+        // Überprüfen ob es default values gibt
+        NSError *error = NULL;
+        NSRegularExpression *regexp2 = [NSRegularExpression regularExpressionWithPattern:@"([\\w]+)=([\\w']+)" options:NSRegularExpressionCaseInsensitive error:&error];
+
+        NSUInteger numberOfMatches = [regexp2 numberOfMatchesInString:args options:0 range:NSMakeRange(0, [args length])];
+        if (numberOfMatches > 0)
+        {
+            // Es kann ja auch eine Mischung geben, von sowohl Argumenten mit
+            // Defaultwerten als auch solchen ohne. Deswegen hier erstmal ohne
+            // Defaultargumente setzen und dann gleich die alle mit.
+            NSMutableString *neueArgs = [self holAlleArgumentDieKeineDefaultArgumenteSind:args];
+            NSLog([NSString stringWithFormat:@"There is/are %ld argument(s) with a default argument. I will regexp them.",numberOfMatches]);
+
+            NSArray *matches = [regexp2 matchesInString:args options:0 range:NSMakeRange(0, [args length])];
+
+            for (NSTextCheckingResult *match in matches)
+            {
+                // NSRange matchRange = [match range];
+                NSRange varNameRange = [match rangeAtIndex:1];
+                NSRange defaultValueRange = [match rangeAtIndex:2];
+
+                NSString *varName = [args substringWithRange:varNameRange];
+                NSLog([NSString stringWithFormat:@"Resulting variable name: %@",varName]);
+                NSString *defaultValue = [args substringWithRange:defaultValueRange];
+                NSLog([NSString stringWithFormat:@"Resulting default value: %@",defaultValue]);
+
+                // ... dann die Variablennamen der args neu sammeln...
+                if (![neueArgs isEqualToString:@""])
+                    [neueArgs appendString:@", "];
+
+                [neueArgs appendString:varName];
+
+                //////////////////// Default- Variablen für JS setzen - Anfang ////////////////////
+                [defaultValues appendFormat:@"\n    if(typeof(%@)==='undefined') ",varName];
+                [defaultValues appendFormat:@"%@ = %@;\n",varName,defaultValue];
+                //////////////////// Default- Variablen für JS setzen - Ende ////////////////////
+            }
+
+            // ... und hier setzen
+            // Den Funktionskopf von oben jetzt benutzen. In diesem die Argumente ersetzen...
+            NSUInteger posOeffnendeKlammer = [funktionskopf rangeOfString:@"("].location;
+            funktionskopf = [funktionskopf substringToIndex:posOeffnendeKlammer];
+            funktionskopf = [NSString stringWithFormat:@"%@(%@) {",funktionskopf,neueArgs];
+
+            // ... dann den alten Funktionskopf komplett ersetzen. Dazu auf das alte regexp von oben  zugreifen
+            // s = [regexp stringByReplacingMatchesInString:s options:0 range:NSMakeRange(0, [s length]) withTemplate:funktionskopf];
+            // Das war falsch!
+            // Der regexp umfasst ja ALLE Funktionsköpfe im Dokument, deswegen muss ich die Range
+            // einschränken auf den aktuellen Funktionskopf über [match rangeAtIndex:0].
+            s = [regexp stringByReplacingMatchesInString:s options:0 range:[match rangeAtIndex:0] withTemplate:funktionskopf];
+
+
+            // Jetzt muss ich 'nur noch' die defaultwerte injecten
+            // Dazu kurz mit einem NSMutableString arbeiten. Und wir greifen auf den 'match'
+            // und dessen Länge von ganz oben zu um die genaue Stelle zu ermitteln.
+            NSUInteger n_entfernteZeichen = [match rangeAtIndex:0].length - funktionskopf.length;
+
+            NSMutableString *t = [NSMutableString stringWithFormat:@"%@",s];
+            [t insertString:defaultValues atIndex:[match rangeAtIndex:0].location+[match rangeAtIndex:0].length-n_entfernteZeichen];
+            s = [NSString stringWithFormat:t];
+        }
+    }
+
+    return s;
+}
 
 
 - (NSString *) somePropertysNeedToBeRenamed:(NSString*)s
@@ -1975,7 +2094,7 @@ void OLLog(xmlParser *self, NSString* s,...)
         // Und deswegen kann ich removeOccurrencesofDollarAndCurlyBracketsIn und
         // modifySomeExpressionsInJSCode auch nicht in einer Methode zusammenfassen!
 
-        s = [self modifySomeExpressionsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
         NSString *showHandCursor = @"false";
         if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
@@ -1993,7 +2112,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"ondblclick"];
 
-        s = [self modifySomeExpressionsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
         NSString *showHandCursor = @"false";
         if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
@@ -2011,7 +2130,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"onfocus"];
 
-        s = [self modifySomeExpressionsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
         [self pointerEventsZulassenBeiId:idName];
         [self.jQueryOutput appendString:@"\n  // jQuery-focus-event (anstelle des Attributs onfocus)\n"];
@@ -2026,7 +2145,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"onblur"];
 
-        s = [self modifySomeExpressionsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
         [self pointerEventsZulassenBeiId:idName];
         [self.jQueryOutput appendString:@"\n  // jQuery-blur-event (anstelle des Attributs onblur)\n"];
@@ -2042,7 +2161,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"onvalue"];
 
-        s = [self modifySomeExpressionsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
         [self.jQueryOutput appendString:@"\n  // jQuery-change-event (anstelle des Attributs onchange)\n"];
         [self.jQueryOutput appendFormat:@"  $('#%@').change(function(){ with (this) { %@ } });\n",idName,s];
@@ -2056,7 +2175,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"onmousedown"];
 
-        s = [self modifySomeExpressionsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
         NSString *showHandCursor = @"false";
         if (![attributeDict valueForKey:@"showhandcursor"] || [[attributeDict valueForKey:@"showhandcursor"] isEqualToString:@"true"])
@@ -2074,7 +2193,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"onmouseup"];
 
-        s = [self modifySomeExpressionsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
 
         NSString *showHandCursor = @"false";
@@ -2093,7 +2212,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"onmouseout"];
 
-        s = [self modifySomeExpressionsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
 
         NSString *showHandCursor = @"false";
@@ -2112,7 +2231,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"onmouseover"];
 
-        s = [self modifySomeExpressionsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
 
         NSString *showHandCursor = @"false";
@@ -2131,7 +2250,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"onkeyup"];
 
-        s = [self modifySomeExpressionsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
         [self.jQueryOutput appendString:@"\n  // jQuery-keyup-event (anstelle des Attributs onkeyup)\n"];
         [self.jQueryOutput appendFormat:@"  $('#%@').keyup(function(){ with (this) { %@ } });\n",idName,s];
@@ -2145,7 +2264,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"onkeydown"];
 
-        s = [self modifySomeExpressionsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
         [self.jQueryOutput appendString:@"\n  // jQuery-keydown-event (anstelle des Attributs onkeydown)\n"];
         [self.jQueryOutput appendFormat:@"  $('#%@').keydown(function(){ with (this) { %@ } });\n",idName,s];
@@ -2159,7 +2278,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"oninit"];
 
-        s = [self modifySomeExpressionsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
         [self.jQueryOutput appendString:@"\n  // self-invoking function with with and with bind (anstelle des Attributs oninit)\n"];
         [self.jQueryOutput appendFormat:@"  (function(){ with (this) { %@ } }).bind(%@)();\n",s,idName];
@@ -2173,7 +2292,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         NSString *s = [attributeDict valueForKey:@"ondata"];
 
-        s = [self modifySomeExpressionsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
         [self.jQueryOutput appendString:@"\n  // self-invoking function with with and with bind (anstelle des Attributs ondata)\n"];
         // WARUM AUCH IMMER, muss da nochmal ein ready drum herum. Irgendwas ist
@@ -2388,7 +2507,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     NSURL *pathToFile = [NSURL URLWithString:relativePath relativeToURL:path];
 
-    // Test ob wir die Datei schin mal vorher eingebunden haben
+    // Test ob wir die Datei schon mal vorher eingebunden haben
     if ([self.allIncludedIncludes containsObject:pathToFile])
     {
         NSLog(@"Aborting recursion, because this file already was included");
@@ -2397,7 +2516,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-    // Alles bereits eingebunde in Array speichern, damit ich ausversehen <includes> doppelt inkludiere
+    // Alle bereits eingebunden Dateien abspeichern, damit ich nicht <includes> doppelt inkludiere
     [self.allIncludedIncludes addObject:pathToFile];
 
     xmlParser *x = [[xmlParser alloc] initWith:pathToFile recursiveCall:YES];
@@ -3098,7 +3217,7 @@ didStartElement:(NSString *)elementName
             href = [NSString stringWithFormat:@"%@/library.lzx",href];
         }
 
-        // Diese implizit inkludierten Files, können u. U. auch explizit gesetzt werden. Dann ignorieren.
+        // Diese implizit inkludierten Files, können auch explizit gesetzt werden. Dann ignorieren.
         // Damit kein Fehler geworfen wird, hier abfangen und nicht rekursiv aufrufen.
         if (![href isEqualToString:@"lz/button.lzx"] &&
             ![href isEqualToString:@"lz/radio.lzx"] &&
@@ -3369,7 +3488,7 @@ didStartElement:(NSString *)elementName
         }
         else
         {
-            [self instableXML:@"dataset NOT in canvas. Hmmm. Different to Handle?"];
+            [self instableXML:@"dataset, that is NOT in canvas. Hmmm. Different to Handle?"];
         }
 
 
@@ -3393,10 +3512,15 @@ didStartElement:(NSString *)elementName
                 [self.datasetOutput appendFormat:@"  %@.src = '%@';\n",self.lastUsedDataset, src];
             }
 
-
-            if ([src hasPrefix:@"http:"])
+            // Die ersten beiden Bedingungen klappen nicht. Dann wird der Inhalt der Comboboxen
+            // nicht mehr angezeigt?! To Do
+            if (/* ([attributeDict valueForKey:@"type"] && [[attributeDict valueForKey:@"type"] isEqualToString:@"http"]) || ([attributeDict valueForKey:@"type"] && [[attributeDict valueForKey:@"type"] isEqualToString:@"soap"]) || */ ([src hasPrefix:@"http:"]))
             {
-                // Aus der Doku: If the value is a URL (starts with 'http:'), the dataset will be configured to load its data at runtime.
+                // attribute 'type': When set to "http" or "soap", the dataset
+                // interprets it's src attribute as a URL to be loaded at runtime. If the "src"
+                // attribute is set to a URL (e.g., starts with "http:") then the type attribute
+                // implicitly becomes "http".
+
                 NSLog([NSString stringWithFormat:@"'src'-Attribute in dataset found! But it is starting with 'http:'. So I am loading the XML-File (%@) at runtime.",src]);
             }
             else
@@ -3538,7 +3662,7 @@ didStartElement:(NSString *)elementName
             // dp = [self makeTheComputedValueComputable:dp];
             // Hmmm, lieber so: Wir haben hier ja keine zuletzt benutzte id:
             dp = [self removeOccurrencesOfDollarAndCurlyBracketsIn:dp];
-            dp = [self modifySomeExpressionsInJSCode:dp];
+            dp = [self modifySomeExpressionsInJSCode:dp alsoModifyWhitespaces:YES];
 
             // Historisch dass hier doppelt classroot ausgetauscht wird.
             // Da ich viel mit classroot als getter experimentiert hatte
@@ -4061,7 +4185,7 @@ didStartElement:(NSString *)elementName
 
             if ([value hasPrefix:@"${"] || [value hasPrefix:@"$once{"])
             {
-                value = [self modifySomeExpressionsInJSCode:value];
+                value = [self modifySomeExpressionsInJSCode:value alsoModifyWhitespaces:YES];
             }
 
 
@@ -4070,7 +4194,7 @@ didStartElement:(NSString *)elementName
             if ([attributeDict valueForKey:@"setter"])
             {
                 NSString *setter = [attributeDict valueForKey:@"setter"];
-                setter = [self modifySomeExpressionsInJSCode:setter];
+                setter = [self modifySomeExpressionsInJSCode:setter alsoModifyWhitespaces:YES];
 
                 if (![value isEqualToString:@"null"])
                 {
@@ -4158,7 +4282,7 @@ didStartElement:(NSString *)elementName
 
 
                     s = [self removeOccurrencesOfDollarAndCurlyBracketsIn:s];
-                    s = [self modifySomeExpressionsInJSCode:s];
+                    s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
                     // Escape ' in s
                     s = [s stringByReplacingOccurrencesOfString:@"'" withString:@"\\\'"];
 
@@ -5966,13 +6090,9 @@ didStartElement:(NSString *)elementName
         // Per <attribute> gesetzte werden beim auslesen der Klasse ergänzt.
 
 
-
-
-        // Alt:
-        //  NSMutableDictionary *dict = [[NSMutableDictionary alloc] initWithCapacity:200];
-        // Statt dessen:
         NSMutableDictionary *dict = [[NSMutableDictionary alloc] initWithDictionary:attributeDict copyItems:YES];
-        // Name und extends verwerte ich ja jeweils anders, und brauche sie nicht als Attribute zu setzen
+        // 'name' und 'extends' verwerte ich ja jeweils intern,
+        // und brauche diese Attribute nicht mehr zu setzen.
         [dict removeObjectForKey:@"name"];
         [dict removeObjectForKey:@"extends"];
 
@@ -6002,7 +6122,8 @@ didStartElement:(NSString *)elementName
         [self.jsOLClassesOutput appendFormat:@"  this.name = '%@';\n",name];
 
         // Das Attribut 'name' brauchen wir jetzt nicht mehr und entfernen es.
-        int i = (int)[keys count]; // Test, ob es auch klappt
+        // Anschließend Test, ob es auch geklappt hat
+        int i = (int)[keys count];
         [keys removeObject:@"name"];
         if (i == [keys count])
         {
@@ -6019,7 +6140,7 @@ didStartElement:(NSString *)elementName
         {
             self.attributeCount++;
 
-            // 'window' ist ein JS-Objekt...
+            // 'window' ist ein vorgegebenes JS-Objekt..., was ich hmmm. Seit oo. kann ich das ändern?
             if ([inherit isEqualToString:@"window"])
                 inherit = @"windowpanel";
 
@@ -6094,8 +6215,8 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
-        // hmm, ich lege es mal als div an, damit ich für states ohne 'name' eine 'id' erzeugen kann
-        // (und damit ich alle da drin steckenden views mit einem Schlag visible/invisible schalten kann)
+        // Ich lege es mal als div an, damit ich für states ohne 'name' eine 'id' erzeugen kann (und
+        // damit ich alle da drin steckenden views mit einem Schlag visible/invisible schalten kann)
 
         [self.output appendString:@"<div"];
         // id hinzufügen und gleichzeitg speichern
@@ -6321,15 +6442,73 @@ didStartElement:(NSString *)elementName
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'when'.");
         }
+
         if ([attributeDict valueForKey:@"src"])
         {
             self.attributeCount++;
             NSLog(@"Setting the attribute 'src' as external JS-File in the <head> of our HTML-File.");
 
+            NSString *src = [attributeDict valueForKey:@"src"];
 
-            [self.externalJSFilesOutput appendString:@"<script type=\"text/javascript\" src=\""];
-            [self.externalJSFilesOutput appendString:[attributeDict valueForKey:@"src"]];
-            [self.externalJSFilesOutput appendString:@"\"></script>\n"];
+
+
+            // But in most cases I have to modify the code before...
+            NSURL *basepath = [self.pathToFile URLByDeletingLastPathComponent];
+
+            // Schutz gegen Leerzeichen im Pfad
+            src = [src stringByAddingPercentEscapesUsingEncoding: NSUTF8StringEncoding];
+
+            NSURL *pathToFile = [NSURL URLWithString:src relativeToURL:basepath];
+
+            BOOL fileExists = [[NSFileManager defaultManager] fileExistsAtPath:[pathToFile path]];
+            if (!fileExists)
+            {
+                [self instableXML:[NSString stringWithFormat:@"Coudn't find the file '%@' given in the script-Tag.", src]];
+            }
+
+            NSString *scriptFileContents = [NSString stringWithContentsOfFile:[pathToFile path] encoding:NSUTF8StringEncoding error:NULL];
+
+            NSString *modifiedScriptFileContents = [self convertSciptCodeToJSCode:scriptFileContents];
+
+            // Wenn ungleich, dann muss ich den String als neue Datei anlegen und
+            // entsprechend die korrigierte Datei einbinden.
+            // Wenn inhalt bereits JS-konform war, kann ich die Datei unverändert lassen.
+            if (![modifiedScriptFileContents isEqualToString:scriptFileContents])
+            {
+                NSLog(@"I had to modify the external Script-File, because it wasn't true JavaScript. So I included the modified script, keeping the original script untouched.");
+
+                // Neuen Dateinamen "erfinden" für das modifizierte Skript
+                NSString *extension = @"_OL2HTML5";
+
+                if ([src rangeOfString:@"."].location != NSNotFound)
+                {
+                    NSMutableString *mutaSrc = [NSMutableString stringWithString:src];
+
+                    [mutaSrc insertString:extension atIndex:[src rangeOfString:@"."].location];
+
+                    src = [NSString stringWithString:mutaSrc];
+                }
+                else
+                {
+                    src = [NSString stringWithFormat:@"%@%@",src,extension];
+                }
+                // Setz den neuen Pfad zusammen
+                NSURL *pathToNewFile = [NSURL URLWithString:src relativeToURL:basepath];
+
+                // Write the new script-file
+                [modifiedScriptFileContents writeToURL:pathToNewFile atomically:NO encoding:NSUTF8StringEncoding error:NULL];
+
+
+                [self.externalJSFilesOutput appendString:@"<script type=\"text/javascript\" src=\""];
+                [self.externalJSFilesOutput appendString:src];
+                [self.externalJSFilesOutput appendString:@"\"></script>\n"];
+            }
+            else
+            {
+                [self.externalJSFilesOutput appendString:@"<script type=\"text/javascript\" src=\""];
+                [self.externalJSFilesOutput appendString:src];
+                [self.externalJSFilesOutput appendString:@"\"></script>\n"];
+            }
         }
         else
         {
@@ -7268,7 +7447,7 @@ didStartElement:(NSString *)elementName
                     // weNeedQuotes = NO;
 
                     // Stattdessen nur:
-                    s = [self modifySomeExpressionsInJSCode:s];
+                    s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
                 }
 
                 key = [self somePropertysNeedToBeRenamed:key];
@@ -8667,109 +8846,18 @@ BOOL isJSExpression(NSString *s)
         NSString *s = [self holDenGesammeltenTextUndLeereIhn];
 
 
-        // Natürlich auch hier setAttribute durch setAttribute_ ersetzen usw.
-        s = [self modifySomeExpressionsInJSCode:s];
-
-
-        // Jetzt wird's richtig schmutzig, ich muss defaultarguments raus-regexpen, weil es die in JS nicht gibt
-        NSError *error = NULL;
-        // Ich muss die öffnende Klammer der Funktion mitnehmen, damit ich später korrekt die defaultArgs injecten kann
-        // * nach dem Leerzeichen und dem \w, und kein +, damit er auch anonyme Funktionen ohne Namen matcht...
-        NSRegularExpression *regexp = [NSRegularExpression regularExpressionWithPattern:@"function[ ]*\\w*\\((.+)\\)\\s\\{" options:NSRegularExpressionCaseInsensitive error:&error];
-
-        NSArray *matches = [regexp matchesInString:s options:0 range:NSMakeRange(0, [s length])];
-
-        for (NSTextCheckingResult *match in matches)
-        {
-            NSString *funktionskopf = [s substringWithRange:[match rangeAtIndex:0]];
-
-
-
-            NSRange argsRange = [match rangeAtIndex:1];
-
-            NSString *args = [s substringWithRange:argsRange];
-            args = [args stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            args = [args stringByReplacingOccurrencesOfString:@" " withString:@""];
-            NSLog([NSString stringWithFormat:@"Found argsString: %@. I will continue my work now.",args]);
-
-
-
-
-
-
-            // Falls es default Values gibt, muss ich diese in JS extra setzen
-            NSMutableString *defaultValues = [[NSMutableString alloc] initWithString:@""];
-
-            // Überprüfen ob es default values gibt
-            NSError *error = NULL;
-            NSRegularExpression *regexp2 = [NSRegularExpression regularExpressionWithPattern:@"([\\w]+)=([\\w']+)" options:NSRegularExpressionCaseInsensitive error:&error];
-
-            NSUInteger numberOfMatches = [regexp2 numberOfMatchesInString:args options:0 range:NSMakeRange(0, [args length])];
-            if (numberOfMatches > 0)
-            {
-                // Es kann ja auch eine Mischung geben, von sowohl Argumenten mit
-                // Defaultwerten als auch solchen ohne. Deswegen hier erstmal ohne
-                // Defaultargumente setzen und dann gleich die alle mit.
-                NSMutableString *neueArgs = [self holAlleArgumentDieKeineDefaultArgumenteSind:args];
-                NSLog([NSString stringWithFormat:@"There is/are %ld argument(s) with a default argument. I will regexp them.",numberOfMatches]);
-
-                NSArray *matches = [regexp2 matchesInString:args options:0 range:NSMakeRange(0, [args length])];
-
-                for (NSTextCheckingResult *match in matches)
-                {
-                    // NSRange matchRange = [match range];
-                    NSRange varNameRange = [match rangeAtIndex:1];
-                    NSRange defaultValueRange = [match rangeAtIndex:2];
-
-                    NSString *varName = [args substringWithRange:varNameRange];
-                    NSLog([NSString stringWithFormat:@"Resulting variable name: %@",varName]);
-                    NSString *defaultValue = [args substringWithRange:defaultValueRange];
-                    NSLog([NSString stringWithFormat:@"Resulting default value: %@",defaultValue]);
-
-                    // ... dann die Variablennamen der args neu sammeln...
-                    if (![neueArgs isEqualToString:@""])
-                        [neueArgs appendString:@", "];
-                    [neueArgs appendString:varName];
-                    ///////////////////// Default- Variablen für JS setzen - Anfang /////////////////////
-                    [defaultValues appendFormat:@"\n    if(typeof(%@)==='undefined') ",varName];
-                    [defaultValues appendFormat:@"%@ = %@;\n",varName,defaultValue];
-                    ///////////////////// Default- Variablen für JS setzen - Ende /////////////////////
-                }
-
-                // ... und hier setzen
-                // args = neueArgs; // Analyzer sagt: 'Value stored to args is never read'
-
-                // Den Funktionskopf von oben jetzt benutzen. In diesem die Argumente ersetzen...
-                NSUInteger posOeffnendeKlammer = [funktionskopf rangeOfString:@"("].location;
-                funktionskopf = [funktionskopf substringToIndex:posOeffnendeKlammer];
-                funktionskopf = [NSString stringWithFormat:@"%@(%@) {",funktionskopf,neueArgs];
-
-                // ... dann den alten Funktionskopf komplett ersetzen. Dazu auf das alte regexp von oben  zugreifen
-                s = [regexp stringByReplacingMatchesInString:s options:0 range:NSMakeRange(0, [s length]) withTemplate:funktionskopf];
-
-
-                // Jetzt muss ich 'nur noch' die defaultwerte injecten
-                // Dazu kurz mit einem NSMutableString arbeiten. Und wir greifen auf den 'match'
-                // und dessen Länge vo ganz oben zu um die genaue Stelle zu ermitteln.
-                NSUInteger n_entfernteZeichen = [match rangeAtIndex:0].length - funktionskopf.length;
-
-                NSMutableString *t = [NSMutableString stringWithFormat:@"%@",s];
-                [t insertString:defaultValues atIndex:[match rangeAtIndex:0].location+[match rangeAtIndex:0].length-n_entfernteZeichen];
-                s = [NSString stringWithFormat:t];
-            }
-        }
+        s = [self convertSciptCodeToJSCode:s];
 
 
         // Die Variablen auf die zugegriffen wird, sind teils HTMLDivElemente
-        // und müssen bekannt sein, deswegen kann es nicht im Head stehen (alte Lösung)
-        // statt dessen:
+        // und müssen bekannt sein, deswegen kann es nicht im Head stehen. Statt dessen:
         // War jQueryOutput, aber es muss vor den SimpleLayouts bekannt sein, da diese sich auch auf
         // per Skript gesetzte Elemente beziehen, deswegen jQueryOutput0:
         if ([s length] > 0)
         {
-            [self.jQueryOutput0 appendString:@"\n  /***** ausgewertetes <script>-Tag - Anfang *****/\n"];
+            [self.jQueryOutput0 appendString:@"\n  /**** Ausgewertetes <script>-Tag - Anfang ****/\n"];
             [self.jQueryOutput0 appendFormat:@"  %@",s];
-            [self.jQueryOutput0 appendString:@"\n  /***** ausgewertetes <script>-Tag - Ende *****/\n"];
+            [self.jQueryOutput0 appendString:@"\n  /**** Ausgewertetes <script>-Tag - Ende ****/\n"];
         }
     }
 
@@ -8815,7 +8903,7 @@ BOOL isJSExpression(NSString *s)
 
             NSLog([NSString stringWithFormat:@"Original code defined in handler: \n**********\n%@\n**********",s]);
 
-            s = [self modifySomeExpressionsInJSCode:s];
+            s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
 
             s = [self indentTheCode:s];
 
@@ -8933,9 +9021,14 @@ BOOL isJSExpression(NSString *s)
         while ([s rangeOfString:@"  "].location != NSNotFound)
         {
             s = [s stringByReplacingOccurrencesOfString:@"  " withString:@" "];
+            // Besser so:
+            // s = [self inString:s searchFor:@"  " andReplaceWith:@" " ignoringTextInQuotes:YES];
+            // Der code von "Besser so" oder das komplette removen klappt nicht...
+            // Führt zu einer infinite Loop. Programm hängt sich auf... WTF???
         }
 
-        s = [self modifySomeExpressionsInJSCode:s];
+        s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
+
         // In String auftauchende '\n' müssen ersetzt werden, sonst JS-Error.
         //s = [s stringByReplacingOccurrencesOfString:@"\\n" withString:@"\\\\n"];
         // Puh, das war ein collectedClasses-Problem. Strings müssen untouched bleiben hier.
@@ -9576,14 +9669,14 @@ BOOL isJSExpression(NSString *s)
     // NSString * path = [[NSString alloc] initWithString:dlDirectory];
     //... deswegen ab jetzt immer im gleichen Verzeichnis wie das OpenLaszlo-input-File
     // Die Dateien dürfen dann nur nicht zufälligerweise genau so heißen wie welche im Verzeichnis
-    // (To Do bei Public Release)
+    // (To Do bei Public Release) -> Lösung: Überall '_OL2HTML5' dahinterschreibe, analog zu <script>
     NSString *path = [[self.pathToFile URLByDeletingLastPathComponent] relativePath];
 
 
     NSString *pathToCSSFile = [NSString stringWithFormat:@"%@/styles.css",path];
     NSString *pathToJSFile = [NSString stringWithFormat:@"%@/jsHelper.js",path];
     NSString *pathToCollectedClassesFile = [NSString stringWithFormat:@"%@/collectedClasses.js",path];
-    NSString *pathToLogile = [NSString stringWithFormat:@"%@/log_OL2HTML5.txt",path];
+    NSString *pathToLogFile = [NSString stringWithFormat:@"%@/log_OL2HTML5.txt",path];
 
 
     path = [path stringByAppendingString: @"/output_ol2x.html"];
@@ -9638,7 +9731,7 @@ BOOL isJSExpression(NSString *s)
 
 
     // Writing Log-File to File-System
-    [[globalAccessToTextView string] writeToFile:pathToLogile atomically:NO encoding:NSUTF8StringEncoding error:NULL];
+    [[globalAccessToTextView string] writeToFile:pathToLogFile atomically:NO encoding:NSUTF8StringEncoding error:NULL];
 
 
 
@@ -16828,8 +16921,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "// Neuimplementierung, derzeit noch ohne Event-Listener, um massiv Zeit zu sparen\n"
-    "// Wird für alle Elemente aufgerufen nach dem Start\n"
-    "// Und dann für alle im Nachhinein zur Laufzeit instanzierten Klassen (ToDo)\n"
+    "// Wird für alle Elemente aufgerufen nach dem Start oder nach dem instanzieren einer\n"
+    "// verzögert geladenen Klasse\n"
     "var adjustHeightAndWidth = function (el) {\n"
     "    // Alle 'text'-Elemente und alle kinderlosen Elemente ausschließen\n"
     "    if ($(el).data('olel') === 'text' || $(el).children().length == 0)\n"
@@ -17868,11 +17961,14 @@ BOOL isJSExpression(NSString *s)
     "Object.defineProperty(HTMLElement.prototype, 'super_', {\n"
     "    get : function(){\n"
     // Keine Ahnung mehr wo das her kam, es scheint auch so zu klappen und nicht mehr notwendig zu sein
-    //"        if ($(this).data('olel') === 'BDSgridcolumn')\n"
-    //"        {\n"
-    //"            // So far doesn't work... with 'BDSgridcolumn'\n"
-    //"            return { init: function() {} };\n"
-    //"        }\n"
+    // Doch, ist notwendig (aber nur am Arbeits-Laptop...), indem Moment wo ich ein 'BDSinputgrid'
+    // per interpretObject() auswerte
+    "        if ($(this).data('olel') === 'BDSgridcolumn')\n"
+    "        {\n"
+    "            // So far doesn't work... with 'BDSgridcolumn'\n"
+    "            return { init: function() {} };\n"
+    "        }\n"
+    "\n"
     "        // 'init' und 'construct' müssen vorhanden sein, selbst wenn nicht von der übergeordneten Klasse definiert\n"
     "        var returnMethods = { init: function() {}, construct: function() {} };\n"
     "\n"
@@ -18139,6 +18235,9 @@ BOOL isJSExpression(NSString *s)
     "// und 'id' wird dem entsprechend mit diesen Attributen und Methoden erweitert.\n"
     "// 'iv' enthält mögliche InstanzVariablen der Instanz\n"
     "function interpretObject(obj,id,iv) {\n"
+    // Blockiert somehow den Aufruf von SteuerBerechnung()... (Musste deswegen wieder rein)
+    //"    //if (obj.name === 'BDSinputgrid') return; // 1) Probs darin mit 'super_' und 2) deutlich zu lange Laufzeit damit... To Do\n"
+    "\n"
     "    // Muss in interpretObject() stecken, damit ich Zugriff auf die var onInitFunc habe\n"
     "    // Bei Objekten gilt 'call by reference', deswegen kann ich 'id' in der Funktion erweitern\n"
     "    function assignAllAttributesAndMethods(id, rueckwaertsArray, attrs) {\n"
@@ -18659,6 +18758,14 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        $(id).parent().css('width',$(id).css('width'))\n"
     "    }\n"
+    "\n"
+    "    // Scheint nichts zu schaden, aber irgendwie auch nichts zu bringen\n"
+    "    //if (canvas.percentcreated == 1) {\n"
+    "    //     $(id).find('div, button').each( function() {\n"
+    "    //         adjustHeightAndWidth(this);\n"
+    "    //     });\n"
+    "    //     adjustHeightAndWidth(id);\n"
+    "    //}\n"
     "\n"
     // Wohl eher Spezialcode für Taxango, aber bin mir unsicher ob das noch nötig ist.
     // Probeweise mal auskommentiert

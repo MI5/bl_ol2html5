@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		45E0F739170A4DA3006AD3F5 /* xmlParserPreCollectClasses.m in Sources */ = {isa = PBXBuildFile; fileRef = 45E0F738170A4DA3006AD3F5 /* xmlParserPreCollectClasses.m */; };
 		65561AFC1540A74300733326 /* ausgabeText.m in Sources */ = {isa = PBXBuildFile; fileRef = 65561AFB1540A74300733326 /* ausgabeText.m */; };
 		65561AFF1540A75B00733326 /* globalVars.m in Sources */ = {isa = PBXBuildFile; fileRef = 65561AFE1540A75B00733326 /* globalVars.m */; };
 		65561B021540A87C00733326 /* ol2hSaveMenuController.m in Sources */ = {isa = PBXBuildFile; fileRef = 65561B011540A87C00733326 /* ol2hSaveMenuController.m */; };
@@ -20,6 +21,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		45E0F737170A4DA3006AD3F5 /* xmlParserPreCollectClasses.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = xmlParserPreCollectClasses.h; sourceTree = "<group>"; };
+		45E0F738170A4DA3006AD3F5 /* xmlParserPreCollectClasses.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = xmlParserPreCollectClasses.m; sourceTree = "<group>"; };
 		65561AF91540A73000733326 /* ausgabeText.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ausgabeText.h; sourceTree = "<group>"; };
 		65561AFB1540A74300733326 /* ausgabeText.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ausgabeText.m; sourceTree = "<group>"; };
 		65561AFD1540A75300733326 /* globalVars.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = globalVars.h; sourceTree = "<group>"; };
@@ -102,6 +105,8 @@
 				65C571431540A1620047963C /* ol2hAppDelegate.m */,
 				65561B001540A87500733326 /* ol2hSaveMenuController.h */,
 				65561B011540A87C00733326 /* ol2hSaveMenuController.m */,
+				45E0F737170A4DA3006AD3F5 /* xmlParserPreCollectClasses.h */,
+				45E0F738170A4DA3006AD3F5 /* xmlParserPreCollectClasses.m */,
 				65561B031540A8B900733326 /* xmlParser.h */,
 				65561B041540A8BF00733326 /* xmlParser.m */,
 				65C571451540A1620047963C /* MainMenu.xib */,
@@ -193,6 +198,7 @@
 				65561AFF1540A75B00733326 /* globalVars.m in Sources */,
 				65561B021540A87C00733326 /* ol2hSaveMenuController.m in Sources */,
 				65561B051540A8BF00733326 /* xmlParser.m in Sources */,
+				45E0F739170A4DA3006AD3F5 /* xmlParserPreCollectClasses.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

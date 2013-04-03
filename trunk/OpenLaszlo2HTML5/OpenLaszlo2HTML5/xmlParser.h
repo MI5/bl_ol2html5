@@ -16,11 +16,12 @@
 
 -(id)initWith:(NSURL*) pathToFile;
 
-// Weil wir uns auch rekursiv aufrufen, muss ich zwischendruch ein Array mit den Zwischenergebnissen zurückgeben
+// Weil wir uns auch rekursiv aufrufen, muss ich zwischendurch
+// ein Array mit den Zwischenergebnissen zurückgeben.
 -(NSArray*) start;
 
 
-// Damit die C-Funktion die NSLog() umleitet, darauf zugreifen kann
+// Damit die C-Funktion, die NSLog() umleitet, darauf zugreifen kann
 - (void) jumpToEndOfTextView;
 
 @end

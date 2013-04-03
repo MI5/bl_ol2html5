@@ -14,7 +14,7 @@
 
 @implementation ol2hAppDelegate
 
-@synthesize window = _window;
+@synthesize window = _window, openButton = _openButton, IHaveABackupButton = _IHaveABackupButton;
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification
 {
@@ -48,6 +48,18 @@
 {
     ol2hSaveMenuController *o = [[ol2hSaveMenuController alloc] init];
     [o openDlgWithoutIB];
+}
+
+- (IBAction)iHaveABackupClicked:(id)sender
+{
+    if ([self.IHaveABackupButton state] == NSOnState)
+    {
+        [self.openButton setEnabled: YES];
+    }
+    else
+    {
+        [self.openButton setEnabled: NO];
+    }
 }
 
 @end

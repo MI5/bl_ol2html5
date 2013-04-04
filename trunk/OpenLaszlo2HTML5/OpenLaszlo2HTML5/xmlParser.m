@@ -459,7 +459,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     return self;
 }
 
-
+// Funktionsname ist irreführend. Denn wenn String leer, dann nimmt er ja ein File.
 -(NSArray*) startWithString:(NSString*)s
 {
     // NSLog(@"GATTV: %@",[[globalAccessToTextView textStorage] string]);
@@ -470,46 +470,44 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
 
-
     BOOL fileExists = [[NSFileManager defaultManager] fileExistsAtPath:[self.pathToFile path]];
     if (!fileExists)
     {
-        // Ich frage den String in diesem Array beim verlassen der Rekursion ab,
-        // falls er zwischendurch mal eine Datei nicht findet.
+        // Schutz, falls er zwischendurch mal eine Datei nicht findet.
+        // Ich frage den String in diesem Array beim verlassen der Rekursion ab.
         NSArray *r = [NSArray arrayWithObjects:@"XML-File not found", nil];
         return r;
     }
+
+
+    if ([s isEqualToString:@""])
+    {
+        // Create a parser from file
+        self.parser = [[NSXMLParser alloc] initWithContentsOfURL:self.pathToFile];
+    }
     else
     {
-        if ([s isEqualToString:@""])
-        {
-            // Create a parser from file
-            self.parser = [[NSXMLParser alloc] initWithContentsOfURL:self.pathToFile];
-        }
-        else
-        {
-            // Create a parser from string
-            NSData* d = [s dataUsingEncoding:NSUTF8StringEncoding];
-            self.parser = [[NSXMLParser alloc] initWithData:d];
-        }
-
-        [self.parser setDelegate:self];
-
-        // You may need to turn some of these on depending on the type of XML file you are parsing
-        /*
-         [parser setShouldProcessNamespaces:NO];
-         [parser setShouldReportNamespacePrefixes:NO];
-         [parser setShouldResolveExternalEntities:NO];
-         */
-
-        // Do the parse
-        [self.parser parse];
-
-        // Zur Sicherheit mache ich von allem ne Copy.
-        // Nicht, dass Objekt beim Verlassen der Rekursion zerstört wird
-        NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.datasetOutput copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.freeToUse copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.jsInitstageDeferOutput copy],[self.idsAndNamesOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy],[[NSNumber numberWithInteger:self.pointerWithoutNameZaehler] copy],[self.directMethodsOfClassOutput copy], nil];
-        return r;
+        // Create a parser from string
+        NSData* d = [s dataUsingEncoding:NSUTF8StringEncoding];
+        self.parser = [[NSXMLParser alloc] initWithData:d];
     }
+
+    [self.parser setDelegate:self];
+
+    // You may need to turn some of these on depending on the type of XML file you are parsing
+    /*
+    [parser setShouldProcessNamespaces:NO];
+    [parser setShouldReportNamespacePrefixes:NO];
+    [parser setShouldResolveExternalEntities:NO];
+    */
+
+    // Do the parse
+    [self.parser parse];
+
+    // Zur Sicherheit mache ich von allem ne Copy.
+    // Nicht, dass das Objekt beim Verlassen der Rekursion zerstört wird
+    NSArray *r = [NSArray arrayWithObjects:[self.output copy],[self.jsOutput copy],[self.jsOLClassesOutput copy],[self.jQueryOutput0 copy],[self.jQueryOutput copy],[self.jsHeadOutput copy],[self.datasetOutput copy],[self.cssOutput copy],[self.externalJSFilesOutput copy],[self.allJSGlobalVars copy],[self.allFoundClasses copy],[[NSNumber numberWithInteger:self.idZaehler] copy],[self.freeToUse copy],[self.jsComputedValuesOutput copy],[self.jsConstraintValuesOutput copy],[self.jsInitstageDeferOutput copy],[self.idsAndNamesOutput copy],[self.allImgPaths copy],[self.allIncludedIncludes copy],[[NSNumber numberWithInteger:self.pointerWithoutNameZaehler] copy],[self.directMethodsOfClassOutput copy], nil];
+    return r;
 }
 
 
@@ -1722,8 +1720,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     s = [self inString:s searchFor:@".dataset" andReplaceWith:@".myDataset" ignoringTextInQuotes:YES];
 
 
-    // align ist eine interne Property...
-    // Mit '.' davor
+    // align ist eine interne Property... Wieder mit '.' davor
     s = [self inString:s searchFor:@".align" andReplaceWith:@".myAlign" ignoringTextInQuotes:YES];
 
 
@@ -1765,6 +1762,17 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     // super ist nicht erlaubt in JS (reserviert) und gibt es auch noch nicht.
     s = [self inString:s searchFor:@"super" andReplaceWith:@"super_" ignoringTextInQuotes:YES];
+
+
+    // onfocus ist eine interne function von JS, muss ausgetauscht werden.
+    s = [self inString:s searchFor:@"onfocus.sendEvent(" andReplaceWith:@"onfocus_.sendEvent(" ignoringTextInQuotes:YES];
+
+
+    // onblur ist eine interne function von JS, muss ausgetauscht werden.
+    s = [self inString:s searchFor:@"onblur.sendEvent(" andReplaceWith:@"onblur_.sendEvent(" ignoringTextInQuotes:YES];
+
+
+
 
     if (b)
     {
@@ -14806,7 +14814,6 @@ BOOL isJSExpression(NSString *s)
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
-    "\n"
     // Funktioniert nicht, bricht irgendwas in jQuery -> Evtl. jetzt nicht mehr, weil Umstieg auf HTMLElement.prototype?!
     //"// Wegen Chapter 15 5.\n"
     //"Object.defineProperty(HTMLElement.prototype, 'unload', {\n"
@@ -14843,14 +14850,41 @@ BOOL isJSExpression(NSString *s)
     //"}\n"
     "\n"
     "\n"
-    "// Seit auswerten 'rollupdown': To Do?\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Per Property ausgelöste events                      //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "/////////////////////////////////////////////////////////\n"
+    "// Es gibt im T-Code manchmal einzeln stehende events in Methoden von Klassen\n"
+    "// Diese werden per 'sendEvent()' jeweils ausgelöst.\n"
+    "// Z. B. in 'rollupdown' gibt es 'onvisible' und in 'BDStitlecontrol' 'onfocus' und 'onblur'.\n"
+    "// Ich habe in der Dokumentation nichts vergleichbares gefunden.\n"
+    "// Ich löse es als allgemeine Property, die ein Objekt mit der Funktion zurückliefert\n"
+    "// 'onfocus' ist jedoch zugleich eine interne nicht überschreibbare JS-Funktion,\n"
+    "// weswegen dieses event umbenannt und intern ausgetauscht wird.\n"
     "Object.defineProperty(HTMLElement.prototype, 'onvisible', {\n"
-    "    get : function(){\n"
+    "    get : function() {\n"
     "        return { sendEvent: function() { $(this).triggerHandler('onvisible',null); } };\n"
     "    },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
     "});\n"
+    "Object.defineProperty(HTMLElement.prototype, 'onfocus_', {\n"
+    "    get : function() {\n"
+    "        return { sendEvent: function() { $(this).triggerHandler('onfocus',null); } };\n"
+    "    },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "Object.defineProperty(HTMLElement.prototype, 'onblur_', {\n"
+    "    get : function() {\n"
+    "        return { sendEvent: function() { $(this).triggerHandler('onblur',null); } };\n"
+    "    },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
@@ -14875,7 +14909,6 @@ BOOL isJSExpression(NSString *s)
     //"HTMLInputElement.prototype.addSubview = addSubviewFunction;\n"
     //"HTMLSelectElement.prototype.addSubview = addSubviewFunction;\n"
     //"HTMLButtonElement.prototype.addSubview = addSubviewFunction;\n"
-
     "\n"
     "\n"
     "\n"
@@ -15089,7 +15122,7 @@ BOOL isJSExpression(NSString *s)
     "    // Nach OL-Code-Inspektion und Beispiel 40.1: Bei <text>-Nodes setzt er den Text!\n"
     "    if ($(this).data('olel') == 'text') // im Prinzip oi\n"
     "    {\n"
-    "        if(data == null) {\n"
+    "        if (data == null) {\n"
     "            this.clearText();\n"
     "        }\n"
     "        else {\n"
@@ -18697,7 +18730,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Example 37.11:\n"
     "    // Erst hier DataPath setzen, weil erst hier alle Attribute gesetzt wurden, und alles korrekt geklont wurde\n"
-    "    // Und wichtig: Erst hier am Ende ist applyData() bekannt!\n"
+    "    // Und: Erst hier am Ende ist applyData() bekannt (gilt nur noch für String-Methoden)\n"
     "    if (iv.datapath)\n"
     "    {\n"
     "        if (iv.datapath.startsWith('${'))\n"
@@ -18996,13 +19029,19 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
-    "//  class = grid (native class) - To Do                      //\n"
+    "//  class = grid (native class) - To Do (get the real code from OL-Page)//\n"
     "///////////////////////////////////////////////////////////////\n"
     "oo.grid = function() {\n"
     "  this.name = 'grid';\n"
     "  this.inherit = new oo.basegrid();\n"
     "\n"
     "  this.attributesDict = { layout: 'placement:hcontent;axis:x;spacing:-1', showhscroll: true, showvscroll: true }\n"
+    "\n"
+    "  this.methods = {\n"
+    "    makeCellsAndColumns: function() {\n"
+    "      // Evtl. auch eine Methode von 'basegrid'. Hauptsache es funktioniert erstmal.\n"
+    "    }\n"
+    "  }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"

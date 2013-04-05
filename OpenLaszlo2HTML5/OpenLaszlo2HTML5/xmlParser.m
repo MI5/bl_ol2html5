@@ -361,6 +361,19 @@ void OLLog(xmlParser *self, NSString* s,...)
     // (Falls es überhaupt vererbbar ist und somit ein Bug wäre).
     [self.allFoundClasses setDictionary:[result objectAtIndex:0]];
 
+
+    // Well... Vorab lese ich alle internal Classes ein. Abhängig von OL-Version
+    NSString *olVersion = @"4.11";
+
+    if ([olVersion isEqualToString:@"4.11"])
+    {
+        //[self preEvaluateInternalClass:@"http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/baseformitem.lzx"];
+    }
+
+    if ([olVersion isEqualToString:@"4.9"])
+    {
+    }
+
     return me;
 }
 
@@ -2562,7 +2575,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // das gleiche gilt für den pointerWithoutName-Zähler
     x.pointerWithoutNameZaehler = self.pointerWithoutNameZaehler;
 
-    NSArray* result = [x start];
+    NSArray* result = [x startWithString:@""];
 
     if ([[result objectAtIndex:0] isEqual:@"XML-File not found"])
     {
@@ -2617,6 +2630,157 @@ void OLLog(xmlParser *self, NSString* s,...)
     }
 
     NSLog(@"Leaving recursion");
+}
+
+-(NSString*) getStringFromInternalDB:(NSString*)entry
+{
+    NSString *s = @"";
+    BOOL found = NO;
+
+    // if ([entry isEqualToString:@"http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/basedatacombobox.lzx"])
+    // Ne! Ich mach es so: In unsere interne DB lege ich nur 4.11 ab. 4.11 ist dann der Fallback,
+    // bei nicht bestehender Internetverbindung / Server-Problemen.
+    // Deswegen teste ich immer nur auf das String-Ende.
+
+    if ([entry hasSuffix:@"/lps/components/base/baseformitem.lzx"]) {
+        found = YES;
+
+        s = @"<library><class name=\"baseformitem\" extends=\"basevaluecomponent\">"
+
+        "<attribute name=\"_parentform\" value=\"null\"/>"
+        "<attribute name=\"submitname\" value=\"\" type=\"string\"/>"
+        "<attribute name=\"submit\" value=\"${enabled}\" type=\"boolean\"/>"
+        "<attribute name=\"changed\" value=\"false\" setter=\"this.setChanged(changed)\" />"
+        "<attribute name=\"value\" value=\"null\" setter=\"this.setValue(value,false)\" />"
+        "<event name=\"onchanged\" />"
+        "<event name=\"onvalue\" />"
+        "<attribute name=\"rollbackvalue\" value=\"null\" />"
+        "<attribute name=\"ignoreform\" value=\"false\" />"
+        "<method name=\"init\"><![CDATA[ if (this.submitname == '') this.submitname = this.name;"
+        "if (this.submitname == '') { if ($debug) { Debug.error('name required for form submit',"
+        "this);}} super.init(); var fp = this.findForm(); if (fp != null) { fp.addFormItem(this);"
+        "this._parentform = fp; } ]]></method> <method name=\"destroy\">if (this._parentform)"
+        "this._parentform.removeFormItem(this);super.destroy();</method>"
+        "<method name=\"setChanged\" args=\"changed,skipform=null\"><![CDATA["
+        "if (! this._initcomplete) { this.changed = false; return; } var oldchanged = this.changed;"
+        "this.changed = changed; if (this.changed != oldchanged) { if (this.onchanged)"
+        "this.onchanged.sendEvent(this.changed); } if (! skipform && this.changed && ! ignoreform) {"
+        "if (this['_parentform'] && this._parentform['changed'] != undefined &&"
+        "! this._parentform.changed) { this._parentform.setChanged(changed, false);}}"
+        "if(!skipform && !this.changed && !ignoreform){ if(this['_parentform'] &&"
+        "this._parentform['changed'] != undefined && this._parentform.changed){"
+        "this._parentform.setChanged(changed, true); } } ]]></method>"
+        "<method name=\"rollback\"> if (this.rollbackvalue != this['value']) {"
+        "this.setAttribute('value', this.rollbackvalue); } this.setAttribute('changed', false);"
+        "</method><method name=\"commit\">"
+        "this.rollbackvalue = this.value;this.setAttribute('changed', false);</method>"
+        "<method name=\"setValue\" args=\"v,isinitvalue=null\"><![CDATA[ var didchange ="
+        "(this.value != v); this.value = v; if (isinitvalue || ! this._initcomplete) {"
+        "this.rollbackvalue = v; } this.setChanged(didchange && !isinitvalue &&"
+        "this.rollbackvalue != v); if (this['onvalue']) this.onvalue.sendEvent(v);]]></method>"
+        "<method name=\"acceptValue\" args=\"data, type=null\">if (type == null) type = this.type;"
+        "this.setValue(lz.Type.acceptTypeValue(type, data, this, 'value'), true);</method>"
+        "<method name=\"findForm\">if (_parentform != null) return _parentform; else {"
+        "var p = this.immediateparent; var fp = null; while (p != canvas) {if (p['formdata']) {"
+        "fp = p; break; } p = p.immediateparent; } return fp; } </method>"
+        "<method name=\"toXML\" args=\"convert\">var val = this.value;if (convert) {"
+        "if (typeof(val) == 'boolean') val = val - 0;}if ($debug) { if (this.submitname == '') {"
+        "Debug.format('WARNING: submitname not given for object %w (baseformitem.toXML)\\n', this);}}"
+        "return (lz.Browser.xmlEscape(this.submitname) + '=\\\"' + lz.Browser.xmlEscape(val) + '\"');"
+        "</method>"
+        "</class></library>";
+    }
+
+
+
+
+    if (!found) {
+        [self instableXML:@"Missing entry in internal File-DB."];
+    }
+
+    return s;
+}
+
+-(NSString*) getStringFromURL:(NSString*)urlAsString
+{
+    NSLog([NSString stringWithFormat:@"Trying to get the content of the url: %@",urlAsString]);
+
+
+
+    // Erstmal greife ich stets auf die interne DB zu und steige hier aus.
+    // Für Relase evtl. dann aus Copyright-Gründen auf die URL's zugreifen.
+    return [self getStringFromInternalDB:urlAsString];
+
+
+
+
+    NSURL *url = [NSURL URLWithString:urlAsString];
+    NSError* error;
+    NSString *content = [NSString stringWithContentsOfURL:url encoding:NSASCIIStringEncoding error:&error];
+
+    if (error) {
+        [NSApp presentError:error];
+        NSLog([NSString stringWithFormat:@"Error: %@", error]);
+        NSLog(@"Coudn't retrieve the URL... Network Problems? Server offline?");
+        NSLog(@"Fallback to different server... Found!");
+
+        return [self getStringFromInternalDB:urlAsString];
+    }
+
+    return content;
+}
+
+-(void) preEvaluateInternalClass:(NSString*)internalClass
+{
+    // Verwandle die übergebene URL in den Code der konkreten Klasse!
+    internalClass = [self getStringFromURL:internalClass];
+
+
+    // Dass ich hier self.pathToFile ist historisch durch den Konstruktor bedingt
+    // Ändert nichts daran, dass tatsächlich ein String ausgewertet wird.
+    xmlParser *x = [[xmlParser alloc] initWith:self.pathToFile recursiveCall:YES];
+
+
+    // Manchmal greift die rekursive Datei auf vorher nicht-rekursiv definierte Res zurück.
+    // Deswegen muss ich das Dictionary, welches alle gesammelten Resourcen enthält mit übergeben.
+    [x.allJSGlobalVars addEntriesFromDictionary:self.allJSGlobalVars];
+
+    // Die soweit erkannten Klassen müssen auch rekursiv aufgerufenen Dateien bekannt sein
+    [x.allFoundClasses addEntriesFromDictionary:self.allFoundClasses];
+
+    // Die soweit inkludierten <includes> müssen auch rekursiv aufgerufenen Dateien bekannt sein!
+    x.allIncludedIncludes = [[NSMutableArray alloc] initWithArray:self.allIncludedIncludes];
+
+    // id-Zähler übergeben, sonst werden IDs doppelt vergeben!
+    x.idZaehler = self.idZaehler;
+    // das gleiche gilt für den pointerWithoutName-Zähler
+    x.pointerWithoutNameZaehler = self.pointerWithoutNameZaehler;
+
+
+    NSArray* result = [x startWithString:internalClass];
+
+
+    [self.output appendString:[result objectAtIndex:0]];
+    [self.jsOutput appendString:[result objectAtIndex:1]];
+    [self.jsOLClassesOutput appendString:[result objectAtIndex:2]];
+    [self.jQueryOutput0 appendString:[result objectAtIndex:3]];
+    [self.jQueryOutput appendString:[result objectAtIndex:4]];
+    [self.jsHeadOutput appendString:[result objectAtIndex:5]];
+    [self.datasetOutput appendString:[result objectAtIndex:6]];
+    [self.cssOutput appendString:[result objectAtIndex:7]];
+    [self.externalJSFilesOutput appendString:[result objectAtIndex:8]];
+    [self.allJSGlobalVars setDictionary:[result objectAtIndex:9]];
+    [self.allFoundClasses setDictionary:[result objectAtIndex:10]];
+    self.idZaehler = [[result objectAtIndex:11] integerValue];
+    self.freeToUse = [result objectAtIndex:12];
+    [self.jsComputedValuesOutput appendString:[result objectAtIndex:13]];
+    [self.jsConstraintValuesOutput appendString:[result objectAtIndex:14]];
+    [self.jsInitstageDeferOutput appendString:[result objectAtIndex:15]];
+    [self.idsAndNamesOutput appendString:[result objectAtIndex:16]];
+    [self.allImgPaths addObjectsFromArray:[result objectAtIndex:17]];
+    self.allIncludedIncludes = [[NSMutableArray alloc] initWithArray:[result objectAtIndex:18]];
+    self.pointerWithoutNameZaehler = [[result objectAtIndex:19] integerValue];
+    [self.directMethodsOfClassOutput appendString:[result objectAtIndex:20]];
 }
 
 
@@ -4209,11 +4373,18 @@ didStartElement:(NSString *)elementName
 
                 if (![value isEqualToString:@"null"])
                 {
-                    // Darauf reagiere ich noch nicht, falls sowas überhaupt möglich:
-                    [self instableXML:@"Hmmm. Dann wurde setter und ein value gleichzeitg gesetzt. Kann sowas sein?"];
+                    // Gemäß OL-Test: Nur wenn value nicht 'null' ist, wird der setter dann auch
+                    // unmittelbar aufgerufen mit dem Nicht-Null-value.
+                    // Dazu den value in so einem Fall mit übergeben und über entsprechende Markierung
+                    // erkennen und berücksichtigen beim auslesen der Klassenvariablen.
+
+                    [attrDictOfClass setObject:[NSString stringWithFormat:@"@§.SETTER.§@%@@§.INITVALUE.§@%@",setter,value] forKey:a];
                 }
                 else
                 {
+                    // Wenn es einen setter gibt, aber keinen value, dann bleibt das Attribut undefined!
+                    // Es wird noch nicht einmal null gesetzt!
+
                     [attrDictOfClass setObject:[NSString stringWithFormat:@"@§.SETTER.§@%@",setter] forKey:a];
                 }
             }
@@ -8286,29 +8457,47 @@ BOOL isJSExpression(NSString *s)
             [self.jsOLClassesOutput appendString:@"\n  }\n\n"];
         }
 
-        [self.jsOLClassesOutput appendString:@"  this.contentJS = \""];
-        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsOutput];
-        [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        if (rekursiveRueckgabeJsOutput.length > 0)
+        {
+            [self.jsOLClassesOutput appendString:@"  this.contentJS = \""];
+            [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsOutput];
+            [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        }
 
-        [self.jsOLClassesOutput appendString:@"  this.contentLeadingJQuery = \""];
-        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJQueryOutput0];
-        [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        if (rekursiveRueckgabeJQueryOutput0.length > 0)
+        {
+            [self.jsOLClassesOutput appendString:@"  this.contentLeadingJQuery = \""];
+            [self.jsOLClassesOutput appendString:rekursiveRueckgabeJQueryOutput0];
+            [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        }
 
-        [self.jsOLClassesOutput appendString:@"  this.contentJSComputedValues = \""];
-        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsComputedValuesOutput];
-        [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        if (rekursiveRueckgabeJsComputedValuesOutput.length > 0)
+        {
+            [self.jsOLClassesOutput appendString:@"  this.contentJSComputedValues = \""];
+            [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsComputedValuesOutput];
+            [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        }
 
-        [self.jsOLClassesOutput appendString:@"  this.contentJSConstraintValues = \""];
-        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsConstraintValuesOutput];
-        [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        if (rekursiveRueckgabeJsConstraintValuesOutput.length > 0)
+        {
+            [self.jsOLClassesOutput appendString:@"  this.contentJSConstraintValues = \""];
+            [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsConstraintValuesOutput];
+            [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        }
 
-        [self.jsOLClassesOutput appendString:@"  this.contentJQuery = \""];
-        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJQueryOutput];
-        [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        if (rekursiveRueckgabeJQueryOutput.length > 0)
+        {
+            [self.jsOLClassesOutput appendString:@"  this.contentJQuery = \""];
+            [self.jsOLClassesOutput appendString:rekursiveRueckgabeJQueryOutput];
+            [self.jsOLClassesOutput appendString:@"\";\n\n"];
+        }
 
-        [self.jsOLClassesOutput appendString:@"  this.contentJSInitstageDefer = \""];
-        [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsInitstageDeferOutput];
-        [self.jsOLClassesOutput appendString:@"\";\n"];
+        if (rekursiveRueckgabeJsInitstageDeferOutput.length > 0)
+        {
+            [self.jsOLClassesOutput appendString:@"  this.contentJSInitstageDefer = \""];
+            [self.jsOLClassesOutput appendString:rekursiveRueckgabeJsInitstageDeferOutput];
+            [self.jsOLClassesOutput appendString:@"\";\n"];
+        }
 
 
 
@@ -13375,7 +13564,6 @@ BOOL isJSExpression(NSString *s)
     "            if (!recursion && this.p)\n"
     "            {\n"
     "                // this.p.__LZlockFromUpdate(this);\n"
-    "                // Seitdem ich applyData() korrekt auswerte:\n"
     "                // Ich muss es hier locken, damit es in update_DataAndDatasetAndTrigger keine infinite loop gibt\n"
     "                this.locked__ = true;\n"
     "            }\n"
@@ -15118,7 +15306,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// applyData()                                         //\n"
     "/////////////////////////////////////////////////////////\n"
-    "var applyDataFunction = function(data) {\n"
+    "HTMLElement.prototype.applyData = function(data) {\n"
     "    // Nach OL-Code-Inspektion und Beispiel 40.1: Bei <text>-Nodes setzt er den Text!\n"
     "    if ($(this).data('olel') == 'text') // im Prinzip oi\n"
     "    {\n"
@@ -15145,10 +15333,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    console.log('Warning: Can not find a overwritten applyData() for ' + this.id);\n"
     "}\n"
-    "HTMLDivElement.prototype.applyData = applyDataFunction;\n"
-    "HTMLInputElement.prototype.applyData = applyDataFunction;\n"
-    "HTMLSelectElement.prototype.applyData = applyDataFunction;\n"
-    "HTMLButtonElement.prototype.applyData = applyDataFunction;\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// completeInstantiation()                             //\n"
@@ -17532,7 +17716,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            if (valueToApply != null)\n"
     "            {\n"
-    "                // Die Methode applyData() ist immer bekannt, wird im Regelfall aber überschrieben\n"
+    "                // Die Methode applyData() wird im Regelfall stets überschrieben\n"
     "                el.applyData(valueToApply);\n"
     "            }\n"
     "        }\n"
@@ -18284,7 +18468,7 @@ BOOL isJSExpression(NSString *s)
     "            var obj = rueckwaertsArray[i];\n"
     "\n"
     "            // Ich denke es ist sinnvoll die Methoden (grundsätzlich) vor den Attributen zu setzen,\n"
-    "            // falls berechnete Werte oder Constraints mit diesen arbeiten wollen.\n"
+    "            // falls berechnete Werte, Constraints oder setter mit diesen arbeiten wollen.\n"
     "            if (obj.methods)\n"
     "            {\n"
     "                Object.keys(obj.methods).forEach(function(key)\n"
@@ -18368,11 +18552,40 @@ BOOL isJSExpression(NSString *s)
     "                        }\n"
     "                        else if (value.startsWith('@§.SETTER.§@'))\n"
     "                        {\n"
-    "                            value = value.substr(12);\n"
     "                            value = replaceID(value,''+$(id).attr('id'));\n"
-    "                            // Den setter als Methode im Objekt speichern, die dann von setAttribute_() aufgerufen wird\n"
-    "                            var evalString = \"id['mySetterFor_'+key+'_'] = function(\" + key + ') { with (' + $(id).attr('id') + ') { ' + value + ' }};';\n"
+    "\n"
+    "                            // Wenn ein initvalue vorliegt, zum einen den setter anders auslesen\n"
+    "                            // weil der string hinten ja noch durch den initvalue ergänzt ist.\n"
+    "                            // Zum anderen muss der initvalue im Anschluss auch gesetzt werden.\n"
+    "                            var initvalueIndex = value.indexOf('@§.INITVALUE.§@')\n"
+    "\n"
+    "                            if (initvalueIndex != -1)\n"
+    "                            {\n"
+    "                                // initvalue für gleich vormerken\n"
+    "                                var initvalue = value.substr(initvalueIndex+15);\n"
+    "                                // Jetzt erst den string kürzen\n"
+    "                                value = value.substring(12,initvalueIndex);\n"
+    "                            }\n"
+    "                            else\n"
+    "                                value = value.substr(12);\n"
+    "\n"
+    //"                            var evalString = \"id['mySetterFor_'+key+'_'] = function(\" + key + ') { with (' + $(id).attr('id') + ') { ' + value + ' }};';\n"
+    // ... Das klappt so nicht. Ich hatte einmal als key 'width'. Dann hat er natürlich den echten
+    // internen setter von width genommen. Deswegen Argumentnamen gerade modifizieren
+    "                            // Um Zusammenstoß mit echten settern zu vermeiden, Argument umbenennen (ergänzen um 2 Unterstriche)\n"
+    "                            value = value.insertAt(value.lastIndexOf('(')+1,'__');\n"
+    "\n"
+    "                            // Dann den setter als Methode im Objekt speichern, die dann von setAttribute_() berücksichtigt wird\n"
+    "                            var evalString = \"id['mySetterFor_'+key+'_'] = function(__\" + key + ') { with (' + $(id).attr('id') + ') { ' + value + ' }};';\n"
     "                            eval(evalString);\n"
+    "\n"
+    "                            if (initvalueIndex != -1)\n"
+    "                            {\n"
+    "                                // In dem Fall muss ich jetzt doch über setAttribute_() gehen\n"
+    "                                // damit er über den setter geht. Aber getriggert wird trotzdem\n"
+    "                                // nicht, da er den setter erkennt und vorzeitig abbricht.\n"
+    "                                id.setAttribute_(key,initvalue);\n"
+    "                            }\n"
     "                        }\n"
     "                    }\n"
     "                });\n"
@@ -18562,7 +18775,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
-    "    while (obj.inherit !== undefined)\n"
+    "    while (obj.inherit)\n"
     "    {\n"
     "        rueckwaertsArray.push(obj);\n"
     "        obj = obj.inherit;\n"
@@ -18923,7 +19136,7 @@ BOOL isJSExpression(NSString *s)
     //"    evalCode(s);\n"
     //"\n"
     "    // Replace-IDs von contentNamesAndIDs ersetzen\n"
-    "    s = replaceID(obj.contentNamesAndIDs, r, r2);\n"
+    "    var s = replaceID(obj.contentNamesAndIDs, r, r2);\n"
     //"    if (s.length > 0)\n"
     "    evalCode(s);\n"
     "\n"
@@ -19018,7 +19231,7 @@ BOOL isJSExpression(NSString *s)
     "///////////////////////////////////////////////////////////////\n"
     "oo.view = function() {\n"
     "  this.name = 'view';\n"
-    "  this.inherit = undefined;\n"
+    "  this.inherit = null;\n"
     "\n"
     "  this.attributesDict = { }\n"
     "\n"
@@ -19475,9 +19688,6 @@ BOOL isJSExpression(NSString *s)
     "// ToDo -> Nimm den hier: http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/baseformitem.lzx\n"
     "///////////////////////////////////////////////////////////////\n"
     "oo.baseformitem = function(textBetweenTags) {\n"
-    "  if(typeof(textBetweenTags) === 'undefined')\n"
-    "    textBetweenTags = '';\n"
-    "\n"
     "  this.name = 'baseformitem';\n"
     "  this.inherit = new oo.basevaluecomponent(textBetweenTags);\n"
     "\n"
@@ -19586,9 +19796,14 @@ BOOL isJSExpression(NSString *s)
         NSLog(@"Z. B. '/ />' am Elementende oder Ampersand (&) im Attribut (NSXMLParserNAMERequiredError) ");
     }
 
+    if ([errorString hasSuffix:@"39"])
+    {
+        NSLog(@"Attribut startet nicht mit Anführungszeichen (NSXMLParserAttributeNotStartedError)");
+    }
+
     if ([errorString hasSuffix:@"38"])
     {
-        NSLog(@"Kleiner-Zeichen (<) in Attribut (NSXMLParserLessThanSymbolInAttributeError) ");
+        NSLog(@"Kleiner-Zeichen (<) in Attribut (NSXMLParserLessThanSymbolInAttributeError)");
     }
 
     if ([errorString hasSuffix:@"5"])

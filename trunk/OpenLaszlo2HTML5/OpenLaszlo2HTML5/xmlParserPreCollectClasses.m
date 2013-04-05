@@ -48,30 +48,30 @@
         NSArray *r = [NSArray arrayWithObjects:@"XML-File not found", nil];
         return r;
     }
+
+
+    if ([s isEqualToString:@""])
+    {
+        // Create a parser from the prevous set file
+        self.parser = [[NSXMLParser alloc] initWithContentsOfURL:self.pathToFile];
+    }
     else
     {
-        if ([s isEqualToString:@""])
-        {
-            // Create a parser from the prevous set file
-            self.parser = [[NSXMLParser alloc] initWithContentsOfURL:self.pathToFile];
-        }
-        else
-        {
-            // Create a parser from string
-            NSData* d = [s dataUsingEncoding:NSUTF8StringEncoding];
-            self.parser = [[NSXMLParser alloc] initWithData:d];
-        }
-
-        // Dadurch werden hierdrin die entsprechenden Delegate-Methoden aufgerufen
-        [self.parser setDelegate:self];
-
-        // Do the parse
-        [self.parser parse];
-
-        // Zurückliefern des Arrays mit 2 Objekten
-        NSArray *r = [NSArray arrayWithObjects:[self.allFoundClasses copy],[self.allIncludedIncludes copy], nil];
-        return r;
+        // Create a parser from string
+        NSData* d = [s dataUsingEncoding:NSUTF8StringEncoding];
+        self.parser = [[NSXMLParser alloc] initWithData:d];
     }
+
+    // Dadurch werden hierdrin die entsprechenden Delegate-Methoden aufgerufen
+    [self.parser setDelegate:self];
+
+    // Do the parse
+    [self.parser parse];
+
+    // Zurückliefern des Arrays mit 2 Objekten
+    NSArray *r = [NSArray arrayWithObjects:[self.allFoundClasses copy],[self.allIncludedIncludes copy], nil];
+
+    return r;
 }
 
 

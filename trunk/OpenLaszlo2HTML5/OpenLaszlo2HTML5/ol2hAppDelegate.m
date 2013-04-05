@@ -25,10 +25,10 @@
 
     if (SOFORTSTART)
     {
-        NSURL *u = [NSURL URLWithString:@"file://localhost/Users/MI5/Downloads/Taxango2012/Taxango.lzx"];
+        NSURL *u = [NSURL URLWithString:@"file://localhost/Users/MI5/Downloads/Taxango2013/Taxango.lzx"];
         BOOL fileExists = [[NSFileManager defaultManager] fileExistsAtPath:[u path]];
         if (!fileExists) // Damit es auch auf Arbeit klappt, dort anderes Verzeichnis
-            u = [NSURL URLWithString:@"file://localhost/Users/Blanquett/Downloads/Taxango2012/Taxango.lzx"];
+            u = [NSURL URLWithString:@"file://localhost/Users/Blanquett/Downloads/Taxango2013/Taxango.lzx"];
         fileExists = [[NSFileManager defaultManager] fileExistsAtPath:[u path]];
         if (!fileExists)
             return;

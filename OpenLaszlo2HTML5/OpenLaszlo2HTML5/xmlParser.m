@@ -4,10 +4,13 @@
 //
 // Hinweise:
 // - IE-Support erst ab IE 8 (weil IE 7 und IE 6 CSS-Angabe inherit nicht unterstützen)
+// - Don't rely on Mousewheels
 //
 //
 // Weitere OL-Dateien:
 // http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/utils/
+//
+// http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/
 //
 //
 // - iwie gibt es noch ein Problem mit den pointer-events (globalhelp verdeckt Foren-Button)
@@ -24,8 +27,6 @@
 //
 //
 // - BDStabsheetTaxango ist nicht das Problem -- > Ne, ich denke ich MUSS beide gleichzeitig auswerten
-//
-// - Hints: Don't rely on Mousewheels
 //
 //
 //
@@ -67,10 +68,11 @@ BOOL ownSplashscreen = NO;
 @property (strong, nonatomic) NSXMLParser *parser;
 
 @property (nonatomic) BOOL isRecursiveCall;
+@property (nonatomic) BOOL isPreCall;
+@property (strong, nonatomic) NSString *fromURL;
 
 // Falls Resourcen relativ gesetzt sind, in tiefer verschachtelten library-files.
-// dann muss ich an den originären Pfad kommen, um den Pfad der Bilder
-// js-intern richtig setzen zu können.
+// Dann muss ich an den originären Pfad kommen, um den Pfad JS-intern richtig setzen zu können.
 @property (strong, nonatomic) NSString *pathToFile_basedir;
 
 @property (strong, nonatomic) NSMutableString *log;
@@ -199,6 +201,8 @@ BOOL ownSplashscreen = NO;
 // Bei Switch/When lese ich nur einen Zweig (den ersten) aus, um Dopplungen zu vermeiden
 @property (nonatomic) BOOL weAreInTheTagSwitchAndNotInTheFirstWhen;
 
+@property (nonatomic) int weAreInTheTagDoc;
+
 // Wenn wir gerade Text einsammeln, dann dürfen auf den Text bezogene HTML-Tags nicht ausgewertet werden
 @property (nonatomic) BOOL weAreCollectingTextAndThereMayBeHTMLTags;
 
@@ -217,7 +221,7 @@ BOOL ownSplashscreen = NO;
 // festen IDs vergeben!
 @property (nonatomic) BOOL ignoreAddingIDsBecauseWeAreInClass;
 
-// oninit-Code in einem Handler wird direkt ausgeführt (load-Handler ist unpassend)
+// oninit-Code in einem Handler wird direkt ausgeführt
 @property (nonatomic) BOOL onInitInHandler;
 @property (nonatomic) int initStageDeferThatWillBeCalledByCompleteInstantiation;
 @property (nonatomic) BOOL classInClass;
@@ -246,7 +250,7 @@ BOOL ownSplashscreen = NO;
 // private
 @synthesize parser = _parser;
 
-@synthesize isRecursiveCall = _isRecursiveCall, pathToFile_basedir = _pathToFile_basedir;
+@synthesize isRecursiveCall = _isRecursiveCall, isPreCall = _isPreCall, fromURL = _fromURL, pathToFile_basedir = _pathToFile_basedir;
 
 @synthesize log = _log;
 
@@ -281,6 +285,7 @@ BOOL ownSplashscreen = NO;
 @synthesize issueWithRecursiveFileNotFound = _issueWithRecursiveFileNotFound;
 
 @synthesize weAreInTheTagSwitchAndNotInTheFirstWhen = _weAreInTheTagSwitchAndNotInTheFirstWhen;
+@synthesize weAreInTheTagDoc = _weAreInTheTagDoc;
 @synthesize weAreCollectingTextAndThereMayBeHTMLTags = _weAreCollectingTextAndThereMayBeHTMLTags;
 @synthesize weAreInDatasetAndNeedToCollectTheFollowingTags = _weAreInDatasetAndNeedToCollectTheFollowingTags;
 @synthesize weAreInRollUpDownWithoutSurroundingRUDContainer = _weAreInRollUpDownWithoutSurroundingRUDContainer;
@@ -367,6 +372,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     if ([olVersion isEqualToString:@"4.11"])
     {
+        //[self preEvaluateInternalClass:@"http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/basecomponent.lzx"];
         //[self preEvaluateInternalClass:@"http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/baseformitem.lzx"];
     }
 
@@ -384,6 +390,8 @@ void OLLog(xmlParser *self, NSString* s,...)
     if (self = [super init])
     {
         self.isRecursiveCall = isRecursive;
+        self.isPreCall = NO;
+        self.fromURL = @"";
 
         self.log = [[globalAccessToTextView textStorage] mutableString];
 
@@ -447,6 +455,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         self.issueWithRecursiveFileNotFound = @"";
 
+        self.weAreInTheTagDoc = 0;
         self.weAreInTheTagSwitchAndNotInTheFirstWhen = NO;
         self.weAreCollectingTextAndThereMayBeHTMLTags = NO;
         self.weAreInDatasetAndNeedToCollectTheFollowingTags = NO;
@@ -1448,6 +1457,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             self.attributeCount++;
             NSLog(@"Skipping the attribute 'proxied'.");
         }
+
         if (![attributeDict valueForKey:@"width"])
         {
             [self setTheValue:@"100%" ofAttribute:@"width"];
@@ -2709,7 +2719,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     // Erstmal greife ich stets auf die interne DB zu und steige hier aus.
     // Für Relase evtl. dann aus Copyright-Gründen auf die URL's zugreifen.
-    return [self getStringFromInternalDB:urlAsString];
+    //return [self getStringFromInternalDB:urlAsString];
 
 
 
@@ -2733,13 +2743,16 @@ void OLLog(xmlParser *self, NSString* s,...)
 -(void) preEvaluateInternalClass:(NSString*)internalClass
 {
     // Verwandle die übergebene URL in den Code der konkreten Klasse!
-    internalClass = [self getStringFromURL:internalClass];
+    NSString *internalClassExpanded = [self getStringFromURL:internalClass];
 
 
     // Dass ich hier self.pathToFile ist historisch durch den Konstruktor bedingt
     // Ändert nichts daran, dass tatsächlich ein String ausgewertet wird.
     xmlParser *x = [[xmlParser alloc] initWith:self.pathToFile recursiveCall:YES];
 
+    // Ich will in der Datei collectedClass.js das 'from' richtig setzen
+    x.isPreCall = YES;
+    x.fromURL = internalClass;
 
     // Manchmal greift die rekursive Datei auf vorher nicht-rekursiv definierte Res zurück.
     // Deswegen muss ich das Dictionary, welches alle gesammelten Resourcen enthält mit übergeben.
@@ -2757,7 +2770,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     x.pointerWithoutNameZaehler = self.pointerWithoutNameZaehler;
 
 
-    NSArray* result = [x startWithString:internalClass];
+    NSArray* result = [x startWithString:internalClassExpanded];
 
 
     [self.output appendString:[result objectAtIndex:0]];
@@ -3074,6 +3087,14 @@ didStartElement:(NSString *)elementName
   qualifiedName:(NSString *)qName
      attributes:(NSDictionary *)attributeDict
 {
+    // Wenn wir im Tag 'doc' sind oder einem Unterelement davon komplett alles überspringen
+    // Als int gelöst, und nicht als bool, falls es verschachtelte 'doc'-Tags gibt
+    if ([elementName isEqualToString:@"doc"])
+        self.weAreInTheTagDoc++;
+    if (self.weAreInTheTagDoc > 0)
+        return;
+
+
     // Zum internen testen, ob wir alle Elemente erfasst haben
     BOOL element_bearbeitet = NO;
 
@@ -3406,6 +3427,11 @@ didStartElement:(NSString *)elementName
             ![href isEqualToString:@"base/baselistitem.lzx"] &&
             ![href isEqualToString:@"base/baselist.lzx"] &&
             ![href isEqualToString:@"base/basebutton.lzx"] &&
+
+            // Die kommen aus dem Original 'basecomponent.lzx':
+            ![href isEqualToString:@"base/style.lzx"] &&
+            ![href isEqualToString:@"base/componentmanager.lzx"] &&
+            ![href isEqualToString:@"base/basefocusview.lzx"] &&
 
             ![href isEqualToString:@"incubator/base64.lzx"])
             [self callMyselfRecursive:href];
@@ -5879,7 +5905,8 @@ didStartElement:(NSString *)elementName
     }
 
 
-
+    // To Do: Nimm den hier: http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/lz/tabelement.lzx
+    // Aber absolut nicht Taxango-relevant
     if ([elementName isEqualToString:@"tabelement"])
     {
         element_bearbeitet = YES;
@@ -5914,7 +5941,6 @@ didStartElement:(NSString *)elementName
 
             if ([[attributeDict valueForKey:@"selected"] isEqualToString:@"true"])
             {
-                // To Do - Nicht Taxango-relevant.
                 //[self.jQueryOutput appendString:@"\n  // Dieser Tab ist selected\n"];
                 //[self.jQueryOutput appendFormat:@"  $('#%@').tabs('select', '#%@');\n",self.lastUsedTabSheetContainerID,geradeVergebeneID];
             }
@@ -6289,15 +6315,25 @@ didStartElement:(NSString *)elementName
 
         [self.jsOLClassesOutput appendString:@"\n\n"];
         [self.jsOLClassesOutput appendString:@"///////////////////////////////////////////////////////////////\n"];
-        [self.jsOLClassesOutput appendFormat:@"// class = %@ (from %@)",name,[self.pathToFile lastPathComponent]];
 
-        for (int i=(42-((int)[name length]+(int)[[self.pathToFile lastPathComponent] length])); i > 0; i--)
+        // Bei internen Klassen, gebe die zugehörige URL aus
+        if (self.isPreCall)
         {
-            [self.jsOLClassesOutput appendFormat:@" "];
+            [self.jsOLClassesOutput appendFormat:@"// class = %@ (from %@)",name,self.fromURL];
+        }
+        else
+        {
+            [self.jsOLClassesOutput appendFormat:@"// class = %@ (from %@)",name,[self.pathToFile lastPathComponent]];
+
+            for (int i=(42-((int)[name length]+(int)[[self.pathToFile lastPathComponent] length])); i > 0; i--)
+            {
+                [self.jsOLClassesOutput appendFormat:@" "];
+            }
+
+            [self.jsOLClassesOutput appendFormat:@"//"];
         }
 
-        [self.jsOLClassesOutput appendFormat:@"//\n"];
-        [self.jsOLClassesOutput appendString:@"///////////////////////////////////////////////////////////////\n"];
+        [self.jsOLClassesOutput appendString:@"\n///////////////////////////////////////////////////////////////\n"];
         [self.jsOLClassesOutput appendFormat:@"oo.%@ = function(textBetweenTags) {\n",name];
 
 
@@ -7492,7 +7528,7 @@ didStartElement:(NSString *)elementName
 
         // Ich muss die Stelle einmal markieren...
         // Standardmäßig wird immer von 'view' geerbt, deswegen hier als class 'div_standard'.
-        // Wird falls nötig auf JS-Ebene von der Funktion interpretObject() mit Attributen erweitert.
+        // Wird falls nötig auf JS-Ebene von der Funktion interpretObject() mit den zugehörigen Attributen erweitert.
         [self.output appendString:@"<div"];
         [self addIdToElement:attributeDict];
         [self.output appendString:@" class=\"div_standard noPointerEvents\" style=\""];
@@ -7636,11 +7672,11 @@ didStartElement:(NSString *)elementName
                 if (weNeedQuotes)
                 {
                     s = [self protectThisSingleQuotedJavaScriptString:s];
-                    [instanceVars appendFormat:@"%@ : '%@', ",key,s];
+                    [instanceVars appendFormat:@"%@: '%@', ",key,s];
                 }
                 else
                 {
-                    [instanceVars appendFormat:@"%@ : %@, ",key,s];
+                    [instanceVars appendFormat:@"%@: %@, ",key,s];
                 }
             }
 
@@ -7664,13 +7700,11 @@ didStartElement:(NSString *)elementName
 
 
 
-        // Und dann kann ich es per jQuery flexibel einfügen.
-        // Okay, hier muss ich jetzt per jQuery die Objekte
-        // auslesen aus der JS-Datei collectedClasses.js
+        // Hier werden jetzt die Objekte instanziert aus der JS-Datei collectedClasses.js
 
         [o appendFormat:@"\n  // Instanzvariablen holen, el holen, Instanz erzeugen, Objekt auswerten und 'el' entsprechend ergänzen"];
-        [o appendFormat:@"\n  var iv = { %@};",instanceVars];
         [o appendFormat:@"\n  var el = document.getElementById('%@');",idUmgebendesElement];
+        [o appendFormat:@"\n  var iv = { %@};",instanceVars];
         [o appendFormat:@"\n  var obj = new oo.%@('');",elementName];
         [o appendString:@"\n  interpretObject(obj,el,iv);\n"];
 
@@ -8033,6 +8067,11 @@ BOOL isJSExpression(NSString *s)
    namespaceURI:(NSString *)namespaceURI
   qualifiedName:(NSString *)qName
 {
+    if ([elementName isEqualToString:@"doc"])
+        self.weAreInTheTagDoc--;
+    if (self.weAreInTheTagDoc > 0 || [elementName isEqualToString:@"doc"])
+        return;
+
     // Zum internen testen, ob wir alle Elemente erfasst haben
     BOOL element_geschlossen = NO;
 
@@ -8387,14 +8426,14 @@ BOOL isJSExpression(NSString *s)
 
                 if (!weNeedQuotes)
                 {
-                    [self.jsOLClassesOutput appendFormat:@" %@ : %@,", key, value];
+                    [self.jsOLClassesOutput appendFormat:@" %@: %@,", key, value];
                 }
                 else
                 {
                     // ' und Newlines escapen bei JS-Strings:
                     value = [self protectThisSingleQuotedJavaScriptString:value];
 
-                    [self.jsOLClassesOutput appendFormat:@" %@ : '%@',", key, value];
+                    [self.jsOLClassesOutput appendFormat:@" %@: '%@',", key, value];
                 }
             }
         }
@@ -8756,7 +8795,7 @@ BOOL isJSExpression(NSString *s)
         element_geschlossen = YES;
 
         [self.jsOutput appendString:@"\n  // Animatorgroup leeren, damit nachfolgende Animationen diese Attribute nicht als die ihrigen auffassen\n"];
-        [self.jsOutput appendString:@"  animatorgroup_ = { animators : [], doStart : function() { for (var i = 0;i<this.animators.length;i++) { this.animators[i].doStart(); } } };\n"];
+        [self.jsOutput appendString:@"  animatorgroup_ = { animators: [], doStart: function() { for (var i = 0;i<this.animators.length;i++) { this.animators[i].doStart(); } } };\n"];
     }
 
 
@@ -11083,7 +11122,7 @@ BOOL isJSExpression(NSString *s)
     "// Alle Variablen und Methoden die zu canvas gehören,  //\n"
     "// werden hier initialisiert.                          //\n"
     "/////////////////////////////////////////////////////////\n"
-    "function makeCanvasAccessible() {\n"
+    "function initCanvas() {\n"
     "    // ohne var, damit global\n"
     "    canvas = $('.canvas_standard').get(0);\n"
     "\n"
@@ -11140,16 +11179,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // Alle datasets stecken auch in einer Property von canvas\n"
     "    canvas.myDatasets = {}; // Dictionary of all named datasets.\n"
-    "\n"
-    "    // Anhand dieser Variable kann im Skript abgefragt werden, ob wir im Debugmode sind\n"
-    "    // ohne 'var', damit global. \n"
-    "    $debug = false;\n"
-    "    $swf8 = false;\n"
-    "\n"
-    "    flash = { net : { FileReference : function() { this.addListener = function() {} } } }\n"
-    "\n"
-    "    // Keine Ahnung, wo diese Variable herkommen soll, 'ftgridcolumn' versucht sie aber als Hintergrundbild für eine view zu setzen\n"
-    "    lzgridsortarrow_rsrc = null;\n"
     "}\n"
     "\n"
     "\n"
@@ -11205,7 +11234,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Führt die beiden oben genannten Methoden aus (init) //\n"
+    "// Nötige Initialiserungen                             //\n"
     "/////////////////////////////////////////////////////////\n"
     "function makeIDsGlobalAndInitStuff(all) {\n"
     "    // Make all id's from <div>'s global (Firefox)\n"
@@ -11221,9 +11250,19 @@ BOOL isJSExpression(NSString *s)
     "    // Make all id's from <textarea>'s global (Firefox)\n"
     "    makeElementsGlobal(document.getElementsByTagName('textarea'));\n"
     "\n"
-    "    // Make canvas accessible\n"
-    "    makeCanvasAccessible();\n"
+    "    // Make canvas accessible and set its propertys\n"
+    "    initCanvas();\n"
     "\n"
+    "\n"
+    "    // Anhand dieser Variable kann im Skript abgefragt werden, ob wir im Debugmode sind\n"
+    "    // ohne 'var', damit global. \n"
+    "    $debug = false;\n"
+    "    $swf8 = false;\n"
+    "\n"
+    "    flash = { net: { FileReference: function() { this.addListener = function() {} } } }\n"
+    "\n"
+    "    // Wo soll diese Variable herkommen? 'ftgridcolumn' will sie als Hintergrundbild für eine view setzen\n"
+    "    lzgridsortarrow_rsrc = null;\n"
     "\n"
     "    ensureProperCheckboxValueAndThatValueIsTriggered();\n"
     "\n"
@@ -11239,7 +11278,7 @@ BOOL isJSExpression(NSString *s)
     "    // Hier schreiben 'animatorgroup's ihre Attribute rein. Als globales Objekt, welches immer erst beim schließen\n"
     "    // einer Grupper geleert wird (und NICHT beim öffnen neu initialisiert). Weil bei verschachtelten\n"
     "    // 'animatorgroups's die inneren, die Attribute der äußeren 'erben'.\n"
-    "    animatorgroup_ = { animators : [], doStart : function() { for (var i = 0;i<this.animators.length;i++) { this.animators[i].doStart(); } } };\n"
+    "    animatorgroup_ = { animators: [], doStart: function() { for (var i = 0;i<this.animators.length;i++) { this.animators[i].doStart(); } } };\n"
     "}\n"
     "\n"
     "\n"
@@ -11265,7 +11304,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Summer aller Zahlen in einem Array                  //\n"
+    "// Summe aller Zahlen in einem Array                   //\n"
     "/////////////////////////////////////////////////////////\n"
     "function getSumOfArray(arr)\n"
     "{\n"
@@ -11286,7 +11325,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Heighest height of all children of an element       //\n"
-    "// @return: integer                                    //\n"
+    "// @return {integer}                                   //\n"
     "/////////////////////////////////////////////////////////\n"
     "function getHeighestHeightOfChildren(el)\n"
     "{\n"
@@ -11304,7 +11343,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// Heighest size of all children of an element         //\n"
     "// (includes a top-value)                              //\n"
-    "// @return: integer                                    //\n"
+    "// @return {integer}                                   //\n"
     "/////////////////////////////////////////////////////////\n"
     "function getHeighestSizeOfChildren(el)\n"
     "{\n"
@@ -11324,8 +11363,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Widest size of all children of an element           //\n"
-    "// (includes a left-value)                              //\n"
-    "// @return: integer                                    //\n"
+    "// (includes a left-value)                             //\n"
+    "// @return {integer}                                   //\n"
     "/////////////////////////////////////////////////////////\n"
     "function getWidestSizeOfChildren(el)\n"
     "{\n"
@@ -11342,7 +11381,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "// Widest width of all children of an element          //\n"
-    "// @return: integer                                    //\n"
+    "// @return {integer}                                   //\n"
     "/////////////////////////////////////////////////////////\n"
     "function getWidestWidthOfChildren(el)\n"
     "{\n"
@@ -11786,7 +11825,7 @@ BOOL isJSExpression(NSString *s)
     "                'top': 0,\n"
     "                'left': 0,\n"
     "                'position': 'fixed',\n"
-    "                'opacity' : 0.4,\n"
+    "                'opacity': 0.4,\n"
     "                'background-color': 'black',\n"
     "                'width': '100%',\n"
     "                'z-index': 12000\n"
@@ -12509,7 +12548,7 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        this.doRequest = function(ignore) {\n"
     "            if (!this.src) {\n"
-    "                console.log('Warning: No src set for this dataset, but doRequest() was called');\n"
+    "                console.log('Warning: No src set for this dataset, but doRequest() was called.');\n"
     "                return;\n"
     "            }\n"
     "\n"
@@ -15138,9 +15177,9 @@ BOOL isJSExpression(NSString *s)
     "// searchSubnodes()                                    //\n"
     "// From the docu: Searches subnodes for the given value of the given property.//\n"
     "// For now, returns when it finds the first one. This is a width first search.//\n"
-    "// @arg prop = The attribute name to search for\n"
-    "// @arg val = The value of the attribute\n"
-    "// @returns = A pointer to the first subnode with the given property or null if none is found\n"
+    "// @param prop The attribute name to search for\n"
+    "// @param val The value of the attribute\n"
+    "// @return A pointer to the first subnode with the given property or null if none is found\n"
     "/////////////////////////////////////////////////////////\n"
     "var searchSubnodesFunction = function (prop,val) {\n"
     "    var node = null;\n"
@@ -15252,16 +15291,16 @@ BOOL isJSExpression(NSString *s)
     "    if (prop !== 'spacing')\n"
     "    {\n"
     "        // Animationen laufen in jQuery immer parallel ab (s. Bsp. 17.8, deswegen queue = false)\n"
-    "        $(this).animate(p, { duration : duration, queue : queue, easing : motion, step : function(now,fx) { $(this).triggerHandler('on'+originalProp,now); } });\n"
+    "        $(this).animate(p, { duration: duration, queue: queue, easing: motion, step: function(now,fx) { $(this).triggerHandler('on'+originalProp,now); } });\n"
     "    }\n"
     "    else\n"
     "    {\n"
     "        var from = this.spacing;\n"
     "        var delta = from - to;\n"
     "\n"
-    "        // $(this).animate({ spacing : 1 }, { duration : duration }); // <-- Doesn't work. Iwie landet falsches this im setter\n"
+    "        // $(this).animate({ spacing: 1 }, { duration: duration }); // <-- Doesn't work. Iwie landet falsches this im setter\n"
     "        // opacity, um einfach nur irgendwas (nicht) zu animieren, die eigentliche Animation dann über step\n"
-    "        $(this).animate({ opacity : $(this).css('opacity') }, { duration : duration, queue : queue, easing : motion, step : function(now,fx) { this.setAttribute_('spacing',from - delta * fx.state); } });\n"
+    "        $(this).animate({ opacity: $(this).css('opacity') }, { duration: duration, queue: queue, easing: motion, step: function(now,fx) { this.setAttribute_('spacing',from - delta * fx.state); } });\n"
     "    }\n"
     "\n"
     "\n"
@@ -15997,9 +16036,9 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// _updateSelectionByIndex()                           //\n"
     "// Updates the combobox text and 'selected' attribute. Called when an item is selected.//\n"
-    "// @param Number index: index of data item.            //\n"
-    "// @param Boolean dontSetValue: used by setValue() not to set value. Avoids circular logic.//\n"
-    "// @param Boolean isinitvalue: used by init() to set value as an init value.//\n"
+    "// @param {Number} index: index of data item.            //\n"
+    "// @param {Boolean} dontSetValue: used by setValue() not to set value. Avoids circular logic.//\n"
+    "// @param {Boolean} isinitvalue: used by init() to set value as an init value.//\n"
     "/////////////////////////////////////////////////////////\n"
     "var _updateSelectionByIndexFunction = function (index,dontSetValue,isinitvalue) { // oi 1:1\n"
     "    var dp = new lz.datapointer(this);\n"
@@ -16061,9 +16100,9 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// doSetValue()                                        //\n"
     "// Set value of combobox.                              //\n"
-    "//@param String|Number value: value to set.            //\n"
-    "//@param Boolean isinitvalue: true if value is an init value.//\n"
-    "//@param Boolean ignoreselection: if true, selection won't be updated//\n"
+    "//@param {String|Number} value: value to set.            //\n"
+    "//@param {Boolean} isinitvalue: true if value is an init value.//\n"
+    "//@param {Boolean} ignoreselection: if true, selection won't be updated//\n"
     "/////////////////////////////////////////////////////////\n"
     "var doSetValueFunction = function (value,isinitvalue,ignoreselection) { // oi 1:1\n"
     "    if (this['value'] != value) {\n"
@@ -16650,7 +16689,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/////////////////////////////////////////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Attribute          von <div> (OL: <view>)           //\n"
+    "// Attribute von <div> (OL: <view>)                    //\n"
     "/////////////////////////////////////////////////////////\n"
     "////////////////////////INCOMPLETE///////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
@@ -18234,7 +18273,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "    // Alte Logik\n"
-    "    // var dur = $(el).parents(\"[data-olel='rollUpDownContainer']\").get(0).animduration ? $(el).parents(\"[data-olel='rollUpDownContainer']\").get(0).animduration : 'slow';\n"
+    "    // var dur = $(el).parents(\"[data-olel='rollUpDownContainer']\").get(0).animduration ? $(el).parents(\"[data-olel='rollUpDownContainer']\").get(0).animduration: 'slow';\n"
     "    // Aber der Schnelligkeit wegen, und weil eh immer 800:\n"
     "    var dur = 800;\n"
     "\n"
@@ -18282,7 +18321,7 @@ BOOL isJSExpression(NSString *s)
     "    });\n"
     "\n"
     "\n"
-    "    // Kostet mich derzeit unter Taxango ganze 12 Sekunden... To check\n"
+    "    // Kostet mich derzeit unter Taxango ganze 5 Sekunden... To check\n"
     "    $('body').find('div, button').each( function() {\n"
     "        adjustHeightAndWidth(this);\n"
     "    });\n"
@@ -18382,24 +18421,23 @@ BOOL isJSExpression(NSString *s)
     NSString *js = @"/* FILE: collectedClasses.js */\n"
     "// \"use strict\"; // Klappt nicht wegen der vielen with-Anweisungen\n"
     "\n"
-    "//////////////////////////////////////////////////////////////////////////////////////////\n"
-    "// Beinhaltet alle von OpenLaszlo mittels <class> definierte Klassen. Es werden korrespondierende //\n"
-    "// 'Constructor Functions' angelegt, welche später von jQuery verarbeitet werden. Sobald          //\n"
-    "// der Converter auf die Klasse dann stößt, legt er ein hier definiertes Objekt per new() an.     //\n"
-    "//////////////////////////////////////////////////////////////////////////////////////////\n"
+    "///////////////////////////////////////////////////////////////////////////////////\n"
+    "// Beinhaltet alle von OpenLaszlo mittels <class> definierten Klassen. Es werden //\n"
+    "// korrespondierende 'Constructor Functions' angelegt. Sobald der Converter auf  //\n"
+    "// die Klasse dann stößt, legt er ein hier definiertes Objekt per new() an.      //\n"
+    "///////////////////////////////////////////////////////////////////////////////////\n"
     "\n"
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
-    "// Globales Objekt, in dem alle Klassen stecken              //\n"
-    "// Damit es keine Name-Conflicts gibt, z. B. bei SharedObject//\n"
+    "// Globales Objekt, in dem alle gefundenen Klassen stecken   //\n"
     "///////////////////////////////////////////////////////////////\n"
     "var oo = {};\n"
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
-    "// Bei diesen Attributen wird nicht setAttribute_ aufgerufen //\n"
-    "// sondern direkter JS-Code ausgeführt.                      //\n"
+    "// Diese Attribute werden nicht als Attribute gesetzt,       //\n"
+    "// sondern als JS-Eventhandler gesetzt.                      //\n"
     "///////////////////////////////////////////////////////////////\n"
     "var eventHandlerAttributes = ['oninit','onclick','ondblclick','onmouseover','onmouseout','onmouseup','onmousedown','onfocus','onblur','onkeyup','onkeydown'];\n"
     "\n"
@@ -18411,16 +18449,16 @@ BOOL isJSExpression(NSString *s)
     "var placeholderID = '@@@P-L,A#TZHALTER@@@';\n"
     "///////////////////////////////////////////////////////////////\n"
     "// replace placeholder-id with real id                       //\n"
-    "// @arg s = der zu bearbeitende String                       //\n"
-    "// @arg to = replacement-String                              //\n"
-    "// @arg to2 = Ersatz-replacement-String                      //\n"
+    "// @param s Der zu bearbeitende String                       //\n"
+    "// @param to Replacement-String                              //\n"
+    "// @param to2 Ersatz-replacement-String                      //\n"
     "///////////////////////////////////////////////////////////////\n"
     "function replaceID(s,to,to2) {\n"
     "    if (s === undefined || s === '')\n"
     "        return '';\n"
     "\n"
     "    // Wenn in einem s der Platzhalter mit und ohne angehängter Nummer auftaucht,\n"
-    "    // dann nacheinander ersetzen. Ein Platzhalter ohne Nummer darf nicht den Objektnamen!!!!!\n"
+    "    // dann nacheinander ersetzen. Ein Platzhalter ohne Nummer darf nicht den Objektnamen\n"
     "    // angehängt bekommen. Deswegen in so einem Fall Rückgriff auf 'to2'.\n"
     "    if (to2)\n"
     "    {\n"
@@ -18452,10 +18490,10 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "///////////////////////////////////////////////////////////////\n"
     "// Mit dieser Funktion werden alle Objekte ausgewertet       //\n"
+    "// @param obj Enthält alle Attribute, Methoden usw., wie das Element aussehen muss//\n"
+    "// @param id Wird dem entsprechend mit diesen Attributen und Methoden erweitert.//\n"
+    "// @param iv Enthält mögliche InstanzVariablen der Instanz   //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "// Aus 'obj' ziehen wir den ganzen Inhalt raus, wie das Objekt aussehen muss\n"
-    "// und 'id' wird dem entsprechend mit diesen Attributen und Methoden erweitert.\n"
-    "// 'iv' enthält mögliche InstanzVariablen der Instanz\n"
     "function interpretObject(obj,id,iv) {\n"
     // Blockiert somehow den Aufruf von SteuerBerechnung()... (Musste deswegen wieder rein)
     //"    //if (obj.name === 'BDSinputgrid') return; // 1) Probs darin mit 'super_' und 2) deutlich zu lange Laufzeit damit... To Do\n"
@@ -18463,12 +18501,13 @@ BOOL isJSExpression(NSString *s)
     "    // Muss in interpretObject() stecken, damit ich Zugriff auf die var onInitFunc habe\n"
     "    // Bei Objekten gilt 'call by reference', deswegen kann ich 'id' in der Funktion erweitern\n"
     "    function assignAllAttributesAndMethods(id, rueckwaertsArray, attrs) {\n"
+    "        // Hier setze ich alle Methoden in das Element rein\n"
+    "        // Ich denke es ist sinnvoll die Methoden (grundsätzlich) vor den Attributen zu setzen,\n"
+    "        // falls berechnete Werte, Constraints oder setter mit diesen arbeiten wollen.\n"
     "        for (var i = 0;i<rueckwaertsArray.length;i++)\n"
     "        {\n"
     "            var obj = rueckwaertsArray[i];\n"
     "\n"
-    "            // Ich denke es ist sinnvoll die Methoden (grundsätzlich) vor den Attributen zu setzen,\n"
-    "            // falls berechnete Werte, Constraints oder setter mit diesen arbeiten wollen.\n"
     "            if (obj.methods)\n"
     "            {\n"
     "                Object.keys(obj.methods).forEach(function(key)\n"
@@ -18476,135 +18515,17 @@ BOOL isJSExpression(NSString *s)
     "                    id[key] = obj.methods[key];\n"
     "                });\n"
     "            }\n"
-    "\n"
-    "\n"
-    "            if (attrs)\n"
-    "            {\n"
-    "                // Erst alle unberechneten, direkt auslesbaren Werte...\n"
-    "                Object.keys(attrs).forEach(function(key)\n"
-    "                {\n"
-    "                    var value = attrs[key];\n"
-    "\n"
-    "                    // Assertion:\n"
-    "                    if (value === undefined)\n"
-    "                    {\n"
-    "                        console.log('Warning: Undefined key or value in assignAllAttributesAndMethods().');\n"
-    "                        alert(key + '  /  ' + value + '  /  ' + id.id);\n"
-    "                    }\n"
-    "\n"
-    "                    if (jQuery.inArray(key,eventHandlerAttributes) != -1)\n"
-    "                    {\n"
-    "                        if (key === 'oninit')\n"
-    "                        {\n"
-    "                            // Kann erst später ausgeführt, werden, wenn alle Methoden bekannt sind.\n"
-    "                            onInitFunc = value;\n"
-    "                        }\n"
-    "                        else\n"
-    "                        {\n"
-    "                            // Da es JS-Code ist, Anpassungen vornehmen.\n"
-    "                            value = value.replace(/setAttribute/g,'setAttribute_');\n"
-    "                            value = value.replace(/\\.dataset/g,'.myDataset');\n"
-    "                            value = value.replace(/\\.align/g,'.myAlign');\n"
-    "                            value = value.replace(/\\.title/g,'.myTitle');\n"
-    "                            value = value.replace(/\\.value/g,'.myValue');\n"
-    "\n"
-    "                            // 'on' entfernen\n"
-    "                            key = key.substr(2);\n"
-    "\n"
-    "                            if ($(id).hasClass('noPointerEvents'))\n"
-    "                                $(id).removeClass('noPointerEvents');\n"
-    "                            // Auch noch von der umgebenden view (Container der Klasse) die pointerEvents entfernen\n"
-    "                            if ($(id).parent().hasClass('noPointerEvents'))\n"
-    "                                $(id).parent().removeClass('noPointerEvents');\n"
-    "\n"
-    "                            enableMouseCursorOnHover(id);\n"
-    "\n"
-    "                            // Neuer Code: Ich muss den KOMPLETTEN on-Befehl per eval setzen,\n"
-    "                            // damit die Variable direkt verwertet wird.\n"
-    "                            eval('$(id).on(key, function() { with (this) { '+value+'; } });');\n"
-    "                        }\n"
-    "                    }\n"
-    "                    else if (typeof value === 'string' && (value.startsWith('$') || value.startsWith('@§.')))\n"
-    "                    {\n"
-    "                        // Wird in diesem Fall erst im nächsten Object.keys-Durchlauf ausgewertet\n"
-    "                    }\n"
-    "                    else\n"
-    "                    {\n"
-    "                        if (key !== 'datapath')\n"
-    "                            id[key] = value;\n"
-    "\n"
-    "                        // War so bei dem alten Schema, aber denke falsch, dass getriggert wird:\n"
-    "                        // id.setAttribute_(key,value);\n"
-    "                    }\n"
-    "                });\n"
-    "\n"
-    "                // ...dann erst alle berechneten Werte, da sich diese\n"
-    "                //  u. U. auf die Existenz der unberechneten verlassen!\n"
-    "                Object.keys(attrs).forEach(function(key)\n"
-    "                {\n"
-    "                    var value = attrs[key];\n"
-    "\n"
-    "                    if (typeof value === 'string' && key !== 'datapath')\n"
-    "                    {\n"
-    "                        if (value.startsWith('$')) // = Constraint value\n"
-    "                        {\n"
-    "                            handleConstraintValue(id,key,value);\n"
-    "                        }\n"
-    "                        else if (value.startsWith('@§.SETTER.§@'))\n"
-    "                        {\n"
-    "                            value = replaceID(value,''+$(id).attr('id'));\n"
-    "\n"
-    "                            // Wenn ein initvalue vorliegt, zum einen den setter anders auslesen\n"
-    "                            // weil der string hinten ja noch durch den initvalue ergänzt ist.\n"
-    "                            // Zum anderen muss der initvalue im Anschluss auch gesetzt werden.\n"
-    "                            var initvalueIndex = value.indexOf('@§.INITVALUE.§@')\n"
-    "\n"
-    "                            if (initvalueIndex != -1)\n"
-    "                            {\n"
-    "                                // initvalue für gleich vormerken\n"
-    "                                var initvalue = value.substr(initvalueIndex+15);\n"
-    "                                // Jetzt erst den string kürzen\n"
-    "                                value = value.substring(12,initvalueIndex);\n"
-    "                            }\n"
-    "                            else\n"
-    "                                value = value.substr(12);\n"
-    "\n"
-    //"                            var evalString = \"id['mySetterFor_'+key+'_'] = function(\" + key + ') { with (' + $(id).attr('id') + ') { ' + value + ' }};';\n"
-    // ... Das klappt so nicht. Ich hatte einmal als key 'width'. Dann hat er natürlich den echten
-    // internen setter von width genommen. Deswegen Argumentnamen gerade modifizieren
-    "                            // Um Zusammenstoß mit echten settern zu vermeiden, Argument umbenennen (ergänzen um 2 Unterstriche)\n"
-    "                            value = value.insertAt(value.lastIndexOf('(')+1,'__');\n"
-    "\n"
-    "                            // Dann den setter als Methode im Objekt speichern, die dann von setAttribute_() berücksichtigt wird\n"
-    "                            var evalString = \"id['mySetterFor_'+key+'_'] = function(__\" + key + ') { with (' + $(id).attr('id') + ') { ' + value + ' }};';\n"
-    "                            eval(evalString);\n"
-    "\n"
-    "                            if (initvalueIndex != -1)\n"
-    "                            {\n"
-    "                                // In dem Fall muss ich jetzt doch über setAttribute_() gehen\n"
-    "                                // damit er über den setter geht. Aber getriggert wird trotzdem\n"
-    "                                // nicht, da er den setter erkennt und vorzeitig abbricht.\n"
-    "                                id.setAttribute_(key,initvalue);\n"
-    "                            }\n"
-    "                        }\n"
-    "                    }\n"
-    "                });\n"
-    "            }\n"
     "        }\n"
-    "    }\n"
     "\n"
-    "    function assignAllInstanceAttributes(id, iv) {\n"
-    "        Object.keys(iv).forEach(function(key)\n"
+    "\n"
+    "        // Hier setze ich dann alle Attribute für das Element\n"
+    "\n"
+    "        // Erst alle unberechneten, direkt auslesbaren Werte...\n"
+    "        Object.keys(attrs).forEach(function(key)\n"
     "        {\n"
-    "            var value = iv[key];\n"
+    "            var value = attrs[key];\n"
     "\n"
-    "            if (typeof value === 'string' && value.startsWith('$')) // = Constraint value\n"
-    "            {\n"
-    "                // 'datapath'-Property wird erst weiter unten gesetzt\n"
-    "                if (key !== 'datapath')\n"
-    "                    handleConstraintValue(id,key,value);\n"
-    "            }\n"
-    "            else\n"
+    "            if (jQuery.inArray(key,eventHandlerAttributes) != -1)\n"
     "            {\n"
     "                if (key === 'oninit')\n"
     "                {\n"
@@ -18613,13 +18534,122 @@ BOOL isJSExpression(NSString *s)
     "                }\n"
     "                else\n"
     "                {\n"
-    "                    // 'datapath'-Property wird erst weiter unten gesetzt\n"
-    "                    if (key !== 'datapath')\n"
-    "                        id[key] = value;\n"
+    "                    // Da es JS-Code ist, Anpassungen vornehmen.\n"
+    "                    value = value.replace(/setAttribute/g,'setAttribute_');\n"
+    "                    value = value.replace(/\\.dataset/g,'.myDataset');\n"
+    "                    value = value.replace(/\\.align/g,'.myAlign');\n"
+    "                    value = value.replace(/\\.title/g,'.myTitle');\n"
+    "                    value = value.replace(/\\.value/g,'.myValue');\n"
+    "\n"
+    "                    // 'on' entfernen\n"
+    "                    key = key.substr(2);\n"
+    "\n"
+    "                    if ($(id).hasClass('noPointerEvents'))\n"
+    "                        $(id).removeClass('noPointerEvents');\n"
+    "                    // Auch noch von der umgebenden view (Container der Klasse) die pointerEvents entfernen\n"
+    "                    if ($(id).parent().hasClass('noPointerEvents'))\n"
+    "                        $(id).parent().removeClass('noPointerEvents');\n"
+    "\n"
+    "                    enableMouseCursorOnHover(id);\n"
+    "\n"
+    "                    // Ich muss den KOMPLETTEN on-Befehl per eval setzen, damit die Variable direkt verwertet wird.\n"
+    "                    eval('$(id).on(key, function() { with (this) { '+value+'; } });');\n"
+    "                }\n"
+    "            }\n"
+    "            else if (typeof value === 'string' && (value.startsWith('$') || value.startsWith('@§.')))\n"
+    "            {\n"
+    "                // Wird in diesem Fall erst im anschließenden Object.keys-Durchlauf ausgewertet\n"
+    "            }\n"
+    "            else\n"
+    "            {\n"
+    "                if (key !== 'datapath')\n"
+    "                    id[key] = value;\n"
+    "\n"
+    "                // War so bei dem alten Schema, aber denke falsch, dass getriggert wird:\n"
+    "                // id.setAttribute_(key,value);\n"
+    "            }\n"
+    "        });\n"
+    "\n"
+    "        // ...dann erst alle berechneten Werte, da sich diese\n"
+    "        //  u. U. auf die Existenz der unberechneten verlassen!\n"
+    "        Object.keys(attrs).forEach(function(key)\n"
+    "        {\n"
+    "            var value = attrs[key];\n"
+    "\n"
+    "            if (typeof value === 'string' && key !== 'datapath')\n"
+    "            {\n"
+    "                if (value.startsWith('$')) // = Constraint value\n"
+    "                {\n"
+    "                    handleConstraintValue(id,key,value);\n"
+    "                }\n"
+    "                else if (value.startsWith('@§.SETTER.§@'))\n"
+    "                {\n"
+    "                    value = replaceID(value,''+$(id).attr('id'));\n"
+    "\n"
+    "                    // Wenn ein initvalue vorliegt, zum einen den setter anders auslesen\n"
+    "                    // weil der string hinten ja noch durch den initvalue ergänzt ist.\n"
+    "                    // Zum anderen muss der initvalue im Anschluss auch gesetzt werden.\n"
+    "                    var initvalueIndex = value.indexOf('@§.INITVALUE.§@')\n"
+    "\n"
+    "                    if (initvalueIndex != -1)\n"
+    "                    {\n"
+    "                        // initvalue für gleich vormerken\n"
+    "                        var initvalue = value.substr(initvalueIndex+15);\n"
+    "                        // Jetzt erst den string kürzen\n"
+    "                        value = value.substring(12,initvalueIndex);\n"
+    "                    }\n"
+    "                    else\n"
+    "                    {\n"
+    "                        value = value.substr(12);\n"
+    "                    }\n"
+    "\n"
+    "                    // Um Zusammenstoß mit echten settern zu vermeiden, Argument umbenennen (ergänzen um 2 Unterstriche). z. B. kollidierte es mit echtem getter von 'width'\n"
+    "                    value = value.insertAt(value.lastIndexOf('(')+1,'__');\n"
+    "\n"
+    "                    // Dann den setter als Methode im Objekt speichern, die dann von setAttribute_() berücksichtigt wird\n"
+    "                    var evalString = \"id['mySetterFor_'+key+'_'] = function(__\" + key + ') { with (' + $(id).attr('id') + ') { ' + value + ' }};';\n"
+    "                    eval(evalString);\n"
+    "\n"
+    "                    if (initvalueIndex != -1)\n"
+    "                    {\n"
+    "                        // In dem Fall muss ich jetzt doch über setAttribute_() gehen\n"
+    "                        // damit er über den setter geht. Aber getriggert wird trotzdem\n"
+    "                        // nicht, da er den setter erkennt und vorzeitig abbricht.\n"
+    "                        id.setAttribute_(key,initvalue);\n"
+    "                    }\n"
     "                }\n"
     "            }\n"
     "        });\n"
     "    }\n"
+    //"\n"
+    // Diesen unnötigen Code habe ich viel zu lange mit mir rumgeschleppt... Dadurch wurde alles doppelt gesetzt...
+    //"    function assignAllInstanceAttributes(id, iv) {\n"
+    //"        Object.keys(iv).forEach(function(key)\n"
+    //"        {\n"
+    //"            var value = iv[key];\n"
+    //"\n"
+    //"            if (typeof value === 'string' && value.startsWith('$')) // = Constraint value\n"
+    //"            {\n"
+    //"                // 'datapath'-Property wird erst weiter unten gesetzt\n"
+    //"                if (key !== 'datapath')\n"
+    //"                    handleConstraintValue(id,key,value);\n"
+    //"            }\n"
+    //"            else\n"
+    //"            {\n"
+    //"                if (key === 'oninit')\n"
+    //"                {\n"
+    //"                    // Kann erst später ausgeführt, werden, wenn alle Methoden bekannt sind.\n"
+    //"                    onInitFunc = value;\n"
+    //"                }\n"
+    //"                else\n"
+    //"                {\n"
+    //"                    // 'datapath'-Property wird erst weiter unten gesetzt\n"
+    //"                    if (key !== 'datapath')\n"
+    //"                        id[key] = value;\n"
+    //"                }\n"
+    //"            }\n"
+    //"        });\n"
+    //"    }\n"
     "\n"
     "\n"
     "\n"
@@ -18794,7 +18824,7 @@ BOOL isJSExpression(NSString *s)
     "    for (var i = 0;i<rueckwaertsArray.length;i++) {\n"
     "        if (rueckwaertsArray[i].attributesDict)\n"
     "        {\n"
-    "            // Falls gleiche Attributnamen: Es gelten die vom allernächsten Erben\n"
+    "            // Falls gleiche Attributnamen: Es gelten die des allernächsten Erben\n"
     "            $.extend(attrs,rueckwaertsArray[i].attributesDict);\n"
     "        }\n"
     "    }\n"
@@ -18815,10 +18845,6 @@ BOOL isJSExpression(NSString *s)
     "    // Durchlauf 2: Alle selbst definierten Attribute (und Methoden) werden an das Element gebunden\n"
     "    // Dies muss als zweites passieren, damit in Unterklassen definierte Methoden oder Attribute bereits darauf zugreifen können\n"
     "    assignAllAttributesAndMethods(id,rueckwaertsArray,attrs);\n"
-    "\n"
-    "\n"
-    "    // Danach setzen der konkreten Instanzvariablen der Instanz\n"
-    "    assignAllInstanceAttributes(id,iv);\n"
     "\n"
     "\n"
     "    // Durchlauf 3: JS-Code auswerten.\n"
@@ -19059,11 +19085,11 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
-    "// Setzt Variable, unter Berücksichtigung, dass es eine constraint ist//\n"
+    "// Sets a property, that is a constraint                     //\n"
+    "// @param el = The element                                   //\n"
+    "// @param a = The attribute to set on this element           //\n"
+    "// @param v = The value to set this property to              //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "// @arg el = Unser Element\n"
-    "// @arg a = Das Attribut\n"
-    "// @arg v = Der zu setzende value.\n"
     "function handleConstraintValue(el,a,v)\n"
     "{\n"
     "    // Sicherstellen, dass uns auch wirklich eine Constraint Value übergeben wurde (Assertion)\n"
@@ -19207,25 +19233,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
-    //"///////////////////////////////////////////////////////////////\n"
-    //"//  Löscht doppelte Attribute (ältere werden überschrieben)  //\n"
-    //"///////////////////////////////////////////////////////////////\n"
-    //"function deleteAttributesPreviousDeclared(bestand,neu)\n"
-    //"{\n"
-    //"    var an = neu.attributeNames ? neu.attributeNames : [];\n"
-    //"    var av = neu.attributeValues ? neu.attributeValues : [];\n"
-    //"\n"
-    //"    for (i = 0;i<an.length;i++)\n"
-    //"    {\n"
-    //"        if (jQuery.inArray(an[i],bestand) != -1)\n"
-    //"        {\n"
-    //"            an.splice(i,1);\n"
-    //"            av.splice(i,1);\n"
-    //"        }\n"
-    //"    }\n"
-    //"\n"
-    //"    return neu;\n"
-    //"}\n"
     "///////////////////////////////////////////////////////////////\n"
     "//  class = view (native class)                              //\n"
     "///////////////////////////////////////////////////////////////\n"
@@ -19299,7 +19306,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'oo.basescrollbar';\n"
     "  this.inherit = new oo.view();\n"
     "\n"
-    "  this.attributesDict = { axis : 'y', focusview : null, mousewheelactive : false, mousewheelevent_off : 'onblur', mousewheelevent_on : 'onfocus', pagesize : null, scrollable : true, scrollattr : '', scrollmax : null, scrolltarget : null, stepsize : 10, usemousewheel : true }\n"
+    "  this.attributesDict = { axis: 'y', focusview: null, mousewheelactive: false, mousewheelevent_off: 'onblur', mousewheelevent_on: 'onfocus', pagesize: null, scrollable: true, scrollattr: '', scrollmax: null, scrolltarget: null, stepsize: 10, usemousewheel: true }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"
@@ -19313,7 +19320,7 @@ BOOL isJSExpression(NSString *s)
     "  this.name = 'vscrollbar';\n"
     "  this.inherit = new oo.basescrollbar();\n"
     "\n"
-    "  this.attributesDict = { disabledbgcolor : null }\n"
+    "  this.attributesDict = { disabledbgcolor: null }\n"
     "\n"
     "  this.contentHTML = '';\n"
     "}\n"

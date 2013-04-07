@@ -7528,7 +7528,7 @@ didStartElement:(NSString *)elementName
 
         // Ich muss die Stelle einmal markieren...
         // Standardmäßig wird immer von 'view' geerbt, deswegen hier als class 'div_standard'.
-        // Wird falls nötig auf JS-Ebene von der Funktion interpretObject() mit den zugehörigen Attributen erweitert.
+        // Wird falls nötig auf JS-Ebene von der Funktion assignObject() mit den zugehörigen Attributen erweitert.
         [self.output appendString:@"<div"];
         [self addIdToElement:attributeDict];
         [self.output appendString:@" class=\"div_standard noPointerEvents\" style=\""];
@@ -7702,17 +7702,17 @@ didStartElement:(NSString *)elementName
 
         // Hier werden jetzt die Objekte instanziert aus der JS-Datei collectedClasses.js
 
-        [o appendFormat:@"\n  // Instanzvariablen holen, el holen, Instanz erzeugen, Objekt auswerten und 'el' entsprechend ergänzen"];
+        [o appendFormat:@"\n  // Element holen, Instanzvariablen drin speichern, Instanz erzeugen, Objekt auswerten und 'el' entsprechend ergänzen"];
         [o appendFormat:@"\n  var el = document.getElementById('%@');",idUmgebendesElement];
-        [o appendFormat:@"\n  var iv = { %@};",instanceVars];
+        [o appendFormat:@"\n  $(el).data('instanceVars',{ %@});",instanceVars];
         [o appendFormat:@"\n  var obj = new oo.%@('');",elementName];
-        [o appendString:@"\n  interpretObject(obj,el,iv);\n"];
+        [o appendString:@"\n  assignObject(obj,el);\n"];
 
 
 
         // Das heißt: Wir sind in einer Klasse auf eine Klasse gestoßen
         // Diese wird immer mit-ausgewertet, wenn die umgebendende ausgewertet wird,
-        // und kriegt deswegen kein eigenes interpretObject() in output_ol2x.html
+        // und kriegt deswegen kein eigenes assignObject() in output_ol2x.html
         if ([self.rememberedID4closingSelfDefinedClass count] > 1)
         {
             // Doesn't work yet...
@@ -7734,7 +7734,7 @@ didStartElement:(NSString *)elementName
         else if (self.classInClass)
         {
             // Dann speichern wir NUR die instanceVars, alles andere klären wir später
-            // beim Aufrufvon interpretObject() des parents
+            // beim Aufrufvon assignObject() des parents
             [self.jsOutput  appendFormat:@"\n  // Klasse '%@' wird mit parent zusammen instanziert in '%@'",elementName,self.zuletztGesetzteID];
             [self.jsOutput  appendFormat:@"\n  $(document.getElementById('%@')).data('instanceVars',{ %@});\n",self.zuletztGesetzteID,instanceVars];
         }
@@ -7753,7 +7753,7 @@ didStartElement:(NSString *)elementName
         self.weAreCollectingTextAndThereMayBeHTMLTags = YES;
 
 
-        // Trick, damit debug auch bei Klassen klappt. Setzen des korrekten Wertes ohne Überprüfung.
+        // Trick, damit debug auch bei Klassen klappt: Setzen der Attribut-Anzahl ohne Überprüfung.
         self.attributeCount = attributeDict.count;
     }
 
@@ -8024,7 +8024,7 @@ BOOL isJSExpression(NSString *s)
                 else
                 {
                     // Dann IN den Output hinein injecten
-                    [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-34];
+                    [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-28];
                 }
             }
         }
@@ -9306,7 +9306,7 @@ BOOL isJSExpression(NSString *s)
             // deswegen die init-Methode erst danach ausführen
             // [self.jsComputedValuesOutput appendString:@"\n  // Oben definierte init-Methode wird erst hier ausgeführt\n"];
             // [self.jsComputedValuesOutput appendFormat:@"  %@.init();\n",[self.enclosingElementsIds lastObject]];
-            // Neu: Wie gemäß Doku vorgesehen steckt der Aufruf von init() nun in interpretObject()
+            // Neu: Wie gemäß Doku vorgesehen steckt der Aufruf von init() nun in assignObject()
             // Das ist gut! Damit haben wir einen Aufruf weniger der per String erledigt wird.
         }
 
@@ -9397,7 +9397,7 @@ BOOL isJSExpression(NSString *s)
             }
             else
             {
-                [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-34];
+                [self.jQueryOutput0 insertString:s atIndex:[self.jQueryOutput0 length]-28];
             }
         }
 
@@ -9743,7 +9743,7 @@ BOOL isJSExpression(NSString *s)
         
         [self.output appendString:@"\n\n  /*******************************************************************/\n"];
         [self.output appendString:@"  /***************************** Grenze ******************************/\n"];
-        [self.output appendString:@"  /************ Vorgezogene JQuery-Ausgaben sind hier vor ************/\n"];
+        [self.output appendString:@"  /************ Vorgezogene jQuery-Ausgaben sind hier vor ************/\n"];
         [self.output appendString:@"  /***Diese müssen zwingend vor folgenden JS/jQuery-Ausgaben kommen***/\n"];
         [self.output appendString:@"  /*******************************************************************/\n\n\n"];
     }
@@ -11656,7 +11656,11 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        var obj = new oo[name]('');\n"
     "        var el = document.getElementById(id);\n"
-    "        interpretObject(obj,el,{});\n"
+    "\n"
+    "        // Leere Instanzvariablen setzen\n"
+    "        $(el).data('instanceVars',{})\n"
+    "\n"
+    "        assignObject(obj,el);\n"
     "    }\n"
     "    else\n"
     "    {\n"
@@ -15378,13 +15382,6 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "var completeInstantiationFunction = function() {\n"
     "    var interpretTheDeferredObject = function(el) {\n"
-    "        // Instanzvariablen holen\n"
-    "        var iv = $(el).data('instanceVars');\n"
-    "        if (iv == undefined)\n"
-    "        {\n"
-    "            alert('Das kann nicht sein. Eine nicht instanzierte Klasse hat immer InstanzVariablen, und seien es leere. el.id = ' + el.id);\n"
-    "        }\n"
-    "\n"
     "        if ($(el).data('textBetweenTags_'))\n"
     "        {\n"
     "            var obj = new oo[$(el).data('olel')]($(el).data('textBetweenTags_'));\n"
@@ -15394,7 +15391,7 @@ BOOL isJSExpression(NSString *s)
     "            var obj = new oo[$(el).data('olel')]('');\n"
     "        }\n"
     "\n"
-    "        interpretObject(obj,el,iv);\n"
+    "        assignObject(obj,el);\n"
     "    }\n"
     "\n"
     "    if (!this.inited) {\n"
@@ -16211,7 +16208,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "// Für OL sind das HTMLCanvasElement und CanvasRenderingContext2D auf der gleichen 'this'-ebene angesiedelt.\n"
     "// Der erste Ansatz war das this in Handlern, Methoden und Attributen von drawviews auf element.getContext('2d')\n"
-    "// zu mappen. Aber das hätte noch umfangreichere Folgeänderungen zu folgen. In InterpretObject das neue zuweisen\n"
+    "// zu mappen. Aber das hätte noch umfangreichere Folgeänderungen zu folgen. In assignObject das neue zuweisen\n"
     "// der Attribute und auch alle Getter und Setter müssten nur für diesen Fall auf das Canvas-Element testen und dann\n"
     "// den Aufruf immer an this.getContext('2d') weiterleiten. Dies sind zu große Folgeänderungen und zerstören die\n"
     "// derzeit einfach zu lesenden Setter/Getter. - Neuer Ansatz: Mappen der Methoden im getContext('2d')-Objekt\n"
@@ -16808,7 +16805,7 @@ BOOL isJSExpression(NSString *s)
     "Object.defineProperty(HTMLElement.prototype, 'layout', {\n"
     "    get : function(){\n"
     "        // if (!$(this).data('layout_')) $(this).data('layout_', new lz.layout());\n"
-    "        // Wo kam das her? - Bricht meine neu eingeführte Abfrage nach einem vorhandenen Layout in interpretObject(), deswegen auskommentiert\n"
+    "        // Wo kam das her? - Bricht meine neu eingeführte Abfrage nach einem vorhandenen Layout in assignObject(), deswegen auskommentiert\n"
     "\n"
     "        return $(this).data('layout_');\n"
     "    },\n"
@@ -17399,7 +17396,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        if (kind.css('position') === 'absolute')\n"
     "        {\n"
-    // var topValue = kind.prev().get(0).offsetTop + kind.prev().outerHeight() + spacing; <- Kommt aus der alten interpretObject()-Auswertung
+    // var topValue = kind.prev().get(0).offsetTop + kind.prev().outerHeight() + spacing; <- Kommt aus der alten assignObject()-Auswertung
     "            var topValue = parseInt(kind.prev().css('top')) + kind.prev().outerHeight() + spacing;\n"
     "            if (i == 0) topValue = 0; // Korrektur des ersten Kindes, falls vorher abweichender 'y'-Wert gesetzt wurde\n"
     "        }\n"
@@ -18223,7 +18220,7 @@ BOOL isJSExpression(NSString *s)
     "    get : function(){\n"
     // Keine Ahnung mehr wo das her kam, es scheint auch so zu klappen und nicht mehr notwendig zu sein
     // Doch, ist notwendig (aber nur am Arbeits-Laptop...), indem Moment wo ich ein 'BDSinputgrid'
-    // per interpretObject() auswerte
+    // per assignObject() auswerte
     "        if ($(this).data('olel') === 'BDSgridcolumn')\n"
     "        {\n"
     "            // So far doesn't work... with 'BDSgridcolumn'\n"
@@ -18492,13 +18489,12 @@ BOOL isJSExpression(NSString *s)
     "// Mit dieser Funktion werden alle Objekte ausgewertet       //\n"
     "// @param obj Enthält alle Attribute, Methoden usw., wie das Element aussehen muss//\n"
     "// @param id Wird dem entsprechend mit diesen Attributen und Methoden erweitert.//\n"
-    "// @param iv Enthält mögliche InstanzVariablen der Instanz   //\n"
     "///////////////////////////////////////////////////////////////\n"
-    "function interpretObject(obj,id,iv) {\n"
+    "function assignObject(obj,id) {\n"
     // Blockiert somehow den Aufruf von SteuerBerechnung()... (Musste deswegen wieder rein)
     //"    //if (obj.name === 'BDSinputgrid') return; // 1) Probs darin mit 'super_' und 2) deutlich zu lange Laufzeit damit... To Do\n"
     "\n"
-    "    // Muss in interpretObject() stecken, damit ich Zugriff auf die var onInitFunc habe\n"
+    "    // Muss in assignObject() stecken, damit ich Zugriff auf die var onInitFunc habe\n"
     "    // Bei Objekten gilt 'call by reference', deswegen kann ich 'id' in der Funktion erweitern\n"
     "    function assignAllAttributesAndMethods(id, rueckwaertsArray, attrs) {\n"
     "        // Hier setze ich alle Methoden in das Element rein\n"
@@ -18655,7 +18651,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    ///////////////////////////////////////////////////////////////\n"
     "    // adds the complete HTML-Code of the given Class            //\n"
-    "    // Muss in interpretObject() stecken, für Zugriff u. a. auf id und kinderVorDemAppenden//\n"
+    "    // Muss in assignObject() stecken, für Zugriff u. a. auf id und kinderVorDemAppenden//\n"
     // 'id' eher nicht mit übergeben an die function, da ich id ja u. U. austausche
     "    ///////////////////////////////////////////////////////////////\n"
     "    function addHTMLCodeOfThisClass(obj) {\n"
@@ -18791,6 +18787,13 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "    }\n"
     "\n"
+    "\n"
+    "    // Instanzvariablen aus dem Element holen\n"
+    "    var iv = $(id).data('instanceVars');\n"
+    //"    if (iv == undefined) // Assertion\n"
+    //"    {\n"
+    //"        console.log('Das kann nicht sein. Eine nicht instanzierte Klasse hat immer InstanzVariablen, und seien es leere. id.id = ' + id.id);\n"
+    //"    }\n"
     "\n"
     "\n"
     "    var onInitFunc = null;\n"
@@ -19061,21 +19064,17 @@ BOOL isJSExpression(NSString *s)
     // Wenn ich classInClass auswerte, diesen Code wohl mit einfügen (aber dann letzlich vor init)
     /*
     $(id).find('*').each(function() {
-        var iv = $(this).data('instanceVars');
-        //alert(iv);
-        if (iv) {
-            // alert('rin');
-            if ($(this).data('textBetweenTags_'))
-            {
-                var obj = new oo[$(this).data('olel')]($(this).data('textBetweenTags_'));
-            }
-            else
-            {
-                var obj = new oo[$(this).data('olel')]('');
-            }
-            
-            interpretObject(obj,this,iv);
+        // alert('rin');
+        if ($(this).data('textBetweenTags_'))
+        {
+            var obj = new oo[$(this).data('olel')]($(this).data('textBetweenTags_'));
         }
+        else
+        {
+            var obj = new oo[$(this).data('olel')]('');
+        }
+
+        assignObject(obj,this);
     });
      */
 

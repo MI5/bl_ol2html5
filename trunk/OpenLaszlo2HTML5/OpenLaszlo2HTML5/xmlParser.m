@@ -373,7 +373,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     if ([olVersion isEqualToString:@"4.11"])
     {
         //[self preEvaluateInternalClass:@"http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/basecomponent.lzx"];
-        //[self preEvaluateInternalClass:@"http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/baseformitem.lzx"];
+        [self preEvaluateInternalClass:@"http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/baseformitem.lzx"];
     }
 
     if ([olVersion isEqualToString:@"4.9"])
@@ -15354,7 +15354,8 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "HTMLElement.prototype.applyData = function(data) {\n"
     "    // Nach OL-Code-Inspektion und Beispiel 40.1: Bei <text>-Nodes setzt er den Text!\n"
-    "    if ($(this).data('olel') == 'text') // im Prinzip oi\n"
+    // Habe auch edittext mal mit reingenommen, damit die Warning nicht anschlägt
+    "    if ($(this).data('olel') == 'text' || $(this).data('olel') == 'edittext') // im Prinzip oi\n"
     "    {\n"
     "        if (data == null) {\n"
     "            this.clearText();\n"
@@ -16102,9 +16103,9 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "// doSetValue()                                        //\n"
     "// Set value of combobox.                              //\n"
-    "//@param {String|Number} value: value to set.            //\n"
-    "//@param {Boolean} isinitvalue: true if value is an init value.//\n"
-    "//@param {Boolean} ignoreselection: if true, selection won't be updated//\n"
+    "// @param {String|Number} value: value to set.         //\n"
+    "// @param {Boolean} isinitvalue: true if value is an init value.//\n"
+    "// @param {Boolean} ignoreselection: if true, selection won't be updated.//\n"
     "/////////////////////////////////////////////////////////\n"
     "var doSetValueFunction = function (value,isinitvalue,ignoreselection) { // oi 1:1\n"
     "    if (this['value'] != value) {\n"
@@ -16117,8 +16118,7 @@ BOOL isJSExpression(NSString *s)
     "            if (isinitvalue || ! this._initcomplete) {\n"
     "                this.rollbackvalue = value;\n"
     "            }\n"
-    "            // this.setChanged(didchange && !isinitvalue && this.rollbackvalue != value);\n"
-    "            // To Do, den Comment vor this.setChanged entfernen, wenn http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/baseformitem.lzx per request ausgewertet\n"
+    "            this.setChanged(didchange && !isinitvalue && this.rollbackvalue != value);\n"
     "            if (this['onvalue']) this.onvalue.sendEvent(value);\n"
     "        }\n"
     "\n"
@@ -19699,31 +19699,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "///////////////////////////////////////////////////////////////\n"
-    "//  class = baseformitem (native class)                      //\n"
-    "// ToDo -> Nimm den hier: http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/baseformitem.lzx\n"
-    "///////////////////////////////////////////////////////////////\n"
-    "oo.baseformitem = function(textBetweenTags) {\n"
-    "  this.name = 'baseformitem';\n"
-    "  this.inherit = new oo.basevaluecomponent(textBetweenTags);\n"
-    "\n"
-    "  this.attributesDict = { changed:false, ignoreform:false, rollbackvalue:null, submit:this.inherit.inherit.attributesDict.enabled, submitname:'', value:null }\n"
-    "\n"
-    "  this.methods = {\n"
-    "    applyData: function(d) {\n"
-    "        // Till OL 4.0b1\n"
-    "        // This implementation sets the applied data as an initalizater value. This is run by a datapath to get the data from a data node.\n"
-    "        // this.setValue(d,true);\n"
-    "        // Since OL 4.11 there is no more implementation of this method...\n"
-    "        // Muss aber leer drin bleiben, damit unser Test auf die Existenz dieser Methode nicht fehlschlägt.\n"
-    "    }\n"
-    "  }\n"
-    "\n"
-    "  this.contentHTML = '';\n"
-    "};\n"
-    "\n"
-    "\n"
-    "\n"
-    "///////////////////////////////////////////////////////////////\n"
     "//  class = basevaluecomponent (native class)                //\n"
     "///////////////////////////////////////////////////////////////\n"
     "oo.basevaluecomponent = function(textBetweenTags) {\n"
@@ -19768,7 +19743,13 @@ BOOL isJSExpression(NSString *s)
 
     js = [NSString stringWithFormat:@"%@%@", js, self.jsOLClassesOutput];
 
-
+    // 'basedatacombobox' erbt von 'baseformitem', ist aber derzeit keine eigene Klasse,
+    // sondern wird direkt in das 'HTMLSelectElement' hinein integriert...
+    // Deswegen muss ich im Prinzip alle Methoden von baseformitem da ebenso hinein integrieren,
+    // da ich ja nicht die reguläre Vererburngshierachie habe...
+    // Erstmal nur setChanged(), weil er das anmeckert.
+    // Langfristig andere Lösung! z. B. 'basedatacombobox' als Klasse auswerten.
+    js = [NSString stringWithFormat:@"%@%@", js, @"\nHTMLSelectElement.prototype.setChanged = new oo.baseformitem().methods.setChanged;"];
 
 
     bool success = [js writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:NULL];

@@ -7530,7 +7530,7 @@ didStartElement:(NSString *)elementName
 
         // Ich muss die Stelle einmal markieren...
         // Standardmäßig wird immer von 'view' geerbt, deswegen hier als class 'div_standard'.
-        // Wird falls nötig auf JS-Ebene von der Funktion assignObject() mit den zugehörigen Attributen erweitert.
+        // Wird auf JS-Ebene von der Funktion assignObject() mit den zugehörigen Attributen erweitert.
         [self.output appendString:@"<div"];
         [self addIdToElement:attributeDict];
         [self.output appendString:@" class=\"div_standard noPointerEvents\" style=\""];
@@ -7548,10 +7548,7 @@ didStartElement:(NSString *)elementName
         }
 
 
-        // No no! Ich lasse alles erst von der Klasse auswerten, sonst fragen z. B. 'visible'-constraints
-        // Eigenschaften ab, die noch gar nicht bekannt sind.
-        //[self addJSCode:attributeDict withId:[NSString stringWithFormat:@"%@",self.zuletztGesetzteID]];
-        // Nur das 'name'-Attribut muss eben doch schon bekannt sein, falls andere Elemente etwas darüber abfragen
+        // Nur das 'name'-Attribut sollte doch schon bekannt sein, falls andere Elemente etwas darüber abfragen
         [self convertNameAttributeToGlobalJSVar:attributeDict];
 
 
@@ -7560,82 +7557,15 @@ didStartElement:(NSString *)elementName
         [o appendFormat:@"\n  // Klasse '%@' wurde instanziert in '%@'",elementName,self.zuletztGesetzteID];
 
 
-        // Erst alle Build-in-Attribute raushauen...
+        // Die Attribute der Instanz werden erst beim Instanzieren gesetzt
         NSMutableDictionary *d = [[NSMutableDictionary alloc] initWithDictionary:attributeDict];
-        // CSS
+        // nur id und name habe ich schon direkt im <div> ausgewertet
         [d removeObjectForKey:@"id"];
         [d removeObjectForKey:@"name"];
 
-        // neu: Alle Attribute werden von der Instanz (zusätzlich) ausgewertet, damit defaultwerte überschrieben werden
-        // nur 'id' und 'name' lasse ich mal exklusiv
 
-        //[d removeObjectForKey:@"bgcolor"];
-        //[d removeObjectForKey:@"fgcolor"];
-        //[d removeObjectForKey:@"topmargin"];
-        //[d removeObjectForKey:@"valign"];
-        //[d removeObjectForKey:@"height"];
-        //[d removeObjectForKey:@"width"];
-        //[d removeObjectForKey:@"x"];
-        //[d removeObjectForKey:@"y"];
-        //[d removeObjectForKey:@"yoffset"];
-        //[d removeObjectForKey:@"xoffset"];
-        //[d removeObjectForKey:@"fontsize"];
-        //[d removeObjectForKey:@"fontstyle"];
-        //[d removeObjectForKey:@"font"];
-        //[d removeObjectForKey:@"align"];
-        //[d removeObjectForKey:@"clip"];
-        //[d removeObjectForKey:@"scriptlimits"];
-        //[d removeObjectForKey:@"stretches"];
-        //[d removeObjectForKey:@"initstage"];
-        //[d removeObjectForKey:@"resource"];
-        //[d removeObjectForKey:@"source"];
-        //[d removeObjectForKey:@"debug"];
-        //[d removeObjectForKey:@"text_x"];
-        //[d removeObjectForKey:@"text_y"];
-        //[d removeObjectForKey:@"text_padding_x"];
-        //[d removeObjectForKey:@"text_padding_y"];
-
-        // von 'text':
-        //[d removeObjectForKey:@"text"];
-        //[d removeObjectForKey:@"textalign"];
-        //[d removeObjectForKey:@"textindent"];
-        //[d removeObjectForKey:@"letterspacing"];
-        //[d removeObjectForKey:@"textdecoration"];
-        //[d removeObjectForKey:@"multiline"];
-
-        // JS
-        //[d removeObjectForKey:@"visible"];
-        //[d removeObjectForKey:@"enabled"];
-        //[d removeObjectForKey:@"focusable"];
-        //[d removeObjectForKey:@"layout"];
-        //[d removeObjectForKey:@"oninit"];
-        //[d removeObjectForKey:@"onclick"];
-        //[d removeObjectForKey:@"ondblclick"];
-        //[d removeObjectForKey:@"onfocus"];
-        //[d removeObjectForKey:@"onblur"];
-        //[d removeObjectForKey:@"onvalue"];
-        //[d removeObjectForKey:@"onmousedown"];
-        //[d removeObjectForKey:@"onmouseup"];
-        //[d removeObjectForKey:@"onmouseout"];
-        //[d removeObjectForKey:@"onmouseover"];
-        //[d removeObjectForKey:@"onkeyup"];
-        //[d removeObjectForKey:@"onkeydown"];
-        //[d removeObjectForKey:@"datapath"];
-        //[d removeObjectForKey:@"clickable"];
-        //[d removeObjectForKey:@"showhandcursor"];
-        //[d removeObjectForKey:@"mask"];
-        //[d removeObjectForKey:@"placement"];
-        //[d removeObjectForKey:@"ignoreplacement"];
-
-        /* [d removeObjectForKey:@"value"]; Auskommentieren, bricht sonst Beispiel <basecombobox> */
-
-
-
-
-
+        // Nun werden die Objective C-Attribute in ein JS-AttributeDict verwandelt
         NSMutableString *instanceVars = [[NSMutableString alloc] initWithString:@""];
-
-        // ...dann die übrig gebliebenen Attribute (die von der Instanz selbst definierten) setzen
         if ([d count] > 0)
         {
             // '__strong', damit ich key modifizieren kann
@@ -7663,10 +7593,6 @@ didStartElement:(NSString *)elementName
                 // Auch bei einem Event-Handler ist es JS-Code und ich muss die Anpassungen vornehmen
                 if ([s hasPrefix:@"$"] || [key hasPrefix:@"on"])
                 {
-                    // s = [self makeTheComputedValueComputable:s];
-                    // weNeedQuotes = NO;
-
-                    // Stattdessen nur:
                     s = [self modifySomeExpressionsInJSCode:s alsoModifyWhitespaces:YES];
                 }
 
@@ -7688,19 +7614,14 @@ didStartElement:(NSString *)elementName
         }
 
 
-        // Es können ja verschachtelte Klassen auftreten, deswegen muss ich die IDs
-        // hier draufpushen, und später wegholen.
+        // Es können verschachtelte Klassen auftreten, deswegen muss ich die IDs hier draufpushen, und später wegholen.
         [self.rememberedID4closingSelfDefinedClass addObject:self.zuletztGesetzteID];
         NSString *idUmgebendesElement = [self.rememberedID4closingSelfDefinedClass lastObject];
 
 
-        // Okay, das geht so nicht, habe den Code wieder nach vorne geholt, denn sonst würde bei ineinander
-        // verschschachtelten Klassen, erst die innere Klasse ausgeführt werden. Aber die innere Klasse
-        // muss bereits die width vom parent wissen (für align).
-        // Falls ich dann doch mal text zwischen den tags habe, dann füge ich ihn dadurch ein, dass ich
-        // hinten was vom Output entferne. Es kann ja nie beides geben. Entweder es gibt ineinander verschachtelte
+        // Falls ich mal text zwischen den tags habe, dann füge ich ihn dadurch ein, dass ich hinten was
+        // vom Output entferne. Es kann ja nie beides geben. Entweder es gibt ineinander verschachtelte
         // Klassen ODER es gibt einen Textstring, der zwischen öffnendem und schließendem Tag liegt.
-
 
 
         // Hier werden jetzt die Objekte instanziert aus der JS-Datei collectedClasses.js
@@ -7752,7 +7673,7 @@ didStartElement:(NSString *)elementName
         // Hoffentlich ist das nicht zu lax, aber wir erlauben zwischen Klassen erstmal immer
         // HTML-Attribute. Streng genommen dürften nur dann HTMl-Attribute auftauchen, wenn die
         // Klasse von <text> (direkt oder indirekt) erbt. Oder wenn es ein 'text'- oder ein 'html'-
-        // Attribut enthält (Example 28.10. Defining new text classes)
+        // Attribut enthält (Example 28.10. Defining new text classes).
         self.weAreCollectingTextAndThereMayBeHTMLTags = YES;
 
 

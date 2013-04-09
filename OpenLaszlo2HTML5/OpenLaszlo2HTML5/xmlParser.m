@@ -374,6 +374,10 @@ void OLLog(xmlParser *self, NSString* s,...)
     {
         //[self preEvaluateInternalClass:@"http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/basecomponent.lzx"];
         [self preEvaluateInternalClass:@"http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/baseformitem.lzx"];
+
+        // Klappt noch nicht...
+        //[self preEvaluateInternalClass:@"http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/utils/layouts/resizelayout.lzx"];
+        //[self preEvaluateInternalClass:@"http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/basegrid.lzx"];
     }
 
     if ([olVersion isEqualToString:@"4.9"])
@@ -2721,7 +2725,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     // Erstmal greife ich stets auf die interne DB zu und steige hier aus.
     // Für Relase evtl. dann aus Copyright-Gründen auf die URL's zugreifen.
-    return [self getStringFromInternalDB:urlAsString];
+    //return [self getStringFromInternalDB:urlAsString];
 
 
 
@@ -7128,13 +7132,13 @@ didStartElement:(NSString *)elementName
 
         // Für bereits instanzierte DOM-Elemente gilt:
         // Alles was in init ist, einfach direkt ausführen
-        // Falls es doch mal das init eines windows (canvas) sein sollte, nicht schlimm,
-        // denn wir führen schon von vorne herein den gesamten Code in $(window).load(function() aus!
         // Ich muss das bei DOM-Elementen so frühzeitig ausführen, sonst wird 'initxml' bei Taxango zu spät ausgeführt
         // Wenn wir aber in einer Klasse sind, dann gilt:
         // Seitdem ich alle handler in jQueryOutput0 ausgebe, sind die in der oninit-Methode benutzten Methoden noch
         // nicht alle bekannt. Deswegen bei Klassen als reguläre oninit-Handler setzen und  später 'oninit' triggern.
-        if (([name isEqualToString:@"oninit"] || [name isEqualToString:@"onconstruct"]) && ![[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
+        // Die letzte Bedingung stellt sicher, dass er bei oninit-Handler von Klassen die zwischen öffnendem und
+        // schließenden Element stehen, nicht hier reingeht, sondern als regulären oninit-Handler setzt
+        if (([name isEqualToString:@"oninit"] || [name isEqualToString:@"onconstruct"]) && ![[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"] && [self.rememberedID4closingSelfDefinedClass count] == 0)
         {
             self.attributeCount++;
 
@@ -7535,7 +7539,10 @@ didStartElement:(NSString *)elementName
         [self addIdToElement:attributeDict];
         [self.output appendString:@" class=\"div_standard noPointerEvents\" style=\""];
 
+
+        // marker ToDo -> Redundanter Aufruf
         [self.output appendString:[self addCSSAttributes:attributeDict]];
+
 
         if (self.initStageDeferThatWillBeCalledByCompleteInstantiation != -1)
         {
@@ -14018,8 +14025,7 @@ BOOL isJSExpression(NSString *s)
     "        }\n"
     "        else if ($(me).is('input'))\n"
     "        {\n"
-    "            // To Do - Shouldn't I use $(me).val(); here?\n"
-    "            $(me).attr('value',value);\n"
+    "            $(me).val(value);\n"
     "        }\n"
     "        else if ($(me).is('button'))\n"
     "        {\n"
@@ -14614,7 +14620,7 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "    else if (attributeName == 'isdefault')\n"
     "    {\n"
-    "       // Give me focus; To Do\n"
+    "       // Catch the focus; To Do\n"
     "    }\n"
     "    else if (attributeName == 'enabled' && ($(me).is('input') || $(me).is('select') || $(me).is('button')))\n"
     "    {\n"
@@ -16779,7 +16785,10 @@ BOOL isJSExpression(NSString *s)
     "Object.defineProperty(HTMLElement.prototype, 'subviews', {\n"
     // "    get : function(){ return $(this).find('*').get(); },\n"
     // Damit er rotatenumber auswerten kann, muss es children sein und nicht find!
-    "    get : function(){ return $(this).children('*').get(); },\n"
+    "// Beim öffnen von Tab 'Lohnsteuerbescheinigungen' greift er auf subviews von rudLohnsteuerkartenPool zu, das ist aber ein Replicator\n"
+    "// Replicatoren werden übersprungen bei property 'subviews'. Abfrage nach $(this).data('olel') aber falsch, Abfrage nach Attribut 'IAmAReplicator'\n"
+    "// Aber dies geht erst wenn ich die Kinder korrekt top-down auswerte, vorher wird Attribut nicht rechtzeitig gesetzt.\n"
+    "    get : function(){ if ($(this).children('*').eq(0).data('olel') == 'BDSreplicator') { return $(this).children('*').eq(0).children('*').get();  } else return $(this).children('*').get(); },\n"
     "    /* READ-ONLY set : , */\n"
     "    enumerable : false,\n"
     "    configurable : true\n"

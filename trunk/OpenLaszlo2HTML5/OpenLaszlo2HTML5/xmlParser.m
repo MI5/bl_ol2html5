@@ -1370,7 +1370,6 @@ void OLLog(xmlParser *self, NSString* s,...)
                 // Als Schutz gegen Leerzeichen im Pfad Hochkommata drum herum
                 [style appendFormat:@"background-image:url('%@');",s];
             }
- 
         }
     }
 
@@ -1570,15 +1569,11 @@ void OLLog(xmlParser *self, NSString* s,...)
 - (void) changeMouseCursorOnHoverOverElement:(NSString*)idName
 {
     [self.jQueryOutput appendString:@"\n  // Maus-Funktionalität, deswegen anderer Mauscursor\n"];
-    //if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
-    if (NO)
-    {
-        [self.jQueryOutput appendFormat:@"  $('#%@').find('*').andSelf().hover(function(e) { $(this).css('cursor','pointer'); }, function(e) { $(this).css('cursor','auto');});\n",idName];
-    }
-    else
-    {
-        [self.jQueryOutput appendFormat:@"  $('#%@').hover(function(e) { if (this == e.target) $(this).css('cursor','pointer'); }, function(e) { if (this == e.target) $(this).css('cursor','auto');});\n",idName];
-    }
+
+    // [self.jQueryOutput appendFormat:@"  $('#%@').hover(function(e) { if (this == e.target) $(this).css('cursor','pointer'); }, function(e) { if (this == e.target) $(this).css('cursor','auto');});\n",idName];
+    // Das war aber totaler Quatsch... Einfach so:
+
+    [self.jQueryOutput appendFormat:@"  $('#%@').css('cursor','pointer');\n",idName];
 }
 
 
@@ -5770,13 +5765,8 @@ didStartElement:(NSString *)elementName
         [self.jQueryOutput appendString:@");});\n"];
 
 
-        // Menüs sind standardmäßig immer zu (falls z. B. gar kein Attribut angegeben wurde)
-        // Deswegen das Menü hier zumachen (ohne Animation!)
-        // Dieser Code funktioniert nicht....
-        //[self.jQueryOutput appendFormat:@"  $('#%@').slideToggle(0); // RUD-Element zuschieben\n",id4panel];
-        // Aber dieser:
-        [self.jQueryOutput appendFormat:@"  $('#%@').css('display','none'); // RUD-Element zuschieben\n",id4panel];
 
+        BOOL elementWurdeGeoeffnet = NO;
         if ([attributeDict valueForKey:@"down"])
         {
             self.attributeCount++;
@@ -5786,12 +5776,20 @@ didStartElement:(NSString *)elementName
             {
                 NSLog(@"Using the attribute 'down' to open the menu.");
 
-                [self.jQueryOutput appendFormat:@"  $('#%@').css('display','block'); // RUD-Element zuschieben\n",id4panel];
+                elementWurdeGeoeffnet = YES;
+
+                [self.jQueryOutput appendFormat:@"  $('#%@').css('display','block'); // RUD-Element öffnen\n",id4panel];
             }
             else
             {
                 NSLog(@"Skipping the attribute 'down', because the menu is already closed.");
             }
+        }
+
+        if (!elementWurdeGeoeffnet) {
+            // Menüs sind standardmäßig immer zu (falls z. B. gar kein Attribut angegeben wurde)
+            // Deswegen das Menü hier zumachen (ohne Animation!)
+            [self.jQueryOutput appendFormat:@"  $('#%@').css('display','none'); // RUD-Element zuschieben\n",id4panel];
         }
 
 

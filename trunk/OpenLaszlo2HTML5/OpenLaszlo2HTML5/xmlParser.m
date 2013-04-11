@@ -7,6 +7,17 @@
 // - Don't rely on Mousewheels
 //
 //
+// Link zu Referenz:
+// http://www.openlaszlo.org/lps4.9/docs/reference/lz.baseformitem.html#lz.baseformitem.__ivars__.value
+//
+// Link zu Doku / Instanzierung:
+// http://www.openlaszlo.org/lps4.9/docs/developers/initialization-and-instantiation.html
+//
+// Link zu Doku / Extending Classes:
+// http://www.openlaszlo.org/lps4.9/docs/developers/class-inheritance.html
+//
+//
+//
 // Weitere OL-Dateien:
 // http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/utils/
 //
@@ -378,10 +389,12 @@ void OLLog(xmlParser *self, NSString* s,...)
         // Klappt noch nicht...
         //[self preEvaluateInternalClass:@"http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/utils/layouts/resizelayout.lzx"];
         //[self preEvaluateInternalClass:@"http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/basegrid.lzx"];
+        //[self preEvaluateInternalClass:@"http://svn.openlaszlo.org/openlaszlo/branches/4.11/lps/components/base/basedatacombobox.lzx"];
     }
 
     if ([olVersion isEqualToString:@"4.9"])
     {
+        //[self preEvaluateInternalClass:@"http://www.openlaszlo.org/lps4.9/lps/utils/viewer/viewer.jsp?file=/lps/components/base/basegrid.lzx"];
     }
 
     return me;
@@ -7538,7 +7551,7 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@" class=\"div_standard noPointerEvents\" style=\""];
 
 
-        // marker ToDo -> Redundanter Aufruf
+        // marker ToDo -> Das ist eigentlich ein redundanter Aufruf
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
 

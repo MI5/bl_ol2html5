@@ -61,6 +61,7 @@ BOOL debugmode = YES;
 
 BOOL ownSplashscreen = NO;
 
+BOOL kompiliereFuerTaxango = YES;
 
 
 #import "xmlParser.h"
@@ -5593,6 +5594,13 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
+        // Arbeitslosengeld-Rechner - Neu aufgetauchte Attribute
+        if ([attributeDict valueForKey:@"htoffset"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"htcolor"])
+            self.attributeCount++;
+        if ([attributeDict valueForKey:@"allowroll"])
+            self.attributeCount++;
 
         // Weil es auch verschachtelte rollUpDowns gibt ohne umschließenden Container,
         // muss ich den Zähler auch hier berücksichtigen.
@@ -5806,7 +5814,7 @@ didStartElement:(NSString *)elementName
         }
 
 
-        // CSS-MouseHover-Anpssung vornehmen
+        // CSS-Hover-Anpassung vornehmen
         [self changeMouseCursorOnHoverOverElement:id4flipleiste];
 
 
@@ -9517,7 +9525,8 @@ BOOL isJSExpression(NSString *s)
 
     // Warum auch immer: general.js wird automatisch importiert
     // -> To Do -> wird im umgebenden Skript referenziert
-    [pre appendString:@"<script type=\"text/javascript\" src=\"includes/general.js\"></script>\n"];
+    if (kompiliereFuerTaxango)
+        [pre appendString:@"<script type=\"text/javascript\" src=\"includes/general.js\"></script>\n"];
 
     // Unser eigenes Skript lieber zuerst
     [pre appendString:@"<script type=\"text/javascript\" src=\"jsHelper.js\"></script>\n"];

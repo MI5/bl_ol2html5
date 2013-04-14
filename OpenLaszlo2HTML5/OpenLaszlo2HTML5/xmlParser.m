@@ -58,10 +58,12 @@ BOOL debugmode = YES;
 
 
 
-
 BOOL ownSplashscreen = NO;
 
-BOOL kompiliereFuerTaxango = YES;
+
+
+BOOL kompiliereFuerTaxango = NO;
+
 
 
 #import "xmlParser.h"
@@ -3338,8 +3340,7 @@ didStartElement:(NSString *)elementName
         [elementName isEqualToString:@"BDStabsheetTaxango"] ||
         [elementName isEqualToString:@"tabelement"] ||
         [elementName isEqualToString:@"baselist"] ||
-        [elementName isEqualToString:@"list"] ||
-        [elementName isEqualToString:@"rollUpDown"])
+        [elementName isEqualToString:@"list"])
             [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
 
 
@@ -5589,9 +5590,11 @@ didStartElement:(NSString *)elementName
 
 
 
-
+    if (kompiliereFuerTaxango)
     if ([elementName isEqualToString:@"rollUpDown"])
     {
+        [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe];
+
         element_bearbeitet = YES;
 
         // Arbeitslosengeld-Rechner - Neu aufgetauchte Attribute
@@ -9001,7 +9004,7 @@ BOOL isJSExpression(NSString *s)
 
 
 
-    // Schließen von rollUpDown
+    if (kompiliereFuerTaxango)
     if ([elementName isEqualToString:@"rollUpDown"])
     {
         self.weAreInRollUpDownWithoutSurroundingRUDContainer = NO;
@@ -18175,9 +18178,19 @@ BOOL isJSExpression(NSString *s)
     // Keine Ahnung mehr wo das her kam, es scheint auch so zu klappen und nicht mehr notwendig zu sein
     // Doch, ist notwendig (aber nur am Arbeits-Laptop...), indem Moment wo ich ein 'BDSinputgrid'
     // per assignObject() auswerte
-    "        if ($(this).data('olel') === 'BDSgridcolumn')\n"
-    "        {\n"
+    "        if ($(this).data('olel') === 'BDSgridcolumn') {\n"
     "            // So far doesn't work... with 'BDSgridcolumn'\n"
+    "            return { init: function() {} };\n"
+    "        }\n"
+    "\n"
+    // Seitdem ich rollupdown auswerte:
+    "        if ($(this).data('olel') === 'rollUpDown') {\n"
+    "            // So far doesn't work... with 'rollUpDown'\n"
+    "            // Problem ist hier, dass er durch das ändern des this weiter unten auch den erneuten Zugriff\n"
+    "            // auf 'super_' in der Methode 'init()' eine Vererbungsstufe zu weit runterholt.\n"
+    "            // Und somit es zu einer infinite loop kommt...\n"
+    "            // Mir ist dazu noch keine passende Lösung eingefallen.\n"
+    "            // Aber insofern unrelevant, als er nur versucht auf 'init()' von 'view' zuzugreifen.\n"
     "            return { init: function() {} };\n"
     "        }\n"
     "\n"
@@ -18198,7 +18211,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        if (superMethods) {\n"
     "            Object.keys(superMethods).forEach(function(key) {\n"
-    "                // Mit korrigiertem this!!! Ein evtl. benutztes 'this' verweist sonst noch auf den Vorfahren.\n"
+    "                // Mit korrigiertem this!!! Ein evtl. benutztes 'this' verweist sonst auf den Vorfahren.\n"
     "                // Hinweis: Durch das bind wird es im alert zu 'native code', also nicht erschrecken.\n"
     "                returnMethods[key] = superMethods[key].bind(me);\n"
     "            });\n"

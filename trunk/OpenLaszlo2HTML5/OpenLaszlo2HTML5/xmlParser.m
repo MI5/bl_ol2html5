@@ -1316,7 +1316,9 @@ void OLLog(xmlParser *self, NSString* s,...)
             }
             else 
             {
-                [self.jQueryOutput0 appendFormat:@"  %@.setAttribute_('resource', %@);\n",self.zuletztGesetzteID,src];
+                // Um 'window.' ergänzt, damit kein Absturz, falls die Variable undefined ist
+                // So ist sie zwar auch undefined, aber ich kann es in der Funktion abfangen
+                [self.jQueryOutput0 appendFormat:@"  %@.setAttribute_('resource', window.%@);\n",self.zuletztGesetzteID,src];
             }
 
             if ([attributeDict valueForKey:@"frame"])
@@ -1791,8 +1793,22 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Diese Doppelpunkt-Syntax muss weg... omg... Wieso kann man sich nicht an ECMAScript-Standards halten?
     // Damit sollen wohl Variablen typisiert werden, dabei ist JS im Grunde typenlos... Hallo?
     s = [self inString:s searchFor:@":FileReference" andReplaceWith:@"" ignoringTextInQuotes:YES];
+
     s = [self inString:s searchFor:@":Array" andReplaceWith:@"" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@": Array" andReplaceWith:@"" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@":Number" andReplaceWith:@"" ignoringTextInQuotes:YES];
     s = [self inString:s searchFor:@": Number" andReplaceWith:@"" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@":Object" andReplaceWith:@"" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@": Object" andReplaceWith:@"" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@":string" andReplaceWith:@"" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@": string" andReplaceWith:@"" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@":Error" andReplaceWith:@"" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@": Error" andReplaceWith:@"" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@":void" andReplaceWith:@"" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@": void" andReplaceWith:@"" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@":int" andReplaceWith:@"" ignoringTextInQuotes:YES];
+    s = [self inString:s searchFor:@": int" andReplaceWith:@"" ignoringTextInQuotes:YES];
+
 
     // Was ist das? Eine Art cast-Anweisung? Da wäre ein Mega-RegExp fällig. Erstmal auskommentieren
     s = [self inString:s searchFor:@" cast " andReplaceWith:@"; // cast " ignoringTextInQuotes:YES];
@@ -13996,7 +14012,9 @@ BOOL isJSExpression(NSString *s)
     "        throw 'Error1 calling setAttribute_, no argument attributeName given (this = '+this+').';\n"
     "    if (value === undefined) // Wirklich Triple-= erforderlich, damit er 'null' passieren lässt bei 'text' und 'mask'\n"
     "    {\n"
-    "        if (attributeName !== 'text') // Bei Text ist sogar undefined erlaubt und wird textuell ausgegeben\n"
+    "         // Bei Text ist sogar undefined erlaubt und wird textuell ausgegeben\n"
+    "         // resourcen können u. U. unefined sein (so beim ALG-Rechner)\n"
+    "        if (attributeName !== 'text' && attributeName !== 'resource')\n"
     "            throw 'Error2 calling setAttribute_, no argument value given or undefined (attributeName = \"'+attributeName+'\" and this = '+this+' and this.id = '+this.id+').';\n"
     "    }\n"
     "\n"
@@ -14676,7 +14694,7 @@ BOOL isJSExpression(NSString *s)
     "            $(me).parent().css('cursor','pointer');\n"
     "        }\n"
     "    }\n"
-    "    else if (attributeName == 'resource')\n"
+    "    else if (attributeName == 'resource' && value != undefined)\n"
     "    {\n"
     "        // In jedem Falle speichern. Var kann auch ausgelesen werden\n"
     "        me.resource = value;\n"

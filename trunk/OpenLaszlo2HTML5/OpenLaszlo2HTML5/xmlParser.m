@@ -62,7 +62,7 @@ BOOL ownSplashscreen = NO;
 
 
 
-BOOL kompiliereFuerTaxango = NO;
+BOOL kompiliereFuerTaxango = YES;
 
 
 
@@ -7578,7 +7578,11 @@ didStartElement:(NSString *)elementName
         [self.output appendString:@" class=\"div_standard noPointerEvents\" style=\""];
 
 
-        // marker ToDo -> Das ist eigentlich ein redundanter Aufruf
+        // Das war bis zum Ende ein redundanter Aufruf
+        // und hat superviele constraints doppelt gesetzt... wtf.
+        // Aber ich muss jetzt erst 'valign', 'multiline' usw. als getter/setter definieren...
+        // Alternative: in assignObject über setAttribute() gehen...
+        // Eins von beiden muss ich machen... Vorher kann ich es nicht auskommentieren. ToDo
         [self.output appendString:[self addCSSAttributes:attributeDict]];
 
 

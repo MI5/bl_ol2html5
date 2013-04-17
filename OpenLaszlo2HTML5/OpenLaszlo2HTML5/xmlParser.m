@@ -7,6 +7,13 @@
 // - Don't rely on Mousewheels
 //
 //
+//
+// Der Fix für den Zugriffsfehler auf das '_erroricon' wäre es die Name-Property
+// nicht nur in dem parent zu verankern, sondern auch im immediateparent.
+//
+//
+//
+//
 // Link zu Referenz:
 // http://www.openlaszlo.org/lps4.9/docs/reference/lz.baseformitem.html#lz.baseformitem.__ivars__.value
 //

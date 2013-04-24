@@ -1824,14 +1824,15 @@ void OLLog(xmlParser *self, NSString* s,...)
     // super ist nicht erlaubt in JS (reserviert) und gibt es auch noch nicht.
     s = [self inString:s searchFor:@"super" andReplaceWith:@"super_" ignoringTextInQuotes:YES];
 
-
-    // onfocus ist eine interne function von JS, muss ausgetauscht werden.
+    // ------------------- Manche Event-Handler umbenennen -------------------
+    // onfocus ist eine interne property von JS, muss ausgetauscht werden.
     s = [self inString:s searchFor:@"onfocus.sendEvent(" andReplaceWith:@"onfocus_.sendEvent(" ignoringTextInQuotes:YES];
-
-
-    // onblur ist eine interne function von JS, muss ausgetauscht werden.
+    // onblur ist eine interne property von JS, muss ausgetauscht werden.
     s = [self inString:s searchFor:@"onblur.sendEvent(" andReplaceWith:@"onblur_.sendEvent(" ignoringTextInQuotes:YES];
-
+    // onmouseover ist eine interne property von JS, muss ausgetauscht werden.
+    s = [self inString:s searchFor:@"onmouseover.sendEvent(" andReplaceWith:@"onmouseover_.sendEvent(" ignoringTextInQuotes:YES];
+    // onmouseout ist eine interne property von JS, muss ausgetauscht werden.
+    s = [self inString:s searchFor:@"onmouseout.sendEvent(" andReplaceWith:@"onmouseout_.sendEvent(" ignoringTextInQuotes:YES];
 
 
 
@@ -5932,14 +5933,10 @@ didStartElement:(NSString *)elementName
 
 
         // Hier legen wir den TabSheetContainer per jQuery an
-        [self.jQueryOutput appendString:@"\n  // Ein TabSheetContainer. Jetzt wird's kompliziert. Wir legen ihn hier an.\n  // Die einzelnen Tabs werden, sobald sie im Code auftauchen, per add hinzugefügt\n  // Mit der Option 'tabTemplate' legen wir die width fest\n  // Mit der Option 'fx' legen wir eine Animation für das Wechseln fest\n"];
-
- 
-        [self.jQueryOutput appendFormat:@"  $('#%@').tabs({ tabTemplate: '<li style=\"width:%dpx;\"><a href=\"#{href}\" style=\"width:%dpx;\"><span>#{label}</span></a></li>' });\n",self.lastUsedTabSheetContainerID,tabwidth,tabwidthForLink];
+        [self.jQueryOutput appendString:@"\n  // Ein TabSheetContainer. Jetzt wird's kompliziert. Wir legen ihn hier an.\n  // Die einzelnen Tabs werden, sobald sie im Code auftauchen, per add hinzugefügt\n"];
 
 
-        [self.jQueryOutput appendFormat:@"  $('#%@').tabs({ fx: { opacity: 'toggle' } });\n",self.lastUsedTabSheetContainerID];
-        [self.jQueryOutput appendFormat:@"  $('#%@').tabs();\n",self.lastUsedTabSheetContainerID];
+        [self.jQueryOutput appendFormat:@"  $('#%@').tabs({ show: 400, hide: 400 });\n",self.lastUsedTabSheetContainerID];
 
 
 
@@ -6062,7 +6059,19 @@ didStartElement:(NSString *)elementName
 
 
         [self.jQueryOutput appendString:@"\n  // Hinzufügen eines tabsheets in den tabsheetContainer\n"];
-        [self.jQueryOutput appendFormat:@"  $('#%@').tabs('add', '#%@', '%@');\n",self.lastUsedTabSheetContainerID,geradeVergebeneID,title];
+
+
+        // Die API wurde umgestellt von jQuery UI
+        // Alte API:
+        //[self.jQueryOutput appendFormat:@"  $('#%@').tabs('add', '#%@', '%@');\n",self.lastUsedTabSheetContainerID,geradeVergebeneID,title];
+        // Neue API:
+
+        [self.jQueryOutput appendFormat:@"  $('<li style=\"width:126px;\"><a href=\"#%@\" style=\"width:102px;\"><span>%@</span></a></li>').appendTo('#%@ .ui-tabs-nav');\n",geradeVergebeneID,title,self.lastUsedTabSheetContainerID];
+        // Vor jedem refresh muss ich das 0. wieder neu als Startseite setzen...
+        [self.jQueryOutput appendFormat:@"  $('#%@').tabs('option', 'active', 0);\n",self.lastUsedTabSheetContainerID];
+        [self.jQueryOutput appendFormat:@"  $('#%@').tabs('refresh');\n",self.lastUsedTabSheetContainerID];
+
+
 
 
         if ([attributeDict valueForKey:@"selected"])
@@ -9529,10 +9538,9 @@ BOOL isJSExpression(NSString *s)
 
     [pre appendFormat:@"<title>%@</title>\n",[[self.pathToFile lastPathComponent] stringByDeletingPathExtension]];
 
-    // CSS-Stylesheet-Datei für das Layout der TabSheets (wohl leider nicht CSS-konform, aber
-    // die CSS-Konformität herzustellen ist wohl leider zu viel Aufwand, von daher greifen wir
-    // auf diese fertige Lösung zurück)
-    [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.21/themes/humanity/jquery-ui.css\">\n"];
+    // CSS-Stylesheet-Datei für das Layout der TabSheets (wohl leider nicht CSS-konform, aber die CSS-Konformität
+    // herzustellen ist wohl leider zu viel Aufwand, von daher greifen wir auf diese fertige Lösung zurück)
+    [pre appendString:@"<link rel=\"stylesheet\" type=\"text/css\" href=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.10.2/themes/humanity/jquery-ui.css\">\n"];
 
     // CSS-Stylesheet-Datei
     // Diese MUSS nach der Humanity-css kommen, da ich bestimmte Sachen überschreibe
@@ -9544,14 +9552,14 @@ BOOL isJSExpression(NSString *s)
 
 
     // jQuery laden
-    [pre appendString:@"<script type=\"text/javascript\" src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js\"></script>\n"];
+    [pre appendString:@"<script type=\"text/javascript\" src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js\"></script>\n"];
 
     // Falls latest jQuery-Version gewünscht:
     // '<script type="text/javascript" src="http://code.jquery.com/jquery-latest.min.js"></script>'
     // einbauen, aber dann kein Caching!
 
     // jQuery UI laden (wegen TabSheet)
-    [pre appendString:@"<script type=\"text/javascript\" src=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.21/jquery-ui.min.js\"></script>\n"];
+    [pre appendString:@"<script type=\"text/javascript\" src=\"https://ajax.googleapis.com/ajax/libs/jqueryui/1.10.2/jquery-ui.min.js\"></script>\n"];
 
     // Warum auch immer: general.js wird automatisch importiert
     // -> To Do -> wird im umgebenden Skript referenziert
@@ -12629,7 +12637,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "        // Wenn ich ein Element hinzufüge muss ich ein paar Dinge des Datapointers aktualisieren und\n"
     "        // anderen datapointern die vorgenommene Aktualisierung an 'p' per 'ondata' mitteilen.\n"
-    "        updateDataAndDatasetAndTrigger = function(dp,addedNode) {\n"
+    "        updateDataAndDatasetAndTrigger = function(dpObj,addedNode) {\n"
     "\n"
     "            // Was ich triggere ist abhängig vom xpath\n"
     "            function identifyWhatToTrigger(ptr,node) {\n"
@@ -12658,29 +12666,29 @@ BOOL isJSExpression(NSString *s)
     "                return node;\n"
     "            }\n"
     "\n"
-    "            if (dp.locked__ == true)\n"
+    "            if (dpObj.locked__ == true)\n"
     "            {\n"
     "                // Dann raus hier, sonst infinite loop beim triggern von 'datasethaschanged'\n"
-    "                // Ein Test ergab, dass Änderungen an dp.data und dp.dataset.rawdata ohenhin nicht nötig sind,\n"
+    "                // Ein Test ergab, dass Änderungen an dpObj.data und dpObj.dataset.rawdata ohenhin nicht nötig sind,\n"
     "                // deswegen direkt am Anfang raus\n"
     "                return;\n"
     "            }\n"
     "\n"
     "            // Anscheinend muss ich unser internes data mit dem gerade gesetzten Wert aktualisieren\n"
     "            // Muss über den XMLSerializer() gehen, sonst kompiliert Beispiel 37.13 nicht\n"
-    "            dp.data = (new XMLSerializer()).serializeToString(dp.p);\n"
+    "            dpObj.data = (new XMLSerializer()).serializeToString(dpObj.p);\n"
     "\n"
     "            // Wird gleich erst zur topNode, aber heißt schonmal so\n"
-    "            var topNode = dp.p;\n"
+    "            var topNode = dpObj.p;\n"
     "\n"
     "            // Attribute haben keine Property 'parentNode'\n"
     "            // Deswegen auf Attribut testen\n"
-    "            // Einfach über dp.xpathQuery('/'); zu gehen funktioniert nicht, da xPathQuery\n"
+    "            // Einfach über dpObj.xpathQuery('/'); zu gehen funktioniert nicht, da xPathQuery\n"
     "            // noch mit dem alten Dataset arbeitet, was ich ja gerade erst aktualisieren muss.\n"
-    "            if (dp.p.ownerElement !== undefined) // Logik für 'Wenn p ein Attribut ist'\n"
+    "            if (dpObj.p.ownerElement !== undefined) // Logik für 'Wenn p ein Attribut ist'\n"
     "            {\n"
     "                // Dann hangel dich erstmal auf das Element drauf.\n"
-    "                topNode = dp.p.ownerElement;\n"
+    "                topNode = dpObj.p.ownerElement;\n"
     "            }\n"
     "\n"
     "            while (topNode.parentNode)\n"
@@ -12693,13 +12701,13 @@ BOOL isJSExpression(NSString *s)
     "            // Und ich muss auch das Dataset als solches aktualisieren, weil auch\n"
     "            // andere darauf gerichtete Pointer ein aktualisiertes Dataset erwarten.\n"
     "            // Ich muss hier über den XMLSerializer gehen, da in das topNode-Element vermutlich nicht serialize() reingemixt wurde\n"
-    "            dp.dataset.rawdata = (new XMLSerializer()).serializeToString(topNode);\n"
+    "            dpObj.dataset.rawdata = (new XMLSerializer()).serializeToString(topNode);\n"
     "\n"
     "            // Und jetzt alle datapointer triggern, die mit diesem Dataset arbeiten\n"
     "            for (var i = 0;i<allMyDatapointer_.length;i++)\n"
     "            {\n"
     "                // Nur 'ondata' triggern, wenn beide Datapointer auf dem gleichen Dataset beruhen\n"
-    "                if (allMyDatapointer_[i].datasetName === dp.datasetName)\n"
+    "                if (allMyDatapointer_[i].datasetName === dpObj.datasetName)\n"
     "                {\n"
     "                    // Dann immer 'ondata' triggern\n"
     "                    if (allMyDatapointer_[i].rerunxpath === true)\n"
@@ -12719,7 +12727,7 @@ BOOL isJSExpression(NSString *s)
     "                }\n"
     "\n"
     "                // Nur 'datasethaschanged' triggern, wenn beide Datapointer auf dem gleichen Dataset beruhen\n"
-    "                if (allMyDatapointer_[i].datasetName === dp.datasetName)\n"
+    "                if (allMyDatapointer_[i].datasetName === dpObj.datasetName)\n"
     "                {\n"
     "                    $(allMyDatapointer_[i]).triggerHandler('datasethaschanged', identifyWhatToTrigger(allMyDatapointer_[i],addedNode));\n"
     "                }\n"
@@ -12727,7 +12735,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            // Alle $path-Angaben (relativeDatapath-Angaben) aktualisieren sich bei Änderungen\n"
     "            // Deswegen hier triggern eines Nicht-Dom-Elements (nämlich lz.datapointer)\n"
-    "            $(dp).triggerHandler('datapathhaschanged');\n"
+    "            $(dpObj).triggerHandler('datapathhaschanged');\n"
     "        }\n"
     "\n"
     "\n"
@@ -15073,8 +15081,8 @@ BOOL isJSExpression(NSString *s)
     "// Z. B. in 'rollupdown' gibt es 'onvisible' und in 'BDStitlecontrol' 'onfocus' und 'onblur'.\n"
     "// Ich habe in der Dokumentation nichts vergleichbares gefunden.\n"
     "// Ich löse es als allgemeine Property, die ein Objekt mit der Funktion zurückliefert\n"
-    "// 'onfocus' ist jedoch zugleich eine interne nicht überschreibbare JS-Funktion,\n"
-    "// weswegen dieses event umbenannt und intern ausgetauscht wird.\n"
+    "// 'onfocus', 'onblur', 'onmouseover', 'onmouseout' sind jedoch zugleich interne nicht überschreibbare JS-Propertys,\n"
+    "// weswegen diese events umbenannt und intern ausgetauscht werden.\n"
     "Object.defineProperty(HTMLElement.prototype, 'onvisible', {\n"
     "    get : function() {\n"
     "        return { sendEvent: function() { $(this).triggerHandler('onvisible',null); } };\n"
@@ -15092,6 +15100,20 @@ BOOL isJSExpression(NSString *s)
     "Object.defineProperty(HTMLElement.prototype, 'onblur_', {\n"
     "    get : function() {\n"
     "        return { sendEvent: function() { $(this).triggerHandler('onblur',null); } };\n"
+    "    },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "Object.defineProperty(HTMLElement.prototype, 'onmouseover_', {\n"
+    "    get : function() {\n"
+    "        return { sendEvent: function() { $(this).triggerHandler('onmouseover',null); } };\n"
+    "    },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "Object.defineProperty(HTMLElement.prototype, 'onmouseout_', {\n"
+    "    get : function() {\n"
+    "        return { sendEvent: function() { $(this).triggerHandler('onmouseout',null); } };\n"
     "    },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"
@@ -15117,10 +15139,6 @@ BOOL isJSExpression(NSString *s)
     "    $(this).triggerHandler('onaddsubview');\n"
     "}\n"
     "HTMLElement.prototype.addSubview = addSubviewFunction;\n"
-    //"HTMLDivElement.prototype.addSubview = addSubviewFunction;\n"
-    //"HTMLInputElement.prototype.addSubview = addSubviewFunction;\n"
-    //"HTMLSelectElement.prototype.addSubview = addSubviewFunction;\n"
-    //"HTMLButtonElement.prototype.addSubview = addSubviewFunction;\n"
     "\n"
     "\n"
     "\n"
@@ -15876,8 +15894,12 @@ BOOL isJSExpression(NSString *s)
     "////////////////////////INCOMPLETE///////////////////////\n"
     "/////////////////////////////////////////////////////////\n"
     "// cb ist der undokumentierte Zugriff auf das eigentliche Checkbox-Feld\n"
-    "// Zugriff darauf wird derzeit nicht unterstützt\n"
-    "HTMLInputElement.prototype.cb = { setAttribute_ : function(){} }\n"
+    "Object.defineProperty(HTMLInputElement.prototype, 'cb', {\n"
+    "    get : function(){ return this; },\n"
+    "    /* READ-ONLY set : , */\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
     "\n"
     "\n"
     "\n"
@@ -17619,8 +17641,9 @@ BOOL isJSExpression(NSString *s)
     "        // Hmmm, aber dann kompiliert Beispiel 37.13 nicht! Deswegen auskommentiert\n"
     "        // Aber wenn es auskommentiert ist, kompiliert Beispiel 37.15 nicht...\n"
     "        // Diesen Konflikt vermag ich noch nicht zu lösen...\n"
-    "        //$(el).data('datapathobject_').init(path);\n"
-    "        //$(el).data('datapathobject_').setXPath(path);\n"
+    "        // Es MUSS für Taxango drin sein!!! Sonst wird das datapathObject nicht aktualisiert!\n"
+    "        $(el).data('datapathobject_').init(path);\n"
+    "        $(el).data('datapathobject_').setXPath(path);\n"
     "    }\n"
     "\n"
     "\n"
@@ -17630,10 +17653,11 @@ BOOL isJSExpression(NSString *s)
     "        $('#'+el.id).data('IAmAReplicator',true);\n"
     "\n"
     "\n"
-    "        // Alle hinzugefügten Methoden vorher sichern\n"
+    "        // Alle hinzugefügten Methoden und Attribute des Elements vorher sichern\n"
+    "        // Eventhandler werden hingegen durch den Klonvorgang von jQuery übernommen\n"
     "        var gesicherteMethoden = {};\n"
     "        for(var func in el) {\n"
-    "            if (el.hasOwnProperty(func) && typeof el[func] === 'function') {\n"
+    "            if (el.hasOwnProperty(func) /*x*/ && typeof el[func] === 'function' /*x*/) {\n"
     "                gesicherteMethoden[func] = el[func];\n"
     "            }\n"
     "        }\n"

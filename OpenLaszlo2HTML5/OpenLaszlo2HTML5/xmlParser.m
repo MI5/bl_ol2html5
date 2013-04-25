@@ -7596,7 +7596,7 @@ didStartElement:(NSString *)elementName
 
         // Das war bis zum Ende ein redundanter Aufruf
         // und hat superviele constraints doppelt gesetzt... wtf.
-        // Aber ich muss jetzt erst 'valign', 'multiline' usw. als getter/setter definieren...
+        // Aber ich muss jetzt erst ('valign') [schon angelegt] usw. als getter/setter definieren...
         // Alternative: in assignObject über setAttribute() gehen...
         // Eins von beiden muss ich machen... Vorher kann ich es nicht auskommentieren. ToDo
         [self.output appendString:[self addCSSAttributes:attributeDict]];
@@ -14578,6 +14578,9 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "    else if (attributeName === 'valign')\n"
     "    {\n"
+    "        // Speichern, falls Wert über den getter ausgelesen wird\n"
+    "        $(me).data('valign_',value);\n"
+    "\n"
     "        if (value === 'middle')\n"
     "        {\n"
     "            // http://phrogz.net/css/vertical-align/index.html\n"
@@ -15621,6 +15624,19 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'multiline'                       //\n"
+    "// INIT-ONLY                                           //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(HTMLElement.prototype, 'multiline', {\n"
+    "    get : function() { return $(this).css('white-space') === 'normal'; },\n"
+    "    set : function(newValue) { this.setAttribute_('multiline',newValue,undefined,false); }, \n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// Nur für class='div_text' sind diese Methoden gültig //\n"
     "/////////////////////////////////////////////////////////\n"
     "function warnOnWrongClass(me) {\n"
@@ -16436,7 +16452,7 @@ BOOL isJSExpression(NSString *s)
     "});\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
-    "// Getter/Setter for 'spacing' (HTMLElement.prototype, bricht sonst jQuery) //\n"
+    "// Getter/Setter for 'spacing'                         //\n"
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'spacing', {\n"
@@ -17009,6 +17025,22 @@ BOOL isJSExpression(NSString *s)
     "});\n"
     "\n"
     "/////////////////////////////////////////////////////////\n"
+    "// Getter/Setter for 'valign'                          //\n"
+    "// READ/WRITE                                          //\n"
+    "/////////////////////////////////////////////////////////\n"
+    "Object.defineProperty(HTMLElement.prototype, 'valign', {\n"
+    "    get : function(){\n"
+    "        if ($(this).data('valign_'))\n"
+    "            return $(this).data('valign_');\n"
+    "\n"
+    "        return 'top'; // => Default value\n"
+    "    },\n"
+    "    set : function(newValue){ this.setAttribute_('valign',newValue,undefined,false); },\n"
+    "    enumerable : false,\n"
+    "    configurable : true\n"
+    "});\n"
+    "\n"
+    "/////////////////////////////////////////////////////////\n"
     "// Getter/Setter for 'visible'                         //\n"
     "// READ/WRITE                                          //\n"
     "/////////////////////////////////////////////////////////\n"
@@ -17035,31 +17067,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "\n"
     "\n"
-    // es gibt ein natives JS-align, was sich wohl korrekt zur OL-Logik verhält
-    // http://jsfiddle.net/Pv8YQ/ Deswegen nicht nötig.
-    //"/////////////////////////////////////////////////////////\n"
-    //"// Setter for 'align'                                  //\n"
-    //"// WRITE                                               //\n"
-    //"/////////////////////////////////////////////////////////\n"
-    //"Object.defineProperty(HTMLElement.prototype, 'align', {\n"
-    //"    get : function(){ /* Keine direkte CSS-Eigenschaft, wenn dann Variable _align einführen */ },\n"
-    //"    set: function(newValue){\n"
-    //"        if (newValue !== 'left' || newValue !== 'center' || newValue !== 'right')\n"
-    //"            throw new Error('Unsupported value for align.');\n"
-    //"\n"
-    //"        if (newValue === 'left')\n"
-    //"            /* Nothing */;\n"
-    //"        if (newValue === 'center')\n"
-    //"            $(this).css('left',toIntFloor((parseInt($(this).parent().css('width'))-parseInt($(this).outerWidth()))/2));\n"
-    //"        if (newValue === 'right')\n"
-    //"            $(this).css('left',toIntFloor((parseInt($(this).parent().width())-$(this).outerWidth())));\n"
-    //"    },\n"
-    //"    enumerable : false,\n"
-    //"    configurable : true\n"
-    //"});\n"
-    //
-    //
-    //
     // Wo kommt das her???? Es gibt gar kein Attribut textalign gemäß Doku. --> Doch, gibt es, s. Example 21.21
     // Es hat bei mir die Auswertung von 'radiobutton' gebrochen, deswegen raus genommen.
     //"/////////////////////////////////////////////////////////\n"

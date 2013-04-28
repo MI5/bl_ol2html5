@@ -8,8 +8,8 @@
 //
 //
 //
-// Der Fix für den Zugriffsfehler auf das '_erroricon' wäre es die Name-Property
-// nicht nur in dem parent zu verankern, sondern auch im immediateparent.
+// 'pattern' ist eine interne HTML5-property und darf zumindestens nicht mit leersting gesetzt werden.
+// Sonst macht FF einen roten Kasten drum herum, weil er es als leeren regexp auswertet.
 //
 //
 //
@@ -755,7 +755,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
 
     BOOL weNeedQuotes = YES;
-    // Das bedeutet wird müssen es noch vor dem DOM ausführen
+    // Das bedeutet wir müssen es noch vor dem DOM ausführen
     if ([s hasPrefix:@"$immediately{"])
     {
         s = [s substringFromIndex:12];
@@ -897,7 +897,6 @@ void OLLog(xmlParser *self, NSString* s,...)
 {
     // Alle Styles in einem eigenen String sammeln, könnte nochmal nützlich werden
     NSMutableString *style = [[NSMutableString alloc] initWithString:@""];
-
 
 
     if ([attributeDict valueForKey:@"textalign"])
@@ -1168,23 +1167,6 @@ void OLLog(xmlParser *self, NSString* s,...)
         [style appendString:@"font-size:"];
         [style appendString:[attributeDict valueForKey:@"fontsize"]];
         [style appendString:@"px;"];
-
-
-        if (![elemName isEqualToString:@"canvas"])
-        {
-            NSMutableString *s = [[NSMutableString alloc] initWithString:@""];
-
-            // Die Eigenschaft font-size überträgt sich auf alle Kinder und Enkel
-            [s appendString:@"\n  // Alle Kinder und Enkel kriegen ebenfalls die font-size-Eigenschaft mit\n"];
-            // Früher war es anstatt 'div' '.div_text'.
-            // Das geht nicht, falls der Text eine Klasse ist. Klassen sind immer 'div_standard', nicht 'div_text'
-            [s appendFormat:@"  $('#%@').find('div').css('font-size','%@px');\n",self.zuletztGesetzteID,[attributeDict valueForKey:@"fontsize"]];
-
-            // Muss GANZ Am Anfang stehen, da die width-eigenschaft, die ausgelesen wird,
-            // von der Schriftgröße abhängt. Diese muss aber vorher korrekt gesetzt werden!!
-            // Oh man, das endlich herausgefunden zu haben!
-            [self.jsOutput insertString:s atIndex:0];
-        }
     }
 
 
@@ -1237,7 +1219,8 @@ void OLLog(xmlParser *self, NSString* s,...)
 
         if ([[attributeDict valueForKey:@"initstage"] isEqual:@"defer"])
         {
-            [self setTheValue:[attributeDict valueForKey:@"initstage"] ofAttribute:@"initstage"];
+            // Auskommentiert, weil redundant, da als HTML5-Annotation gelöst
+            // [self setTheValue:[attributeDict valueForKey:@"initstage"] ofAttribute:@"initstage"];
         }
     }
 
@@ -1421,7 +1404,7 @@ void OLLog(xmlParser *self, NSString* s,...)
             else
                 font = @"";
 
-            [self.cssOutput appendString:@"body\n{\n  text-align: center;\n  font-size: "];
+            [self.cssOutput appendString:@"body {\n  font-size: "];
             [self.cssOutput appendString:fontsize];
             [self.cssOutput appendString:@"px;\n"];
             [self.cssOutput appendString:@"  font-family: "];
@@ -1440,19 +1423,9 @@ void OLLog(xmlParser *self, NSString* s,...)
             if ([[[self.pathToFile lastPathComponent] stringByDeletingPathExtension] isEqualToString:@"Taxango"])
             {
                 [self.cssOutput appendString:@"  /* Hintergrundbild von Taxango-HTML-File */\n"];
-                [self.cssOutput appendString:@"  background-image:url(images/bg1.jpg);\n"];
+                [self.cssOutput appendString:@"  background-image:url('images/bg1.jpg');\n"];
             }
 
-            [self.cssOutput appendString:@"}\n\n"];
-
-
-            // auch für .div_text muss ich font-size und font-family übernehmen
-            [self.cssOutput appendString:@".div_text\n{\n  font-size: "];
-            [self.cssOutput appendString:fontsize];
-            [self.cssOutput appendString:@"px;\n"];
-            [self.cssOutput appendString:@"  font-family: "];
-            [self.cssOutput appendString:font];
-            [self.cssOutput appendString:@", Verdana, Helvetica, sans-serif, Arial;\n"];
             [self.cssOutput appendString:@"}\n\n"];
         }
 
@@ -1597,6 +1570,7 @@ void OLLog(xmlParser *self, NSString* s,...)
 
     // [self.jQueryOutput appendFormat:@"  $('#%@').hover(function(e) { if (this == e.target) $(this).css('cursor','pointer'); }, function(e) { if (this == e.target) $(this).css('cursor','auto');});\n",idName];
     // Das war aber totaler Quatsch... Einfach so:
+    // Bzw. dann habe ich aber nicht die Abfrage nach e.target drin... Also nochmal prüfen, wenn ich drauf stoße.
 
     [self.jQueryOutput appendFormat:@"  $('#%@').css('cursor','pointer');\n",idName];
 }
@@ -1638,16 +1612,18 @@ void OLLog(xmlParser *self, NSString* s,...)
         }
 
 
-        [self.idsAndNamesOutput appendString:@"\n  // All 'name'-attributes can be referenced by its parent Element\n"];
-
 
         // Wenn wir in einer Klasse in der ersten Ebene sind, dann ist der Parent immer das umgebende Element der Klasse
         if ([elemTyp isEqualToString:@"evaluateclass"])
         {
+            [self.idsAndNamesOutput appendString:@"\n  // All 'name'-attributes can be referenced by its parent and immediateparent Element\n"];
             [self.idsAndNamesOutput appendFormat:@"  %@.%@ = document.getElementById('%@');\n",ID_REPLACE_STRING, name, self.zuletztGesetzteID];
+            // nach OL-Test: parent UND immediateparent kriegen eine Referenz auf das Name-Attribut
+            [self.idsAndNamesOutput appendFormat:@"  document.getElementById('%@').immediateparent.%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, name, self.zuletztGesetzteID];
         }
         else
         {
+            [self.idsAndNamesOutput appendString:@"\n  // All 'name'-attributes can be referenced by its parent Element\n"];
             // nach OL-Test: parent UND immediateparent kriegen eine Referenz auf das Name-Attribut
             [self.idsAndNamesOutput appendFormat:@"  document.getElementById('%@').parent.%@ = document.getElementById('%@');\n",self.zuletztGesetzteID, name, self.zuletztGesetzteID];
             // Wirkt sich hier noch nicht aus! Erst wenn ich ne Klasse instanziere
@@ -2535,6 +2511,11 @@ void OLLog(xmlParser *self, NSString* s,...)
     if ([attributeDict valueForKey:@"name"])
         [self.output appendFormat:@" data-name=\"%@\"",[attributeDict valueForKey:@"name"]];
 
+    // Ebenfalls noch initstage-Attribut als HTML5-Annotation adden.
+    // Derzeit nur 'defer', denn nur dieses wird intern ausgewertet.
+    if ([attributeDict valueForKey:@"initstage"] && [[attributeDict valueForKey:@"initstage"] isEqualToString:@"defer"])
+        [self.output appendFormat:@" data-initstage=\"%@\"",[attributeDict valueForKey:@"initstage"]];
+
 
     // Falls wir in einem Replicator sind, muss ich wissen welche ID geklont werden soll
     if ([self.collectTheNextIDForReplicator isEqualToString:@"$collectTheID_PLZ$"])
@@ -2548,7 +2529,7 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Nur bei nachträglich hinzugefügten Klassen ist es nachwievor nötig!
     if ([[self.enclosingElements objectAtIndex:0] isEqualToString:@"evaluateclass"])
     {
-        [self.idsAndNamesOutput appendString:@"\n  // Alle von OpenLaszlo vergebenen IDs müssen auch global verfügbar sein.\n"];
+        [self.idsAndNamesOutput appendString:@"\n  // All IDs need to be global vars\n"];
         [self.idsAndNamesOutput appendFormat:@"  %@ = document.getElementById('%@');\n",self.zuletztGesetzteID,self.zuletztGesetzteID];
     }
 
@@ -5731,7 +5712,7 @@ didStartElement:(NSString *)elementName
                     code = [self makeTheComputedValueComputable:code];
 
                 [self.jQueryOutput appendString:@"\n  // Der Titel (header) von rollUpDown wird hier dynamisch gesetzt\n"];
-                [self.jQueryOutput appendFormat:@"  $('#%@').html('<span style=\"margin-left:8px;\">'+%@+'</span>');\n",id4flipleiste,code];
+                [self.jQueryOutput appendFormat:@"  $('#%@').html('<span style=\"margin-left:8px;font-size:14px;\">'+%@+'</span>');\n",id4flipleiste,code];
             }
         }
 
@@ -5782,7 +5763,7 @@ didStartElement:(NSString *)elementName
         [self.output appendString:id4flipleiste];
         [self.output appendString:@"\">\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];
-        [self.output appendString:@"<span style=\"margin-left:8px;\">"];
+        [self.output appendString:@"<span style=\"margin-left:8px;font-size:14px;\">"];
         [self.output appendString:title];
         [self.output appendString:@"</span>\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
@@ -6525,9 +6506,15 @@ didStartElement:(NSString *)elementName
             applied = [attributeDict valueForKey:@"applied"];
 
             if ([applied hasPrefix:@"$"])
+            {
+                // Alle Variablen ermitteln, die den zu setzenden state beeinflussen können...
+                NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:applied in:elementName];
+                //ToDo To continue
+
                 applied = [self makeTheComputedValueComputable:applied];
+            }
         }
-        // Muss ich dann so früh wie möglich bekannt geben, ob applied oder nicht, weil nachfolgende Handler usw. darauf achten
+        // Dann so früh wie möglich bekannt geben, ob applied oder nicht, weil nachfolgende Handler usw. darauf achten
         // bzw. sogar es modifizieren (sonst beschwert sich setAttribute es sei noch undeclared)
         [self.jQueryOutput0 appendFormat:@"\n  // %@ repräsentiert einen 'state'...\n",self.zuletztGesetzteID];
         [self.jQueryOutput0 appendFormat:@"  %@.applied = %@;\n",self.zuletztGesetzteID,applied];
@@ -7022,6 +7009,15 @@ didStartElement:(NSString *)elementName
     {
         element_bearbeitet = YES;
 
+
+        if (![attributeDict valueForKey:@"name"])
+            [self instableXML:@"Ein Handler ohne name-Attribut. Das geht so nicht!"];
+        
+        NSLog(@"Using the 'name'-attribute as the name for the handler.");
+        
+        NSString *name = [attributeDict valueForKey:@"name"];
+
+
         NSString *enclosingElem = [self.enclosingElementsIds objectAtIndex:[self.enclosingElementsIds count]-2];
         NSString *enclosingElemTyp = [self.enclosingElements objectAtIndex:[self.enclosingElements count]-2];
 
@@ -7099,21 +7095,24 @@ didStartElement:(NSString *)elementName
             }
             else
             {
-                [o appendString:@"\n  // pointer-events zulassen, da ein Handler an dieses Element gebunden ist."];
-                [o appendFormat:@"\n  $('#%@').css('pointer-events','auto');\n",enclosingElem];
+                // Neu: pointer-events nur zu zulassen, wenn es auch Mausgesten sind. Sonst machen sie keinen Sinn.
+                // Insbesondere macht es keinen Sinn bei custom-Handlern oder 'oninit'-Handler usw. Auch nicht bei Tastatur.
+                if ([name isEqualToString:@"onclick"] ||
+                    [name isEqualToString:@"ondblclick"] ||
+                    [name isEqualToString:@"onfocus"] ||
+                    [name isEqualToString:@"onblur"] ||
+                    [name isEqualToString:@"onmousedown"] ||
+                    [name isEqualToString:@"onmouseup"] ||
+                    [name isEqualToString:@"onmouseover"] ||
+                    [name isEqualToString:@"onmouseout"])
+                {
+                    [o appendString:@"\n  // pointer-events zulassen, da ein Handler an dieses Element gebunden ist."];
+                    [o appendFormat:@"\n  $('#%@').css('pointer-events','auto');\n",enclosingElem];
+                }
             }
         }
 
 
-
-
-        if (![attributeDict valueForKey:@"name"])
-            [self instableXML:@"Ein Handler ohne name-Attribut. Das geht so nicht!"];
-
-        NSLog(@"Using the 'name'-attribute as the name for the handler.");
-
-
-        NSString *name = [attributeDict valueForKey:@"name"];
 
         NSString *args = @"";
 
@@ -7342,20 +7341,6 @@ didStartElement:(NSString *)elementName
 
         if ([name isEqualToString:@"onkeyup"])
         {
-            /* ka, wo das herkam
-            if ([attributeDict valueForKey:@"args"] &&
-                ([[attributeDict valueForKey:@"args"] isEqualToString:@"k"]))
-            {
-                self.attributeCount++;
-                NSLog(@"Considering the argument 'k' as 'var k = e.keyCode;'.");
-            }
-            if ([attributeDict valueForKey:@"args"] &&
-                ([[attributeDict valueForKey:@"args"] isEqualToString:@"key"]))
-            {
-                self.attributeCount++;
-                NSLog(@"Considering the argument 'key' as 'var key = e.keyCode;'.");
-            }
-             */
             if ([attributeDict valueForKey:@"args"])
             {
                 self.attributeCount++;
@@ -7387,20 +7372,6 @@ didStartElement:(NSString *)elementName
 
         if ([name isEqualToString:@"onkeydown"])
         {
-            /* ka, wo das herkam
-            if ([attributeDict valueForKey:@"args"] &&
-                ([[attributeDict valueForKey:@"args"] isEqualToString:@"k"]))
-            {
-                self.attributeCount++;
-                NSLog(@"Considering the argument 'k' as 'var k = e.keyCode;'.");
-            }
-            if ([attributeDict valueForKey:@"args"] &&
-                ([[attributeDict valueForKey:@"args"] isEqualToString:@"key"]))
-            {
-                self.attributeCount++;
-                NSLog(@"Considering the argument 'key' as 'var key = e.keyCode;'.");
-            }
-             */
             if ([attributeDict valueForKey:@"args"])
             {
                 self.attributeCount++;
@@ -7605,7 +7576,19 @@ didStartElement:(NSString *)elementName
         if (self.initStageDeferThatWillBeCalledByCompleteInstantiation != -1)
         {
             // Nicht sichtbar, weil es ja erst später instanziert wird
-            [self.output appendString:@"display:none;\" data-initstage=\"defer\">\n"];
+            [self.output appendString:@"display:none;\""];
+
+            // Falls initstage=defer ein direktes Attribut im attributeDict war wurde es schon durch den
+            // Aufruf von addIdToElement hinzugefügt.
+            // Falls nicht, dann packe ich es jetzt noch mit rein
+            if ([attributeDict valueForKey:@"initstage"] && [[attributeDict valueForKey:@"initstage"] isEqualToString:@"defer"])
+            {
+                [self.output appendString:@">\n"];
+            }
+            else
+            {
+                [self.output appendString:@" data-initstage=\"defer\">\n"];
+            }
         }
         else
         {
@@ -9987,7 +9970,12 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    /* Prevents scrolling */\n"
     "    overflow: hidden;\n"
+    "}\n"
     "\n"
+    "body\n"
+    "{\n"
+    "    font-size: 11px;\n" // Startwert OL
+    "    text-align: center;\n" // Startwert OL
     "}\n"
     "\n"
     ".img_preload\n"
@@ -10059,6 +10047,10 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "/* Damit der Hintergrund weiß wird, entgegen der Angabe in Humanity.css */\n"
     ".ui-widget-content { border: 1px solid #e0cfc2; background: #ffffff; color: #1e1b1d; }\n"
+    "/* Damit jQuery UI die Schriftgröße und Schriftart nicht verändert, diese aus dem Container raus (sonst wird sie weitervererbt) */\n"
+    ".ui-widget { font-size: inherit; font-family: inherit; }\n"
+    "/* ... und dafür direkt in das 'li', welches jQuery UI injectet reinpacken (dort stört die Vererbung nicht) */\n"
+    "li.ui-state-default { font-size: 1.1em; }\n"
     "\n"
     "img\n"
     "{\n"
@@ -10335,11 +10327,11 @@ BOOL isJSExpression(NSString *s)
     "    position:absolute;\n"
     "    text-align:left;\n"
     "    padding:2px;\n"
-    "\n"
-    "    font-family: Verdana,sans-serif;\n"
-    "    font-style: normal;\n"
-    "    font-weight: normal;\n"
-    "    font-size: 11px;\n"
+    //     Alle 4 Eigenschaften müssen raus, sonst wird die natürliche Vererbungshierachie (inherit) dieser Angaben zerstört
+    //"    font-family: Verdana,sans-serif;\n"
+    //"    font-style: normal;\n"
+    //"    font-weight: normal;\n"
+    //"    font-size: 11px;\n"
     "    line-height: 1.2em;\n"
     "    text-indent: 0;\n"
     "    letter-spacing: 0.01em;\n"
@@ -14170,30 +14162,29 @@ BOOL isJSExpression(NSString *s)
     "    else if (attributeName == 'fontsize')\n"
     "    {\n"
     "        $(me).css('font-size',value+'px');\n"
-    "        // Die Eigenschaft font-size überträgt sich auf alle Kinder und Enkel\n"
-    // Früher war es anstatt 'div' '.div_text'.
-    // Das geht nicht, falls der Text eine Klasse ist. Klassen sind immer 'div_standard', nicht 'div_text'
-    "        $(me).find('div').css('font-size',value+'px');\n"
+    //"        // Die Eigenschaft font-size überträgt sich auf alle Kinder und Enkel\n"
+    //"        $(me).find('div').css('font-size',value+'px');\n"
+    // Dies klappt automatisch, wenn es keinen Standardwert gibt...
     "    }\n"
     "    else if (attributeName == 'fontstyle')\n"
     "    {\n"
     "        if (value === 'plain')\n"
     "        {\n"
     "            $(me).css('font-style','normal');\n"
-    "            $(me).find('.div_text').css('font-style','normal');\n"
+    //"            $(me).find('.div_text').css('font-style','normal');\n"
     "            $(me).css('font-weight','normal');\n"
-    "            $(me).find('div').css('font-weight','normal');\n"
+    //"            $(me).find('div').css('font-weight','normal');\n"
     "        }\n"
     "        // contains() und nicht ===, weil mit der Angabe 'bolditalic' auch beides auf einmal gelten kann\n"
     "        if (value.contains('bold'))\n"
     "        {\n"
     "            $(me).css('font-weight','bold');\n"
-    "            $(me).find('div').css('font-weight','bold');\n"
+    //"            $(me).find('div').css('font-weight','bold');\n"
     "        }\n"
     "        if (value.contains('italic'))\n"
     "        {\n"
     "            $(me).css('font-style','italic');\n"
-    "            $(me).find('div').css('font-style','italic');\n"
+    //"            $(me).find('div').css('font-style','italic');\n"
     "        }\n"
     "    }\n"
     "    else if (attributeName == 'bgcolor')\n"
@@ -14487,16 +14478,15 @@ BOOL isJSExpression(NSString *s)
     "    {\n"
     "        $(me).addClass(value);\n"
     "    }\n"
-    "    else if (attributeName === 'initstage')\n"
-    "    {\n"
-    "        if (value === 'defer')\n"
-    "            ;//$(me).hide(); // Muss ich an anderer Stelle abfangen. Bricht z. B. Anzeige Kinder\n"
-    "\n"
-    "        if (value === 'immediate' || value === 'early' || value === 'normal' || value === 'late')\n"
-    "            jQuery.noop(); /* no operation */\n"
-    "\n"
-    "        $(me).data('initstage_',value);\n"
-    "    }\n"
+    // Auskommentiert, da neu als HTML5-Annotation gelöst
+    //"    else if (attributeName === 'initstage')\n"
+    //"    {\n"
+    //"        if (value === 'defer')\n"
+    //"            ;//$(me).hide(); // Muss ich an anderer Stelle abfangen. Bricht z. B. Anzeige Kinder\n"
+    //"\n"
+    //"        if (value === 'immediate' || value === 'early' || value === 'normal' || value === 'late')\n"
+    //"            jQuery.noop(); /* no operation */\n"
+    //"    }\n"
     "    else if (attributeName === 'align')\n"
     "    {\n"
     "        // Speichern, falls Wert über den getter ausgelesen wird\n"
@@ -15511,7 +15501,7 @@ BOOL isJSExpression(NSString *s)
     "/////////////////////////////////////////////////////////\n"
     "Object.defineProperty(HTMLElement.prototype, 'initstage', {\n"
     "    get : function() {\n"
-    "        return $(this).data('initstage_');\n"
+    "        return $(this).data('initstage');\n"
     "    },\n"
     "    enumerable : false,\n"
     "    configurable : true\n"

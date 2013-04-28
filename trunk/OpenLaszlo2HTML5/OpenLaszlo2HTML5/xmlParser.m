@@ -6498,6 +6498,10 @@ didStartElement:(NSString *)elementName
             self.lastUsedNameAttributeOfState = theId;
         }
 
+
+        NSMutableArray *vars = [[NSMutableArray alloc] initWithCapacity:3];
+        NSString *e = @"";
+
         NSString *applied = @"false"; // Default-Wert
         if ([attributeDict valueForKey:@"applied"])
         {
@@ -6507,9 +6511,17 @@ didStartElement:(NSString *)elementName
 
             if ([applied hasPrefix:@"$"])
             {
+                // Auch states können constraints haben...
+
                 // Alle Variablen ermitteln, die den zu setzenden state beeinflussen können...
-                NSMutableArray *vars = [self getTheDependingVarsOfTheConstraint:applied in:elementName];
-                //ToDo To continue
+                vars = [self getTheDependingVarsOfTheConstraint:applied in:elementName];
+
+
+                e = [self removeOccurrencesOfDollarAndCurlyBracketsIn:applied];
+                e = [self modifySomeExpressionsInJSCode:e alsoModifyWhitespaces:YES];
+                // Escape ' in e
+                e = [e stringByReplacingOccurrencesOfString:@"'" withString:@"\\\'"];
+
 
                 applied = [self makeTheComputedValueComputable:applied];
             }
@@ -6523,6 +6535,20 @@ didStartElement:(NSString *)elementName
         [self.jQueryOutput0 appendString:@"  // ...und auf 'onapplied' horchen und Visibility bei Änderung anpassen\n"];
         [self.jQueryOutput0 appendFormat:@"  $('#%@').on('onapplied', function(a,b) { $('#%@').toggle(b); } );\n",self.zuletztGesetzteID, self.zuletztGesetzteID];
 
+        // Neu: Zusätzliche Bedingungen setzen, die den state applyen können, falls Attribut 'applied' eine constraint ist
+        for (id object in vars)
+        {
+            // Bricht noch bei objectFromScript9_8
+            // er probiert da irgendwie auf die state-property zuzugreifen
+            // Aber für Taxango nicht so relevant da in BDSgridcolumn usw.
+            if (![object isEqualToString:@"state.parent.editing"])
+            {
+                [self.jQueryOutput0 appendString:@"  // ...außerdem kann diese Variable triggern von 'onapplied' auslösen:\n"];
+                //[self.jQueryOutput0 appendFormat:@"  $('#%@').on('onapplied', function(a,b) { $('#%@').toggle(b); } );\n",self.zuletztGesetzteID, self.zuletztGesetzteID];
+
+                [self.jQueryOutput0 appendFormat:@"  setConstraint(%@,'%@',\"return (function() { with (%@) { %@.setAttribute_('%@',%@); } }).bind(%@)();\");\n",self.zuletztGesetzteID,object,self.zuletztGesetzteID,self.zuletztGesetzteID,@"applied",e,self.zuletztGesetzteID];
+            }
+        }
 
         if ([attributeDict valueForKey:@"onremove"])
             self.attributeCount++;
@@ -18207,13 +18233,7 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    if (showHandCursor && $('#'+el).data('mousechangeOnHoverAndPointerEventsAlreadySet') == undefined)\n"
     "    {\n"
-    "        $('#'+el).hover(function(e) {\n"
-    "            if (this == e.target)\n"
-    "                $(this).css('cursor','pointer');\n"
-    "        }, function(e) {\n"
-    "            if (this == e.target)\n"
-    "                $(this).css('cursor','auto');\n"
-    "        });\n"
+    "        enableMouseCursorOnHover(el);\n"
     "\n"
     "        $('#'+el).data('mousechangeOnHoverAndPointerEventsAlreadySet',true);\n"
     "    }\n"

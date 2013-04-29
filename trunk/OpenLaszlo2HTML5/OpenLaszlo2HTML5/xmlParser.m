@@ -8381,15 +8381,15 @@ BOOL isJSExpression(NSString *s)
         // Siehe auch: http://google-styleguide.googlecode.com/svn/trunk/javascriptguide.xml?showone=Multiline_string_literals#Multiline_string_literals
         // Am Ende innerhalb der JS-String-Zeile muss ein \\n stehen, damit Kommentare nur für eine Zeile gelten.
         rekursiveRueckgabeOutput = [rekursiveRueckgabeOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n' + \n  '"];
-        rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
-        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
-        rekursiveRueckgabeDatasetOutput = [rekursiveRueckgabeDatasetOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
-        rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
-        rekursiveRueckgabeJsHeadOutput = [rekursiveRueckgabeJsHeadOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
-        rekursiveRueckgabeJsComputedValuesOutput = [rekursiveRueckgabeJsComputedValuesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
-        rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
-        rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
-        rekursiveRueckgabeIDsAndNamesOutput = [rekursiveRueckgabeIDsAndNamesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" + \n  \""];
+        rekursiveRueckgabeJQueryOutput = [rekursiveRueckgabeJQueryOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" +\n  \""];
+        rekursiveRueckgabeJQueryOutput0 = [rekursiveRueckgabeJQueryOutput0 stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" +\n  \""];
+        rekursiveRueckgabeDatasetOutput = [rekursiveRueckgabeDatasetOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" +\n  \""];
+        rekursiveRueckgabeJsOutput = [rekursiveRueckgabeJsOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" +\n  \""];
+        rekursiveRueckgabeJsHeadOutput = [rekursiveRueckgabeJsHeadOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" +\n  \""];
+        rekursiveRueckgabeJsComputedValuesOutput = [rekursiveRueckgabeJsComputedValuesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" +\n  \""];
+        rekursiveRueckgabeJsConstraintValuesOutput = [rekursiveRueckgabeJsConstraintValuesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" +\n  \""];
+        rekursiveRueckgabeJsInitstageDeferOutput = [rekursiveRueckgabeJsInitstageDeferOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" +\n  \""];
+        rekursiveRueckgabeIDsAndNamesOutput = [rekursiveRueckgabeIDsAndNamesOutput stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n\" +\n  \""];
 
 
         [self.jsOLClassesOutput appendFormat:@"  this.attributesDict = {"];
@@ -8410,6 +8410,7 @@ BOOL isJSExpression(NSString *s)
                     weNeedQuotes = NO;
 
                 // '_columnclass' ist ein internes Attribut von 'grid' und immer ein Objekt und bekommt damit keine quotes
+                // ...
                 if ([key isEqualToString:@"_columnclass"])
                 {
                    weNeedQuotes = NO;
@@ -8422,16 +8423,23 @@ BOOL isJSExpression(NSString *s)
 
                 key = [self somePropertysNeedToBeRenamed:key];
 
-                if (!weNeedQuotes)
+                // Dies sind Flash-Attribute, die ich sinnigerweise dann gar nicht erst ausgebe
+                if (![key isEqualToString:@"antiAliasType"] &&
+                    ![key isEqualToString:@"sharpness"] &&
+                    ![key isEqualToString:@"gridFit"] &&
+                    ![key isEqualToString:@"thickness"])
                 {
-                    [self.jsOLClassesOutput appendFormat:@" %@: %@,", key, value];
-                }
-                else
-                {
-                    // ' und Newlines escapen bei JS-Strings:
-                    value = [self protectThisSingleQuotedJavaScriptString:value];
+                    if (!weNeedQuotes)
+                    {
+                        [self.jsOLClassesOutput appendFormat:@" %@: %@,", key, value];
+                    }
+                    else
+                    {
+                        // ' und Newlines escapen bei JS-Strings:
+                        value = [self protectThisSingleQuotedJavaScriptString:value];
 
-                    [self.jsOLClassesOutput appendFormat:@" %@: '%@',", key, value];
+                        [self.jsOLClassesOutput appendFormat:@" %@: '%@',", key, value];
+                    }
                 }
             }
         }
@@ -11623,6 +11631,7 @@ BOOL isJSExpression(NSString *s)
     "        window[id] = document.getElementById(id);\n"
     "\n"
     "        // data-olel setzen für das neue Element, wird z. B. von der super_-Property ausgelesen\n"
+    //         $('#'+id).attr("data-olel",name); // Wenn man das mit aufnimmt, wäre es auch im DOM
     "        $('#'+id).data('olel',name);\n"
     "    }\n"
     "    else if (name === 'button') {\n"
@@ -11634,6 +11643,7 @@ BOOL isJSExpression(NSString *s)
     "        window[id] = document.getElementById(id);\n"
     "\n"
     "        // data-olel setzen für das neue Element, wird z. B. von der super_-Property ausgelesen\n"
+    //         $('#'+id).attr("data-olel",name); // Wenn man das mit aufnimmt, wäre es auch im DOM
     "        $('#'+id).data('olel',name);\n"
     "    }\n"
     "    else if (name === 'text') {\n"
@@ -11646,6 +11656,7 @@ BOOL isJSExpression(NSString *s)
     "        window[id] = document.getElementById(id);\n"
     "\n"
     "        // data-olel setzen für das neue Element, wird z. B. von der super_-Property ausgelesen\n"
+    //         $('#'+id).attr("data-olel",name); // Wenn man das mit aufnimmt, wäre es auch im DOM
     "        $('#'+id).data('olel',name);\n"
     "    }\n"
     "    else if (typeof oo[name] === 'function') {\n"
@@ -11657,6 +11668,7 @@ BOOL isJSExpression(NSString *s)
     "        window[id] = document.getElementById(id);\n"
     "\n"
     "        // data-olel setzen für das neue Element, wird z. B. von der super_-Property ausgelesen\n"
+    //         $('#'+id).attr("data-olel",name); // Wenn man das mit aufnimmt, wäre es auch im DOM
     "        $('#'+id).data('olel',name);\n"
     "\n"
     "        var obj = new oo[name]('');\n"
@@ -14793,10 +14805,6 @@ BOOL isJSExpression(NSString *s)
     "    else if ($(me).hasClass('select_standard') && attributeName == 'editable') // Nur vom Element 'basecombobox' von Haus aus gesetztes Attribut\n"
     "    {\n"
     "        // Not supported so far. The items of the select-box are never editable\n"
-    "    }\n"
-    "    else if (($(me).data('olel') === 'edittext' || $(me).data('olel') === 'text') && (attributeName === 'thickness' || attributeName === 'sharpness' || attributeName === 'gridFit' || attributeName === 'antiAliasType')) // Nur vom Element 'text' von Haus aus gesetztes Attribut\n"
-    "    {\n"
-    "        // Flash-Only Attributes, that will be ignored\n"
     "    }\n"
     "    else if (attributeName === 'pixellock')\n"
     "    {\n"
@@ -19544,7 +19552,6 @@ BOOL isJSExpression(NSString *s)
     "    }\n"
     "  }\n"
     "\n"
-    // data-olel auch hier setzen, damit er in setAttribute_() bei gridFit usw. richtig abbiegt
     "  this.contentHTML = '<input type=\"text\" id=\"@@@P-L,A#TZHALTER@@@\" data-olel=\"edittext\" class=\"input_standard\" value=\"'+textBetweenTags+'\" />'\n"
     "\n"
     // Hier mal neuer Approach und nicht als String, sondern als Funktion probieren:
@@ -19554,10 +19561,10 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "    // field wurde per prototype in 'jsHelper.js' für alle HTMLElemente definiert \n"
     "    el.field.setHTML = function(flag) { el.field.flagHTML = flag; }\n"
-    "    el.field.antiAliasType = '';\n"
-    "    el.field.gridFit = '';\n"
-    "    el.field.sharpness = -300\n"
-    "    el.field.thickness = 100;\n"
+    //"    el.field.antiAliasType = '';\n"
+    //"    el.field.gridFit = '';\n"
+    //"    el.field.sharpness = -300\n"
+    //"    el.field.thickness = 100;\n"
     "\n"
     "    if (el.maxlength)\n"
     "        $(el).attr(\"maxlength\", el.maxlength);\n"
@@ -19671,8 +19678,6 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "  this.contentJS = '';\n"
     "\n"
-    "  this.contentLeadingJQuery = ''\n"
-    "\n"
     "  this.contentJQuery = '';\n"
     "};\n"
     //"oo.button.prototype.test2 = function() {}; // extern definierte Methode\n"
@@ -19695,8 +19700,6 @@ BOOL isJSExpression(NSString *s)
     "  this.contentHTML = '';\n"
     "\n"
     "  this.contentJS = '';\n"
-    "\n"
-    "  this.contentLeadingJQuery = ''\n"
     "\n"
     "  this.contentJQuery = '';\n"
     "};\n"

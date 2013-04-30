@@ -1232,7 +1232,10 @@ void OLLog(xmlParser *self, NSString* s,...)
     // Neuerding kann auch in 'source' der Pfad zu einer Datei enthalten sein, nicht nur in resource
     if ([attributeDict valueForKey:@"resource"] || [attributeDict valueForKey:@"source"])
     {
-        // Frame ermitteln, falls einer gesetzt wurde
+        self.attributeCount++;
+
+
+        // Zuerst den zu benutzenden Frame ermitteln, falls einer gesetzt wurde
         NSUInteger index = 0;
         if ([attributeDict valueForKey:@"frame"])
         {
@@ -1263,13 +1266,11 @@ void OLLog(xmlParser *self, NSString* s,...)
         if ([src hasPrefix:@"http:"] && ![src hasPrefix:@"http://"])
         {
             // Wenn ich Example 8.6 richtig verstehe, muss ich in diesem Fall das 'http:' entfernen
-            // Es ist bei einer lokalen Datei lediglich  ein Hinweis darauf, dass es erst ab run-time geladen werden darf.
+            // Es ist bei einer lokalen Datei lediglich  ein Hinweis darauf, dass es erst zur Laufzeit geladen werden darf.
             src = [src substringFromIndex:5];
         }
 
 
-
-        self.attributeCount++;
         NSString *s = @"";
 
 
@@ -1318,7 +1319,8 @@ void OLLog(xmlParser *self, NSString* s,...)
             }
 
 
-// Dieser Code ist nicht mehr nötig, aber würde auch nichts schaden mit ausgeführt zu werden.
+// Dieser Code ist nicht mehr nötig, aber schadet auch nichts mit ausgeführt zu werden.
+// Setzt die Bilder direkt als CSS im richtigen DIV.
 
 
             // Wenn ein Punkt enthalten ist, ist es wohl eine Datei
@@ -1344,26 +1346,21 @@ void OLLog(xmlParser *self, NSString* s,...)
             }
 
 
-
-            if (s == nil || [s isEqualToString:@""])
-            {
-                // Release: Rausnehmen, es entspricht der OL-Logik, keinen Fehler zu werfen.
-                // [self instableXML:[NSString stringWithFormat:@"ERROR: The image-path '%@' isn't valid.",src]];
-            }
-            else
+            // Logik: Falls wir einen gütigen Pfad ermitteln konnten, dann auch als CSS mal setzen
+            if (s != nil && [s length] > 0)
             {
                 NSLog(@"Checking the image-size directly on file-system:");
                 // Dann erstmal width und height von dem Image auf Dateiebene ermitteln
                 NSURL *path = [self.pathToFile URLByDeletingLastPathComponent];
 
                 // Schutz gegen Leerzeichen im Pfad
-                //s = [s stringByAddingPercentEscapesUsingEncoding: NSUTF8StringEncoding];
+                // s = [s stringByAddingPercentEscapesUsingEncoding: NSUTF8StringEncoding];
                 // auskommentiert, weil sonst in 'class calculator (from calculator.lzx)' die Pfade doppelt escaped werden
 
                 NSURL *pathToImg = [NSURL URLWithString:s relativeToURL:path];
 
-                // [NSString stringWithFormat:@"%@%@",path,s];
                 NSLog([NSString stringWithFormat:@"Path to Image: %@",pathToImg]);
+
                 NSImage *image = [[NSImage alloc] initByReferencingURL:pathToImg];
                 NSSize dimensions = [image size];
                 int w = (int)dimensions.width;
@@ -7441,7 +7438,11 @@ didStartElement:(NSString *)elementName
             // ebenso 'setAttribute_'.
             // Das erste Argument (e) ist immer automatisch das event-Objekt.
             // (Siehe Beispiel <event>, Example 28)
-            [o appendFormat:@"\n  // 'custom'-Handler für %@ / Typ: %@\n",enclosingElem,enclosingElemTyp];
+            // Nur textuell: Bei 'oninit' von einem 'oninit'-Handler sprechen
+            if ([name isEqualToString:@"oninit"])
+                [o appendFormat:@"\n  // 'oninit'-Handler für %@ / Typ: %@\n",enclosingElem,enclosingElemTyp];
+            else
+                [o appendFormat:@"\n  // 'custom'-Handler für %@ / Typ: %@\n",enclosingElem,enclosingElemTyp];
 
 
             // Per 'jQuery' an 'datapointer' und 'dataset' gebundene Handler machen keinen Sinn, da die
@@ -12669,7 +12670,8 @@ BOOL isJSExpression(NSString *s)
     "\n"
     "            // Was ich triggere ist abhängig vom xpath\n"
     "            function identifyWhatToTrigger(ptr,node) {\n"
-    "                if (ptr.xpath == null)\n"
+    "                // 2. Bedingung heißt: Wenn wir keine node sind, sondern z.B. ein String\n"
+    "                if (ptr.xpath == null || (node.nodeType === undefined))\n"
     "                    return node; // Not 100 % sure\n"
     "\n"
     "                if (ptr.xpath.contains('@'))\n"
@@ -12697,7 +12699,7 @@ BOOL isJSExpression(NSString *s)
     "            if (dpObj.locked__ == true)\n"
     "            {\n"
     "                // Dann raus hier, sonst infinite loop beim triggern von 'datasethaschanged'\n"
-    "                // Ein Test ergab, dass Änderungen an dpObj.data und dpObj.dataset.rawdata ohenhin nicht nötig sind,\n"
+    "                // Ein Test ergab, dass Änderungen an dpObj.data und dpObj.dataset.rawdata ohnehin nicht nötig sind,\n"
     "                // deswegen direkt am Anfang raus\n"
     "                return;\n"
     "            }\n"
@@ -12730,6 +12732,22 @@ BOOL isJSExpression(NSString *s)
     "            // andere darauf gerichtete Pointer ein aktualisiertes Dataset erwarten.\n"
     "            // Ich muss hier über den XMLSerializer gehen, da in das topNode-Element vermutlich nicht serialize() reingemixt wurde\n"
     "            dpObj.dataset.rawdata = (new XMLSerializer()).serializeToString(topNode);\n"
+    "\n"
+    "\n"
+    "\n"
+    "            // Für alle Datapointer müssen wir den XPath aktuallisieren, wenn es eine Änderung am Dataset gab.\n"
+    "            // nach langem hin und her steckt die Aktualisierung der dataponter jetzt hier\n"
+    "            // Aber denke so richtig. Aber bricht jetzt die Steuerberechnung. ToDo\n"
+    "            for (var i = 0;i<allMyDatapointer_.length;i++)\n"
+    "            {\n"
+    "                // Es sind nur die interessant, welche das gleiche Dataset haben\n"
+    "                if (allMyDatapointer_[i].datasetName === dpObj.datasetName)\n"
+    "                {\n"
+    "                    allMyDatapointer_[i].setXPath(allMyDatapointer_[i].xpath);\n"
+    "                }\n"
+    "            }\n"
+    "\n"
+    "\n"
     "\n"
     "            // Und jetzt alle datapointer triggern, die mit diesem Dataset arbeiten\n"
     "            for (var i = 0;i<allMyDatapointer_.length;i++)\n"
@@ -14454,7 +14472,9 @@ BOOL isJSExpression(NSString *s)
     "            $(me).css('cursor','auto');\n"
     "        }\n"
     "        else\n"
-    "            alert('So far unsupported value for clickable. value: '+value);\n"
+    "        {\n"
+    "            console.log('Unsupported value for clickable in ' + el.id + '. value: '+value);\n"
+    "        }\n"
     "    }\n"
     "    else if (attributeName === 'focusable' && value === false)\n"
     "    {\n"
@@ -17671,8 +17691,9 @@ BOOL isJSExpression(NSString *s)
     "        // Aber wenn es auskommentiert ist, kompiliert Beispiel 37.15 nicht...\n"
     "        // Diesen Konflikt vermag ich noch nicht zu lösen...\n"
     "        // Es MUSS für Taxango drin sein!!! Sonst wird das datapathObject nicht aktualisiert!\n"
-    "        $(el).data('datapathobject_').init(path);\n"
-    "        $(el).data('datapathobject_').setXPath(path);\n"
+    "        // Aktualisierung steckt jetzt in 'updateDataAndDatasetAndTrigger()'\n"
+    "        //$(el).data('datapathobject_').init(path);\n"
+    "        //$(el).data('datapathobject_').setXPath(path);\n"
     "    }\n"
     "\n"
     "\n"

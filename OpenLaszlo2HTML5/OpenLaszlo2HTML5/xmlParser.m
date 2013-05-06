@@ -5762,8 +5762,8 @@ didStartElement:(NSString *)elementName
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
         [self.output appendString:@"<!-- Die Flipleiste -->\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+1];
-        [self.output appendString:@"<div style=\"position:relative; top:0px; left:0px; width:"];
-        [self.output appendFormat:@"%dpx; height:%dpx; background-color:lightblue; line-height: %dpx; vertical-align:middle;\" class=\"ui-corner-top\" id=\"",breiteVonRollUpDown,heightOfFlipBar, heightOfFlipBar];
+        [self.output appendString:@"<div style=\"position:relative;top:0px;left:0px;width:"];
+        [self.output appendFormat:@"%dpx;height:%dpx;background-color:lightblue;line-height: %dpx;vertical-align:middle;\" class=\"ui-corner-top\" id=\"",breiteVonRollUpDown,heightOfFlipBar, heightOfFlipBar];
         [self.output appendString:id4flipleiste];
         [self.output appendString:@"\">\n"];
         [self rueckeMitLeerzeichenEin:self.verschachtelungstiefe+2];

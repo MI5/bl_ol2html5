@@ -8,9 +8,10 @@
 //
 //
 //
-// 'pattern' ist eine interne HTML5-property und darf zumindestens nicht mit leersting gesetzt werden.
+// - 'pattern' ist eine interne HTML5-property und darf zumindestens nicht mit leersting gesetzt werden.
 // Sonst macht FF einen roten Kasten drum herum, weil er es als leeren regexp auswertet.
 //
+// - 'clickable' wird gesetzt im AttributeDict, ist aber gar kein getter/setter...
 //
 //
 //

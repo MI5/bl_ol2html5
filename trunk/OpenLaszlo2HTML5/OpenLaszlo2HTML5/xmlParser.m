@@ -12,6 +12,8 @@
 // Sonst macht FF einen roten Kasten drum herum, weil er es als leeren regexp auswertet.
 //
 // - 'clickable' wird gesetzt im AttributeDict, ist aber gar kein getter/setter...
+// - Auch z. B. 'selectable' und 'focustrap' sind keine getter / setter, und gehen so immer an
+// setAttribute_() vorbei... -> Konzeptionell überdenken.
 //
 //
 //

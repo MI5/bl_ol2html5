@@ -18333,7 +18333,8 @@ BOOL isJSExpression(NSString *s)
     //"    alert('damn');\n"
     "\n"
     "    // Bei change aktualisieren bzw. auf ein event horchen, da constraint-value\n"
-    "    if (typeof expression === 'object')\n"
+    //"    if (typeof expression === 'object')\n"
+    "    if (expression!==null && typeof expression === 'object')\n"
     "    {\n"
     // "        $(expression).on('change', func);\n" // <-- Als früher noch direkt die function übergeben wurde
     //"        eval(\"$(expression).on('change', \"+func+\");\");\n"

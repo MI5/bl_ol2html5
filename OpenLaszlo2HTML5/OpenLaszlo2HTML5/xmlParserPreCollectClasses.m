@@ -3,7 +3,7 @@
 //  OpenLaszlo2HTML5
 //
 //  Created by Matthias Blanquett on 02.04.13.
-//  Copyright (c) 2013 Buhl. All rights reserved.
+//  Copyright (c) 2013. All rights reserved.
 //
 
 #import "xmlParserPreCollectClasses.h"

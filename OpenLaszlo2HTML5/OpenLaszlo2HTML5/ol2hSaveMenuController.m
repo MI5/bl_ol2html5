@@ -3,7 +3,7 @@
 //  OpenLaszlo2Canvas
 //
 //  Created by Matthias Blanquett on 12.04.12.
-//  Copyright (c) 2012 Buhl. All rights reserved.
+//  Copyright (c) 2012. All rights reserved.
 //
 
 #import "ol2hSaveMenuController.h"
